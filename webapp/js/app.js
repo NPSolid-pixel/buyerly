@@ -141,6 +141,8 @@
     // Auto-fetch data on tab switch
     if (tabName === 'accounts') {
       loadAccounts();
+    } else if (tabName === 'rules') {
+      loadRulesTab();
     } else if (tabName === 'summary') {
       updateFetchButtonLabel(state.currentPeriod);
       if (state.summaryCache[state.currentPeriod]) {
@@ -229,42 +231,48 @@
         acc.account_status !== 1 ? 'account-disabled' : ''
       ].filter(Boolean).join(' ');
 
-      // Format rule summary pill
-      let ruleBadgeText = 'Настроить правило';
       const hasConditions = acc.rule_conditions && acc.rule_conditions.length > 0;
-      
-      if (acc.preset_name && hasConditions) {
-        ruleBadgeText = acc.preset_name;
-      } else if (hasConditions) {
-        const first = acc.rule_conditions[0];
-        const metricLabels = {
-          'spend': 'Спенд',
-          'cpl': 'CPL',
-          'cpr': 'CPR',
-          'cpa': 'CPA',
-          'leads': 'Лиды',
-          'registrations': 'Реги',
-          'purchases': 'Покупки',
-          'ctr': 'CTR',
-          'cpc': 'CPC'
-        };
-        const mLabel = metricLabels[first.metric] || first.metric;
-        const op = (first.operator === 'gte' || first.operator === 'gt') ? '≥' : ((first.operator === 'lte' || first.operator === 'lt') ? '≤' : '=');
-        const unit = (first.metric === 'leads' || first.metric === 'registrations' || first.metric === 'purchases') ? ' шт' : (first.metric === 'ctr' ? '%' : '$');
-        const valStr = unit === '$' ? `$${first.value.toFixed(1)}` : `${first.value}${unit}`;
-        ruleBadgeText = `${mLabel} ${op} ${valStr}`;
-      } else {
-        ruleBadgeText = 'Настроить правило';
-      }
+      let rulePillHtml = '';
 
-      const actionIcons = {
-        'turn_off': '🛑',
-        'notify_only': '🔔',
-        'turn_on': '🟢',
-        'increase_budget': '📈',
-        'decrease_budget': '📉'
-      };
-      const actionIcon = actionIcons[acc.rule_action] || '⚙️';
+      if (hasConditions) {
+        let ruleBadgeText = acc.preset_name || '';
+        if (!ruleBadgeText && acc.rule_conditions.length > 0) {
+          const first = acc.rule_conditions[0];
+          const metricLabels = {
+            'spend': 'Спенд', 'cpl': 'CPL', 'cpr': 'CPR', 'cpa': 'CPA',
+            'leads': 'Лиды', 'registrations': 'Реги', 'purchases': 'Покупки',
+            'ctr': 'CTR', 'cpc': 'CPC'
+          };
+          const mLabel = metricLabels[first.metric] || first.metric;
+          const op = (first.operator === 'gte' || first.operator === 'gt') ? '≥' : ((first.operator === 'lte' || first.operator === 'lt') ? '≤' : '=');
+          const unit = (first.metric === 'leads' || first.metric === 'registrations' || first.metric === 'purchases') ? ' шт' : (first.metric === 'ctr' ? '%' : '$');
+          const valStr = unit === '$' ? `$${first.value.toFixed(1)}` : `${first.value}${unit}`;
+          ruleBadgeText = `${mLabel} ${op} ${valStr}`;
+        }
+
+        const actionIcons = {
+          'turn_off': '🔴', 'notify_only': '🔔', 'turn_on': '🟢',
+          'increase_budget': '📈', 'decrease_budget': '📉'
+        };
+        const actionIcon = actionIcons[acc.rule_action] || '⚙️';
+
+        rulePillHtml = `
+          <div class="card-limits-btn ${acc.rules_enabled ? 'active' : ''}" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Нажмите, чтобы изменить правило">
+            <span style="font-size:13px; line-height:1;">${actionIcon}</span>
+            <span class="limits-label">Правило:</span>
+            <span class="limits-value">${escapeHtml(ruleBadgeText)}</span>
+            <svg class="limits-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </div>
+        `;
+      } else {
+        // Photo 3: "+ Добавить правило"
+        rulePillHtml = `
+          <div class="card-limits-btn empty" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Привязать правило к кабинету">
+            <span class="plus-icon" style="font-size:14px; font-weight:700; color:#7aa2f7;">+</span>
+            <span class="limits-value" style="color:#7aa2f7; font-weight:600;">Добавить правило</span>
+          </div>
+        `;
+      }
 
       return `
         <div class="${cardClass}" id="card-${acc.account_id}">
@@ -288,12 +296,7 @@
 
           <!-- Bottom Row: Unified Interactive Rule Pill + Master Rules Toggle -->
           <div class="card-control-row">
-            <div class="card-limits-btn ${acc.rules_enabled ? 'active' : ''}" onclick="window.openEditLimitsModal('${acc.account_id}')" title="Нажмите, чтобы настроить правило">
-              <span style="font-size:13px; line-height:1;">${actionIcon}</span>
-              <span class="limits-label">Правило:</span>
-              <span class="limits-value">${escapeHtml(ruleBadgeText)}</span>
-              <svg class="limits-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            </div>
+            ${rulePillHtml}
 
             <label class="switch" title="Включить/выключить авто-правила">
               <input type="checkbox" ${acc.rules_enabled ? 'checked' : ''} onchange="window.toggleRules('${acc.account_id}', this.checked)">
@@ -334,9 +337,243 @@
   };
 
   // ==========================================================
-  // RULE BUILDER & PRESETS LOGIC
+  // TAB: RULES & PRESETS MANAGEMENT (PHOTO 2 & TAB LOGIC)
   // ==========================================================
-  async function loadPresets() {
+  async function loadRulesTab() {
+    await loadPresets();
+    await loadAccounts();
+    renderRulesTab();
+  }
+
+  function renderRulesTab() {
+    const container = document.getElementById('rulesCardsContainer');
+    const emptyEl = document.getElementById('rulesEmptyState');
+    const activeCountEl = document.getElementById('rulesActiveCount');
+    const linkedCountEl = document.getElementById('rulesLinkedAccsCount');
+    if (!container || !emptyEl) return;
+
+    const totalPresets = state.presets.length;
+    let linkedAccountsCount = 0;
+    state.accounts.forEach(a => {
+      if (a.rules_enabled && (a.preset_id || (a.rule_conditions && a.rule_conditions.length > 0))) {
+        linkedAccountsCount++;
+      }
+    });
+
+    if (activeCountEl) activeCountEl.textContent = totalPresets;
+    if (linkedCountEl) linkedCountEl.textContent = linkedAccountsCount;
+
+    if (totalPresets === 0) {
+      container.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+
+    const actionBadgeMap = {
+      'turn_off': { label: '🔴 Выключить адсеты', class: 'rule-action-turn_off' },
+      'notify_only': { label: '🔔 Только уведомление', class: 'rule-action-notify_only' },
+      'turn_on': { label: '🟢 Включить адсеты', class: 'rule-action-turn_on' },
+      'increase_budget': { label: '📈 Увеличить бюджет', class: 'rule-action-increase_budget' },
+      'decrease_budget': { label: '📉 Уменьшить бюджет', class: 'rule-action-decrease_budget' }
+    };
+
+    container.innerHTML = state.presets.map(p => {
+      const act = actionBadgeMap[p.action] || { label: p.action, class: '' };
+      const condList = p.conditions || [];
+      const logicText = p.condition_logic === 'or' ? 'Логика: OR (Любое)' : 'Логика: AND (Все)';
+      
+      const condsHtml = condList.map(c => {
+        const metricLabels = {
+          'spend': 'Спенд', 'cpl': 'CPL', 'cpr': 'CPR', 'cpa': 'CPA',
+          'leads': 'Лиды', 'registrations': 'Реги', 'purchases': 'Покупки',
+          'ctr': 'CTR', 'cpc': 'CPC'
+        };
+        const mLabel = metricLabels[c.metric] || c.metric;
+        const op = (c.operator === 'gte' || c.operator === 'gt') ? '≥' : ((c.operator === 'lte' || c.operator === 'lt') ? '≤' : '=');
+        const unit = (c.metric === 'leads' || c.metric === 'registrations' || c.metric === 'purchases') ? ' шт' : (c.metric === 'ctr' ? '%' : '$');
+        const valStr = unit === '$' ? `$${c.value.toFixed(1)}` : `${c.value}${unit}`;
+        const windowLabels = { 'today': 'Сегодня', 'yesterday': 'Вчера', 'last_3d': '3 дня', 'last_7d': '7 дней' };
+        const winStr = windowLabels[c.time_window || 'today'] || 'Сегодня';
+
+        return `
+          <div class="rule-condition-chip">
+            <span class="rule-cond-bullet">•</span>
+            <span><b>${mLabel}</b> ${op} <b>${valStr}</b></span>
+            <span style="font-size:11px; color:var(--tg-hint);">(${winStr})</span>
+          </div>
+        `;
+      }).join('');
+
+      let budgetInfoHtml = '';
+      if (p.action === 'increase_budget' || p.action === 'decrease_budget') {
+        const sign = p.action === 'increase_budget' ? '+' : '-';
+        const cap = p.budget_max_daily > 0 ? ` · Макс: $${p.budget_max_daily}/день` : '';
+        budgetInfoHtml = `<div style="font-size:11.5px; color:#7aa2f7; font-weight:600;">💰 Шаг: ${sign}${p.budget_change_percent || 20}%${cap}</div>`;
+      }
+
+      return `
+        <div class="rule-item-card">
+          <div class="rule-card-top">
+            <div>
+              <div class="rule-card-title">${escapeHtml(p.name)}</div>
+              <div class="rule-card-meta">
+                <span>⏱ Проверка: ${p.check_interval_minutes || 5} мин</span>
+                <span>·</span>
+                <span>⏸ Пауза: ${p.cooldown_minutes ? p.cooldown_minutes + ' мин' : 'нет'}</span>
+              </div>
+            </div>
+            <span class="rule-action-badge ${act.class}">${act.label}</span>
+          </div>
+
+          ${budgetInfoHtml}
+
+          <div class="rule-conditions-list">
+            <div style="font-size:11px; font-weight:700; color:var(--tg-hint); text-transform:uppercase; margin-bottom:2px;">
+              ${logicText}
+            </div>
+            ${condsHtml || '<span style="font-size:12px; color:var(--tg-hint);">Без условий</span>'}
+          </div>
+
+          <div class="rule-card-footer">
+            <span style="font-size:11px; color:var(--tg-hint);">🔔 ${p.notify_tg !== false ? 'Уведомления ВКЛ' : 'Без пушей'}</span>
+            <div class="rule-card-actions">
+              <button class="btn-rule-action" onclick="window.editPresetFromTab(${p.id})">Редактировать</button>
+              <button class="btn-rule-action danger" onclick="window.deletePresetDirectly(${p.id})">Удалить</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  window.openCreateRuleFromTab = function () {
+    haptic('selection');
+    document.getElementById('editLimitsAccountId').value = '';
+    document.getElementById('modalLimitsTitle').textContent = 'Создание правила';
+    window.newPresetMode();
+    window.openModal('modalEditLimits');
+  };
+
+  window.editPresetFromTab = function (presetId) {
+    haptic('selection');
+    document.getElementById('editLimitsAccountId').value = '';
+    document.getElementById('modalLimitsTitle').textContent = 'Редактирование правила';
+    window.selectPreset(presetId);
+    window.openModal('modalEditLimits');
+  };
+
+  window.deletePresetDirectly = async function (presetId) {
+    haptic('impact', 'medium');
+    try {
+      await apiRequest(`/api/presets/${presetId}`, { method: 'DELETE' });
+      showToast('Правило удалено', 'success');
+      await loadPresets();
+      await loadAccounts();
+      renderRulesTab();
+    } catch (e) {
+      showToast(`Ошибка удаления: ${e.message}`, 'error');
+    }
+  };
+
+  // ==========================================================
+  // QUICK ASSIGN MODAL (PHOTO 3)
+  // ==========================================================
+  let currentAssignAccountId = null;
+
+  window.openAssignRuleModal = async function (accountId) {
+    haptic('impact', 'medium');
+    currentAssignAccountId = accountId;
+    const acc = state.accounts.find(a => a.account_id === accountId);
+    if (!acc) return;
+
+    await loadPresets();
+
+    document.getElementById('assignRuleAccountId').value = acc.account_id;
+    document.getElementById('assignRuleModalTitle').textContent = `Правило для ${acc.name}`;
+
+    const listEl = document.getElementById('assignPresetsList');
+    const detachBtn = document.getElementById('btnDetachFromAssignModal');
+
+    const hasActiveRule = (acc.preset_id || (acc.rule_conditions && acc.rule_conditions.length > 0));
+    if (detachBtn) {
+      detachBtn.classList.toggle('hidden', !hasActiveRule);
+    }
+
+    if (!state.presets || state.presets.length === 0) {
+      listEl.innerHTML = `
+        <div style="text-align:center; padding: 24px 12px; color:var(--tg-hint);">
+          <p style="margin-bottom:8px; font-size:13px;">У вас пока нет сохраненных правил.</p>
+        </div>
+      `;
+    } else {
+      const actionBadgeMap = {
+        'turn_off': '🔴 Стоп',
+        'notify_only': '🔔 Пуш',
+        'turn_on': '🟢 Старт',
+        'increase_budget': '📈 +Бюджет',
+        'decrease_budget': '📉 -Бюджет'
+      };
+
+      listEl.innerHTML = state.presets.map(p => {
+        const isCurrent = acc.preset_id === p.id;
+        const actLabel = actionBadgeMap[p.action] || p.action;
+        const condCount = p.conditions ? p.conditions.length : 0;
+        return `
+          <div class="assign-preset-item ${isCurrent ? 'active' : ''}" onclick="window.pickRuleForAccount(${p.id})">
+            <div class="assign-preset-info">
+              <div class="assign-preset-title">${isCurrent ? '✓ ' : ''}${escapeHtml(p.name)}</div>
+              <div class="assign-preset-sub">${actLabel} · ${condCount} условий · каждые ${p.check_interval_minutes || 5}м</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" style="pointer-events:none;">
+              ${isCurrent ? 'Выбрано' : 'Выбрать'}
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.openModal('modalAssignRule');
+  };
+
+  window.pickRuleForAccount = async function (presetId) {
+    if (!currentAssignAccountId) return;
+    haptic('impact', 'medium');
+    try {
+      const res = await apiRequest(`/api/accounts/${currentAssignAccountId}/apply-preset`, {
+        method: 'POST',
+        body: JSON.stringify({ preset_id: presetId })
+      });
+      showToast(res.message || 'Правило успешно привязано!', 'success');
+      window.closeModal('modalAssignRule');
+      await loadAccounts();
+      if (state.activeTab === 'rules') renderRulesTab();
+    } catch (e) {
+      showToast(`Ошибка: ${e.message}`, 'error');
+    }
+  };
+
+  window.openCreateRuleForCurrentAccount = function () {
+    window.closeModal('modalAssignRule');
+    if (currentAssignAccountId) {
+      window.openEditLimitsModal(currentAssignAccountId);
+    }
+  };
+
+  window.detachRuleFromCurrentAccount = async function () {
+    if (!currentAssignAccountId) return;
+    haptic('impact', 'medium');
+    try {
+      await apiRequest(`/api/accounts/${currentAssignAccountId}/detach-rule`, { method: 'POST' });
+      showToast('Правило сброшено с кабинета', 'success');
+      window.closeModal('modalAssignRule');
+      await loadAccounts();
+      if (state.activeTab === 'rules') renderRulesTab();
+    } catch (e) {
+      showToast(`Ошибка: ${e.message}`, 'error');
+    }
+  };
     try {
       const data = await apiRequest('/api/presets');
       state.presets = data || [];
@@ -774,17 +1011,35 @@
         budget_max_daily: budgetMaxDaily
       };
 
-      const res = await apiRequest(`/api/accounts/${accountId}/apply-preset`, {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      if (accountId) {
+        const res = await apiRequest(`/api/accounts/${accountId}/apply-preset`, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        haptic('notification', 'success');
+        showToast(res.message || 'Правило успешно сохранено и применено!', 'success');
+      } else {
+        if (editingPresetId) {
+          await apiRequest(`/api/presets/${editingPresetId}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+          });
+          showToast('Пресет успешно обновлен!', 'success');
+        } else {
+          await apiRequest('/api/presets', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+          showToast('Пресет успешно создан!', 'success');
+        }
+        haptic('notification', 'success');
+      }
 
-      haptic('notification', 'success');
-      showToast(res.message || 'Правило успешно сохранено и применено!', 'success');
       window.closeModal('modalEditLimits');
 
       await loadPresets();
       await loadAccounts();
+      if (state.activeTab === 'rules') renderRulesTab();
     } catch (err) {
       showToast(`Ошибка сохранения: ${err.message}`, 'error');
     }

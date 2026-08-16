@@ -54,6 +54,10 @@
           <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span>Мои кабинеты</span>
         </button>
+        <button class="nav-tab" data-tab="rules">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>Правила</span>
+        </button>
         <button class="nav-tab" data-tab="summary">
           <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           <span>Сводка</span>
@@ -104,7 +108,6 @@
 
         <!-- Accounts Grid / List -->
         <div id="accountsList" class="accounts-grid">
-          <!-- Dynamic Account Cards rendered here -->
           <div class="loading-state">
             <div class="spinner"></div>
             <p>Загрузка рекламных кабинетов...</p>
@@ -121,6 +124,49 @@
           <button class="btn btn-primary" onclick="window.switchTab('add')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
             Добавить кабинеты
+          </button>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- TAB: ПРАВИЛА (RULES & PRESETS) -->
+      <!-- ============================================== -->
+      <section id="tab-rules" class="tab-content">
+        <!-- Rules Header & Actions -->
+        <div class="rules-tab-header">
+          <div class="rules-header-info">
+            <h2>Правила мониторинга кампаний</h2>
+            <p class="rules-header-desc">
+              Правила проверяются автоматически с настроенным интервалом. При выполнении условий выбранные действия выполняются автоматически.
+            </p>
+          </div>
+          <button class="btn btn-primary btn-add-rule-main" onclick="window.openCreateRuleFromTab()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Новое правило</span>
+          </button>
+        </div>
+
+        <!-- Rules Stats Banner -->
+        <div class="rules-stats-bar" id="rulesStatsBar">
+          <div class="stat-pill"><span class="status-dot dot-success"></span> <span id="rulesActiveCount">0</span> активных правил</div>
+          <div class="stat-pill"><span id="rulesLinkedAccsCount">0</span> привязанных кабинетов</div>
+        </div>
+
+        <!-- Rules Cards List -->
+        <div id="rulesCardsContainer" class="rules-cards-grid">
+          <!-- Dynamically populated rules -->
+        </div>
+
+        <!-- Rules Empty State (Photo 2 reference) -->
+        <div id="rulesEmptyState" class="rules-empty-card hidden">
+          <div class="bell-empty-icon">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <h3>Правил пока нет</h3>
+          <p>Создайте правило, чтобы начать автоматический мониторинг кампаний и управление бюджетами.</p>
+          <button class="btn btn-primary btn-lg" onclick="window.openCreateRuleFromTab()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Новое правило</span>
           </button>
         </div>
       </section>
@@ -424,6 +470,10 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         <span>Кабинеты</span>
       </button>
+      <button class="mobile-nav-item" data-tab="rules">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Правила</span>
+      </button>
       <button class="mobile-nav-item" data-tab="summary">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         <span>Сводка</span>
@@ -690,6 +740,35 @@
         </div>
         <div class="modal-footer">
           <button id="btnBatchDone" class="btn btn-primary btn-block hidden" onclick="window.closeBatchProgress()">Готово</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 5: Quick Assign Rule Bottom Sheet (Photo 3) -->
+    <div id="modalAssignRule" class="modal-overlay hidden">
+      <div class="bottom-sheet" style="max-height: 80vh;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3 id="assignRuleModalTitle">Выбор правила для кабинета</h3>
+          <button class="btn-close" onclick="window.closeModal('modalAssignRule')">&times;</button>
+        </div>
+        <div class="sheet-body">
+          <input type="hidden" id="assignRuleAccountId">
+          <p class="text-hint" style="margin-bottom: 14px; font-size: 13px;">Выберите одно из созданных правил для привязки к этому кабинету, либо создайте новое.</p>
+          
+          <div class="assign-presets-list" id="assignPresetsList">
+            <!-- Dynamically populated list of rules to pick in 1 click -->
+          </div>
+
+          <div class="assign-modal-actions" style="display: flex; flex-direction: column; gap: 8px; margin-top: 16px;">
+            <button type="button" class="btn btn-secondary btn-block" onclick="window.openCreateRuleForCurrentAccount()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Создать новое правило
+            </button>
+            <button type="button" id="btnDetachFromAssignModal" class="btn-sub-link hidden" style="color: var(--color-warning); text-align: center;" onclick="window.detachRuleFromCurrentAccount()">
+              Сбросить текущее правило
+            </button>
+          </div>
         </div>
       </div>
     </div>
