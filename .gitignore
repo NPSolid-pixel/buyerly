@@ -1,0 +1,39 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs & Temp files
+*.log
+scratch/
+.system_generated/
+.user_uploaded/
+
+# Audio files (voice messages)
+*.ogg
+*.mp3
+*.wav
+transcription.txt
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/

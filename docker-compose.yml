@@ -1,0 +1,11 @@
+services:
+  ai-mediabuyer:
+    build: .
+    container_name: ai-mediabuyer-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/mediabuyer.db
