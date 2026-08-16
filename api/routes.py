@@ -29,6 +29,7 @@ from database.models import (
     RuleGroup,
     RuleGroupItem,
     SummarySnapshot,
+    AnalyticsViewPreference,
 )
 from meta_api.client import MetaClient
 from bot.handlers import parse_fb_raw_accounts, get_short_account_label
@@ -44,6 +45,33 @@ meta_client = MetaClient()
 _summary_cache: Dict[str, Any] = {}
 SUMMARY_CACHE_TTL = 120  # 2 minutes cache
 SUMMARY_SNAPSHOT_RETENTION = 100
+SUMMARY_VIEW_SCOPE = "summary"
+SUMMARY_TABLE_COLUMNS = (
+    "account",
+    "data",
+    "spend",
+    "impressions",
+    "reach",
+    "frequency",
+    "cpm",
+    "clicks",
+    "link_clicks",
+    "unique_clicks",
+    "outbound_clicks",
+    "landing_page_views",
+    "ctr",
+    "ctr_link",
+    "cpc",
+    "cpc_link",
+    "leads",
+    "registrations",
+    "purchases",
+    "cpl",
+    "cpreg",
+    "cpp",
+)
+SUMMARY_REQUIRED_COLUMNS = ("account", "data")
+SUMMARY_VIEW_MODES = {"all", "overview", "delivery", "traffic", "funnel", "custom"}
 
 # ----------------------------------------------------
 # Pydantic Schemas
@@ -164,6 +192,11 @@ class SetIntervalRequest(BaseModel):
     minutes: int = Field(ge=1, le=1440)
 
 
+class AnalyticsViewPreferenceRequest(BaseModel):
+    view_mode: str = Field(default="all", pattern="^(all|overview|delivery|traffic|funnel|custom)$")
+    visible_columns: List[str] = Field(default_factory=lambda: list(SUMMARY_TABLE_COLUMNS), max_length=len(SUMMARY_TABLE_COLUMNS))
+
+
 # ----------------------------------------------------
 # Helper to filter user accounts
 # ----------------------------------------------------
@@ -234,6 +267,43 @@ def _summary_with_cache_metadata(
 
 def _summary_owner_key(user: TelegramUser) -> str:
     return str(user.telegram_id or f"user:{user.id}")
+
+
+def _normalize_summary_view_config(config: Any, *, strict: bool = True) -> Dict[str, Any]:
+    if not isinstance(config, dict):
+        config = {}
+    view_mode = str(config.get("view_mode") or "all")
+    if view_mode not in SUMMARY_VIEW_MODES:
+        view_mode = "all"
+
+    requested = config.get("visible_columns")
+    if not isinstance(requested, list):
+        requested = list(SUMMARY_TABLE_COLUMNS)
+    invalid = [key for key in requested if key not in SUMMARY_TABLE_COLUMNS]
+    if invalid and strict:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Неизвестные колонки аналитики: {', '.join(map(str, invalid))}",
+        )
+    requested = [key for key in requested if key in SUMMARY_TABLE_COLUMNS]
+    requested_set = set(requested) | set(SUMMARY_REQUIRED_COLUMNS)
+    visible_columns = [key for key in SUMMARY_TABLE_COLUMNS if key in requested_set]
+    return {
+        "scope": SUMMARY_VIEW_SCOPE,
+        "view_mode": view_mode,
+        "visible_columns": visible_columns,
+    }
+
+
+def _analytics_view_response(
+    row: Optional[AnalyticsViewPreference],
+    config: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        **config,
+        "is_saved": row is not None,
+        "updated_at": _utc_iso(row.updated_at) if row else "",
+    }
 
 
 def _summary_snapshot_reference(
@@ -1175,6 +1245,60 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
         "added": added_list,
         "errors": error_list
     }
+
+
+@router.get("/analytics-view")
+async def get_analytics_view(user: TelegramUser = Depends(get_current_user)):
+    owner_key = _summary_owner_key(user)
+    async with async_session_maker() as session:
+        row = (
+            await session.execute(
+                select(AnalyticsViewPreference).where(
+                    AnalyticsViewPreference.owner_id == owner_key,
+                    AnalyticsViewPreference.scope == SUMMARY_VIEW_SCOPE,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            config = _normalize_summary_view_config({})
+        else:
+            try:
+                stored_config = json.loads(row.config or "{}")
+            except (TypeError, json.JSONDecodeError):
+                stored_config = {}
+            config = _normalize_summary_view_config(stored_config, strict=False)
+        return _analytics_view_response(row, config)
+
+
+@router.put("/analytics-view")
+async def save_analytics_view(
+    payload: AnalyticsViewPreferenceRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    owner_key = _summary_owner_key(user)
+    config = _normalize_summary_view_config(payload.model_dump())
+    async with async_session_maker() as session:
+        row = (
+            await session.execute(
+                select(AnalyticsViewPreference).where(
+                    AnalyticsViewPreference.owner_id == owner_key,
+                    AnalyticsViewPreference.scope == SUMMARY_VIEW_SCOPE,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            row = AnalyticsViewPreference(
+                owner_id=owner_key,
+                scope=SUMMARY_VIEW_SCOPE,
+                config=json.dumps(config, ensure_ascii=False),
+            )
+            session.add(row)
+        else:
+            row.config = json.dumps(config, ensure_ascii=False)
+            row.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(row)
+        return _analytics_view_response(row, config)
 
 
 @router.get("/summary")

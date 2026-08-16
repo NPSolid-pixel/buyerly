@@ -6,7 +6,46 @@
   'use strict';
 
   const SUMMARY_AUTO_REFRESH_MS = 3 * 60 * 1000;
+  const SUMMARY_COLUMNS = [
+    { key: 'account', label: 'Кабинет', group: 'base', required: true },
+    { key: 'data', label: 'Статус данных', group: 'base', required: true },
+    { key: 'spend', label: 'Spend', group: 'base' },
+    { key: 'impressions', label: 'Показы', group: 'delivery' },
+    { key: 'reach', label: 'Охват', group: 'delivery' },
+    { key: 'frequency', label: 'Частота', group: 'delivery' },
+    { key: 'cpm', label: 'CPM', group: 'delivery' },
+    { key: 'clicks', label: 'Все клики', group: 'traffic' },
+    { key: 'link_clicks', label: 'Link Clicks', group: 'traffic' },
+    { key: 'unique_clicks', label: 'Unique Clicks', group: 'traffic' },
+    { key: 'outbound_clicks', label: 'Outbound Clicks', group: 'traffic' },
+    { key: 'landing_page_views', label: 'Landing Page Views', group: 'traffic' },
+    { key: 'ctr', label: 'CTR All', group: 'traffic' },
+    { key: 'ctr_link', label: 'CTR Link', group: 'traffic' },
+    { key: 'cpc', label: 'CPC All', group: 'traffic' },
+    { key: 'cpc_link', label: 'CPC Link', group: 'traffic' },
+    { key: 'leads', label: 'Лиды', group: 'funnel' },
+    { key: 'registrations', label: 'Регистрации', group: 'funnel' },
+    { key: 'purchases', label: 'Покупки', group: 'funnel' },
+    { key: 'cpl', label: 'CPL', group: 'funnel' },
+    { key: 'cpreg', label: 'CPReg', group: 'funnel' },
+    { key: 'cpp', label: 'CPP', group: 'funnel' }
+  ];
+  const SUMMARY_VIEW_PRESETS = {
+    overview: ['account', 'data', 'spend', 'impressions', 'clicks', 'link_clicks', 'leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'],
+    delivery: ['account', 'data', 'spend', 'impressions', 'reach', 'frequency', 'cpm'],
+    traffic: ['account', 'data', 'spend', 'impressions', 'clicks', 'link_clicks', 'unique_clicks', 'outbound_clicks', 'landing_page_views', 'ctr', 'ctr_link', 'cpc', 'cpc_link'],
+    funnel: ['account', 'data', 'spend', 'leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'],
+    all: SUMMARY_COLUMNS.map(column => column.key)
+  };
+  const SUMMARY_COLUMN_GROUPS = {
+    base: { label: 'Основное', columns: ['account', 'data', 'spend'] },
+    delivery: { label: 'Доставка', columns: ['impressions', 'reach', 'frequency', 'cpm'] },
+    traffic: { label: 'Трафик', columns: ['clicks', 'link_clicks', 'unique_clicks', 'outbound_clicks', 'landing_page_views', 'ctr', 'ctr_link', 'cpc', 'cpc_link'] },
+    funnel: { label: 'Воронка', columns: ['leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'] }
+  };
   let summaryAutoRefreshTimer = null;
+  let summaryViewSaveQueue = Promise.resolve();
+  let summaryViewChangeVersion = 0;
 
   // Application State
   const state = {
@@ -16,6 +55,8 @@
     summaryCache: {},
     summaryLoading: false,
     summaryQueuedRequest: null,
+    summaryView: { view_mode: 'all', visible_columns: [...SUMMARY_VIEW_PRESETS.all] },
+    summaryViewLoaded: false,
     presets: [],
     ruleGroups: [],
     activePresetId: null,
@@ -161,6 +202,7 @@
       loadRulesTab();
     } else if (tabName === 'summary') {
       updateFetchButtonLabel(state.currentPeriod);
+      loadSummaryViewPreference();
       loadStoppedAdsets();
       if (state.summaryCache[state.currentPeriod]) {
         renderLocalSummaryCache(state.summaryCache[state.currentPeriod]);
@@ -1385,6 +1427,134 @@
     }, SUMMARY_AUTO_REFRESH_MS);
   }
 
+  function normalizeSummaryView(preference = {}) {
+    const knownColumns = new Set(SUMMARY_COLUMNS.map(column => column.key));
+    const requested = Array.isArray(preference.visible_columns)
+      ? preference.visible_columns.filter(key => knownColumns.has(key))
+      : SUMMARY_VIEW_PRESETS.all;
+    const visibleSet = new Set([...requested, 'account', 'data']);
+    const viewMode = ['all', 'overview', 'delivery', 'traffic', 'funnel', 'custom'].includes(preference.view_mode)
+      ? preference.view_mode
+      : 'all';
+    return {
+      view_mode: viewMode,
+      visible_columns: SUMMARY_COLUMNS.map(column => column.key).filter(key => visibleSet.has(key))
+    };
+  }
+
+  function summaryVisibleColumnCount() {
+    return Math.max(2, state.summaryView.visible_columns.length);
+  }
+
+  function updateSummaryViewControls() {
+    document.querySelectorAll('[data-summary-view]').forEach(button => {
+      button.classList.toggle('active', button.dataset.summaryView === state.summaryView.view_mode);
+    });
+    const count = document.getElementById('summaryVisibleColumnsCount');
+    if (count) count.textContent = summaryVisibleColumnCount();
+  }
+
+  function applySummaryColumnVisibility() {
+    const visible = new Set(state.summaryView.visible_columns);
+    document.querySelectorAll('[data-summary-column]').forEach(element => {
+      element.classList.toggle('summary-column-hidden', !visible.has(element.dataset.summaryColumn));
+    });
+
+    Object.entries(SUMMARY_COLUMN_GROUPS).forEach(([groupKey, group]) => {
+      if (groupKey === 'base') return;
+      const visibleCount = group.columns.filter(key => visible.has(key)).length;
+      const heading = document.querySelector(`[data-summary-group="${groupKey}"]`);
+      if (heading) {
+        heading.colSpan = Math.max(1, visibleCount);
+        heading.classList.toggle('summary-column-hidden', visibleCount === 0);
+      }
+    });
+
+    const table = document.querySelector('.summary-metrics-table');
+    if (table) table.style.minWidth = `${Math.max(760, 290 + summaryVisibleColumnCount() * 82)}px`;
+    document.querySelectorAll('#summaryTableBody td[data-summary-empty]').forEach(cell => {
+      cell.colSpan = summaryVisibleColumnCount();
+    });
+    updateSummaryViewControls();
+  }
+
+  function renderSummaryColumnOptions() {
+    const container = document.getElementById('summaryColumnOptions');
+    if (!container) return;
+    const visible = new Set(state.summaryView.visible_columns);
+    const definitions = new Map(SUMMARY_COLUMNS.map(column => [column.key, column]));
+    container.innerHTML = Object.entries(SUMMARY_COLUMN_GROUPS).map(([, group]) => `
+      <section class="summary-column-group">
+        <h4>${escapeHtml(group.label)}</h4>
+        ${group.columns.map(key => {
+          const column = definitions.get(key);
+          const isRequired = Boolean(column?.required);
+          return `
+            <label class="summary-column-choice${isRequired ? ' required' : ''}">
+              <input type="checkbox" value="${key}" ${visible.has(key) ? 'checked' : ''} ${isRequired ? 'disabled' : ''}>
+              <span>${escapeHtml(column?.label || key)}</span>
+              ${isRequired ? '<small class="summary-column-required">обязательно</small>' : ''}
+            </label>`;
+        }).join('')}
+      </section>`).join('');
+  }
+
+  async function persistSummaryView(preference, options = {}) {
+    const normalized = normalizeSummaryView(preference);
+    const changeVersion = ++summaryViewChangeVersion;
+    state.summaryView = normalized;
+    state.summaryViewLoaded = true;
+    applySummaryColumnVisibility();
+    try {
+      summaryViewSaveQueue = summaryViewSaveQueue
+        .catch(() => null)
+        .then(() => apiRequest('/api/analytics-view', {
+          method: 'PUT',
+          body: JSON.stringify(normalized)
+        }));
+      const saved = await summaryViewSaveQueue;
+      if (changeVersion === summaryViewChangeVersion) {
+        state.summaryView = normalizeSummaryView(saved);
+        applySummaryColumnVisibility();
+        if (options.toast) showToast(options.toast, 'success');
+      }
+      return saved;
+    } catch (err) {
+      if (changeVersion === summaryViewChangeVersion) {
+        showToast(`Вид применён, но не сохранён: ${err.message}`, 'error');
+      }
+      return null;
+    }
+  }
+
+  async function loadSummaryViewPreference() {
+    if (state.summaryViewLoaded) {
+      applySummaryColumnVisibility();
+      return state.summaryView;
+    }
+    const changeVersion = summaryViewChangeVersion;
+    try {
+      const preference = await apiRequest('/api/analytics-view');
+      if (changeVersion === summaryViewChangeVersion) {
+        state.summaryView = normalizeSummaryView(preference);
+      }
+    } catch (err) {
+      console.warn('Не удалось загрузить сохранённый вид аналитики:', err);
+      if (changeVersion === summaryViewChangeVersion) {
+        state.summaryView = normalizeSummaryView({ view_mode: 'all' });
+      }
+    } finally {
+      state.summaryViewLoaded = true;
+      applySummaryColumnVisibility();
+    }
+    return state.summaryView;
+  }
+
+  window.openSummaryColumns = function () {
+    renderSummaryColumnOptions();
+    window.openModal('modalSummaryColumns');
+  };
+
   // ==========================================================
   // TAB 2: SUMMARY (СВОДКА И АНАЛИТИКА)
   // ==========================================================
@@ -1628,7 +1798,7 @@
     // Desktop Table
     const tableBody = document.getElementById('summaryTableBody');
     if (!data.accounts || data.accounts.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="22" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
+      tableBody.innerHTML = `<tr><td data-summary-empty colspan="${summaryVisibleColumnCount()}" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
     } else {
       tableBody.innerHTML = data.accounts.map(acc => {
         const hasMetrics = acc.data_status === 'synced' || (!acc.data_status && !acc.is_banned && !acc.has_error);
@@ -1637,32 +1807,33 @@
         
         return `
           <tr>
-            <td><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
-            <td>${summaryDataStatus(acc)}</td>
-            <td class="text-right mono"><b>${spendStr}</b></td>
-            <td class="text-right mono">${hasMetrics ? formatNumber(acc.impressions) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.reach) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatDecimalOrDash(acc.frequency) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cpm) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatNumber(acc.clicks) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.link_clicks) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.unique_clicks) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.outbound_clicks) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.landing_page_views) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatDecimalOrDash(acc.ctr_link, 2, '%') : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cpc) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cpc_link) : '—'}</td>
-            <td class="text-right mono" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
-            <td class="text-right mono" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead) : '—'}</td>
-            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration) : '—'}</td>
-            <td class="text-right mono"><b>${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase) : '—'}</b></td>
+            <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
+            <td data-summary-column="data">${summaryDataStatus(acc)}</td>
+            <td class="text-right mono" data-summary-column="spend"><b>${spendStr}</b></td>
+            <td class="text-right mono" data-summary-column="impressions">${hasMetrics ? formatNumber(acc.impressions) : '—'}</td>
+            <td class="text-right mono" data-summary-column="reach">${hasMetrics ? formatOptionalNumber(acc.reach) : '—'}</td>
+            <td class="text-right mono" data-summary-column="frequency">${hasMetrics ? formatDecimalOrDash(acc.frequency) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpm">${hasMetrics ? formatMoneyOrDash(acc.cpm) : '—'}</td>
+            <td class="text-right mono" data-summary-column="clicks">${hasMetrics ? formatNumber(acc.clicks) : '—'}</td>
+            <td class="text-right mono" data-summary-column="link_clicks">${hasMetrics ? formatOptionalNumber(acc.link_clicks) : '—'}</td>
+            <td class="text-right mono" data-summary-column="unique_clicks">${hasMetrics ? formatOptionalNumber(acc.unique_clicks) : '—'}</td>
+            <td class="text-right mono" data-summary-column="outbound_clicks">${hasMetrics ? formatOptionalNumber(acc.outbound_clicks) : '—'}</td>
+            <td class="text-right mono" data-summary-column="landing_page_views">${hasMetrics ? formatOptionalNumber(acc.landing_page_views) : '—'}</td>
+            <td class="text-right mono" data-summary-column="ctr">${hasMetrics ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</td>
+            <td class="text-right mono" data-summary-column="ctr_link">${hasMetrics ? formatDecimalOrDash(acc.ctr_link, 2, '%') : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpc">${hasMetrics ? formatMoneyOrDash(acc.cpc) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpc_link">${hasMetrics ? formatMoneyOrDash(acc.cpc_link) : '—'}</td>
+            <td class="text-right mono" data-summary-column="leads" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
+            <td class="text-right mono" data-summary-column="registrations" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
+            <td class="text-right mono" data-summary-column="purchases">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpl">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpreg">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpp"><b>${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase) : '—'}</b></td>
           </tr>
         `;
       }).join('');
     }
+    applySummaryColumnVisibility();
 
     // Mobile Cards
     const mobileCards = document.getElementById('summaryMobileCards');
@@ -2292,6 +2463,42 @@
 
   document.getElementById('btnOpenTokenGuide')?.addEventListener('click', () => {
     window.openModal('modalTokenGuide');
+  });
+
+  document.getElementById('btnOpenSummaryColumns')?.addEventListener('click', () => {
+    haptic('selection');
+    window.openSummaryColumns();
+  });
+
+  document.querySelectorAll('[data-summary-view]').forEach(button => {
+    button.addEventListener('click', () => {
+      const viewMode = button.dataset.summaryView;
+      const columns = SUMMARY_VIEW_PRESETS[viewMode];
+      if (!columns) return;
+      haptic('selection');
+      persistSummaryView({ view_mode: viewMode, visible_columns: columns });
+    });
+  });
+
+  document.getElementById('btnSaveSummaryColumns')?.addEventListener('click', async () => {
+    const button = document.getElementById('btnSaveSummaryColumns');
+    const selected = Array.from(document.querySelectorAll('#summaryColumnOptions input:checked'))
+      .map(input => input.value);
+    if (button) button.disabled = true;
+    const saved = await persistSummaryView(
+      { view_mode: 'custom', visible_columns: selected },
+      { toast: 'Представление таблицы сохранено' }
+    );
+    if (button) button.disabled = false;
+    if (saved) window.closeModal('modalSummaryColumns');
+  });
+
+  document.getElementById('btnResetSummaryColumns')?.addEventListener('click', async () => {
+    const saved = await persistSummaryView(
+      { view_mode: 'all', visible_columns: SUMMARY_VIEW_PRESETS.all },
+      { toast: 'Восстановлен полный вид таблицы' }
+    );
+    if (saved) window.closeModal('modalSummaryColumns');
   });
 
   // Search & Filter & Sort event listeners

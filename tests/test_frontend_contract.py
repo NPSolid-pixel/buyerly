@@ -152,6 +152,34 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.metric-category-header', self.styles)
         self.assertIn('.summary-metrics-table', self.styles)
 
+    def test_summary_table_views_are_configurable_and_persisted(self):
+        for contract in (
+            'id="summaryViewPresets"',
+            'id="btnOpenSummaryColumns"',
+            'id="modalSummaryColumns"',
+            'id="summaryColumnOptions"',
+            'data-summary-view="overview"',
+            'data-summary-view="delivery"',
+            'data-summary-view="traffic"',
+            'data-summary-view="funnel"',
+            'data-summary-column="account"',
+            'data-summary-column="cpp"',
+        ):
+            self.assertIn(contract, self.index + self.script)
+
+        for contract in (
+            "apiRequest('/api/analytics-view')",
+            "apiRequest('/api/analytics-view', {",
+            'loadSummaryViewPreference()',
+            'applySummaryColumnVisibility()',
+            'SUMMARY_VIEW_PRESETS',
+        ):
+            self.assertIn(contract, self.script)
+
+        self.assertIn('.summary-view-toolbar', self.styles)
+        self.assertIn('.summary-column-hidden', self.styles)
+        self.assertIn('v=9.6.0', self.index)
+
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (
             'value="cpl"',

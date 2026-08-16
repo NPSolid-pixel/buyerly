@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.5.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.6.0">
 </head>
 
 <body>
@@ -485,38 +485,51 @@
             <span class="last-sync-time" id="lastSyncLabel">Синхронизировано только что</span>
           </div>
 
+          <div class="summary-view-toolbar desktop-view" aria-label="Представление таблицы">
+            <div class="summary-view-presets" id="summaryViewPresets">
+              <button class="summary-view-btn" type="button" data-summary-view="overview">Обзор</button>
+              <button class="summary-view-btn" type="button" data-summary-view="delivery">Доставка</button>
+              <button class="summary-view-btn" type="button" data-summary-view="traffic">Трафик</button>
+              <button class="summary-view-btn" type="button" data-summary-view="funnel">Воронка</button>
+              <button class="summary-view-btn active" type="button" data-summary-view="all">Все метрики</button>
+            </div>
+            <button id="btnOpenSummaryColumns" class="btn btn-secondary summary-columns-button" type="button">
+              Колонки таблицы <span id="summaryVisibleColumnsCount" class="summary-columns-count">22</span>
+            </button>
+          </div>
+
           <!-- Desktop Table View -->
           <div class="table-responsive desktop-view">
             <table class="data-table summary-metrics-table">
               <thead>
                 <tr class="table-group-header">
-                  <th rowspan="2">Кабинет</th>
-                  <th rowspan="2">Данные</th>
-                  <th rowspan="2" class="text-right">Spend</th>
-                  <th colspan="4" class="text-center">Доставка</th>
-                  <th colspan="9" class="text-center">Трафик</th>
-                  <th colspan="6" class="text-center">Воронка</th>
+                  <th rowspan="2" data-summary-column="account">Кабинет</th>
+                  <th rowspan="2" data-summary-column="data">Данные</th>
+                  <th rowspan="2" class="text-right" data-summary-column="spend">Spend</th>
+                  <th colspan="4" class="text-center" data-summary-group="delivery">Доставка</th>
+                  <th colspan="9" class="text-center" data-summary-group="traffic">Трафик</th>
+                  <th colspan="6" class="text-center" data-summary-group="funnel">Воронка</th>
                 </tr>
                 <tr>
-                  <th class="text-right">Показы</th>
-                  <th class="text-right">Охват</th>
-                  <th class="text-right">Частота</th>
-                  <th class="text-right">CPM</th>
-                  <th class="text-right">Все клики</th>
-                  <th class="text-right">Link</th>
-                  <th class="text-right">Unique</th>
-                  <th class="text-right">Outbound</th>
-                  <th class="text-right">LP Views</th>
-                  <th class="text-right">CTR All</th>
-                  <th class="text-right">CTR Link</th>
-                  <th class="text-right">CPC All</th>
-                  <th class="text-right">CPC Link</th>
-                  <th class="text-right">Лиды</th>
-                  <th class="text-right">Реги</th>
-                  <th class="text-right">Покупки</th>
-                  <th class="text-right">CPL</th>
-                  <th class="text-right">CPReg</th>
-                  <th class="text-right">CPP</th>
+                  <th class="text-right" data-summary-column="impressions">Показы</th>
+                  <th class="text-right" data-summary-column="reach">Охват</th>
+                  <th class="text-right" data-summary-column="frequency">Частота</th>
+                  <th class="text-right" data-summary-column="cpm">CPM</th>
+                  <th class="text-right" data-summary-column="clicks">Все клики</th>
+                  <th class="text-right" data-summary-column="link_clicks">Link</th>
+                  <th class="text-right" data-summary-column="unique_clicks">Unique</th>
+                  <th class="text-right" data-summary-column="outbound_clicks">Outbound</th>
+                  <th class="text-right" data-summary-column="landing_page_views">LP Views</th>
+                  <th class="text-right" data-summary-column="ctr">CTR All</th>
+                  <th class="text-right" data-summary-column="ctr_link">CTR Link</th>
+                  <th class="text-right" data-summary-column="cpc">CPC All</th>
+                  <th class="text-right" data-summary-column="cpc_link">CPC Link</th>
+                  <th class="text-right" data-summary-column="leads">Лиды</th>
+                  <th class="text-right" data-summary-column="registrations">Реги</th>
+                  <th class="text-right" data-summary-column="purchases">Покупки</th>
+                  <th class="text-right" data-summary-column="cpl">CPL</th>
+                  <th class="text-right" data-summary-column="cpreg">CPReg</th>
+                  <th class="text-right" data-summary-column="cpp">CPP</th>
                 </tr>
               </thead>
               <tbody id="summaryTableBody">
@@ -1180,6 +1193,24 @@
       </div>
     </div>
 
+    <div id="modalSummaryColumns" class="modal-overlay hidden">
+      <div class="bottom-sheet summary-columns-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <div>
+            <h3>Колонки таблицы</h3>
+            <p class="summary-columns-description">Выберите показатели для разбивки по кабинетам. Настройка сохранится для вашего пользователя.</p>
+          </div>
+          <button class="btn-close" type="button" onclick="window.closeModal('modalSummaryColumns')">&times;</button>
+        </div>
+        <div id="summaryColumnOptions" class="summary-column-options"></div>
+        <div class="modal-footer summary-columns-footer">
+          <button id="btnResetSummaryColumns" class="btn btn-secondary" type="button">Сбросить</button>
+          <button id="btnSaveSummaryColumns" class="btn btn-primary" type="button">Сохранить вид</button>
+        </div>
+      </div>
+    </div>
+
     <div id="toastContainer" class="toast-container"></div>
 
 
@@ -1188,6 +1219,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.5.0"></script>
+  <script src="/static/js/app.js?v=9.6.0"></script>
 </body>
 </html>

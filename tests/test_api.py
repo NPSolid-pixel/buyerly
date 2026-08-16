@@ -25,6 +25,7 @@ from database.models import (
     RuleGroupItem,
     RulePreset,
     SummarySnapshot,
+    AnalyticsViewPreference,
     StoppedAdSet,
     TelegramUser,
 )
@@ -535,6 +536,59 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             imported = result.scalar_one()
             self.assertFalse(imported.rules_enabled)
             self.assertEqual(imported.active_rules, "[]")
+
+    async def test_analytics_view_is_saved_per_user_and_validated(self):
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        admin_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8634201356, "first_name": "Admin", "username": "admin_user"},
+        )
+        buyer_headers = {"Authorization": f"tma {buyer_data}"}
+        admin_headers = {"Authorization": f"tma {admin_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            default_view = await client.get("/api/analytics-view", headers=buyer_headers)
+            self.assertEqual(default_view.status_code, 200)
+            self.assertFalse(default_view.json()["is_saved"])
+            self.assertEqual(default_view.json()["view_mode"], "all")
+            self.assertEqual(len(default_view.json()["visible_columns"]), 22)
+
+            saved_view = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"view_mode": "delivery", "visible_columns": ["spend", "impressions", "cpm"]},
+            )
+            self.assertEqual(saved_view.status_code, 200)
+            self.assertTrue(saved_view.json()["is_saved"])
+            self.assertEqual(
+                saved_view.json()["visible_columns"],
+                ["account", "data", "spend", "impressions", "cpm"],
+            )
+
+            restored_view = await client.get("/api/analytics-view", headers=buyer_headers)
+            self.assertEqual(restored_view.json()["view_mode"], "delivery")
+            self.assertEqual(restored_view.json()["visible_columns"], saved_view.json()["visible_columns"])
+
+            isolated_admin_view = await client.get("/api/analytics-view", headers=admin_headers)
+            self.assertFalse(isolated_admin_view.json()["is_saved"])
+            self.assertEqual(len(isolated_admin_view.json()["visible_columns"]), 22)
+
+            invalid_view = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"view_mode": "custom", "visible_columns": ["account", "secret_token"]},
+            )
+            self.assertEqual(invalid_view.status_code, 422)
+
+        async with self.test_session_maker() as session:
+            count = int(
+                (await session.execute(select(func.count()).select_from(AnalyticsViewPreference))).scalar_one()
+            )
+            self.assertEqual(count, 1)
 
     async def test_summary_exposes_metric_definitions_quality_and_cache_provenance(self):
         async with self.test_session_maker() as session:

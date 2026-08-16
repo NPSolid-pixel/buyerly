@@ -145,6 +145,25 @@ class SummarySnapshot(Base):
         return f"<SummarySnapshot(owner='{self.owner_id}', period='{self.period}', generated='{self.generated_at}')>"
 
 
+class AnalyticsViewPreference(Base):
+    """Owner-isolated saved configuration for an analytics surface."""
+
+    __tablename__ = "analytics_view_preferences"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "scope", name="uq_analytics_view_owner_scope"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String, nullable=False, index=True)
+    scope = Column(String, default="summary", nullable=False, index=True)
+    config = Column(Text, default="{}", nullable=False, doc="Безопасный JSON настроек представления")
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<AnalyticsViewPreference(owner='{self.owner_id}', scope='{self.scope}')>"
+
+
 class StoppedAdSet(Base):
     __tablename__ = "stopped_adsets"
 
