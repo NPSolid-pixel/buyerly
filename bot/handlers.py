@@ -411,31 +411,23 @@ async def cb_report_period(callback: CallbackQuery):
                 total_active_adsets += acc_active
                 total_paused_adsets += acc_paused
 
-                acc_cpa = (acc_spend / acc_conversions) if acc_conversions > 0 else 0.0
-                acc_cpc = (acc_spend / acc_clicks) if acc_clicks > 0 else 0.0
-
                 account_summaries.append(
                     f"🏢 <b>{acc.name}</b> (<code>{acc.timezone_name}</code>):\n"
-                    f"   💰 Спенд: <b>${acc_spend:.2f}</b> | 👆 Клики: <b>{acc_clicks}</b> (CPC: ${acc_cpc:.2f})\n"
+                    f"   💰 Спенд: <b>${acc_spend:.2f}</b> | 👆 Клики: <b>{acc_clicks}</b>\n"
                     f"   🎯 Лиды: <b>{acc_leads}</b> | 📝 Реги: <b>{acc_regs}</b> | 💳 Пурчейз: <b>{acc_purchases}</b>\n"
-                    f"   📈 CPA: <b>${acc_cpa:.2f}</b> | Адсеты: {acc_active} акт. / {acc_paused} пауза"
+                    f"   ⚡ Адсеты: {acc_active} акт. / {acc_paused} на паузе"
                 )
             except Exception as e:
                 logger.error(f"Error fetching report for {acc.account_id}: {e}")
                 account_summaries.append(f"⚠️ <b>{acc.name}</b>: <i>Ошибка API ({e})</i>")
 
-        total_conversions = total_leads + total_regs + total_purchases
-        overall_cpa = (total_spend / total_conversions) if total_conversions > 0 else 0.0
-        overall_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0.0
-
         report_text = (
             f"📊 <b>Ваш сводный отчет ({period_title}):</b>\n\n"
             f"💵 <b>Общий спенд:</b> <code>${total_spend:.2f}</code>\n"
-            f"👆 <b>Клики:</b> {total_clicks} (CPC: ${overall_cpc:.2f})\n"
+            f"👆 <b>Клики:</b> {total_clicks}\n"
             f"🎯 <b>Лиды:</b> {total_leads}\n"
             f"📝 <b>Реги (Регистрации):</b> {total_regs}\n"
             f"💳 <b>Пурчейз (Покупки):</b> {total_purchases}\n"
-            f"📈 <b>Средний CPA:</b> ${overall_cpa:.2f}\n"
             f"⚡ <b>Адсеты:</b> {total_active_adsets} активных / {total_paused_adsets} на паузе\n\n"
             f"<b>По кабинетам:</b>\n\n" + "\n\n".join(account_summaries)
         )

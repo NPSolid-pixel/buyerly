@@ -118,24 +118,19 @@ class MetaClient:
                 cpc = float(insight.get("cpc", 0.0)) if "cpc" in insight else 0.0
                 ctr = float(insight.get("ctr", 0.0)) if "ctr" in insight else 0.0
 
-                # Раздельный подсчет: Клики, Лиды, Реги, Покупки (Пурчейс)
-                leads = 0
-                registrations = 0
-                purchases = 0
-                actions = insight.get("actions", [])
-                for act in actions:
+                # Канонический точный подсчет: Лиды, Реги, Покупки (Пурчейс) без дублирования
+                actions_dict = {}
+                for act in insight.get("actions", []):
                     act_type = act.get("action_type", "")
                     try:
                         val = int(act.get("value", 0))
                     except (ValueError, TypeError):
                         val = 0
-                        
-                    if act_type in ["lead", "offsite_conversion.fb_pixel_lead", "contact", "onsite_conversion.lead_grouped"]:
-                        leads += val
-                    elif act_type in ["complete_registration", "offsite_conversion.fb_pixel_complete_registration", "registration"]:
-                        registrations += val
-                    elif act_type in ["purchase", "offsite_conversion.fb_pixel_purchase", "omni_purchase", "onsite_conversion.purchase"]:
-                        purchases += val
+                    actions_dict[act_type] = val
+
+                leads = actions_dict.get("lead", actions_dict.get("offsite_conversion.fb_pixel_lead", actions_dict.get("onsite_web_lead", 0)))
+                registrations = actions_dict.get("complete_registration", actions_dict.get("offsite_conversion.fb_pixel_complete_registration", actions_dict.get("omni_complete_registration", 0)))
+                purchases = actions_dict.get("purchase", actions_dict.get("offsite_conversion.fb_pixel_purchase", actions_dict.get("omni_purchase", 0)))
 
                 total_conversions = leads + registrations
                 cpa = (spend / total_conversions) if total_conversions > 0 else 0.0
