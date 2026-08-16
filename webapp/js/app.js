@@ -469,6 +469,7 @@
       showToast('Пресет удален', 'success');
       state.activePresetId = null;
       await loadPresets();
+      await loadAccounts();
       window.newPresetMode();
     } catch (e) {
       showToast(`Ошибка: ${e.message}`, 'error');

@@ -1034,12 +1034,19 @@ input:checked + .slider:before {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
+  background-color: #1a1b26 !important;
+  color: var(--tg-text) !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237aa2f7' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 12px;
   padding-right: 32px !important;
   cursor: pointer;
+}
+
+select option {
+  background-color: #1a1b26 !important;
+  color: #c0caf5 !important;
 }
 
 .form-textarea {
@@ -1698,6 +1705,8 @@ input[type=number] {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
+  background-color: var(--tg-sec-bg) !important;
+  color: var(--tg-text) !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%237aa2f7' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;

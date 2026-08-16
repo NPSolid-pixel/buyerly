@@ -259,6 +259,18 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
         preset = res.scalar_one_or_none()
         if not preset:
             raise HTTPException(status_code=404, detail="Пресет не найден")
+
+        # Сбрасываем привязанные кабинеты
+        acc_stmt = select(Account).where(Account.preset_id == preset_id)
+        if user.role != "admin":
+            acc_stmt = acc_stmt.where(Account.owner_id == user.telegram_id)
+        acc_res = await session.execute(acc_stmt)
+        linked_accounts = acc_res.scalars().all()
+        for acc in linked_accounts:
+            acc.preset_id = None
+            acc.preset_name = ""
+            acc.rule_conditions = "[]"
+            acc.rule_action = "turn_off"
         
         await session.execute(delete(RulePreset).where(RulePreset.id == preset_id))
         await session.commit()
