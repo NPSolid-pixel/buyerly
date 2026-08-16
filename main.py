@@ -9,6 +9,7 @@ from aiogram import Bot, Dispatcher
 from sqlalchemy import select
 
 from core.config import settings
+from core.logging_config import RedactingFormatter
 from database.db import init_db, async_session_maker
 from database.models import AppSettings
 from scheduler.worker import MonitoringWorker
@@ -18,7 +19,7 @@ from api.server import app as fastapi_app
 
 # Настройка сквозного логирования (в консоль + в файл logs/buyerly.log)
 os.makedirs("logs", exist_ok=True)
-log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log_formatter = RedactingFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 file_handler = RotatingFileHandler("logs/buyerly.log", maxBytes=10*1024*1024, backupCount=5, encoding="utf-8")
 file_handler.setFormatter(log_formatter)
