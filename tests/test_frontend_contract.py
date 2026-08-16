@@ -101,3 +101,21 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('data.cache?.is_cached', self.script)
         self.assertNotIn('id="kpiCpa"', self.index)
         self.assertNotIn('Средний CPA', self.index)
+
+    def test_account_cards_separate_meta_automation_and_rule_state(self):
+        for contract in (
+            'id="accountsHealthActive"',
+            'id="accountsHealthAutomation"',
+            'id="accountsHealthIssues"',
+            'id="modalAccountDetails"',
+            'Статус Meta',
+            'Автоматика',
+        ):
+            self.assertIn(contract, self.index + self.script)
+
+        self.assertIn('getAccountMetaState', self.script)
+        self.assertIn('window.openAccountDetails', self.script)
+        self.assertIn('window.openAccountLogs', self.script)
+        self.assertIn('state.pendingLogsAccountId', self.script)
+        self.assertIn('account-state-grid', self.styles)
+        self.assertIn('account-detail-grid', self.styles)

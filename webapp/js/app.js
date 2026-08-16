@@ -22,6 +22,7 @@
     auditEvents: [],
     auditPage: 1,
     auditTotalPages: 1,
+    pendingLogsAccountId: '',
     stoppedAdsets: [],
     settings: { poll_interval_minutes: 10 }
   };
@@ -214,6 +215,10 @@
     document.getElementById('countActive').textContent = activeCount;
     document.getElementById('countRules').textContent = rulesCount;
     document.getElementById('countIssue').textContent = issueCount;
+    document.getElementById('accountsHealthTotal').textContent = totalCount;
+    document.getElementById('accountsHealthActive').textContent = activeCount;
+    document.getElementById('accountsHealthAutomation').textContent = rulesCount;
+    document.getElementById('accountsHealthIssues').textContent = issueCount;
 
     if (filtered.length === 0) {
       listEl.innerHTML = '';
@@ -223,86 +228,75 @@
 
     emptyEl.classList.add('hidden');
     listEl.innerHTML = filtered.map(acc => {
-      let statusClass = 'status-active';
-      let statusText = '<span class="status-dot dot-success"></span>Активен';
-      
-      if (acc.account_status === 2 || !acc.is_active) {
-        statusClass = 'status-disabled';
-        statusText = '<span class="status-dot dot-danger"></span>Заблокирован';
-      } else if (acc.account_status === 3) {
-        statusClass = 'status-unsettled';
-        statusText = '<span class="status-dot dot-warning"></span>Hold на карте';
-      }
-
-      const cardClass = [
-        'account-card',
-        acc.rules_enabled ? 'rules-active' : '',
-        acc.account_status !== 1 ? 'account-disabled' : ''
-      ].filter(Boolean).join(' ');
-
+      const metaState = getAccountMetaState(acc);
       const activeRules = Array.isArray(acc.active_rules) ? acc.active_rules : [];
-      let rulePillHtml = '';
-
-      if (activeRules.length > 0) {
-        const actionIcons = {
-          'turn_off': '🔴', 'notify_only': '🔔', 'turn_on': '🟢',
-          'increase_budget': '📈', 'decrease_budget': '📉'
-        };
-        rulePillHtml = `
-          <div class="card-rules-list">
-            ${activeRules.map(rule => `
-              <button type="button" class="card-limits-btn ${acc.rules_enabled ? 'active' : ''}" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Управлять правилами кабинета">
-                <span style="font-size:13px; line-height:1;">${actionIcons[rule.action] || '⚙️'}</span>
-                <span class="limits-value">${escapeHtml(rule.name || `Правило #${rule.preset_id}`)}</span>
-              </button>
-            `).join('')}
-            <button type="button" class="card-limits-btn empty" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Добавить ещё одно правило">
-              <span class="plus-icon" style="font-size:14px; font-weight:700; color:var(--tg-link);">+</span>
-              <span class="limits-value" style="color:var(--tg-link); font-weight:600;">Добавить</span>
-            </button>
-          </div>
-        `;
-      } else {
-        rulePillHtml = `
-          <button type="button" class="card-limits-btn empty" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Привязать правило к кабинету">
-            <span class="plus-icon" style="font-size:14px; font-weight:700; color:var(--tg-link);">+</span>
-            <span class="limits-value" style="color:var(--tg-link); font-weight:600;">Добавить правило</span>
-          </button>
-        `;
-      }
+      const automationState = activeRules.length === 0
+        ? { key: 'empty', label: 'Не настроена' }
+        : (acc.rules_enabled ? { key: 'active', label: 'Включена' } : { key: 'paused', label: 'На паузе' });
+      const actionLabels = {
+        turn_off: 'Стоп', notify_only: 'Пуш', turn_on: 'Старт',
+        increase_budget: '+Бюджет', decrease_budget: '-Бюджет'
+      };
+      const visibleRules = activeRules.slice(0, 2);
+      const moreCount = Math.max(0, activeRules.length - visibleRules.length);
 
       return `
-        <div class="${cardClass}" id="card-${acc.account_id}">
+        <article class="account-card ${metaState.key !== 'active' ? 'account-disabled' : ''}" id="card-${escapeHtml(acc.account_id)}">
           <div class="card-header-row">
             <div class="card-title-area">
               <span class="card-title">${escapeHtml(acc.name)}</span>
               <div class="card-subtitle-row">
-                <span class="card-id-copy mono" onclick="window.copyToClipboard('${acc.account_id}', this)" title="Скопировать ID">
-                  ${acc.account_id}
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                </span>
-                <span class="card-sub-dot">·</span>
-                <span class="card-tz mono" title="Часовой пояс сброса статистики 00:00">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:2px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  ${acc.timezone_name}
-                </span>
+                <button class="card-id-copy mono" type="button" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Скопировать ID">
+                  ${escapeHtml(acc.account_id)}
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+                <span class="card-tz mono">${escapeHtml(acc.timezone_name || 'UTC')}</span>
               </div>
             </div>
-            <span class="status-badge ${statusClass}">${statusText}</span>
+            <button class="account-more-button" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')">Подробнее</button>
           </div>
 
-          <!-- Bottom Row: Unified Interactive Rule Pill + Master Rules Toggle -->
-          <div class="card-control-row">
-            ${rulePillHtml}
-
-            <label class="switch" title="Включить/выключить авто-правила">
-              <input type="checkbox" ${acc.rules_enabled ? 'checked' : ''} onchange="window.toggleRules('${acc.account_id}', this.checked)">
-              <span class="slider round"></span>
-            </label>
+          <div class="account-state-grid">
+            <div class="account-state-item">
+              <span>Статус Meta</span>
+              <b class="account-meta-state ${metaState.key}"><span class="status-dot dot-${metaState.dot}"></span>${metaState.label}</b>
+            </div>
+            <div class="account-state-item">
+              <span>Автоматика</span>
+              <b class="automation-state ${automationState.key}">${automationState.label}</b>
+            </div>
+            <div class="account-state-item">
+              <span>Правила</span>
+              <b>${activeRules.length}</b>
+            </div>
           </div>
-        </div>
-      `;
+
+          <div class="account-rules-preview ${activeRules.length ? '' : 'empty'}">
+            ${activeRules.length ? visibleRules.map(rule => `
+              <span><b>${escapeHtml(actionLabels[rule.action] || 'Правило')}</b> · ${escapeHtml(rule.name || `#${rule.preset_id}`)}</span>
+            `).join('') + (moreCount ? `<span class="account-rules-more">+ ещё ${moreCount}</span>` : '') : '<span>Правила ещё не назначены</span>'}
+          </div>
+
+          <div class="account-card-footer">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="window.openAssignRuleModal('${escapeHtml(acc.account_id)}')">Управлять правилами</button>
+            <div class="automation-master-control">
+              <span>${acc.rules_enabled ? 'Автоматика работает' : 'Автоматика выключена'}</span>
+              <label class="switch" title="Включить или выключить автоматику">
+                <input type="checkbox" ${acc.rules_enabled ? 'checked' : ''} onchange="window.toggleRules('${escapeHtml(acc.account_id)}', this.checked)">
+                <span class="slider round"></span>
+              </label>
+            </div>
+          </div>
+        </article>`;
     }).join('');
+  }
+
+  function getAccountMetaState(account) {
+    if (!account.is_active) return { key: 'inactive', label: 'Выключен в Buyerly', dot: 'muted' };
+    if ([2, 101].includes(account.account_status)) return { key: 'blocked', label: 'Заблокирован', dot: 'danger' };
+    if (account.account_status === 3) return { key: 'unsettled', label: 'Проблема оплаты', dot: 'warning' };
+    if (account.account_status !== 1) return { key: 'unknown', label: 'Нужна проверка', dot: 'warning' };
+    return { key: 'active', label: 'Доступен', dot: 'success' };
   }
 
   // Toggle Auto-Rules via API
@@ -331,6 +325,80 @@
     navigator.clipboard.writeText(text).then(() => {
       showToast(`ID ${text} скопирован в буфер!`, 'info');
     });
+  };
+
+  window.openAccountDetails = function (accountId) {
+    const account = state.accounts.find(item => item.account_id === accountId);
+    const content = document.getElementById('accountDetailsContent');
+    if (!account || !content) return;
+    const metaState = getAccountMetaState(account);
+    const activeRules = Array.isArray(account.active_rules) ? account.active_rules : [];
+    const actionLabels = {
+      turn_off: 'Выключить ad set', notify_only: 'Только уведомить', turn_on: 'Включить ad set',
+      increase_budget: 'Увеличить бюджет', decrease_budget: 'Уменьшить бюджет'
+    };
+    const rulesHtml = activeRules.length
+      ? activeRules.map(rule => `
+          <div class="account-detail-rule">
+            <div>
+              <b>${escapeHtml(rule.name || `Правило #${rule.preset_id}`)}</b>
+              <span>${escapeHtml(actionLabels[rule.action] || rule.action)} · проверка каждые ${rule.check_interval || 5} мин · cooldown ${rule.cooldown_minutes || 0} мин</span>
+            </div>
+            <span class="account-detail-rule-state ${account.rules_enabled ? 'active' : 'paused'}">${account.rules_enabled ? 'Работает' : 'Пауза'}</span>
+          </div>`).join('')
+      : '<div class="account-detail-rules-empty">Правила не назначены. Автоматика не может быть включена.</div>';
+    const ownerHtml = state.user?.role === 'admin'
+      ? `<div class="account-detail-field"><span>Владелец</span><b class="mono">${escapeHtml(account.owner_id || '—')}</b></div>`
+      : '';
+
+    content.innerHTML = `
+      <div class="account-detail-hero">
+        <div>
+          <span class="eyebrow">Рекламный кабинет</span>
+          <h2>${escapeHtml(account.name)}</h2>
+          <button type="button" class="account-detail-copy mono" onclick="window.copyToClipboard('${escapeHtml(account.account_id)}', this)">${escapeHtml(account.account_id)} · копировать</button>
+        </div>
+        <span class="account-meta-state ${metaState.key}"><span class="status-dot dot-${metaState.dot}"></span>${metaState.label}</span>
+      </div>
+
+      <div class="account-detail-grid">
+        <div class="account-detail-field"><span>Статус Meta</span><b>${escapeHtml(account.status_label || metaState.label)}</b></div>
+        <div class="account-detail-field"><span>Часовой пояс</span><b class="mono">${escapeHtml(account.timezone_name || 'UTC')}</b></div>
+        <div class="account-detail-field"><span>Автоматика</span><b>${account.rules_enabled ? 'Включена' : 'Выключена'}</b></div>
+        <div class="account-detail-field"><span>Назначено правил</span><b>${activeRules.length}</b></div>
+        ${ownerHtml}
+        <div class="account-detail-field"><span>Добавлен</span><b>${escapeHtml(account.created_at || '—')}</b></div>
+      </div>
+
+      <section class="account-detail-rules">
+        <div class="account-detail-section-head"><h3>Правила автоматики</h3><span>${activeRules.length}</span></div>
+        ${rulesHtml}
+      </section>
+
+      <div class="account-detail-actions">
+        <button class="btn btn-primary" type="button" onclick="window.manageRulesFromAccountDetails('${escapeHtml(account.account_id)}')">Управлять правилами</button>
+        <button class="btn btn-secondary" type="button" onclick="window.openAccountLogs('${escapeHtml(account.account_id)}')">История действий</button>
+        <button class="btn btn-danger" type="button" onclick="window.deleteAccountFromDetails('${escapeHtml(account.account_id)}')">Удалить</button>
+      </div>`;
+    window.openModal('modalAccountDetails');
+  };
+
+  window.manageRulesFromAccountDetails = function (accountId) {
+    window.closeModal('modalAccountDetails');
+    window.openAssignRuleModal(accountId);
+  };
+
+  window.openAccountLogs = function (accountId) {
+    state.pendingLogsAccountId = accountId;
+    window.closeModal('modalAccountDetails');
+    window.switchTab('logs');
+  };
+
+  window.deleteAccountFromDetails = function (accountId) {
+    const account = state.accounts.find(item => item.account_id === accountId);
+    if (!account) return;
+    window.closeModal('modalAccountDetails');
+    window.openDeleteConfirmModal(account.account_id, account.name);
   };
 
   // ==========================================================
@@ -1555,7 +1623,8 @@
     select.innerHTML = '<option value="">Все кабинеты</option>' + state.accounts.map(account =>
       `<option value="${escapeHtml(account.account_id)}">${escapeHtml(account.name || account.account_id)}</option>`
     ).join('');
-    select.value = current;
+    select.value = state.pendingLogsAccountId || current;
+    state.pendingLogsAccountId = '';
   }
 
   async function loadLogsTab(page = 1) {

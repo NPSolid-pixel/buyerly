@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.2.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.3.0">
 </head>
 
 <body>
@@ -127,6 +127,25 @@
       <!-- TAB 1: МОИ КАБИНЕТЫ (ACCOUNTS) -->
       <!-- ============================================== -->
       <section id="tab-accounts" class="tab-content active">
+        <div class="accounts-page-header">
+          <div>
+            <span class="eyebrow">Рабочее пространство</span>
+            <h2>Рекламные кабинеты</h2>
+            <p>Статус Meta, автоматика и назначенные правила — отдельно и без скрытых состояний.</p>
+          </div>
+          <button class="btn btn-primary" onclick="window.switchTab('add')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Добавить кабинеты
+          </button>
+        </div>
+
+        <div class="accounts-health-strip">
+          <span><b id="accountsHealthTotal">0</b> всего</span>
+          <span class="health-good"><span class="status-dot dot-success"></span><b id="accountsHealthActive">0</b> доступны в Meta</span>
+          <span><span class="status-dot dot-info"></span><b id="accountsHealthAutomation">0</b> с автоматикой</span>
+          <span class="health-bad"><span class="status-dot dot-danger"></span><b id="accountsHealthIssues">0</b> требуют внимания</span>
+        </div>
+
         <!-- Filter & Search Toolbar -->
         <div class="toolbar">
           <div class="search-box">
@@ -846,6 +865,18 @@
       </div>
     </div>
 
+    <!-- Modal 7: Account Details -->
+    <div id="modalAccountDetails" class="modal-overlay hidden">
+      <div class="bottom-sheet account-details-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3>Карточка кабинета</h3>
+          <button class="btn-close" onclick="window.closeModal('modalAccountDetails')">&times;</button>
+        </div>
+        <div id="accountDetailsContent" class="sheet-body"></div>
+      </div>
+    </div>
+
     <!-- Modal 2: Token Guide -->
     <div id="modalTokenGuide" class="modal-overlay hidden">
       <div class="modal-dialog">
@@ -1021,6 +1052,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.2.0"></script>
+  <script src="/static/js/app.js?v=9.3.0"></script>
 </body>
 </html>
