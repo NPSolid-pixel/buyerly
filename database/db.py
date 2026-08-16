@@ -74,8 +74,8 @@ async def init_db():
                 (TelegramUser.telegram_id == u["telegram_id"])
             )
             res = await session.execute(stmt)
-            existing = res.scalar_one_or_none()
-            if not existing:
+            matches = res.scalars().all()
+            if not matches:
                 new_u = TelegramUser(
                     telegram_id=u["telegram_id"],
                     username=u["username"],
@@ -87,16 +87,22 @@ async def init_db():
                 )
                 session.add(new_u)
             else:
-                existing.username = u["username"]
-                existing.full_name = u["full_name"]
-                existing.telegram_id = u["telegram_id"]
-                if not existing.password_hash:
-                    existing.password_hash = hash_password(u["password"])
-                if not existing.auth_token:
-                    existing.auth_token = u["token"]
-                existing.role = u["role"]
-                existing.is_approved = True
+                primary = next((m for m in matches if m.telegram_id == u["telegram_id"]), matches[0])
+                primary.username = u["username"]
+                primary.full_name = u["full_name"]
+                primary.telegram_id = u["telegram_id"]
+                if not primary.password_hash:
+                    primary.password_hash = hash_password(u["password"])
+                if not primary.auth_token:
+                    primary.auth_token = u["token"]
+                primary.role = u["role"]
+                primary.is_approved = True
+
+                for other in matches:
+                    if other.id != primary.id:
+                        await session.delete(other)
         await session.commit()
+
 
 
 
