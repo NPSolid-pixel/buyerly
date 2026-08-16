@@ -42,40 +42,19 @@
       <form id="loginForm" class="login-form" onsubmit="return false;">
         <div class="form-group">
           <label class="form-label" for="loginUsername">Логин</label>
-          <input type="text" id="loginUsername" class="form-control" placeholder="Artem или Nikolai" required autocomplete="username">
+          <input type="text" id="loginUsername" class="form-control" placeholder="Введите логин" required autocomplete="username">
         </div>
 
         <div class="form-group">
           <label class="form-label" for="loginPassword">Пароль</label>
-          <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+          <input type="password" id="loginPassword" class="form-control" placeholder="Введите пароль" required autocomplete="current-password">
         </div>
 
         <div id="loginError" class="login-error-msg hidden"></div>
 
-        <button type="submit" id="btnLoginSubmit" class="btn btn-primary btn-block btn-lg" style="margin-top: 8px;">
-          <span>Войти в систему</span>
+        <button type="submit" id="btnLoginSubmit" class="btn btn-primary btn-block btn-lg" style="margin-top: 14px;">
+          <span>Войти</span>
         </button>
-
-        <div class="quick-login-divider">
-          <span>Быстрый выбор пользователя</span>
-        </div>
-
-        <div class="quick-users-grid">
-          <button type="button" class="btn-quick-user" onclick="window.quickFillLogin('Artem', 'artem_buyer_2026')">
-            <span class="user-avatar-small">A</span>
-            <div style="text-align:left;">
-              <div style="font-weight:600; font-size:13px;">Artem</div>
-              <div style="font-size:11px; color:var(--tg-hint);">Администратор</div>
-            </div>
-          </button>
-          <button type="button" class="btn-quick-user" onclick="window.quickFillLogin('Nikolai', 'nikolai_buyer_2026')">
-            <span class="user-avatar-small">N</span>
-            <div style="text-align:left;">
-              <div style="font-weight:600; font-size:13px;">Nikolai</div>
-              <div style="font-size:11px; color:var(--tg-hint);">Администратор</div>
-            </div>
-          </button>
-        </div>
       </form>
     </div>
   </div>
