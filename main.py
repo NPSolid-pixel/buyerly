@@ -1,5 +1,7 @@
+import os
 import asyncio
 import logging
+from logging.handlers import RotatingFileHandler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot, Dispatcher
 from sqlalchemy import select
@@ -11,23 +13,35 @@ from scheduler.worker import MonitoringWorker
 from bot.notifier import TelegramNotifier
 from bot.handlers import router as bot_router, set_scheduler
 
+# Настройка сквозного логирования (в консоль + в файл logs/buyerly.log)
+os.makedirs("logs", exist_ok=True)
+log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+file_handler = RotatingFileHandler("logs/buyerly.log", maxBytes=10*1024*1024, backupCount=5, encoding="utf-8")
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+console_handler.setLevel(logging.INFO)
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    handlers=[file_handler, console_handler]
 )
 logger = logging.getLogger("ai_mediabuyer")
 
 async def main():
-    logger.info("Initializing AI Media Buyer Service...")
+    logger.info("Initializing Buyerly AI Media Buyer Service...")
     
     # 1. Инициализация базы данных
     await init_db()
 
-    # Получаем сохраненный интервал из БД или по умолчанию 15 мин
+    # Получаем сохраненный интервал из БД или по умолчанию 10 мин
     async with async_session_maker() as session:
         res = await session.execute(select(AppSettings).limit(1))
         app_settings = res.scalar_one_or_none()
-        interval = app_settings.poll_interval_minutes if app_settings else settings.DEFAULT_POLL_INTERVAL_MINUTES
+        interval = app_settings.poll_interval_minutes if app_settings else 10
         if not app_settings:
             session.add(AppSettings(poll_interval_minutes=interval))
             await session.commit()
@@ -61,7 +75,7 @@ async def main():
     logger.info(f"Scheduler started: polling accounts every {interval} minutes.")
 
     # 5. Запускаем polling бота
-    logger.info("Starting Telegram Bot polling...")
+    logger.info("Starting Telegram Bot polling for Buyerly...")
     try:
         await dp.start_polling(bot)
     finally:

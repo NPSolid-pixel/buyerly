@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text
 from database.db import Base
 
 def utcnow():
@@ -82,3 +82,18 @@ class StoppedAdSet(Base):
 
     def __repr__(self):
         return f"<StoppedAdSet(adset_id='{self.adset_id}', spend=${self.stop_spend})>"
+
+
+class EventLog(Base):
+    __tablename__ = "event_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_type = Column(String, nullable=False, index=True, doc="Тип события (ALERT_SENT, DAY_START, STOP, etc.)")
+    target_chat_id = Column(String, default="", index=True, doc="Кому отправлено (Telegram ID)")
+    account_id = Column(String, default="", index=True, doc="ID кабинета")
+    message = Column(Text, nullable=False, doc="Текст отправленного сообщения или события")
+    status = Column(String, default="SUCCESS", nullable=False, doc="Статус: SUCCESS или ERROR")
+    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<EventLog(type='{self.event_type}', chat='{self.target_chat_id}', status='{self.status}', time='{self.created_at}')>"

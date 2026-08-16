@@ -684,6 +684,32 @@ async def cmd_admin_panel(message: Message, bot: Bot, state: FSMContext):
         await message.answer(text, parse_mode="HTML")
 
 
+@router.message(StateFilter("*"), Command("events"))
+async def cmd_view_events(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
+    tg_id = str(message.from_user.id)
+    if tg_id != str(settings.ADMIN_CHAT_ID):
+        return
+
+    from database.models import EventLog
+    async with async_session_maker() as session:
+        stmt = select(EventLog).order_by(EventLog.created_at.desc()).limit(15)
+        res = await session.execute(stmt)
+        logs = res.scalars().all()
+
+        if not logs:
+            await message.answer("ℹ️ Журнал событий пока пуст.")
+            return
+
+        lines = []
+        for l in logs:
+            status_icon = "✅" if l.status == "SUCCESS" else "❌"
+            time_str = l.created_at.strftime("%H:%M:%S")
+            lines.append(f"{status_icon} <code>{time_str}</code> [{l.event_type}] → <code>{l.target_chat_id}</code>")
+
+        await message.answer("📜 <b>Последние 15 событий доставки алертов:</b>\n\n" + "\n".join(lines), parse_mode="HTML")
+
+
 @router.callback_query(F.data.startswith("approve_user:"))
 async def cb_approve_user(callback: CallbackQuery, bot: Bot):
     target_tg_id = callback.data.split(":")[1]

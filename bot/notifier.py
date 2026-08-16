@@ -3,17 +3,35 @@ from typing import Optional
 from aiogram import Bot
 from rules.engine import RuleEvaluationResult
 from bot.keyboards import get_reactivate_keyboard
+from database.db import async_session_maker
+from database.models import EventLog
 
 logger = logging.getLogger(__name__)
 
 class TelegramNotifier:
     """
-    Форматирует и отправляет алерты и отчеты в Telegram конкретному владельцу или админу.
+    Форматирует и отправляет алерты и отчеты в Telegram конкретному владельцу или админу
+    с обязательной фиксацией каждого события в логах и базе данных EventLog.
     """
 
     def __init__(self, bot: Bot, target_chat_id: str = ""):
         self.bot = bot
         self.default_chat_id = target_chat_id
+
+    async def _save_event_log(self, event_type: str, chat_id: str, account_id: str, message: str, status: str = "SUCCESS"):
+        try:
+            async with async_session_maker() as session:
+                log_entry = EventLog(
+                    event_type=event_type,
+                    target_chat_id=str(chat_id),
+                    account_id=str(account_id),
+                    message=message,
+                    status=status
+                )
+                session.add(log_entry)
+                await session.commit()
+        except Exception as e:
+            logger.error(f"Failed to save EventLog to DB: {e}")
 
     async def send_alert(
         self,
@@ -30,8 +48,11 @@ class TelegramNotifier:
         from core.config import settings
         chat_id = target_chat_id or self.default_chat_id or settings.ADMIN_CHAT_ID
         if not chat_id:
-            logger.warning("No target_chat_id configured, cannot send Telegram alert.")
+            logger.warning(f"No target_chat_id configured for event {event_type} (Account: {account_id}). Alert skipped.")
             return
+
+        text = ""
+        keyboard = None
 
         try:
             # 1. ОСТАНОВКА АДСЕТА
@@ -44,11 +65,6 @@ class TelegramNotifier:
                     f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n"
                     f"📊 <b>CPA:</b> ${eval_result.cpa:.2f}\n\n"
                     f"⚠️ <i>Причина: {eval_result.reason}</i>"
-                )
-                await self.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    parse_mode="HTML"
                 )
 
             # 2. ДОЛЕТ ЛИДА / РЕГИ (ПРЕДЛОЖЕНИЕ ВКЛЮЧИТЬ)
@@ -66,12 +82,6 @@ class TelegramNotifier:
                     account_id=account_id,
                     adset_id=eval_result.adset_id
                 )
-                await self.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=keyboard,
-                    parse_mode="HTML"
-                )
 
             # 3. АВТО-ВКЛЮЧЕНИЕ
             elif event_type == "AUTO_REACTIVATE" and eval_result:
@@ -81,11 +91,6 @@ class TelegramNotifier:
                     f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code>\n"
                     f"💰 <b>Спенд:</b> ${eval_result.spend:.2f} | <b>Лиды:</b> {eval_result.leads} | <b>Реги:</b> {eval_result.registrations} | <b>CPA:</b> ${eval_result.cpa:.2f}\n"
                     f"✅ <i>Адсет автоматически переведен в статус ACTIVE.</i>"
-                )
-                await self.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    parse_mode="HTML"
                 )
 
             # 4. СТАРТ ОТКРУТА В 00:00 ПО ВРЕМЕНИ КАБИНЕТА
@@ -98,11 +103,6 @@ class TelegramNotifier:
                     f"💰 <b>Стартовый спенд:</b> ${start_spend:.2f}\n\n"
                     f"<i>Бот непрерывно мониторит кампании.</i>"
                 )
-                await self.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    parse_mode="HTML"
-                )
 
             # 5. ПРОБЛЕМА С КАБИНЕТОМ (БАН / ХОЛД / ПРОВЕРКА)
             elif event_type == "ACCOUNT_ISSUE":
@@ -111,11 +111,6 @@ class TelegramNotifier:
                     f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
                     f"⚠️ <b>Статус:</b> {local_time}\n\n"
                     f"🛑 <i>Мониторинг этого кабинета временно приостановлен во избежание ошибок.</i>"
-                )
-                await self.bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    parse_mode="HTML"
                 )
 
             # 6. СЛЕТЕВШИЙ ТОКЕН ДОСТУПА
@@ -126,11 +121,18 @@ class TelegramNotifier:
                     f"⚠️ <i>Токен доступа стал недействительным или истек срок действия.</i>\n\n"
                     f"💡 <i>Обновите токен через бота (кнопка '➕ Добавить кабинеты').</i>"
                 )
+
+            if text:
+                logger.info(f"Sending Telegram alert [{event_type}] to chat_id={chat_id} (Account: {account_id})")
                 await self.bot.send_message(
                     chat_id=chat_id,
                     text=text,
+                    reply_markup=keyboard,
                     parse_mode="HTML"
                 )
+                logger.info(f"✅ Alert [{event_type}] delivered successfully to chat_id={chat_id}")
+                await self._save_event_log(event_type=event_type, chat_id=chat_id, account_id=account_id, message=text, status="SUCCESS")
 
         except Exception as e:
-            logger.error(f"Failed to send telegram alert: {e}")
+            logger.error(f"❌ Failed to send telegram alert [{event_type}] to {chat_id}: {e}")
+            await self._save_event_log(event_type=event_type, chat_id=chat_id, account_id=account_id, message=f"FAILED: {e}\n{text}", status="ERROR")
