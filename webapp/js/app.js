@@ -430,6 +430,38 @@
     return parseInt(activeBtn.dataset.val) || 5;
   }
 
+  function setupSettingsChips() {
+    document.querySelectorAll('#cooldownChipGroup .chip-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        haptic('selection');
+        document.querySelectorAll('#cooldownChipGroup .chip-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const customInput = document.getElementById('customCooldownInput');
+        if (btn.dataset.val === 'custom') {
+          customInput?.classList.remove('hidden');
+          customInput?.focus();
+        } else {
+          customInput?.classList.add('hidden');
+        }
+      });
+    });
+
+    document.querySelectorAll('#intervalChipGroup .chip-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        haptic('selection');
+        document.querySelectorAll('#intervalChipGroup .chip-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const customInput = document.getElementById('customIntervalInput');
+        if (btn.dataset.val === 'custom') {
+          customInput?.classList.remove('hidden');
+          customInput?.focus();
+        } else {
+          customInput?.classList.add('hidden');
+        }
+      });
+    });
+  }
+
   window.selectPreset = function (presetId) {
     haptic('selection');
     const preset = state.presets.find(p => p.id === presetId);
