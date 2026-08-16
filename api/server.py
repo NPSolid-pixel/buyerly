@@ -1,11 +1,15 @@
-import os
 import logging
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from sqlalchemy import text
 
 from api.routes import router as api_router
+from core.config import settings
+from database.db import async_session_maker
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,23 @@ def create_app() -> FastAPI:
     # API routes
     app.include_router(api_router)
 
+    @app.get("/health/live", include_in_schema=False)
+    async def health_live():
+        return {"status": "alive", "version": settings.APP_VERSION}
+
+    @app.get("/health/ready", include_in_schema=False)
+    async def health_ready():
+        try:
+            async with async_session_maker() as session:
+                await session.execute(text("SELECT 1"))
+        except Exception:
+            logger.exception("Readiness database check failed")
+            return JSONResponse(
+                status_code=503,
+                content={"status": "not_ready", "version": settings.APP_VERSION},
+            )
+        return {"status": "ready", "version": settings.APP_VERSION}
+
     # Static Web App files
     webapp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "webapp")
     os.makedirs(webapp_dir, exist_ok=True)
@@ -62,4 +83,3 @@ def create_app() -> FastAPI:
     return app
 
 app = create_app()
-

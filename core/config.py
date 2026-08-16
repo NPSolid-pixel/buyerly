@@ -1,8 +1,9 @@
-import os
-from pydantic_settings import BaseSettings
 from pydantic import Field
+from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
+    APP_VERSION: str = Field(default="dev", description="Deployed Git commit SHA")
     BOT_TOKEN: str = Field(default="", description="Telegram Bot Token from @BotFather")
     DATABASE_URL: str = Field(default="sqlite+aiosqlite:///mediabuyer.db", description="SQLite database URL")
     DEFAULT_POLL_INTERVAL_MINUTES: int = Field(default=5, description="Monitoring interval in minutes")
@@ -18,4 +19,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

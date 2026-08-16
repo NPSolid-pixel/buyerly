@@ -1,18 +1,21 @@
-import hmac
 import hashlib
+import hmac
 import json
-import urllib.parse
 import unittest
-import httpx
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+import urllib.parse
 
-from database.db import Base
-from database.models import TelegramUser, Account, AppSettings
-from core.config import settings
+import httpx
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+import api.auth as api_auth_module
+import api.routes as api_routes_module
+import api.server as api_server_module
 from api.auth import validate_telegram_init_data
 from api.server import create_app
-import api.routes as api_routes_module
-import api.auth as api_auth_module
+from core.config import settings
+from database.db import Base
+from database.models import Account, AppSettings, TelegramUser
+
 
 def generate_valid_telegram_init_data(bot_token: str, user_dict: dict) -> str:
     params = {
@@ -40,6 +43,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         # Patch session maker in modules
         api_routes_module.async_session_maker = self.test_session_maker
         api_auth_module.async_session_maker = self.test_session_maker
+        api_server_module.async_session_maker = self.test_session_maker
 
         settings.BOT_TOKEN = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
         settings.ADMIN_CHAT_ID = "8634201356"
@@ -98,6 +102,18 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         tampered_init_data = valid_init_data.replace("buyer_nick", "hacker")
         tampered_res = validate_telegram_init_data(tampered_init_data, settings.BOT_TOKEN)
         self.assertIsNone(tampered_res)
+
+    async def test_health_endpoints(self):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            live_response = await client.get("/health/live")
+            ready_response = await client.get("/health/ready")
+
+        self.assertEqual(live_response.status_code, 200)
+        self.assertEqual(live_response.json()["status"], "alive")
+        self.assertEqual(ready_response.status_code, 200)
+        self.assertEqual(ready_response.json()["status"], "ready")
+        self.assertIn("version", ready_response.json())
 
     async def test_get_accounts_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
