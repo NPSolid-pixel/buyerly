@@ -1,0 +1,68 @@
+name: CI/CD & Auto-Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Unit & Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Test Suite
+        run: |
+          python -m unittest discover tests -v
+
+  deploy:
+    name: Deploy to Production VPS
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Execute Remote SSH Commands for Deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME || 'root' }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_PASSPHRASE || '' }}
+          password: ${{ secrets.VPS_PASSWORD || '' }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+            echo "🚀 [Deploy] Connected to VPS. Starting deployment for Buyerly..."
+            if [ -d "/opt/buyerly" ]; then
+              cd /opt/buyerly
+              if [ -f "scripts/deploy.sh" ]; then
+                chmod +x scripts/deploy.sh scripts/backup_db.sh || true
+                bash scripts/deploy.sh
+              else
+                echo "📥 Pulling latest git changes..."
+                git fetch origin main
+                git reset --hard origin/main
+                chmod +x scripts/deploy.sh scripts/backup_db.sh || true
+                bash scripts/deploy.sh
+              fi
+            else
+              echo "❌ Error: /opt/buyerly directory does not exist on server!"
+              exit 1
+            fi
