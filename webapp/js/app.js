@@ -867,20 +867,30 @@
       document.getElementById('userName').textContent = user.full_name || user.username || 'Медиабайер';
       document.getElementById('userAvatar').textContent = (user.full_name || user.username || 'B').charAt(0).toUpperCase();
       
+      // Hide unauthorized screen & reveal app UI
+      const unauthEl = document.getElementById('unauthorizedScreen');
+      const appEl = document.getElementById('app');
+      if (unauthEl) unauthEl.style.display = 'none';
+      if (appEl) appEl.style.display = 'block';
+
       // Load initial tab (Accounts)
       window.switchTab('accounts');
     } catch (e) {
       console.warn("Unauthorized / access locked:", e);
-      const lockScreen = document.getElementById('authLockScreen');
-      const lockMsg = document.getElementById('authLockMessage');
-      if (lockScreen) {
-        lockScreen.classList.remove('hidden');
+      const unauthEl = document.getElementById('unauthorizedScreen');
+      const appEl = document.getElementById('app');
+      if (appEl) appEl.style.display = 'none';
+      if (unauthEl) {
+        unauthEl.style.display = 'flex';
         if (e.message && e.message.includes('одобрения')) {
-          lockMsg.textContent = 'Ваш аккаунт зарегистрирован, но ожидает подтверждения администратором.';
+          unauthEl.innerHTML = '<span>❌ Ваш аккаунт ожидает одобрения администратора (@buyerly_bot)</span>';
+        } else {
+          unauthEl.innerHTML = '<span>❌ Требуется авторизация через Telegram Web App (@buyerly_bot)</span>';
         }
       }
     }
   }
+
 
 
 
