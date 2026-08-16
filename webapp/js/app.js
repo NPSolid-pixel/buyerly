@@ -52,6 +52,26 @@
   };
   const SUMMARY_COLUMN_MIN_WIDTH = 72;
   const SUMMARY_COLUMN_MAX_WIDTH = 420;
+  const TAB_ROUTES = Object.freeze({
+    accounts: '/accounts',
+    rules: '/rules',
+    summary: '/summary',
+    logs: '/logs',
+    add: '/add-accounts',
+    settings: '/settings'
+  });
+  const ROUTE_TABS = Object.freeze(Object.fromEntries(
+    Object.entries(TAB_ROUTES).map(([tab, route]) => [route, tab])
+  ));
+  const LEGACY_ROUTE_TABS = Object.freeze({ '/': 'accounts', '/dashboard': 'summary' });
+  const TAB_PAGE_TITLES = Object.freeze({
+    accounts: 'Мои кабинеты — Buyerly',
+    rules: 'Правила — Buyerly',
+    summary: 'Сводка — Buyerly',
+    logs: 'Логи — Buyerly',
+    add: 'Добавить кабинеты — Buyerly',
+    settings: 'Настройки — Buyerly'
+  });
   let summaryAutoRefreshTimer = null;
   let summaryViewSaveQueue = Promise.resolve();
   let summaryViewChangeVersion = 0;
@@ -201,13 +221,61 @@
   // ==========================================================
   // TAB NAVIGATION
   // ==========================================================
-  window.switchTab = function (tabName) {
+  function normalizeAppPath(pathname = '/') {
+    const path = String(pathname || '/').replace(/\/+$/, '');
+    return path || '/';
+  }
+
+  function tabFromLocation(pathname = window.location.pathname) {
+    const path = normalizeAppPath(pathname);
+    return ROUTE_TABS[path] || LEGACY_ROUTE_TABS[path] || 'accounts';
+  }
+
+  function isKnownAppPath(pathname = window.location.pathname) {
+    const path = normalizeAppPath(pathname);
+    return Boolean(ROUTE_TABS[path] || LEGACY_ROUTE_TABS[path]);
+  }
+
+  function rememberReturnRoute(pathname = window.location.pathname) {
+    if (!isKnownAppPath(pathname)) return;
+    try {
+      sessionStorage.setItem('buyerly_return_route', TAB_ROUTES[tabFromLocation(pathname)]);
+    } catch (e) {}
+  }
+
+  function consumeReturnRoute() {
+    try {
+      const route = sessionStorage.getItem('buyerly_return_route') || '';
+      sessionStorage.removeItem('buyerly_return_route');
+      return route;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function syncBrowserRoute(tabName, historyMode = 'push') {
+    if (historyMode === 'none') return;
+    const route = TAB_ROUTES[tabName] || TAB_ROUTES.accounts;
+    const currentPath = normalizeAppPath(window.location.pathname);
+    const method = historyMode === 'replace' || currentPath === route ? 'replaceState' : 'pushState';
+    try {
+      window.history[method]({ tab: tabName }, '', route);
+    } catch (e) {}
+  }
+
+  window.switchTab = function (requestedTab, options = {}) {
+    const tabName = Object.hasOwn(TAB_ROUTES, requestedTab) ? requestedTab : 'accounts';
     state.activeTab = tabName;
-    haptic('selection');
+    if (options.haptic !== false) haptic('selection');
+    syncBrowserRoute(tabName, options.historyMode || 'push');
+    document.title = TAB_PAGE_TITLES[tabName] || 'Buyerly — AI Media Buyer';
 
     // Update active tab buttons (Desktop & Mobile)
     document.querySelectorAll('.nav-tab, .mobile-nav-item').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tabName);
+      const isActive = btn.dataset.tab === tabName;
+      btn.classList.toggle('active', isActive);
+      if (isActive) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
     });
 
     // Show active tab section
@@ -229,7 +297,7 @@
     }
 
     // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: options.scrollBehavior || 'smooth' });
   };
 
   // ==========================================================
@@ -3155,15 +3223,21 @@
         if (uAvatar) uAvatar.textContent = (user.full_name || user.username || 'B').charAt(0).toUpperCase();
       }
 
-      if (window.location.pathname === '/sign-in' || window.location.pathname === '/login') {
-        try { window.history.replaceState({}, '', '/'); } catch (e) {}
-      }
+      const currentPath = normalizeAppPath(window.location.pathname);
+      const isLoginPath = currentPath === '/sign-in' || currentPath === '/login';
+      const initialPath = isLoginPath ? consumeReturnRoute() : currentPath;
+      const initialTab = tabFromLocation(initialPath || TAB_ROUTES.accounts);
 
-      // Load initial tab (Accounts)
+      // Restore the requested page only after authentication succeeds.
       startSummaryAutoRefresh();
-      window.switchTab('accounts');
+      window.switchTab(initialTab, {
+        historyMode: 'replace',
+        haptic: false,
+        scrollBehavior: 'auto'
+      });
     } catch (e) {
       console.warn("Unauthorized / access locked:", e);
+      rememberReturnRoute();
       setWebAuthToken('');
       const loginScreen = document.getElementById('loginScreen');
       const loginError = document.getElementById('loginError');
@@ -3292,9 +3366,19 @@
     setWebAuthToken('');
     showToast('Вы вышли из системы', 'info');
     setTimeout(() => {
+      try { window.history.replaceState({}, '', '/sign-in'); } catch (e) {}
       window.location.reload();
     }, 300);
   };
+
+  window.addEventListener('popstate', () => {
+    if (!state.user) return;
+    window.switchTab(tabFromLocation(), {
+      historyMode: 'none',
+      haptic: false,
+      scrollBehavior: 'auto'
+    });
+  });
 
   document.addEventListener('visibilitychange', () => {
     if (

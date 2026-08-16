@@ -9,6 +9,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         cls.script = (webapp / "js" / "app.js").read_text()
         cls.index = (webapp / "index.html").read_text()
         cls.styles = (webapp / "css" / "styles.css").read_text()
+        cls.server = (Path(__file__).parents[1] / "api" / "server.py").read_text()
 
     def test_frontend_uses_current_rule_endpoints(self):
         self.assertNotIn("/apply-preset", self.script)
@@ -67,6 +68,28 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('role="button" tabindex="0"', self.index)
         self.assertIn("window.switchTab('settings')", self.script)
         self.assertNotIn('class="mobile-nav-item" data-tab="settings"', self.index)
+
+    def test_sections_have_stable_urls_and_restore_after_reload(self):
+        for contract in (
+            "accounts: '/accounts'",
+            "rules: '/rules'",
+            "summary: '/summary'",
+            "logs: '/logs'",
+            "add: '/add-accounts'",
+            "settings: '/settings'",
+            'TAB_ROUTES',
+            'ROUTE_TABS',
+            'tabFromLocation',
+            'syncBrowserRoute',
+            "window.addEventListener('popstate'",
+            "historyMode: 'replace'",
+            "historyMode: 'none'",
+            "btn.setAttribute('aria-current', 'page')",
+        ):
+            self.assertIn(contract, self.script)
+
+        for route in ('accounts', 'rules', 'summary', 'logs', 'add-accounts', 'settings'):
+            self.assertIn(f'@app.get("/{route}")', self.server)
 
     def test_rule_groups_can_be_managed_and_assigned_from_the_ui(self):
         for contract in (
@@ -206,7 +229,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.9.0', self.index)
+        self.assertIn('v=9.10.0', self.index)
 
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (

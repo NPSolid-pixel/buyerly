@@ -73,6 +73,12 @@ def create_app() -> FastAPI:
         @app.get("/sign-in")
         @app.get("/login")
         @app.get("/dashboard")
+        @app.get("/accounts")
+        @app.get("/rules")
+        @app.get("/summary")
+        @app.get("/logs")
+        @app.get("/add-accounts")
+        @app.get("/settings")
         async def serve_index():
             index_path = os.path.join(webapp_dir, "index.html")
             if os.path.exists(index_path):
