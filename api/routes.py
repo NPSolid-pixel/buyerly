@@ -36,7 +36,7 @@ class UserProfileResponse(BaseModel):
 
 class ConditionItem(BaseModel):
     metric: str = "spend"  # spend, cpl, cpr
-    operator: str = "gt"   # gt, lt, eq
+    operator: str = "gte"  # gte, gt, lte, lt, eq
     value: float = 0.0
 
 class RulePresetItem(BaseModel):
@@ -44,18 +44,27 @@ class RulePresetItem(BaseModel):
     name: str
     action: str
     conditions: List[ConditionItem]
+    cooldown_minutes: int = 0
+    check_interval_minutes: int = 5
+    notify_tg: bool = True
     created_at: str
 
 class CreatePresetRequest(BaseModel):
     name: str
     action: Optional[str] = "turn_off"
     conditions: List[ConditionItem] = Field(default_factory=list)
+    cooldown_minutes: Optional[int] = 0
+    check_interval_minutes: Optional[int] = 5
+    notify_tg: Optional[bool] = True
 
 class ApplyPresetRequest(BaseModel):
     preset_id: Optional[int] = None
     name: Optional[str] = ""
     action: Optional[str] = "turn_off"
     conditions: List[ConditionItem] = Field(default_factory=list)
+    cooldown_minutes: Optional[int] = 0
+    check_interval_minutes: Optional[int] = 5
+    notify_tg: Optional[bool] = True
 
 class AccountItem(BaseModel):
     id: int
@@ -72,6 +81,9 @@ class AccountItem(BaseModel):
     preset_name: Optional[str] = ""
     rule_action: Optional[str] = "turn_off"
     rule_conditions: Optional[List[ConditionItem]] = Field(default_factory=list)
+    rule_cooldown_minutes: Optional[int] = 0
+    rule_check_interval: Optional[int] = 5
+    rule_notify_tg: Optional[bool] = True
     max_spend_0_leads: float
     max_spend_1_lead: float
     max_cpa_multiple_leads: float
@@ -166,6 +178,9 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 preset_name=a.preset_name or "",
                 rule_action=a.rule_action or "turn_off",
                 rule_conditions=conds,
+                rule_cooldown_minutes=a.rule_cooldown_minutes or 0,
+                rule_check_interval=a.rule_check_interval or 5,
+                rule_notify_tg=a.rule_notify_tg if a.rule_notify_tg is not None else True,
                 max_spend_0_leads=a.max_spend_0_leads,
                 max_spend_1_lead=a.max_spend_1_lead,
                 max_cpa_multiple_leads=a.max_cpa_multiple_leads,
@@ -197,6 +212,9 @@ async def list_presets(user: TelegramUser = Depends(get_current_user)):
                 name=p.name,
                 action=p.action,
                 conditions=[ConditionItem(**c) for c in conds if isinstance(c, dict)],
+                cooldown_minutes=p.cooldown_minutes or 0,
+                check_interval_minutes=p.check_interval_minutes or 5,
+                notify_tg=p.notify_tg if p.notify_tg is not None else True,
                 created_at=p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else ""
             ))
         return result
@@ -210,7 +228,10 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
             owner_id=user.telegram_id,
             name=payload.name.strip() or "Новое правило",
             action=payload.action or "turn_off",
-            conditions=conds_json
+            conditions=conds_json,
+            cooldown_minutes=payload.cooldown_minutes or 0,
+            check_interval_minutes=payload.check_interval_minutes or 5,
+            notify_tg=payload.notify_tg if payload.notify_tg is not None else True
         )
         session.add(preset)
         await session.commit()
@@ -220,6 +241,9 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
             name=preset.name,
             action=preset.action,
             conditions=payload.conditions,
+            cooldown_minutes=preset.cooldown_minutes,
+            check_interval_minutes=preset.check_interval_minutes,
+            notify_tg=preset.notify_tg,
             created_at=preset.created_at.strftime("%Y-%m-%d %H:%M") if preset.created_at else ""
         )
 
@@ -238,6 +262,13 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
         preset.name = payload.name.strip() or preset.name
         preset.action = payload.action or "turn_off"
         preset.conditions = json.dumps([c.model_dump() for c in payload.conditions])
+        if payload.cooldown_minutes is not None:
+            preset.cooldown_minutes = payload.cooldown_minutes
+        if payload.check_interval_minutes is not None:
+            preset.check_interval_minutes = payload.check_interval_minutes
+        if payload.notify_tg is not None:
+            preset.notify_tg = payload.notify_tg
+
         await session.commit()
         await session.refresh(preset)
         return RulePresetItem(
@@ -245,6 +276,9 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
             name=preset.name,
             action=preset.action,
             conditions=payload.conditions,
+            cooldown_minutes=preset.cooldown_minutes,
+            check_interval_minutes=preset.check_interval_minutes,
+            notify_tg=preset.notify_tg,
             created_at=preset.created_at.strftime("%Y-%m-%d %H:%M") if preset.created_at else ""
         )
 
@@ -306,15 +340,25 @@ async def apply_preset_to_account(
                 acc.preset_name = preset.name
                 acc.rule_action = preset.action
                 acc.rule_conditions = preset.conditions
+                acc.rule_cooldown_minutes = preset.cooldown_minutes or 0
+                acc.rule_check_interval = preset.check_interval_minutes or 5
+                acc.rule_notify_tg = preset.notify_tg if preset.notify_tg is not None else True
         else:
             # Custom rule conditions from payload
             conds_json = json.dumps([c.model_dump() for c in payload.conditions])
             preset_name = payload.name.strip() or "Мое правило"
+            cooldown = payload.cooldown_minutes or 0
+            check_interval = payload.check_interval_minutes or 5
+            notify_tg = payload.notify_tg if payload.notify_tg is not None else True
+
             preset = RulePreset(
                 owner_id=user.telegram_id,
                 name=preset_name,
                 action=payload.action or "turn_off",
-                conditions=conds_json
+                conditions=conds_json,
+                cooldown_minutes=cooldown,
+                check_interval_minutes=check_interval,
+                notify_tg=notify_tg
             )
             session.add(preset)
             await session.flush()
@@ -323,6 +367,9 @@ async def apply_preset_to_account(
             acc.preset_name = preset.name
             acc.rule_action = preset.action
             acc.rule_conditions = conds_json
+            acc.rule_cooldown_minutes = cooldown
+            acc.rule_check_interval = check_interval
+            acc.rule_notify_tg = notify_tg
 
         acc.rules_enabled = True
         await session.commit()
@@ -331,6 +378,9 @@ async def apply_preset_to_account(
             "preset_id": acc.preset_id,
             "preset_name": acc.preset_name,
             "rule_action": acc.rule_action,
+            "rule_cooldown_minutes": acc.rule_cooldown_minutes,
+            "rule_check_interval": acc.rule_check_interval,
+            "rule_notify_tg": acc.rule_notify_tg,
             "rule_conditions": acc.rule_conditions,
             "rules_enabled": acc.rules_enabled,
             "message": f"Правило '{acc.preset_name}' успешно применено к кабинету"

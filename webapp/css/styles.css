@@ -1765,6 +1765,131 @@ input[type=number] {
   padding: 6px 12px;
 }
 
+/* ==========================================================================
+   Rule Settings Card & Chips (Facebook / Automation Platform Style)
+   ========================================================================== */
+.rule-settings-card {
+  background: var(--tg-sec-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-top: 12px;
+  margin-bottom: 14px;
+}
+
+.rule-settings-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.settings-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tg-hint);
+}
+
+.settings-row-group {
+  margin-bottom: 14px;
+}
+
+.settings-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.settings-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tg-text);
+}
+
+.info-tooltip-icon {
+  font-size: 13px;
+  color: var(--tg-hint);
+  cursor: help;
+  user-select: none;
+}
+
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.chip-btn {
+  background: var(--tg-card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--tg-hint);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.chip-btn:hover {
+  border-color: var(--tg-link);
+  color: var(--tg-text);
+}
+
+.chip-btn.active {
+  background: rgba(122, 162, 247, 0.15);
+  border-color: var(--tg-link);
+  color: #7aa2f7;
+  font-weight: 600;
+}
+
+.custom-time-input {
+  max-width: 140px;
+  height: 34px;
+  font-size: 12px;
+  padding: 4px 10px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+.settings-field-hint {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--tg-hint);
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.settings-toggle-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tg-status-subtext {
+  font-size: 11px;
+  color: var(--color-success);
+}
+
 .modal-sub-actions {
   display: flex;
   justify-content: space-between;

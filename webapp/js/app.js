@@ -343,6 +343,93 @@
     }).join('');
   }
 
+  // ==========================================================
+  // RULE SETTINGS (COOLDOWN, INTERVAL, TELEGRAM TOGGLE)
+  // ==========================================================
+  function setCooldownUI(minutes = 0) {
+    const group = document.getElementById('cooldownChipGroup');
+    const customInput = document.getElementById('customCooldownInput');
+    if (!group) return;
+
+    let matched = false;
+    group.querySelectorAll('.chip-btn').forEach(btn => {
+      const v = btn.dataset.val;
+      if (v !== 'custom' && parseInt(v) === minutes) {
+        btn.classList.add('active');
+        matched = true;
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    if (!matched) {
+      const customBtn = group.querySelector('.chip-btn[data-val="custom"]');
+      if (customBtn) customBtn.classList.add('active');
+      if (customInput) {
+        customInput.classList.remove('hidden');
+        customInput.value = minutes || '';
+      }
+    } else {
+      if (customInput) {
+        customInput.classList.add('hidden');
+        customInput.value = '';
+      }
+    }
+  }
+
+  function getCooldownFromUI() {
+    const group = document.getElementById('cooldownChipGroup');
+    const customInput = document.getElementById('customCooldownInput');
+    const activeBtn = group?.querySelector('.chip-btn.active');
+    if (!activeBtn) return 0;
+    if (activeBtn.dataset.val === 'custom') {
+      return parseInt(customInput?.value) || 0;
+    }
+    return parseInt(activeBtn.dataset.val) || 0;
+  }
+
+  function setIntervalUI(minutes = 5) {
+    const group = document.getElementById('intervalChipGroup');
+    const customInput = document.getElementById('customIntervalInput');
+    if (!group) return;
+
+    let matched = false;
+    group.querySelectorAll('.chip-btn').forEach(btn => {
+      const v = btn.dataset.val;
+      if (v !== 'custom' && parseInt(v) === minutes) {
+        btn.classList.add('active');
+        matched = true;
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    if (!matched) {
+      const customBtn = group.querySelector('.chip-btn[data-val="custom"]');
+      if (customBtn) customBtn.classList.add('active');
+      if (customInput) {
+        customInput.classList.remove('hidden');
+        customInput.value = minutes || 5;
+      }
+    } else {
+      if (customInput) {
+        customInput.classList.add('hidden');
+        customInput.value = '';
+      }
+    }
+  }
+
+  function getIntervalFromUI() {
+    const group = document.getElementById('intervalChipGroup');
+    const customInput = document.getElementById('customIntervalInput');
+    const activeBtn = group?.querySelector('.chip-btn.active');
+    if (!activeBtn) return 5;
+    if (activeBtn.dataset.val === 'custom') {
+      return parseInt(customInput?.value) || 5;
+    }
+    return parseInt(activeBtn.dataset.val) || 5;
+  }
+
   window.selectPreset = function (presetId) {
     haptic('selection');
     const preset = state.presets.find(p => p.id === presetId);
@@ -354,6 +441,11 @@
     document.getElementById('ruleActionSelect').value = preset.action || 'turn_off';
     document.getElementById('builderModeTag').textContent = `Пресет: ${preset.name}`;
     document.getElementById('btnDeletePreset')?.classList.remove('hidden');
+
+    setCooldownUI(preset.cooldown_minutes || 0);
+    setIntervalUI(preset.check_interval_minutes || 5);
+    const tgToggle = document.getElementById('ruleNotifyTgToggle');
+    if (tgToggle) tgToggle.checked = preset.notify_tg !== false;
 
     renderConditions(preset.conditions || []);
     renderPresetsList(preset.id);
@@ -367,6 +459,11 @@
     document.getElementById('ruleActionSelect').value = 'turn_off';
     document.getElementById('builderModeTag').textContent = 'Новое правило';
     document.getElementById('btnDeletePreset')?.classList.add('hidden');
+
+    setCooldownUI(0);
+    setIntervalUI(5);
+    const tgToggle = document.getElementById('ruleNotifyTgToggle');
+    if (tgToggle) tgToggle.checked = true;
 
     renderConditions([
       { metric: 'spend', operator: 'gte', value: 2.0 }
@@ -423,7 +520,7 @@
     const conds = [];
     rows.forEach(r => {
       const metric = r.querySelector('.cond-metric')?.value || 'spend';
-      const operator = r.querySelector('.cond-operator')?.value || 'gt';
+      const operator = r.querySelector('.cond-operator')?.value || 'gte';
       const valInput = r.querySelector('.cond-value')?.value;
       const value = parseFloat(valInput);
       if (!isNaN(value)) {
@@ -442,6 +539,11 @@
 
     document.getElementById('editLimitsAccountId').value = acc.account_id;
     document.getElementById('modalLimitsTitle').textContent = `Правило для ${acc.name}`;
+
+    setCooldownUI(acc.rule_cooldown_minutes || 0);
+    setIntervalUI(acc.rule_check_interval || 5);
+    const tgToggle = document.getElementById('ruleNotifyTgToggle');
+    if (tgToggle) tgToggle.checked = acc.rule_notify_tg !== false;
 
     if (acc.preset_id && state.presets.some(p => p.id === acc.preset_id)) {
       window.selectPreset(acc.preset_id);
@@ -486,6 +588,9 @@
     const ruleName = document.getElementById('ruleNameInput').value.trim() || 'Правило стопа';
     const action = document.getElementById('ruleActionSelect').value;
     const conditions = getConditionsFromUI();
+    const cooldownMins = getCooldownFromUI();
+    const checkIntervalMins = getIntervalFromUI();
+    const notifyTg = document.getElementById('ruleNotifyTgToggle')?.checked !== false;
 
     if (conditions.length === 0) {
       showToast('Добавьте хотя бы одно условие правила', 'error');
@@ -497,7 +602,10 @@
         preset_id: editingPresetId ? parseInt(editingPresetId) : null,
         name: ruleName,
         action: action,
-        conditions: conditions
+        conditions: conditions,
+        cooldown_minutes: cooldownMins,
+        check_interval_minutes: checkIntervalMins,
+        notify_tg: notifyTg
       };
 
       const res = await apiRequest(`/api/accounts/${accountId}/apply-preset`, {
@@ -1174,6 +1282,8 @@
       await new Promise(resolve => setTimeout(resolve, 100));
       initData = getTelegramInitData();
     }
+
+    setupSettingsChips();
 
     // Authenticate and load initial profile
     try {

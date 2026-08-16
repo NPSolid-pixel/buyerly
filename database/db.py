@@ -32,7 +32,13 @@ async def init_db():
             "ALTER TABLE accounts ADD COLUMN preset_id INTEGER;",
             "ALTER TABLE accounts ADD COLUMN preset_name VARCHAR DEFAULT '';",
             "ALTER TABLE accounts ADD COLUMN rule_action VARCHAR DEFAULT 'turn_off';",
-            "ALTER TABLE accounts ADD COLUMN rule_conditions TEXT DEFAULT '[]';"
+            "ALTER TABLE accounts ADD COLUMN rule_conditions TEXT DEFAULT '[]';",
+            "ALTER TABLE accounts ADD COLUMN rule_cooldown_minutes INTEGER DEFAULT 0;",
+            "ALTER TABLE accounts ADD COLUMN rule_check_interval INTEGER DEFAULT 5;",
+            "ALTER TABLE accounts ADD COLUMN rule_notify_tg BOOLEAN DEFAULT 1;",
+            "ALTER TABLE rule_presets ADD COLUMN cooldown_minutes INTEGER DEFAULT 0;",
+            "ALTER TABLE rule_presets ADD COLUMN check_interval_minutes INTEGER DEFAULT 5;",
+            "ALTER TABLE rule_presets ADD COLUMN notify_tg BOOLEAN DEFAULT 1;"
         ]:
             try:
                 await conn.execute(text(col_sql))

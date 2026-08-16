@@ -27,8 +27,10 @@ class MonitoringWorker:
     ):
         self.meta_client = meta_client or MetaClient()
         self.telegram_notifier = telegram_notifier
+        self._adset_cooldowns: dict[str, float] = {}
 
     async def run_cycle(self) -> dict:
+        import time
         stats = {
             "accounts_checked": 0,
             "adsets_checked": 0,
@@ -130,6 +132,9 @@ class MonitoringWorker:
                         # Авто-правила выключены: кабинет только собирает статистику
                         continue
 
+                    should_notify_tg = acc.rule_notify_tg if acc.rule_notify_tg is not None else True
+                    cooldown_mins = acc.rule_cooldown_minutes or 0
+
                     for adset in adsets:
                         a_id = str(adset["adset_id"])
                         is_stopped_today = a_id in stopped_records
@@ -140,6 +145,14 @@ class MonitoringWorker:
                             is_stopped_today=is_stopped_today
                         )
 
+                        # Проверка паузы между срабатываниями (cooldown)
+                        cooldown_key = f"{acc.account_id}_{a_id}_{eval_res.action}"
+                        if cooldown_mins > 0 and eval_res.action != RuleAction.NOOP:
+                            last_time = self._adset_cooldowns.get(cooldown_key)
+                            if last_time and (time.time() - last_time < cooldown_mins * 60):
+                                logger.debug(f"AdSet {a_id} action {eval_res.action} in cooldown ({cooldown_mins}m). Skipping.")
+                                continue
+
                         # СТОП адсета
                         if eval_res.action == RuleAction.STOP:
                             try:
@@ -148,6 +161,7 @@ class MonitoringWorker:
                                     access_token=acc.access_token,
                                     status="PAUSED"
                                 )
+                                self._adset_cooldowns[cooldown_key] = time.time()
                                 if a_id not in stopped_records:
                                     stopped_entry = StoppedAdSet(
                                         account_id=acc.account_id,
@@ -163,7 +177,7 @@ class MonitoringWorker:
                                 stats["adsets_stopped"] += 1
                                 logger.info(f"STOPPED AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
 
-                                if self.telegram_notifier:
+                                if should_notify_tg and self.telegram_notifier:
                                     await self.telegram_notifier(
                                         event_type="STOP",
                                         eval_result=eval_res,
@@ -177,8 +191,9 @@ class MonitoringWorker:
 
                         # ТОЛЬКО УВЕДОМЛЕНИЕ (Send notification only)
                         elif eval_res.action == RuleAction.NOTIFY_ONLY:
+                            self._adset_cooldowns[cooldown_key] = time.time()
                             logger.info(f"NOTIFY ONLY AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
-                            if self.telegram_notifier:
+                            if should_notify_tg and self.telegram_notifier:
                                 await self.telegram_notifier(
                                     event_type="NOTIFY_ONLY",
                                     eval_result=eval_res,
@@ -189,10 +204,11 @@ class MonitoringWorker:
 
                         # ПРЕДЛОЖЕНИЕ ВКЛЮЧИТЬ (долет)
                         elif eval_res.action == RuleAction.PROPOSE_REACTIVATE:
+                            self._adset_cooldowns[cooldown_key] = time.time()
                             stats["proposals_sent"] += 1
                             logger.info(f"PROPOSE REACTIVATE AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
 
-                            if self.telegram_notifier:
+                            if should_notify_tg and self.telegram_notifier:
                                 await self.telegram_notifier(
                                     event_type="PROPOSE_REACTIVATE",
                                     eval_result=eval_res,

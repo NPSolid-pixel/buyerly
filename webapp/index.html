@@ -14,8 +14,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   
   <!-- App Stylesheet & Favicon -->
-  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.3.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=8.3.0">
+  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.4.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=8.4.0">
 </head>
 
 
@@ -505,6 +505,72 @@
             </div>
           </div>
 
+          <!-- 4. Settings Card (Cooldown, Polling Interval, Telegram Notifications) -->
+          <div class="rule-settings-card">
+            <div class="rule-settings-header">
+              <span class="settings-card-title">НАСТРОЙКИ</span>
+            </div>
+
+            <!-- Cooldown Section -->
+            <div class="settings-row-group">
+              <div class="settings-label-row">
+                <span class="settings-field-label">Пауза между срабатываниями</span>
+                <span class="info-tooltip-icon" title="Время, в течение которого правило не сработает повторно для того же объявления/кампании/адсета.">ℹ️</span>
+              </div>
+              <div class="chip-group" id="cooldownChipGroup">
+                <button type="button" class="chip-btn active" data-val="0">Нет</button>
+                <button type="button" class="chip-btn" data-val="3">3 мин</button>
+                <button type="button" class="chip-btn" data-val="5">5 мин</button>
+                <button type="button" class="chip-btn" data-val="10">10 мин</button>
+                <button type="button" class="chip-btn" data-val="15">15 мин</button>
+                <button type="button" class="chip-btn" data-val="30">30 мин</button>
+                <button type="button" class="chip-btn" data-val="60">1 час</button>
+                <button type="button" class="chip-btn" data-val="120">2 ч</button>
+                <button type="button" class="chip-btn" data-val="360">6 ч</button>
+                <button type="button" class="chip-btn" data-val="720">12 ч</button>
+                <button type="button" class="chip-btn" data-val="1440">24 ч</button>
+                <button type="button" class="chip-btn" data-val="custom">Другое</button>
+              </div>
+              <input type="number" id="customCooldownInput" class="form-input custom-time-input hidden" placeholder="Минут (напр. 45)" min="1">
+              <p class="settings-field-hint">Время, в течение которого правило не сработает повторно для того же объявления/кампании/адсета. Например: 10 мин = если правило изменило статус X, следующие 10 минут оно не будет пытаться триггерить X снова, даже если условие всё ещё выполняется.</p>
+            </div>
+
+            <!-- Check Interval Section -->
+            <div class="settings-row-group">
+              <div class="settings-label-row">
+                <span class="settings-field-label">Проверять каждые</span>
+                <span class="info-tooltip-icon" title="Как часто воркер опрашивает Meta API для проверки этого правила.">ℹ️</span>
+              </div>
+              <div class="chip-group" id="intervalChipGroup">
+                <button type="button" class="chip-btn" data-val="3">3 мин</button>
+                <button type="button" class="chip-btn active" data-val="5">5 мин</button>
+                <button type="button" class="chip-btn" data-val="10">10 мин</button>
+                <button type="button" class="chip-btn" data-val="15">15 мин</button>
+                <button type="button" class="chip-btn" data-val="30">30 мин</button>
+                <button type="button" class="chip-btn" data-val="60">1 час</button>
+                <button type="button" class="chip-btn" data-val="120">2 ч</button>
+                <button type="button" class="chip-btn" data-val="360">6 ч</button>
+                <button type="button" class="chip-btn" data-val="custom">Другое</button>
+              </div>
+              <input type="number" id="customIntervalInput" class="form-input custom-time-input hidden" placeholder="Минут (напр. 20)" min="1">
+              <p class="settings-field-hint">Как часто проверяется это правило</p>
+            </div>
+
+            <!-- Telegram Notification Toggle Section -->
+            <div class="settings-toggle-group">
+              <div class="settings-toggle-left">
+                <label class="switch">
+                  <input type="checkbox" id="ruleNotifyTgToggle" checked>
+                  <span class="slider round"></span>
+                </label>
+                <div class="settings-toggle-text">
+                  <span class="settings-field-label">Уведомление в Telegram</span>
+                  <span class="tg-status-subtext">🟢 Бот подключен (@buyerly_bot)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="sheet-actions" style="flex-direction: column; gap: 8px; margin-top: 16px;">
             <button id="btnSaveLimits" class="btn btn-primary btn-block btn-lg">Сохранить и применить</button>
             <div class="modal-sub-actions">
@@ -610,7 +676,7 @@
   </div>
 
   <!-- App Script -->
-  <script src="/static/js/app.js?v=8.3.0"></script>
+  <script src="/static/js/app.js?v=8.4.0"></script>
 </body>
 </html>
 

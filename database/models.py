@@ -39,6 +39,9 @@ class RulePreset(Base):
     name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPA > $6')")
     action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only'")
     conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
+    cooldown_minutes = Column(Integer, default=0, nullable=False, doc="Пауза между срабатываниями (мин, 0=нет)")
+    check_interval_minutes = Column(Integer, default=5, nullable=False, doc="Интервал проверки воркером (мин)")
+    notify_tg = Column(Boolean, default=True, nullable=False, doc="Уведомление в Telegram")
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -67,6 +70,9 @@ class Account(Base):
     preset_name = Column(String, default="", nullable=False, doc="Название активного пресета")
     rule_action = Column(String, default="turn_off", nullable=False, doc="turn_off, turn_on, notify_only")
     rule_conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
+    rule_cooldown_minutes = Column(Integer, default=0, nullable=False, doc="Пауза между срабатываниями (мин)")
+    rule_check_interval = Column(Integer, default=5, nullable=False, doc="Интервал проверки (мин)")
+    rule_notify_tg = Column(Boolean, default=True, nullable=False, doc="Уведомление в Telegram")
 
     # Индивидуальные ступенчатые лимиты правил (в USD $)
     max_spend_0_leads = Column(Float, default=2.0, nullable=False, doc="Макс спенд при 0 лидов/рег ($)")
