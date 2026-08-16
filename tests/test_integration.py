@@ -201,5 +201,27 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(sent_alerts), 1)
         self.assertEqual(sent_alerts[0]["event_type"], "TOKEN_EXPIRED")
 
+    def test_meta_client_usage_headers_parsing(self):
+        import httpx
+        client = MetaClient()
+        
+        # 1. Нормальный расход (15%)
+        headers_normal = httpx.Headers({
+            "x-business-use-case-usage": '{"act_1083": [{"type": "ads_management", "call_count": 15, "total_cputime": 10, "total_time": 8, "estimated_time_to_regain_access": 0}]}'
+        })
+        res_normal = client._parse_usage_headers(headers_normal, "act_1083")
+        self.assertEqual(res_normal["call_count"], 15)
+        self.assertFalse(res_normal["is_high_usage"])
+
+        # 2. Высокий расход (85% -> Warning trigger)
+        headers_high = httpx.Headers({
+            "x-business-use-case-usage": '{"act_1083": [{"type": "ads_management", "call_count": 85, "total_cputime": 60, "total_time": 50, "estimated_time_to_regain_access": 5}]}'
+        })
+        res_high = client._parse_usage_headers(headers_high, "act_1083")
+        self.assertEqual(res_high["call_count"], 85)
+        self.assertTrue(res_high["is_high_usage"])
+        self.assertEqual(res_high["estimated_time_to_regain_access"], 5)
+
 if __name__ == "__main__":
     unittest.main()
+

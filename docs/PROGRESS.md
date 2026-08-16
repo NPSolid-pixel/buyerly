@@ -72,8 +72,14 @@
 - [x] Создано руководство `docs/DEPLOYMENT.md` (DevOps, настройка VPS, GitHub Secrets, восстановление БД, troubleshooting).
 - [x] Создано руководство `docs/ARCHITECTURE.md` (ERD модели данных, Mermaid диаграммы, дедупликация Meta API, FSM).
 
+### [x] Веха 8: Техническое усиление (Hardening) Meta API и воркера
+- [x] Внедрен централизованный метод `_request_with_retry` с Exponential Backoff + Jitter (2с $\rightarrow$ 4с $\rightarrow$ 8с) при 429 и 5xx ошибках.
+- [x] Реализован парсинг диагностического заголовка `X-Business-Use-Case-Usage` для превентивного выявления расхода квоты $>80\%$.
+- [x] Внедрен межаккаунтный случайный джиттер `0.5–1.5 сек` в цикле воркера для сглаживания сетевой нагрузки.
+
 ---
 
 ## 🧪 Тестирование
-* 11 из 11 тестов проходят успешно (`python -m unittest discover tests`).
+* 12 из 12 тестов проходят успешно (`python -m unittest discover tests`).
+
 

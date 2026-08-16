@@ -1,4 +1,6 @@
 import logging
+import random
+import asyncio
 from datetime import datetime, timezone
 import zoneinfo
 from typing import Optional, Callable, Awaitable
@@ -215,6 +217,10 @@ class MonitoringWorker:
                 except Exception as e:
                     logger.error(f"Error processing account {acc.account_id}: {e}")
                     stats["errors"].append(f"Account {acc.account_id}: {e}")
+
+                # Межаккаунтный случайный джиттер (0.5–1.5с) для сглаживания нагрузки на Meta API
+                jitter = random.uniform(0.5, 1.5)
+                await asyncio.sleep(jitter)
 
             await session.commit()
 
