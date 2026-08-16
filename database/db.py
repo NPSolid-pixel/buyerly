@@ -19,6 +19,13 @@ async def get_db():
     async with async_session_maker() as session:
         yield session
 
+from sqlalchemy import text
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Безопасное добавление колонки rules_enabled если таблица уже существовала
+        try:
+            await conn.execute(text("ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;"))
+        except Exception:
+            pass  # Колонка уже есть

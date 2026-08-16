@@ -57,11 +57,12 @@ class Account(Base):
     
     # Флаг: включать автоматически или слать кнопку с подтверждением
     auto_reactivate = Column(Boolean, default=False, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False, doc="Включен ли мониторинг")
+    rules_enabled = Column(Boolean, default=False, nullable=False, doc="Включены ли авто-правила стопов")
+    is_active = Column(Boolean, default=True, nullable=False, doc="Включен ли кабинет в системе")
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<Account(account_id='{self.account_id}', name='{self.name}', owner='{self.owner_id}')>"
+        return f"<Account(account_id='{self.account_id}', name='{self.name}', rules={self.rules_enabled})>"
 
 
 class StoppedAdSet(Base):

@@ -123,7 +123,11 @@ class MonitoringWorker:
                                 start_spend=total_spend
                             )
 
-                    # 7. Оцениваем каждый адсет через RuleEngine
+                    # 7. Оцениваем каждый адсет через RuleEngine (только если авто-правила включены!)
+                    if not acc.rules_enabled:
+                        # Авто-правила выключены: кабинет только собирает статистику
+                        continue
+
                     for adset in adsets:
                         a_id = str(adset["adset_id"])
                         is_stopped_today = a_id in stopped_records

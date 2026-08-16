@@ -18,6 +18,7 @@ from bot.keyboards import (
     get_period_keyboard,
     get_interval_keyboard,
     get_account_manage_keyboard,
+    get_limits_preset_keyboard,
     get_admin_approval_keyboard
 )
 
@@ -40,6 +41,9 @@ class BatchAccountAddStates(StatesGroup):
     waiting_for_ids = State()
     waiting_for_name = State()
     waiting_for_token = State()
+
+class ManualLimitsStates(StatesGroup):
+    waiting_for_limits = State()
 
 
 # ----------------------------------------------------
@@ -296,6 +300,7 @@ async def process_token_and_save(message: Message, state: FSMContext):
                         max_spend_0_leads=2.0,
                         max_spend_1_lead=6.0,
                         max_cpa_multiple_leads=6.0,
+                        rules_enabled=False,
                         is_active=True
                     )
                     session.add(new_acc)
@@ -318,8 +323,8 @@ async def process_token_and_save(message: Message, state: FSMContext):
         result_text += "⚠️ <b>Ошибки подключения:</b>\n" + "\n".join(error_results) + "\n\n"
 
     result_text += (
-        "⚙️ <b>Базовые лимиты:</b> 0 лидов → $2.00, 1 лид → $6.00, 2+ → CPA $6.00\n"
-        "<i>Кабинеты поставлены на автоматический фоновый мониторинг.</i>"
+        "📊 <b>Режим:</b> 👁 <i>Только аналитика и статистика (Авто-правила выключены).</i>\n"
+        "💡 <i>Включить боевые авто-правила стопов можно в любой момент в '🏢 Мои кабинеты'.</i>"
     )
 
     await progress_msg.edit_text(result_text, parse_mode="HTML")
@@ -511,36 +516,68 @@ async def cmd_accounts(message: Message, bot: Bot, state: FSMContext):
             )
             return
 
-        for acc in accounts:
-            status_icon = "🟢 Мониторится" if acc.is_active else "🔴 На паузе"
-            text = (
-                f"🏢 <b>{acc.name}</b> (<code>{acc.account_id}</code>)\n"
-                f"Статус: <b>{status_icon}</b> | Таймзона: <code>{acc.timezone_name}</code>\n\n"
-                f"⚙️ <b>Текущие лимиты правил:</b>\n"
-                f"• 0 лидов/рег → стоп при <b>${acc.max_spend_0_leads:.2f}</b>\n"
-                f"• 1 лид/рега → стоп при <b>${acc.max_spend_1_lead:.2f}</b>\n"
-                f"• 2+ лида/реги → макс CPA <b>${acc.max_cpa_multiple_leads:.2f}</b>"
+def format_account_card(acc: Account) -> str:
+    rules_icon = "🟢 <b>Авто-правила ВКЛЮЧЕНЫ</b>" if acc.rules_enabled else "👁 <b>Только статистика (Правила выключены)</b>"
+    return (
+        f"🏢 <b>{acc.name}</b> (<code>{acc.account_id}</code>)\n"
+        f"Режим: {rules_icon}\n"
+        f"🕒 Таймзона: <code>{acc.timezone_name}</code>\n\n"
+        f"⚙️ <b>Текущие лимиты авто-стопов:</b>\n"
+        f"• 0 лидов/рег → стоп при <b>${acc.max_spend_0_leads:.2f}</b>\n"
+        f"• 1 лид/рега → стоп при <b>${acc.max_spend_1_lead:.2f}</b>\n"
+        f"• 2+ лида/реги → макс CPA <b>${acc.max_cpa_multiple_leads:.2f}</b>"
+    )
+
+
+# ----------------------------------------------------
+# 5. СПИСОК КАБИНЕТОВ ПОЛЬЗОВАТЕЛЯ
+# ----------------------------------------------------
+@router.message(StateFilter("*"), F.text.in_(["🏢 Мои кабинеты", "🏢 Кабинеты", "/accounts"]))
+async def cmd_accounts(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
+    has_access = await check_user_access(message, bot)
+    if not has_access:
+        return
+
+    user_id = str(message.from_user.id)
+
+    async with async_session_maker() as session:
+        stmt = select(Account).where(Account.owner_id == user_id)
+        res = await session.execute(stmt)
+        accounts = res.scalars().all()
+
+        if not accounts:
+            await message.answer(
+                "ℹ️ У вас пока нет подключенных кабинетов.\n"
+                "Чтобы добавить кабинеты, нажмите кнопку <b>➕ Добавить кабинеты</b> в меню.",
+                parse_mode="HTML"
             )
+            return
+
+        for acc in accounts:
+            text = format_account_card(acc)
             await message.answer(
                 text, 
-                reply_markup=get_account_manage_keyboard(acc.account_id, acc.is_active),
+                reply_markup=get_account_manage_keyboard(acc.account_id, acc.rules_enabled),
                 parse_mode="HTML"
             )
 
 
-@router.callback_query(F.data.startswith("toggle_acc:"))
-async def cb_toggle_acc(callback: CallbackQuery):
+@router.callback_query(F.data.startswith("toggle_rules:"))
+async def cb_toggle_rules(callback: CallbackQuery):
     account_id = callback.data.split(":")[1]
     async with async_session_maker() as session:
         res = await session.execute(select(Account).where(Account.account_id == account_id))
         acc = res.scalar_one_or_none()
         if acc:
-            acc.is_active = not acc.is_active
+            acc.rules_enabled = not acc.rules_enabled
             await session.commit()
-            status_str = "🟢 возобновлен" if acc.is_active else "🔴 поставлен на паузу"
-            await callback.answer(f"Мониторинг кабинета {status_str}")
-            await callback.message.edit_reply_markup(
-                reply_markup=get_account_manage_keyboard(acc.account_id, acc.is_active)
+            status_str = "🟢 ВКЛЮЧЕНЫ" if acc.rules_enabled else "🔴 ВЫКЛЮЧЕНЫ (Только статистика)"
+            await callback.answer(f"Авто-правила {status_str}!")
+            await callback.message.edit_text(
+                format_account_card(acc),
+                reply_markup=get_account_manage_keyboard(acc.account_id, acc.rules_enabled),
+                parse_mode="HTML"
             )
 
 
@@ -551,7 +588,7 @@ async def cb_delete_acc(callback: CallbackQuery):
         await session.execute(delete(Account).where(Account.account_id == account_id))
         await session.commit()
     await callback.answer("Кабинет удален из базы.")
-    await callback.message.edit_text(f"🗑 Кабинет <code>{account_id}</code> удален.", parse_mode="HTML")
+    await callback.message.edit_text(f"🗑 Кабинет <code>{account_id}</code> удален из системы.", parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("edit_limits:"))
@@ -559,13 +596,113 @@ async def cb_edit_limits(callback: CallbackQuery):
     account_id = callback.data.split(":")[1]
     text = (
         f"✏️ <b>Настройка лимитов для <code>{account_id}</code>:</b>\n\n"
-        f"Отправьте команду:\n"
-        f"<code>/set_limits {account_id} СТОП_0_ЛИДОВ СТОП_1_ЛИД МАКС_CPA</code>\n\n"
-        f"<i>Пример:</i>\n"
-        f"<code>/set_limits {account_id} 3.0 8.0 8.0</code>"
+        "Выберите готовый пресет лимитов или введите свои значения вручную:\n\n"
+        "• <b>$2.0 / $6.0 / $6.0</b> (Стандарт)\n"
+        "• <b>$3.0 / $8.0 / $8.0</b> (Средний зацеп)\n"
+        "• <b>$5.0 / $10.0 / $10.0</b> (Широкий зацеп)"
     )
-    await callback.message.answer(text, parse_mode="HTML")
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_limits_preset_keyboard(account_id),
+        parse_mode="HTML"
+    )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("set_preset:"))
+async def cb_set_preset(callback: CallbackQuery):
+    _, account_id, l0, l1, lcpa = callback.data.split(":")
+    async with async_session_maker() as session:
+        res = await session.execute(select(Account).where(Account.account_id == account_id))
+        acc = res.scalar_one_or_none()
+        if acc:
+            acc.max_spend_0_leads = float(l0)
+            acc.max_spend_1_lead = float(l1)
+            acc.max_cpa_multiple_leads = float(lcpa)
+            await session.commit()
+            await callback.answer(f"Лимиты обновлены: ${l0} / ${l1} / ${lcpa}!")
+            await callback.message.edit_text(
+                format_account_card(acc),
+                reply_markup=get_account_manage_keyboard(acc.account_id, acc.rules_enabled),
+                parse_mode="HTML"
+            )
+
+
+@router.callback_query(F.data.startswith("back_to_acc:"))
+async def cb_back_to_acc(callback: CallbackQuery):
+    account_id = callback.data.split(":")[1]
+    async with async_session_maker() as session:
+        res = await session.execute(select(Account).where(Account.account_id == account_id))
+        acc = res.scalar_one_or_none()
+        if acc:
+            await callback.message.edit_text(
+                format_account_card(acc),
+                reply_markup=get_account_manage_keyboard(acc.account_id, acc.rules_enabled),
+                parse_mode="HTML"
+            )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("manual_limits:"))
+async def cb_manual_limits(callback: CallbackQuery, state: FSMContext):
+    account_id = callback.data.split(":")[1]
+    await state.update_data(target_account_id=account_id)
+    await state.set_state(ManualLimitsStates.waiting_for_limits)
+    await callback.message.answer(
+        f"✍️ <b>Ручной ввод лимитов для <code>{account_id}</code>:</b>\n\n"
+        "Отправьте 3 числа через пробел:\n"
+        "<b>[СТОП_0_ЛИДОВ] [СТОП_1_ЛИД] [МАКС_CPA]</b>\n\n"
+        "<i>Пример:</i> <code>2.5 7.0 7.0</code>",
+        reply_markup=get_cancel_keyboard(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.message(ManualLimitsStates.waiting_for_limits)
+async def process_manual_limits(message: Message, state: FSMContext):
+    raw_text = message.text.strip()
+    if raw_text in ["❌ Отменить добавление", "❌ Отмена", "/cancel"]:
+        await state.clear()
+        await message.answer(
+            "❌ Настройка лимитов отменена.", 
+            reply_markup=get_main_menu_keyboard(is_admin=(str(message.from_user.id) == str(settings.ADMIN_CHAT_ID)))
+        )
+        return
+
+    parts = raw_text.replace(",", ".").split()
+    if len(parts) < 3:
+        await message.answer("❌ Введите 3 числа через пробел (например: <code>2.5 7.0 7.0</code>).", parse_mode="HTML")
+        return
+
+    try:
+        lim0 = float(parts[0])
+        lim1 = float(parts[1])
+        lim_cpa = float(parts[2])
+    except ValueError:
+        await message.answer("❌ Все значения должны быть числами (например: <code>2.5 7.0 7.0</code>).", parse_mode="HTML")
+        return
+
+    data = await state.get_data()
+    account_id = data.get("target_account_id")
+    await state.clear()
+
+    async with async_session_maker() as session:
+        res = await session.execute(select(Account).where(Account.account_id == account_id))
+        acc = res.scalar_one_or_none()
+        if acc:
+            acc.max_spend_0_leads = lim0
+            acc.max_spend_1_lead = lim1
+            acc.max_cpa_multiple_leads = lim_cpa
+            await session.commit()
+            await message.answer(
+                f"✅ <b>Лимиты для {acc.name} успешно сохранены:</b>\n"
+                f"• 0 лидов/рег: стоп при <b>${lim0:.2f}</b>\n"
+                f"• 1 лид/рега: стоп при <b>${lim1:.2f}</b>\n"
+                f"• 2+ лида/реги: макс CPA <b>${lim_cpa:.2f}</b>",
+                reply_markup=get_main_menu_keyboard(is_admin=(str(message.from_user.id) == str(settings.ADMIN_CHAT_ID))),
+                parse_mode="HTML"
+            )
 
 
 @router.message(StateFilter("*"), Command("set_limits"))

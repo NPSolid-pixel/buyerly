@@ -83,6 +83,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                 max_spend_1_lead=6.0,
                 max_cpa_multiple_leads=6.0,
                 conversion_event="all",
+                rules_enabled=True,
                 is_active=True
             )
             session.add(account)
@@ -91,6 +92,27 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.test_engine.dispose()
+
+    async def test_rules_disabled_mode_skips_stopping(self):
+        async with self.test_session_maker() as session:
+            res = await session.execute(select(Account).where(Account.account_id == self.account_id))
+            acc = res.scalar_one()
+            acc.rules_enabled = False
+            await session.commit()
+
+        mock_meta = MockMetaClient()
+        sent_alerts = []
+        async def mock_notifier(**kwargs):
+            sent_alerts.append(kwargs)
+
+        worker = MonitoringWorker(meta_client=mock_meta, telegram_notifier=mock_notifier)
+        stats = await worker.run_cycle()
+
+        # Day start should still trigger, but NO adsets should be stopped
+        self.assertEqual(stats["starts_notified"], 1)
+        self.assertEqual(stats["adsets_stopped"], 0)
+        self.assertEqual(mock_meta.adsets_state["adset_1"]["status"], "ACTIVE")
+        self.assertEqual(mock_meta.adsets_state["adset_2"]["status"], "ACTIVE")
 
     async def test_full_lifecycle_with_registrations_and_day_start(self):
         mock_meta = MockMetaClient()
