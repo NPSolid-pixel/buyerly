@@ -14,7 +14,7 @@ from database.db import init_db, async_session_maker
 from database.models import AppSettings
 from scheduler.worker import MonitoringWorker
 from bot.notifier import TelegramNotifier
-from bot.handlers import router as bot_router, set_scheduler
+from bot.handlers import router as bot_router
 from api.server import app as fastapi_app
 
 # Настройка сквозного логирования (в консоль + в файл logs/buyerly.log)
@@ -41,13 +41,12 @@ async def main():
     # 1. Инициализация базы данных
     await init_db()
 
-    # Получаем сохраненный интервал из БД или по умолчанию 10 мин
+    # Ensure the default account-monitoring interval exists.
     async with async_session_maker() as session:
         res = await session.execute(select(AppSettings).limit(1))
         app_settings = res.scalar_one_or_none()
-        interval = app_settings.poll_interval_minutes if app_settings else 10
         if not app_settings:
-            session.add(AppSettings(poll_interval_minutes=interval))
+            session.add(AppSettings(poll_interval_minutes=10))
             await session.commit()
 
     # 2. Настраиваем FastAPI/Uvicorn веб-сервер
@@ -79,18 +78,19 @@ async def main():
     notifier = TelegramNotifier(bot=bot, target_chat_id=settings.ADMIN_CHAT_ID)
     worker = MonitoringWorker(telegram_notifier=notifier.send_alert)
 
-    # 5. Настраиваем планировщик периодического мониторинга
+    # The worker wakes up every minute and only polls accounts/rules that are due.
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         worker.run_cycle,
         "interval",
-        minutes=interval,
+        minutes=1,
         id="monitoring_job",
-        next_run_time=datetime.now(timezone.utc)
+        next_run_time=datetime.now(timezone.utc),
+        max_instances=1,
+        coalesce=True,
     )
     scheduler.start()
-    set_scheduler(scheduler)
-    logger.info(f"Scheduler started: polling accounts every {interval} minutes.")
+    logger.info("Scheduler started: 1-minute dispatch tick with per-rule intervals.")
 
     # 6. Запускаем polling бота
     logger.info("Starting Telegram Bot polling for Buyerly...")

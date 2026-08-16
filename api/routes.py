@@ -10,7 +10,7 @@ from database.db import async_session_maker
 import json
 from database.models import Account, StoppedAdSet, AppSettings, TelegramUser, EventLog, RulePreset
 from meta_api.client import MetaClient
-from bot.handlers import parse_fb_raw_accounts, scheduler_ref, get_short_account_label
+from bot.handlers import parse_fb_raw_accounts, get_short_account_label
 from api.auth import get_current_user
 
 
@@ -79,7 +79,7 @@ class CreatePresetRequest(BaseModel):
     conditions: List[ConditionItem] = Field(default_factory=list)
     condition_logic: Optional[str] = "and"
     cooldown_minutes: Optional[int] = 0
-    check_interval_minutes: Optional[int] = 5
+    check_interval_minutes: Optional[int] = Field(default=5, ge=1, le=1440)
     notify_tg: Optional[bool] = True
     budget_change_percent: Optional[float] = 0.0
     budget_max_daily: Optional[float] = 0.0
@@ -882,18 +882,10 @@ async def set_poll_interval(payload: SetIntervalRequest, user: TelegramUser = De
             app_settings.poll_interval_minutes = payload.minutes
         await session.commit()
 
-    if scheduler_ref:
-        scheduler_ref.reschedule_job(
-            "monitoring_job",
-            trigger="interval",
-            minutes=payload.minutes
-        )
-        logger.info(f"Rescheduled monitoring job to {payload.minutes} minutes via Web App.")
-
     return {
         "success": True,
         "poll_interval_minutes": payload.minutes,
-        "message": f"Интервал опроса изменен на {payload.minutes} минут"
+        "message": f"Базовый интервал мониторинга изменен на {payload.minutes} минут"
     }
 
 

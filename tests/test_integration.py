@@ -203,6 +203,84 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["adsets_stopped"], 1)
         self.assertEqual(mock_meta.status_changes, [("adset_1", "PAUSED")])
 
+    async def test_rule_check_interval_is_enforced_without_extra_meta_calls(self):
+        async with self.test_session_maker() as session:
+            res = await session.execute(select(Account).where(Account.account_id == self.account_id))
+            acc = res.scalar_one()
+            acc.active_rules = json.dumps([
+                {
+                    "preset_id": 4,
+                    "name": "Five minute notification",
+                    "action": "notify_only",
+                    "conditions": [
+                        {"metric": "spend", "operator": "gte", "value": 0.0}
+                    ],
+                    "logic": "and",
+                    "check_interval": 5,
+                    "cooldown_minutes": 0,
+                    "notify_tg": False,
+                }
+            ])
+            await session.commit()
+
+        now = [1_000.0]
+        mock_meta = MockMetaClient()
+        worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+
+        first = await worker.run_cycle()
+        initial_request_count = len(mock_meta.requested_windows)
+        self.assertEqual(first["rules_checked"], 1)
+
+        now[0] += 4 * 60
+        early = await worker.run_cycle()
+        self.assertEqual(early["accounts_skipped"], 1)
+        self.assertEqual(len(mock_meta.requested_windows), initial_request_count)
+
+        now[0] += 60
+        due = await worker.run_cycle()
+        self.assertEqual(due["rules_checked"], 1)
+        self.assertGreater(len(mock_meta.requested_windows), initial_request_count)
+
+    async def test_only_rules_that_are_due_are_evaluated(self):
+        async with self.test_session_maker() as session:
+            res = await session.execute(select(Account).where(Account.account_id == self.account_id))
+            acc = res.scalar_one()
+            acc.active_rules = json.dumps([
+                {
+                    "preset_id": 5,
+                    "name": "Fast notification",
+                    "action": "notify_only",
+                    "conditions": [
+                        {"metric": "spend", "operator": "gte", "value": 0.0}
+                    ],
+                    "logic": "and",
+                    "check_interval": 5,
+                    "notify_tg": False,
+                },
+                {
+                    "preset_id": 6,
+                    "name": "Slow stop",
+                    "action": "turn_off",
+                    "conditions": [
+                        {"metric": "spend", "operator": "gte", "value": 10.0}
+                    ],
+                    "logic": "and",
+                    "check_interval": 60,
+                    "notify_tg": False,
+                },
+            ])
+            await session.commit()
+
+        now = [2_000.0]
+        mock_meta = MockMetaClient()
+        worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+        worker._rule_last_checked[f"{self.account_id}:6"] = now[0]
+
+        stats = await worker.run_cycle()
+
+        self.assertEqual(stats["rules_checked"], 1)
+        self.assertEqual(mock_meta.status_changes, [])
+
     async def test_budget_increase_action(self):
         """Правило: CPL < $5 И Лиды >= 2 → увеличить бюджет на 20%, потолок $100."""
         async with self.test_session_maker() as session:

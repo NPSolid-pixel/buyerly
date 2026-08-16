@@ -138,6 +138,17 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             headers = {"Authorization": f"tma {init_data}"}
 
+            invalid_interval = await client.post(
+                "/api/presets",
+                headers=headers,
+                json={
+                    "name": "Invalid interval",
+                    "conditions": [],
+                    "check_interval_minutes": 0,
+                },
+            )
+            self.assertEqual(invalid_interval.status_code, 422)
+
             # An account cannot be enabled before at least one rule is attached.
             t_resp = await client.post("/api/accounts/act_1018756607700064/toggle-rules", headers=headers)
             self.assertEqual(t_resp.status_code, 400)

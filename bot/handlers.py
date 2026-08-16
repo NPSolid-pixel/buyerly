@@ -25,14 +25,6 @@ logger = logging.getLogger(__name__)
 router = Router()
 meta_client = MetaClient()
 
-# Глобальная ссылка на планировщик (устанавливается в main.py)
-scheduler_ref = None
-
-def set_scheduler(sched):
-    global scheduler_ref
-    scheduler_ref = sched
-
-
 # ----------------------------------------------------
 # FSM: ПОШАГОВЫЙ МАСТЕР ДОБАВЛЕНИЯ ПАЧКИ КАБИНЕТОВ
 # ----------------------------------------------------
@@ -631,8 +623,8 @@ async def cmd_settings(message: Message, bot: Bot, state: FSMContext):
 
     text = (
         "⚙️ <b>Настройки системы:</b>\n\n"
-        f"⏱ <b>Текущий интервал опроса:</b> <code>{interval} минут</code>\n\n"
-        "Выберите частоту автоматической проверки кабинетов:"
+        f"⏱ <b>Базовый интервал мониторинга:</b> <code>{interval} минут</code>\n\n"
+        "У авто-правил используется собственный интервал. Выберите частоту проверки статуса остальных кабинетов:"
     )
     await message.answer(text, reply_markup=get_interval_keyboard(interval), parse_mode="HTML")
 
@@ -651,18 +643,9 @@ async def cb_set_interval(callback: CallbackQuery):
             app_settings.poll_interval_minutes = minutes
         await session.commit()
 
-    global scheduler_ref
-    if scheduler_ref:
-        scheduler_ref.reschedule_job(
-            "monitoring_job",
-            trigger="interval",
-            minutes=minutes
-        )
-        logger.info(f"Rescheduled monitoring job to {minutes} minutes.")
-
-    await callback.answer(f"Интервал изменен на {minutes} минут!")
+    await callback.answer(f"Базовый интервал изменен на {minutes} минут!")
     await callback.message.edit_text(
-        f"✅ <b>Интервал опроса успешно обновлен на {minutes} минут!</b>",
+        f"✅ <b>Базовый интервал мониторинга обновлен на {minutes} минут!</b>",
         reply_markup=get_interval_keyboard(minutes),
         parse_mode="HTML"
     )

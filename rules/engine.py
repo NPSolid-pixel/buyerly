@@ -79,7 +79,8 @@ class RuleEngine:
     def evaluate(
         adset: Dict[str, Any],
         account: Account,
-        insights_by_window: Optional[Dict[str, Dict[str, Any]]] = None
+        insights_by_window: Optional[Dict[str, Dict[str, Any]]] = None,
+        active_rules_override: Optional[List[Dict[str, Any]]] = None,
     ) -> RuleEvaluationResult:
         """
         Оценивает адсет по пользовательским правилам с поддержкой AND/OR логики и временных окон.
@@ -114,11 +115,14 @@ class RuleEngine:
         if not getattr(account, "rules_enabled", False):
             return noop("Правила выключены для этого кабинета.")
 
-        raw_rules = getattr(account, "active_rules", "[]")
-        try:
-            active_rules = json.loads(raw_rules) if isinstance(raw_rules, str) else raw_rules
-        except Exception:
-            active_rules = []
+        if active_rules_override is not None:
+            active_rules = active_rules_override
+        else:
+            raw_rules = getattr(account, "active_rules", "[]")
+            try:
+                active_rules = json.loads(raw_rules) if isinstance(raw_rules, str) else raw_rules
+            except Exception:
+                active_rules = []
 
         if not active_rules or not isinstance(active_rules, list) or len(active_rules) == 0:
             return noop("Правила не настроены.")

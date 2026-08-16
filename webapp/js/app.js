@@ -1508,7 +1508,7 @@
           method: 'POST',
           body: JSON.stringify({ minutes: interval })
         });
-        showToast(`Интервал опроса изменен на ${interval} мин!`, 'success');
+        showToast(`Базовый интервал мониторинга: ${interval} мин`, 'success');
         document.querySelectorAll('.btn-interval').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
       } catch (err) {

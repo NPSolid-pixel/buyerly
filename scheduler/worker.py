@@ -1,13 +1,15 @@
 import logging
 import random
 import asyncio
+import json
+import time
 from datetime import datetime, timezone
 import zoneinfo
-from typing import Optional, Callable, Awaitable
+from typing import Optional, Callable, Awaitable, Any
 from sqlalchemy import select
 
 from database.db import async_session_maker
-from database.models import Account
+from database.models import Account, AppSettings
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 
@@ -23,16 +25,43 @@ class MonitoringWorker:
     def __init__(
         self, 
         meta_client: Optional[MetaClient] = None,
-        telegram_notifier: Optional[Callable[..., Awaitable[None]]] = None
+        telegram_notifier: Optional[Callable[..., Awaitable[None]]] = None,
+        clock: Optional[Callable[[], float]] = None,
     ):
         self.meta_client = meta_client or MetaClient()
         self.telegram_notifier = telegram_notifier
+        self._clock = clock or time.monotonic
         self._adset_cooldowns: dict[str, float] = {}
+        self._account_last_checked: dict[str, float] = {}
+        self._rule_last_checked: dict[str, float] = {}
+
+    @staticmethod
+    def _load_rules(raw_rules: Any) -> list[dict[str, Any]]:
+        try:
+            rules = json.loads(raw_rules) if isinstance(raw_rules, str) else raw_rules
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(rules, list):
+            return []
+        return [rule for rule in rules if isinstance(rule, dict)]
+
+    @staticmethod
+    def _interval_minutes(value: Any, fallback: int) -> int:
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return max(1, fallback)
+
+    @staticmethod
+    def _rule_key(account_id: str, index: int, rule: dict[str, Any]) -> str:
+        rule_id = rule.get("preset_id")
+        return f"{account_id}:{rule_id if rule_id is not None else f'index-{index}'}"
 
     async def run_cycle(self) -> dict:
-        import time
         stats = {
             "accounts_checked": 0,
+            "accounts_skipped": 0,
+            "rules_checked": 0,
             "adsets_checked": 0,
             "adsets_stopped": 0,
             "budgets_changed": 0,
@@ -47,9 +76,53 @@ class MonitoringWorker:
             result = await session.execute(stmt)
             accounts = result.scalars().all()
 
-            stats["accounts_checked"] = len(accounts)
+            settings_result = await session.execute(select(AppSettings).limit(1))
+            app_settings = settings_result.scalar_one_or_none()
+            default_interval = self._interval_minutes(
+                app_settings.poll_interval_minutes if app_settings else 10,
+                10,
+            )
 
             for acc in accounts:
+                now = self._clock()
+                active_rules = self._load_rules(acc.active_rules)
+                due_rule_entries = []
+                active_rule_keys = set()
+                if acc.rules_enabled:
+                    for index, rule in enumerate(active_rules):
+                        rule_key = self._rule_key(acc.account_id, index, rule)
+                        active_rule_keys.add(rule_key)
+                        interval = self._interval_minutes(
+                            rule.get("check_interval"),
+                            default_interval,
+                        )
+                        last_checked = self._rule_last_checked.get(rule_key)
+                        if last_checked is None or now - last_checked >= interval * 60:
+                            due_rule_entries.append((rule_key, rule))
+
+                account_last_checked = self._account_last_checked.get(acc.account_id)
+                account_monitor_due = (
+                    account_last_checked is None
+                    or now - account_last_checked >= default_interval * 60
+                )
+                if not account_monitor_due and not due_rule_entries:
+                    stats["accounts_skipped"] += 1
+                    continue
+
+                self._account_last_checked[acc.account_id] = now
+                for rule_key, _ in due_rule_entries:
+                    self._rule_last_checked[rule_key] = now
+                for stale_key in [
+                    key
+                    for key in self._rule_last_checked
+                    if key.startswith(f"{acc.account_id}:") and key not in active_rule_keys
+                ]:
+                    self._rule_last_checked.pop(stale_key, None)
+
+                due_rules = [rule for _, rule in due_rule_entries]
+                stats["accounts_checked"] += 1
+                stats["rules_checked"] += len(due_rules)
+
                 try:
                     # 2. Проверяем здоровье кабинета и статус в Meta
                     try:
@@ -92,19 +165,13 @@ class MonitoringWorker:
 
                     # 4. Собираем данные за нужные time_windows, кроме 'today'
                     windows = set()
-                    import json
-                    if acc.active_rules:
-                        try:
-                            rules = json.loads(acc.active_rules) if isinstance(acc.active_rules, str) else acc.active_rules
-                            for rule in rules:
-                                conds = rule.get("conditions", [])
-                                for cond in conds:
-                                    if isinstance(cond, dict):
-                                        w = cond.get("time_window", "today")
-                                        if w != "today":
-                                            windows.add(w)
-                        except Exception:
-                            pass
+                    for rule in due_rules:
+                        conds = rule.get("conditions", [])
+                        for cond in conds:
+                            if isinstance(cond, dict):
+                                window = cond.get("time_window", "today")
+                                if window != "today":
+                                    windows.add(window)
                     
                     insights_by_window = {}
                     for w in windows:
@@ -149,7 +216,7 @@ class MonitoringWorker:
                             )
 
                     # 7. Оцениваем каждый адсет через RuleEngine (только если авто-правила включены!)
-                    if not acc.rules_enabled:
+                    if not acc.rules_enabled or not due_rules:
                         # Авто-правила выключены: кабинет только собирает статистику
                         continue
 
@@ -163,7 +230,8 @@ class MonitoringWorker:
                         eval_res = RuleEngine.evaluate(
                             adset=adset,
                             account=acc,
-                            insights_by_window=current_adset_windows
+                            insights_by_window=current_adset_windows,
+                            active_rules_override=due_rules,
                         )
                         
                         should_notify_tg = eval_res.notify_tg
