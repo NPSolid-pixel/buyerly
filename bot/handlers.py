@@ -362,6 +362,18 @@ def get_short_account_label(name: str, account_id: str) -> str:
     return clean_id[-5:]
 
 
+async def get_user_accounts(session, user_id: str) -> List[Account]:
+    user_res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == user_id))
+    db_user = user_res.scalar_one_or_none()
+    is_admin = (user_id == str(settings.ADMIN_CHAT_ID)) or (db_user and db_user.role == "admin")
+    if is_admin:
+        stmt = select(Account)
+    else:
+        stmt = select(Account).where(Account.owner_id == user_id)
+    res = await session.execute(stmt)
+    return res.scalars().all()
+
+
 @router.callback_query(F.data.startswith("report_period:"))
 async def cb_report_period(callback: CallbackQuery):
     period = callback.data.split(":")[1]
@@ -378,10 +390,7 @@ async def cb_report_period(callback: CallbackQuery):
     await callback.message.edit_text(f"⏳ Собираю статистику за <b>{period_title}</b> из Meta API...", parse_mode="HTML")
 
     async with async_session_maker() as session:
-        # Фильтруем строго по владельцу кабинетов
-        stmt = select(Account).where(Account.owner_id == user_id)
-        res = await session.execute(stmt)
-        accounts = res.scalars().all()
+        accounts = await get_user_accounts(session, user_id)
 
         if not accounts:
             await callback.message.edit_text(
@@ -483,10 +492,7 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
     wait_msg = await message.answer("⏳ Считаю расходы по вашим кабинетам за сегодня...")
 
     async with async_session_maker() as session:
-        # Получаем все кабинеты байера
-        stmt = select(Account).where(Account.owner_id == user_id)
-        res = await session.execute(stmt)
-        accounts = res.scalars().all()
+        accounts = await get_user_accounts(session, user_id)
 
         if not accounts:
             await wait_msg.edit_text("ℹ️ У вас пока нет подключенных кабинетов.")
@@ -543,9 +549,7 @@ async def cmd_accounts(message: Message, bot: Bot, state: FSMContext):
     user_id = str(message.from_user.id)
 
     async with async_session_maker() as session:
-        stmt = select(Account).where(Account.owner_id == user_id)
-        res = await session.execute(stmt)
-        accounts = res.scalars().all()
+        accounts = await get_user_accounts(session, user_id)
 
         if not accounts:
             await message.answer(
