@@ -17,7 +17,7 @@ from api.auth import validate_telegram_init_data
 from api.server import create_app
 from core.config import settings
 from database.db import Base, verify_password
-from database.models import Account, AppSettings, RulePreset, StoppedAdSet, TelegramUser
+from database.models import Account, AppSettings, AuditEvent, RulePreset, StoppedAdSet, TelegramUser
 
 
 def generate_valid_telegram_init_data(
@@ -458,6 +458,130 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(forbidden.status_code, 403)
         self.assertEqual(allowed.status_code, 200)
+
+        async with self.test_session_maker() as session:
+            audit_event = (
+                await session.execute(
+                    select(AuditEvent).where(AuditEvent.event_type == "DISMISS_STOPPED")
+                )
+            ).scalar_one()
+            self.assertEqual(audit_event.actor_type, "user")
+            self.assertEqual(audit_event.actor_id, "8634201356")
+            self.assertEqual(audit_event.adset_id, "admin_adset_1")
+
+    async def test_audit_history_is_owner_isolated_filterable_and_paginated(self):
+        async with self.test_session_maker() as session:
+            session.add_all(
+                [
+                    AuditEvent(
+                        owner_id="8948797431",
+                        category="RULE_ACTION",
+                        event_type="STOP",
+                        status="SUCCESS",
+                        account_id="act_1018756607700064",
+                        account_name="Buyer account",
+                        adset_id="buyer_adset",
+                        adset_name="Buyer ad set",
+                        rule_name="Buyer stop rule",
+                        action="STOP",
+                        message="Buyer event",
+                        correlation_id="buyer-cycle",
+                    ),
+                    AuditEvent(
+                        owner_id="8634201356",
+                        category="ACCOUNT_HEALTH",
+                        event_type="TOKEN_EXPIRED",
+                        status="ERROR",
+                        account_id="act_admin_account",
+                        account_name="Admin account",
+                        message="Admin event",
+                        correlation_id="admin-cycle",
+                    ),
+                ]
+            )
+            await session.commit()
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        admin_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8634201356, "first_name": "Admin", "username": "admin_user"},
+        )
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            buyer_response = await client.get(
+                "/api/audit-events?category=rule_action&search=Buyer",
+                headers={"Authorization": f"tma {buyer_data}"},
+            )
+            buyer_error_filter = await client.get(
+                "/api/audit-events?status=ERROR",
+                headers={"Authorization": f"tma {buyer_data}"},
+            )
+            admin_response = await client.get(
+                "/api/audit-events?page_size=1",
+                headers={"Authorization": f"tma {admin_data}"},
+            )
+
+        self.assertEqual(buyer_response.status_code, 200)
+        self.assertEqual(buyer_response.json()["total"], 1)
+        self.assertEqual(buyer_response.json()["items"][0]["adset_id"], "buyer_adset")
+        self.assertIsNone(buyer_response.json()["items"][0]["owner_id"])
+        self.assertEqual(buyer_response.json()["status_counts"]["SUCCESS"], 1)
+        self.assertEqual(buyer_error_filter.json()["total"], 0)
+        self.assertEqual(buyer_error_filter.json()["status_counts"]["SUCCESS"], 1)
+
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertEqual(admin_response.json()["total"], 2)
+        self.assertEqual(admin_response.json()["total_pages"], 2)
+        self.assertEqual(len(admin_response.json()["items"]), 1)
+        self.assertIsNotNone(admin_response.json()["items"][0]["owner_id"])
+
+    async def test_failed_manual_reactivation_is_audited_without_exposing_secret(self):
+        async with self.test_session_maker() as session:
+            session.add(
+                StoppedAdSet(
+                    account_id="act_1018756607700064",
+                    adset_id="buyer_failed_adset",
+                    adset_name="Buyer failed ad set",
+                    stop_spend=8.0,
+                )
+            )
+            await session.commit()
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(
+            api_routes_module.meta_client,
+            "set_adset_status",
+            new=AsyncMock(side_effect=RuntimeError("access_token=private-secret")),
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/adsets/buyer_failed_adset/reactivate",
+                    headers={"Authorization": f"tma {buyer_data}"},
+                )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn("private-secret", response.text)
+        async with self.test_session_maker() as session:
+            event = (
+                await session.execute(
+                    select(AuditEvent).where(AuditEvent.adset_id == "buyer_failed_adset")
+                )
+            ).scalar_one()
+            stopped = (
+                await session.execute(
+                    select(StoppedAdSet).where(StoppedAdSet.adset_id == "buyer_failed_adset")
+                )
+            ).scalar_one()
+            self.assertEqual(event.status, "ERROR")
+            self.assertIn("access_token=[REDACTED]", event.message)
+            self.assertFalse(stopped.is_resolved)
 
     async def test_account_cannot_attach_another_owners_preset(self):
         async with self.test_session_maker() as session:

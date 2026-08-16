@@ -31,6 +31,10 @@ def build_audit_event(
     after_state: Any = None,
     details: Any = None,
     duration_ms: int = 0,
+    actor_type: str = "system",
+    actor_id: str = "monitoring_worker",
+    adset_id: str = "",
+    adset_name: str = "",
 ) -> AuditEvent:
     """Build a secret-safe audit row without committing the caller's transaction."""
 
@@ -53,15 +57,15 @@ def build_audit_event(
 
     return AuditEvent(
         owner_id=str(account.owner_id or ""),
-        actor_type="system",
-        actor_id="monitoring_worker",
+        actor_type=str(actor_type),
+        actor_id=str(actor_id),
         category=category,
         event_type=str(event_type),
         status=str(status),
         account_id=str(account.account_id or ""),
         account_name=str(account.name or ""),
-        adset_id=str(evaluation.adset_id if evaluation else ""),
-        adset_name=str(evaluation.adset_name if evaluation else ""),
+        adset_id=str(evaluation.adset_id if evaluation else adset_id),
+        adset_name=str(evaluation.adset_name if evaluation else adset_name),
         rule_id=_optional_int(evaluation.rule_id if evaluation else None),
         rule_name=str(evaluation.rule_name if evaluation else ""),
         action=action or (evaluation.action.value if evaluation else ""),

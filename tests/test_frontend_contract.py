@@ -53,3 +53,17 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("--tg-bg: #0d0e11", self.styles)
         self.assertNotIn("TOKYO NIGHT COLOR PALETTE", self.styles)
         self.assertNotIn("appEl.style.display = 'block'", self.script)
+
+    def test_logs_are_a_first_class_section_not_a_summary_table(self):
+        self.assertIn('data-tab="logs"', self.index)
+        self.assertIn('id="tab-logs"', self.index)
+        self.assertIn('id="logsAttentionBanner"', self.index)
+        self.assertNotIn('id="stoppedAdsetsSection"', self.index)
+        self.assertIn('/api/audit-events?', self.script)
+        self.assertIn('window.openLogDetails', self.script)
+
+    def test_mobile_settings_remain_reachable_from_profile_badge(self):
+        self.assertIn('id="userBadge"', self.index)
+        self.assertIn('role="button" tabindex="0"', self.index)
+        self.assertIn("window.switchTab('settings')", self.script)
+        self.assertNotIn('class="mobile-nav-item" data-tab="settings"', self.index)

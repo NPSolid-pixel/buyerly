@@ -19,6 +19,10 @@
     filter: 'all',
     searchQuery: '',
     parsedAccounts: [],
+    auditEvents: [],
+    auditPage: 1,
+    auditTotalPages: 1,
+    stoppedAdsets: [],
     settings: { poll_interval_minutes: 10 }
   };
 
@@ -151,6 +155,7 @@
       loadRulesTab();
     } else if (tabName === 'summary') {
       updateFetchButtonLabel(state.currentPeriod);
+      loadStoppedAdsets();
       if (state.summaryCache[state.currentPeriod]) {
         renderSummaryData(state.summaryCache[state.currentPeriod]);
         const statusEl = document.getElementById('summaryStatusLabel');
@@ -158,6 +163,8 @@
           statusEl.textContent = `Сводка сформирована в ${state.summaryLastFetchedAt[state.currentPeriod]}`;
         }
       }
+    } else if (tabName === 'logs') {
+      loadLogsTab(1);
     } else if (tabName === 'settings') {
       loadSettings();
     }
@@ -1198,39 +1205,210 @@
   }
 
 
-  // Load Stopped Adsets for Reactivation
-  async function loadStoppedAdsets() {
-    const section = document.getElementById('stoppedAdsetsSection');
-    const listEl = document.getElementById('stoppedAdsetsList');
-    const countBadge = document.getElementById('stoppedCountBadge');
+  const auditEventLabels = {
+    STOP: 'Ad set остановлен',
+    NOTIFY_ONLY: 'Отправлено уведомление',
+    AUTO_REACTIVATE: 'Ad set включён автоматически',
+    MANUAL_REACTIVATE: 'Ad set включён вручную',
+    PROPOSE_REACTIVATE: 'Предложено включение',
+    INCREASE_BUDGET: 'Бюджет увеличен',
+    DECREASE_BUDGET: 'Бюджет уменьшен',
+    RULE_ACTION_COOLDOWN: 'Пропуск по cooldown',
+    ACCOUNT_ISSUE: 'Проблема кабинета',
+    TOKEN_EXPIRED: 'Проблема токена',
+    DAY_START: 'Начало дня',
+    DISMISS_STOPPED: 'Решение подтверждено',
+    RULE_ACTION: 'Действие правила'
+  };
+
+  const auditStatusLabels = {
+    SUCCESS: 'Успешно',
+    ERROR: 'Ошибка',
+    WARNING: 'Внимание',
+    INFO: 'Информация'
+  };
+
+  function auditStatusBadge(status) {
+    const normalized = (status || 'INFO').toUpperCase();
+    const modifier = ['SUCCESS', 'ERROR', 'WARNING'].includes(normalized) ? normalized.toLowerCase() : 'info';
+    return `<span class="log-status log-status-${modifier}"><span class="status-dot dot-${modifier === 'error' ? 'danger' : modifier}"></span>${auditStatusLabels[normalized] || escapeHtml(normalized)}</span>`;
+  }
+
+  function formatAuditTime(value, compact = false) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return escapeHtml(value);
+    return new Intl.DateTimeFormat('ru-RU', {
+      day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: compact ? undefined : '2-digit'
+    }).format(date);
+  }
+
+  function auditTarget(event) {
+    return event.account_name || event.account_id || event.adset_name || event.adset_id || 'Система';
+  }
+
+  function auditEventLabel(event) {
+    return auditEventLabels[(event.event_type || '').toUpperCase()] || (event.event_type || event.category || 'Событие');
+  }
+
+  function populateLogsAccountFilter() {
+    const select = document.getElementById('logsAccountFilter');
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = '<option value="">Все кабинеты</option>' + state.accounts.map(account =>
+      `<option value="${escapeHtml(account.account_id)}">${escapeHtml(account.name || account.account_id)}</option>`
+    ).join('');
+    select.value = current;
+  }
+
+  async function loadLogsTab(page = 1) {
+    const tableBody = document.getElementById('logsTableBody');
+    const refreshBtn = document.getElementById('btnRefreshLogs');
+    if (!tableBody) return;
+    state.auditPage = Math.max(1, page);
+    refreshBtn?.classList.add('loading');
+
+    if (state.accounts.length === 0) {
+      await loadAccounts();
+    }
+    populateLogsAccountFilter();
+
+    const params = new URLSearchParams({ page: state.auditPage.toString(), page_size: '25' });
+    const category = document.getElementById('logsCategoryFilter')?.value;
+    const status = document.getElementById('logsStatusFilter')?.value;
+    const accountId = document.getElementById('logsAccountFilter')?.value;
+    const search = document.getElementById('logsSearchInput')?.value.trim();
+    if (category) params.set('category', category);
+    if (status) params.set('status', status);
+    if (accountId) params.set('account_id', accountId);
+    if (search) params.set('search', search);
 
     try {
-      const records = await apiRequest('/api/adsets/stopped');
-      if (records && records.length > 0) {
-        section.classList.remove('hidden');
-        countBadge.textContent = `${records.length} шт`;
-        listEl.innerHTML = records.map(r => `
-          <div class="stopped-card-item" id="stopped-item-${r.adset_id}">
-            <div>
-              <b>${escapeHtml(r.adset_name)}</b> <span class="mono text-hint">(${r.account_id})</span>
-              <div style="font-size: 11px; color: var(--tg-hint); margin-top:2px;">
-                Спенд: <b>$${r.stop_spend.toFixed(2)}</b> · Лиды: ${r.stop_leads} · Реги: ${r.stop_registrations}
-              </div>
-            </div>
-            <div style="display:flex; gap:6px;">
-              <button class="btn btn-primary btn-sm" onclick="window.reactivateAdset('${r.adset_id}')">Включить</button>
-              <button class="btn btn-secondary btn-sm" onclick="window.dismissAdset('${r.adset_id}')">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-          </div>
-        `).join('');
-      } else {
-        section.classList.add('hidden');
-      }
+      const [data] = await Promise.all([
+        apiRequest(`/api/audit-events?${params.toString()}`),
+        loadStoppedAdsets()
+      ]);
+      state.auditEvents = data.items || [];
+      state.auditPage = data.page || 1;
+      state.auditTotalPages = data.total_pages || 1;
+      renderAuditEvents(data);
+    } catch (err) {
+      tableBody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
+      document.getElementById('logsMobileList').innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
+    } finally {
+      refreshBtn?.classList.remove('loading');
+    }
+  }
 
+  function renderAuditEvents(data) {
+    const events = state.auditEvents;
+    const tableBody = document.getElementById('logsTableBody');
+    const mobileList = document.getElementById('logsMobileList');
+    const emptyState = document.getElementById('logsEmptyState');
+    const pagination = document.querySelector('.logs-pagination');
+    const counts = data.status_counts || {};
+
+    document.getElementById('logsTotalCount').textContent = data.total || 0;
+    document.getElementById('logsSuccessCount').textContent = counts.SUCCESS || 0;
+    document.getElementById('logsErrorCount').textContent = counts.ERROR || 0;
+    document.getElementById('logsPageLabel').textContent = `Страница ${state.auditPage} из ${state.auditTotalPages}`;
+    document.getElementById('btnLogsPrev').disabled = state.auditPage <= 1;
+    document.getElementById('btnLogsNext').disabled = state.auditPage >= state.auditTotalPages;
+
+    emptyState.classList.toggle('hidden', events.length > 0);
+    pagination.classList.toggle('hidden', events.length === 0);
+    if (events.length === 0) {
+      tableBody.innerHTML = '';
+      mobileList.innerHTML = '';
+      return;
+    }
+
+    tableBody.innerHTML = events.map(event => `
+      <tr>
+        <td class="mono text-hint">${formatAuditTime(event.created_at)}</td>
+        <td>${auditStatusBadge(event.status)}</td>
+        <td class="log-event-cell">${escapeHtml(auditEventLabel(event))}</td>
+        <td class="log-target">${escapeHtml(auditTarget(event))}<small>${escapeHtml(event.adset_name || event.adset_id || event.account_id || '')}</small></td>
+        <td>${escapeHtml(event.rule_name || '—')}</td>
+        <td class="log-message">${escapeHtml(event.message || 'Без дополнительного сообщения')}<small>${event.action ? `Действие: ${escapeHtml(event.action)}` : ''}</small></td>
+        <td><button class="log-row-action" type="button" onclick="window.openLogDetails(${event.id})">Детали</button></td>
+      </tr>`).join('');
+
+    mobileList.innerHTML = events.map(event => `
+      <article class="log-mobile-card" onclick="window.openLogDetails(${event.id})" role="button" tabindex="0">
+        <div class="log-mobile-head">${auditStatusBadge(event.status)}<span class="log-mobile-time">${formatAuditTime(event.created_at, true)}</span></div>
+        <h4>${escapeHtml(auditEventLabel(event))}</h4>
+        <p>${escapeHtml(event.message || 'Без дополнительного сообщения')}</p>
+        <div class="log-mobile-target"><span>${escapeHtml(auditTarget(event))}</span><span>${escapeHtml(event.rule_name || '')}</span></div>
+      </article>`).join('');
+  }
+
+  window.openLogDetails = function (eventId) {
+    const event = state.auditEvents.find(item => item.id === eventId);
+    const content = document.getElementById('logDetailsContent');
+    if (!event || !content) return;
+    const detailsJson = Object.keys(event.details || {}).length ? JSON.stringify(event.details, null, 2) : 'Нет дополнительных данных';
+    const stateJson = Object.keys(event.before_state || {}).length || Object.keys(event.after_state || {}).length
+      ? JSON.stringify({ before: event.before_state || {}, after: event.after_state || {} }, null, 2)
+      : 'Изменения состояния не зафиксированы';
+    content.innerHTML = `
+      <div class="log-details-grid">
+        <div class="log-detail-block"><span>Статус</span>${auditStatusBadge(event.status)}</div>
+        <div class="log-detail-block"><span>Время</span><b>${formatAuditTime(event.created_at)}</b></div>
+        <div class="log-detail-block"><span>Событие</span><b>${escapeHtml(auditEventLabel(event))}</b></div>
+        <div class="log-detail-block"><span>Инициатор</span><b>${escapeHtml(event.actor_type || 'system')}</b></div>
+        <div class="log-detail-block"><span>Кабинет</span><b>${escapeHtml(event.account_name || event.account_id || '—')}</b></div>
+        <div class="log-detail-block"><span>Ad set</span><b>${escapeHtml(event.adset_name || event.adset_id || '—')}</b></div>
+        <div class="log-detail-block"><span>Правило</span><b>${escapeHtml(event.rule_name || '—')}</b></div>
+        <div class="log-detail-block"><span>Действие</span><b>${escapeHtml(event.action || '—')}</b></div>
+        <div class="log-detail-block wide"><span>Описание</span><p>${escapeHtml(event.message || '—')}</p></div>
+        <div class="log-detail-block wide"><span>Метрики и условия</span><pre class="log-json">${escapeHtml(detailsJson)}</pre></div>
+        <div class="log-detail-block wide"><span>До / после</span><pre class="log-json">${escapeHtml(stateJson)}</pre></div>
+        <div class="log-detail-block wide"><span>ID операции</span><p class="mono">${escapeHtml(event.correlation_id || '—')}</p></div>
+      </div>`;
+    window.openModal('modalLogDetails');
+  };
+
+  function renderStoppedAdsets() {
+    const records = state.stoppedAdsets;
+    const section = document.getElementById('logsStoppedSection');
+    const listEl = document.getElementById('stoppedAdsetsList');
+    const countBadge = document.getElementById('stoppedCountBadge');
+    const banner = document.getElementById('logsAttentionBanner');
+    const hasRecords = records.length > 0;
+
+    section?.classList.toggle('hidden', !hasRecords);
+    banner?.classList.toggle('hidden', !hasRecords);
+    if (countBadge) countBadge.textContent = records.length.toString();
+    if (document.getElementById('logsAttentionCount')) document.getElementById('logsAttentionCount').textContent = records.length;
+    if (document.getElementById('logsStoppedCount')) document.getElementById('logsStoppedCount').textContent = records.length;
+    if (!listEl) return;
+
+    listEl.innerHTML = records.map(record => `
+      <div class="stopped-card-item" id="stopped-item-${escapeHtml(record.adset_id)}">
+        <div>
+          <b>${escapeHtml(record.adset_name)}</b> <span class="mono text-hint">${escapeHtml(record.account_id)}</span>
+          <div style="font-size:11px;color:var(--tg-hint);margin-top:2px;">
+            Остановлен ${escapeHtml(record.stopped_at || '—')} · Спенд <b>$${Number(record.stop_spend || 0).toFixed(2)}</b> · Лиды ${record.stop_leads || 0} · Реги ${record.stop_registrations || 0}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-primary btn-sm" onclick="window.reactivateAdset('${escapeHtml(record.adset_id)}')">Включить</button>
+          <button class="btn btn-secondary btn-sm" title="Подтвердить остановку" onclick="window.dismissAdset('${escapeHtml(record.adset_id)}')">Подтвердить</button>
+        </div>
+      </div>`).join('');
+  }
+
+  // Load stopped adsets independently from the audit history.
+  async function loadStoppedAdsets() {
+    try {
+      const records = await apiRequest('/api/adsets/stopped');
+      state.stoppedAdsets = records || [];
+      renderStoppedAdsets();
     } catch (e) {
-      section.classList.add('hidden');
+      state.stoppedAdsets = [];
+      renderStoppedAdsets();
     }
   }
 
@@ -1239,7 +1417,9 @@
     try {
       const res = await apiRequest(`/api/adsets/${adsetId}/reactivate`, { method: 'POST' });
       showToast(res.message, 'success');
-      document.getElementById(`stopped-item-${adsetId}`)?.remove();
+      state.stoppedAdsets = state.stoppedAdsets.filter(item => item.adset_id !== adsetId);
+      renderStoppedAdsets();
+      if (state.activeTab === 'logs') loadLogsTab(state.auditPage);
     } catch (err) {
       showToast(`Ошибка: ${err.message}`, 'error');
     }
@@ -1248,8 +1428,13 @@
   window.dismissAdset = async function (adsetId) {
     try {
       await apiRequest(`/api/adsets/${adsetId}/dismiss`, { method: 'POST' });
-      document.getElementById(`stopped-item-${adsetId}`)?.remove();
-    } catch (err) {}
+      state.stoppedAdsets = state.stoppedAdsets.filter(item => item.adset_id !== adsetId);
+      renderStoppedAdsets();
+      showToast('Остановка подтверждена', 'success');
+      if (state.activeTab === 'logs') loadLogsTab(state.auditPage);
+    } catch (err) {
+      showToast(`Ошибка: ${err.message}`, 'error');
+    }
   };
 
   // ==========================================================
@@ -1638,6 +1823,8 @@
         await loadAccounts();
       } else if (state.activeTab === 'summary') {
         await loadSummary(state.currentPeriod, true); // force refresh
+      } else if (state.activeTab === 'logs') {
+        await loadLogsTab(state.auditPage);
       }
       showToast('Данные успешно обновлены', 'success');
       syncCooldownUntil = Date.now() + 30000; // 30s cooldown
@@ -1655,6 +1842,28 @@
     btn.addEventListener('click', () => {
       window.switchTab(btn.dataset.tab);
     });
+  });
+
+  const userBadge = document.getElementById('userBadge');
+  userBadge?.addEventListener('click', () => window.switchTab('settings'));
+  userBadge?.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      window.switchTab('settings');
+    }
+  });
+
+  document.getElementById('btnRefreshLogs')?.addEventListener('click', () => loadLogsTab(state.auditPage));
+  document.getElementById('btnLogsPrev')?.addEventListener('click', () => loadLogsTab(state.auditPage - 1));
+  document.getElementById('btnLogsNext')?.addEventListener('click', () => loadLogsTab(state.auditPage + 1));
+  ['logsCategoryFilter', 'logsStatusFilter', 'logsAccountFilter'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => loadLogsTab(1));
+  });
+
+  let logsSearchTimer;
+  document.getElementById('logsSearchInput')?.addEventListener('input', () => {
+    window.clearTimeout(logsSearchTimer);
+    logsSearchTimer = window.setTimeout(() => loadLogsTab(1), 350);
   });
 
   function escapeHtml(text) {

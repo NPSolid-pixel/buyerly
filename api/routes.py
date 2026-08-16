@@ -1,14 +1,17 @@
 import logging
 import time
+import uuid
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, or_
 
+from core.audit import build_audit_event
 from core.config import settings
 from database.db import async_session_maker
 import json
-from database.models import Account, StoppedAdSet, AppSettings, TelegramUser, EventLog, RulePreset
+from database.models import Account, AuditEvent, StoppedAdSet, AppSettings, TelegramUser, EventLog, RulePreset
 from meta_api.client import MetaClient
 from bot.handlers import parse_fb_raw_accounts, get_short_account_label
 from api.auth import get_current_user
@@ -151,6 +154,22 @@ def _load_active_rules(raw_rules: Any) -> List[Dict[str, Any]]:
     if not isinstance(rules, list):
         return []
     return [rule for rule in rules if isinstance(rule, dict)]
+
+
+def _load_json_object(raw_value: Any) -> Dict[str, Any]:
+    try:
+        value = json.loads(raw_value) if isinstance(raw_value, str) else raw_value
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _utc_iso(value: Optional[datetime]) -> str:
+    if value is None:
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
@@ -895,6 +914,111 @@ async def set_poll_interval(payload: SetIntervalRequest, user: TelegramUser = De
     }
 
 
+@router.get("/audit-events")
+async def list_audit_events(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    category: Optional[str] = Query(None, max_length=40),
+    event_status: Optional[str] = Query(None, alias="status", max_length=20),
+    account_id: Optional[str] = Query(None, max_length=80),
+    search: Optional[str] = Query(None, max_length=100),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Return an owner-isolated, filterable audit history for the web UI."""
+
+    filters = []
+    if user.role != "admin":
+        filters.append(AuditEvent.owner_id == user.telegram_id)
+    if category:
+        filters.append(AuditEvent.category == category.upper())
+    if account_id:
+        filters.append(AuditEvent.account_id == account_id)
+    if date_from:
+        filters.append(AuditEvent.created_at >= date_from)
+    if date_to:
+        filters.append(AuditEvent.created_at <= date_to)
+    if search and search.strip():
+        search_pattern = f"%{search.strip()}%"
+        filters.append(
+            or_(
+                AuditEvent.account_name.ilike(search_pattern),
+                AuditEvent.account_id.ilike(search_pattern),
+                AuditEvent.adset_name.ilike(search_pattern),
+                AuditEvent.adset_id.ilike(search_pattern),
+                AuditEvent.rule_name.ilike(search_pattern),
+                AuditEvent.message.ilike(search_pattern),
+            )
+        )
+
+    status_filters = list(filters)
+    if event_status:
+        filters.append(AuditEvent.status == event_status.upper())
+
+    async with async_session_maker() as session:
+        total = (
+            await session.execute(
+                select(func.count()).select_from(AuditEvent).where(*filters)
+            )
+        ).scalar_one()
+
+        status_rows = (
+            await session.execute(
+                select(AuditEvent.status, func.count(AuditEvent.id))
+                .where(*status_filters)
+                .group_by(AuditEvent.status)
+            )
+        ).all()
+
+        rows = (
+            await session.execute(
+                select(AuditEvent)
+                .where(*filters)
+                .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        ).scalars().all()
+
+    items = [
+        {
+            "id": row.id,
+            "owner_id": row.owner_id if user.role == "admin" else None,
+            "actor_type": row.actor_type,
+            "actor_id": row.actor_id,
+            "category": row.category,
+            "event_type": row.event_type,
+            "status": row.status,
+            "account_id": row.account_id,
+            "account_name": row.account_name,
+            "adset_id": row.adset_id,
+            "adset_name": row.adset_name,
+            "rule_id": row.rule_id,
+            "rule_name": row.rule_name,
+            "action": row.action,
+            "message": row.message,
+            "before_state": _load_json_object(row.before_state),
+            "after_state": _load_json_object(row.after_state),
+            "details": _load_json_object(row.details),
+            "correlation_id": row.correlation_id,
+            "duration_ms": row.duration_ms,
+            "created_at": _utc_iso(row.created_at),
+        }
+        for row in rows
+    ]
+
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "status_counts": {status_name: count for status_name, count in status_rows},
+    }
+
+
 @router.get("/adsets/stopped")
 async def list_stopped_adsets(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
@@ -938,14 +1062,65 @@ async def reactivate_adset(adset_id: str, user: TelegramUser = Depends(get_curre
         if not account or (user.role != "admin" and account.owner_id != user.telegram_id):
             raise HTTPException(status_code=403, detail="Доступ запрещен.")
 
+        action_started = time.perf_counter()
         try:
             await meta_client.set_adset_status(adset_id=adset_id, access_token=account.access_token, status="ACTIVE")
-            stopped_entry.is_resolved = True
-            await session.commit()
-            return {"success": True, "message": f"Адсет {adset_id} успешно включен!"}
         except Exception as e:
-            logger.error(f"Error reactivating adset {adset_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"Ошибка Meta API: {e}")
+            logger.error("Error reactivating adset %s; details stored in audit history", adset_id)
+            session.add(
+                build_audit_event(
+                    account=account,
+                    event_type="MANUAL_REACTIVATE",
+                    status="ERROR",
+                    correlation_id=uuid.uuid4().hex,
+                    category="MANUAL_ACTION",
+                    action="REACTIVATE_ADSET",
+                    message=str(e),
+                    before_state={"status": "PAUSED", "is_resolved": False},
+                    after_state={"status": "PAUSED", "is_resolved": False},
+                    duration_ms=(time.perf_counter() - action_started) * 1000,
+                    actor_type="user",
+                    actor_id=user.telegram_id,
+                    adset_id=adset_id,
+                    adset_name=stopped_entry.adset_name,
+                )
+            )
+            try:
+                await session.commit()
+            except Exception as audit_error:
+                await session.rollback()
+                logger.error("Failed to persist manual reactivation error: %s", audit_error)
+            raise HTTPException(status_code=500, detail="Meta не смогла включить ad set. Подробности сохранены в логах.")
+
+        stopped_entry.is_resolved = True
+        session.add(
+            build_audit_event(
+                account=account,
+                event_type="MANUAL_REACTIVATE",
+                status="SUCCESS",
+                correlation_id=uuid.uuid4().hex,
+                category="MANUAL_ACTION",
+                action="REACTIVATE_ADSET",
+                message="Ad set вручную включён пользователем.",
+                before_state={"status": "PAUSED", "is_resolved": False},
+                after_state={"status": "ACTIVE", "is_resolved": True},
+                duration_ms=(time.perf_counter() - action_started) * 1000,
+                actor_type="user",
+                actor_id=user.telegram_id,
+                adset_id=adset_id,
+                adset_name=stopped_entry.adset_name,
+            )
+        )
+        try:
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            logger.error("Meta activated adset %s but local state commit failed: %s", adset_id, e)
+            raise HTTPException(
+                status_code=500,
+                detail="Meta включила ad set, но Buyerly не смог сохранить локальный статус. Обновите страницу.",
+            )
+        return {"success": True, "message": f"Адсет {adset_id} успешно включен!"}
 
 
 @router.post("/adsets/{adset_id}/dismiss")
@@ -964,5 +1139,22 @@ async def dismiss_adset(adset_id: str, user: TelegramUser = Depends(get_current_
             raise HTTPException(status_code=403, detail="Доступ запрещен.")
 
         stopped_entry.is_resolved = True
+        session.add(
+            build_audit_event(
+                account=account,
+                event_type="DISMISS_STOPPED",
+                status="SUCCESS",
+                correlation_id=uuid.uuid4().hex,
+                category="MANUAL_ACTION",
+                action="KEEP_PAUSED",
+                message="Остановленный ad set оставлен выключенным пользователем.",
+                before_state={"status": "PAUSED", "is_resolved": False},
+                after_state={"status": "PAUSED", "is_resolved": True},
+                actor_type="user",
+                actor_id=user.telegram_id,
+                adset_id=adset_id,
+                adset_name=stopped_entry.adset_name,
+            )
+        )
         await session.commit()
         return {"success": True, "message": "Оставлен выключенным."}

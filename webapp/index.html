@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=8.9.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.0.0">
 </head>
 
 <body>
@@ -92,6 +92,10 @@
           <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           <span>Сводка</span>
         </button>
+        <button class="nav-tab" data-tab="logs">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+          <span>Логи</span>
+        </button>
         <button class="nav-tab" data-tab="add">
           <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           <span>Добавить кабинеты</span>
@@ -106,7 +110,7 @@
         <button id="btnSync" class="btn-icon" title="Синхронизировать данные">
           <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
         </button>
-        <div id="userBadge" class="user-badge" title="Профиль">
+        <div id="userBadge" class="user-badge" title="Открыть настройки" role="button" tabindex="0">
           <span class="user-avatar" id="userAvatar">B</span>
           <span class="user-name" id="userName">Медиабайер</span>
         </div>
@@ -279,17 +283,10 @@
           </div>
         </div>
 
-        <!-- Stopped Adsets Banner (If any) -->
-        <div id="stoppedAdsetsSection" class="stopped-section hidden">
-          <div class="section-header">
-            <span class="section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:6px; color:var(--color-danger);"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-              Остановленные сегодня адсеты
-            </span>
-            <span class="badge badge-warning" id="stoppedCountBadge">0</span>
-          </div>
-          <div id="stoppedAdsetsList" class="stopped-list"></div>
-        </div>
+        <button id="logsAttentionBanner" class="logs-attention-banner hidden" type="button" onclick="window.switchTab('logs')">
+          <span><span class="status-dot dot-warning"></span><b id="logsAttentionCount">0</b> остановленных ad set требуют решения</span>
+          <span class="logs-attention-link">Открыть логи →</span>
+        </button>
 
         <!-- Breakdown Table / Cards -->
         <div class="summary-breakdown-card">
@@ -327,7 +324,85 @@
       </section>
 
       <!-- ============================================== -->
-      <!-- TAB 3: ДОБАВИТЬ КАБИНЕТЫ (BATCH IMPORT) -->
+      <!-- TAB 3: ЛОГИ И ИСТОРИЯ ДЕЙСТВИЙ -->
+      <!-- ============================================== -->
+      <section id="tab-logs" class="tab-content">
+        <div class="logs-page-header">
+          <div>
+            <span class="eyebrow">Контроль автоматики</span>
+            <h2>Логи и действия</h2>
+            <p>Прозрачная история решений Buyerly: что произошло, какое правило сработало и что изменилось.</p>
+          </div>
+          <button id="btnRefreshLogs" class="btn btn-secondary" type="button">
+            <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Обновить
+          </button>
+        </div>
+
+        <div class="logs-stats-grid">
+          <div class="logs-stat"><span>Всего событий</span><strong id="logsTotalCount">0</strong></div>
+          <div class="logs-stat logs-stat-success"><span>Успешных</span><strong id="logsSuccessCount">0</strong></div>
+          <div class="logs-stat logs-stat-error"><span>С ошибкой</span><strong id="logsErrorCount">0</strong></div>
+          <div class="logs-stat logs-stat-warning"><span>Ждут решения</span><strong id="logsStoppedCount">0</strong></div>
+        </div>
+
+        <section id="logsStoppedSection" class="logs-attention-section hidden">
+          <div class="logs-section-title-row">
+            <div>
+              <span class="eyebrow">Нужна проверка</span>
+              <h3>Остановленные ad set <span id="stoppedCountBadge" class="label-badge">0</span></h3>
+            </div>
+            <p>Можно вернуть в работу или скрыть из списка, если остановка корректна.</p>
+          </div>
+          <div id="stoppedAdsetsList" class="stopped-adsets-list"></div>
+        </section>
+
+        <div class="logs-panel">
+          <div class="logs-filters">
+            <label class="logs-search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input id="logsSearchInput" type="search" placeholder="Кабинет, ad set, правило или сообщение">
+            </label>
+            <select id="logsCategoryFilter" class="logs-filter-select" aria-label="Категория события">
+              <option value="">Все категории</option>
+              <option value="rule_action">Действия правил</option>
+              <option value="manual_action">Ручные действия</option>
+              <option value="account_health">Состояние кабинетов</option>
+            </select>
+            <select id="logsStatusFilter" class="logs-filter-select" aria-label="Статус события">
+              <option value="">Все статусы</option>
+              <option value="SUCCESS">Успешно</option>
+              <option value="ERROR">Ошибка</option>
+              <option value="WARNING">Внимание</option>
+              <option value="INFO">Информация</option>
+            </select>
+            <select id="logsAccountFilter" class="logs-filter-select" aria-label="Рекламный кабинет">
+              <option value="">Все кабинеты</option>
+            </select>
+          </div>
+
+          <div class="table-responsive desktop-view">
+            <table class="logs-table">
+              <thead><tr><th>Время</th><th>Статус</th><th>Событие</th><th>Кабинет / ad set</th><th>Правило</th><th>Что произошло</th><th></th></tr></thead>
+              <tbody id="logsTableBody"></tbody>
+            </table>
+          </div>
+          <div id="logsMobileList" class="logs-mobile-list mobile-view"></div>
+
+          <div id="logsEmptyState" class="empty-state hidden">
+            <h3>Событий пока нет</h3>
+            <p>Здесь появятся решения автоматических правил, ошибки и ручные действия.</p>
+          </div>
+          <div class="logs-pagination">
+            <button id="btnLogsPrev" class="btn btn-secondary btn-sm" type="button">← Назад</button>
+            <span id="logsPageLabel">Страница 1 из 1</span>
+            <button id="btnLogsNext" class="btn btn-secondary btn-sm" type="button">Вперёд →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- TAB 4: ДОБАВИТЬ КАБИНЕТЫ (BATCH IMPORT) -->
       <!-- ============================================== -->
       <section id="tab-add" class="tab-content">
         <div class="form-card">
@@ -539,9 +614,9 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
         <span>Добавить</span>
       </button>
-      <button class="mobile-nav-item" data-tab="settings">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>Настройки</span>
+      <button class="mobile-nav-item" data-tab="logs">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+        <span>Логи</span>
       </button>
     </nav>
 
@@ -827,6 +902,17 @@
     </div>
 
     <!-- Toast Notification Container -->
+    <div id="modalLogDetails" class="modal-overlay hidden">
+      <div class="bottom-sheet log-details-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3>Детали события</h3>
+          <button class="btn-close" onclick="window.closeModal('modalLogDetails')">&times;</button>
+        </div>
+        <div id="logDetailsContent" class="sheet-body"></div>
+      </div>
+    </div>
+
     <div id="toastContainer" class="toast-container"></div>
 
 
@@ -835,6 +921,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=8.8.1"></script>
+  <script src="/static/js/app.js?v=9.0.0"></script>
 </body>
 </html>
