@@ -14,7 +14,6 @@
     summaryLastFetchedAt: {},
     presets: [],
     activePresetId: null,
-    selectedPreset: { l0: 2.0, l1: 6.0, lcpa: 6.0 },
     currentPeriod: 'today',
     activeTab: 'accounts',
     filter: 'all',
@@ -1342,25 +1341,10 @@
     input.type = input.type === 'password' ? 'text' : 'password';
   });
 
-  // Preset Selection in Add Form
-  document.querySelectorAll('.btn-preset').forEach(btn => {
-    btn.addEventListener('click', () => {
-      haptic('selection');
-      document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.selectedPreset = {
-        l0: parseFloat(btn.dataset.l0),
-        l1: parseFloat(btn.dataset.l1),
-        lcpa: parseFloat(btn.dataset.lcpa)
-      };
-    });
-  });
-
   // Submit Batch Add
   btnSubmit?.addEventListener('click', async () => {
     const token = document.getElementById('accessTokenInput').value.trim();
     const batchName = document.getElementById('batchNameInput').value.trim() || '-';
-    const enableRules = document.getElementById('addEnableRulesSwitch').checked;
 
     if (!token) {
       showToast('Введите Meta Access Token', 'error');
@@ -1379,6 +1363,8 @@
     document.getElementById('batchProgressText').textContent = `Проверка ${state.parsedAccounts.length} кабинетов через Meta API...`;
     document.getElementById('batchResultsList').innerHTML = '';
     document.getElementById('btnBatchDone').classList.add('hidden');
+    document.getElementById('btnBatchDone').classList.add('btn-block');
+    document.getElementById('btnBatchOpenRules').classList.add('hidden');
 
     try {
       const res = await apiRequest('/api/accounts/batch-add', {
@@ -1386,11 +1372,7 @@
         body: JSON.stringify({
           accounts: state.parsedAccounts,
           batch_name: batchName,
-          access_token: token,
-          rules_enabled: enableRules,
-          max_spend_0_leads: state.selectedPreset.l0,
-          max_spend_1_lead: state.selectedPreset.l1,
-          max_cpa_multiple_leads: state.selectedPreset.lcpa
+          access_token: token
         })
       });
 
@@ -1421,6 +1403,10 @@
 
       document.getElementById('batchResultsList').innerHTML = resultsHtml.join('');
       document.getElementById('btnBatchDone').classList.remove('hidden');
+      document.getElementById('btnBatchDone').classList.remove('btn-block');
+      if (res.success_count > 0) {
+        document.getElementById('btnBatchOpenRules').classList.remove('hidden');
+      }
       haptic('notification', 'success');
 
       // Clear input fields
@@ -1434,9 +1420,9 @@
 
   });
 
-  window.closeBatchProgress = function () {
+  window.closeBatchProgress = function (targetTab = 'accounts') {
     window.closeModal('modalBatchProgress');
-    window.switchTab('accounts');
+    window.switchTab(targetTab);
   };
 
   // ==========================================================

@@ -394,30 +394,6 @@
             <span class="input-hint">Бессрочный токен системного пользователя с правами <code>ads_management</code> и <code>ads_read</code>.</span>
           </div>
 
-          <!-- Step 4: Initial Rules & Limits Preset -->
-          <div class="form-group">
-            <label>4. Начальные лимиты автоправил стопов</label>
-            <div class="preset-buttons">
-              <button type="button" class="btn-preset active" data-l0="2.0" data-l1="6.0" data-lcpa="6.0">
-                <b>Стандарт</b> ($2.0 / $6.0 / $6.0)
-              </button>
-              <button type="button" class="btn-preset" data-l0="3.0" data-l1="8.0" data-lcpa="8.0">
-                <b>Средний</b> ($3.0 / $8.0 / $8.0)
-              </button>
-              <button type="button" class="btn-preset" data-l0="5.0" data-l1="10.0" data-lcpa="10.0">
-                <b>Широкий</b> ($5.0 / $10.0 / $10.0)
-              </button>
-            </div>
-            
-            <div class="form-check" style="margin-top: 14px;">
-              <label class="switch">
-                <input type="checkbox" id="addEnableRulesSwitch">
-                <span class="slider round"></span>
-              </label>
-              <span class="check-label">Включить авто-правила сразу после подключения (по умолчанию выключены для безопасного сбора статистики)</span>
-            </div>
-          </div>
-
           <!-- Action Button -->
           <div class="form-actions">
             <button id="btnSubmitBatchAdd" class="btn btn-primary btn-block btn-lg" disabled>
@@ -818,6 +794,7 @@
           <div id="batchResultsList" class="batch-results-list"></div>
         </div>
         <div class="modal-footer">
+          <button id="btnBatchOpenRules" class="btn btn-secondary hidden" onclick="window.closeBatchProgress('rules')">Перейти к правилам</button>
           <button id="btnBatchDone" class="btn btn-primary btn-block hidden" onclick="window.closeBatchProgress()">Готово</button>
         </div>
       </div>

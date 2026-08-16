@@ -125,7 +125,6 @@ class BatchAddRequest(BaseModel):
     accounts: List[BatchAddAccountEntry]
     batch_name: Optional[str] = "-"
     access_token: str
-    rules_enabled: Optional[bool] = False
 
 class SetIntervalRequest(BaseModel):
     minutes: int = Field(ge=1, le=1440)
@@ -667,7 +666,9 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                         timezone_name=timezone_name,
                         account_status=status_code,
                         status_label=status_label,
-                        rules_enabled=payload.rules_enabled or False,
+                        # Account import never enables automation. Rules are
+                        # assigned explicitly after the account is connected.
+                        rules_enabled=False,
                         is_active=True
                     )
                     session.add(new_acc)

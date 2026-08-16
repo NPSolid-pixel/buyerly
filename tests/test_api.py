@@ -4,6 +4,7 @@ import json
 import time
 import unittest
 import urllib.parse
+from unittest.mock import AsyncMock, patch
 
 import httpx
 from sqlalchemy import select
@@ -352,6 +353,49 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(items), 2)
             self.assertEqual(items[0]["account_id"], "act_1083480094013618")
             self.assertEqual(items[1]["account_id"], "act_1070862758952340")
+
+    async def test_batch_import_never_enables_rules_for_a_new_account(self):
+        user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
+        init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)
+        headers = {"Authorization": f"tma {init_data}"}
+
+        meta_account = {
+            "timezone_name": "Europe/Stockholm",
+            "name": "Imported account",
+            "account_status": 1,
+            "status_label": "Активен",
+        }
+        legacy_payload = {
+            "accounts": [{"account_id": "act_new_account", "name": "New account"}],
+            "batch_name": "-",
+            "access_token": "new_mock_token",
+            # Older clients may still send this field. It must be ignored.
+            "rules_enabled": True,
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_account_info",
+            new=AsyncMock(return_value=meta_account),
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/accounts/batch-add",
+                    headers=headers,
+                    json=legacy_payload,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["success_count"], 1)
+
+        async with self.test_session_maker() as session:
+            result = await session.execute(
+                select(Account).where(Account.account_id == "act_new_account")
+            )
+            imported = result.scalar_one()
+            self.assertFalse(imported.rules_enabled)
+            self.assertEqual(imported.active_rules, "[]")
 
 
     async def test_settings_endpoint(self):

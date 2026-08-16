@@ -23,6 +23,20 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertNotIn(removed_field, self.script)
 
+    def test_account_import_does_not_offer_or_send_automatic_rules(self):
+        for removed_contract in (
+            "addEnableRulesSwitch",
+            "selectedPreset",
+            "max_spend_0_leads",
+            "max_spend_1_lead",
+            "max_cpa_multiple_leads",
+            "Начальные лимиты автоправил",
+        ):
+            self.assertNotIn(removed_contract, self.script + self.index)
+
+        self.assertIn("btnBatchOpenRules", self.index)
+        self.assertIn("Перейти к правилам", self.index)
+
     def test_telegram_mini_app_sends_signed_init_data(self):
         sdk_position = self.index.index("telegram-web-app.js")
         app_position = self.index.index("/static/js/app.js")
