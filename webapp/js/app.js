@@ -56,6 +56,7 @@
   let summaryViewSaveQueue = Promise.resolve();
   let summaryViewChangeVersion = 0;
   let summaryFilterSaveTimer = null;
+  let summaryColumnResizeState = null;
 
   // Application State
   const state = {
@@ -1553,7 +1554,8 @@
       const direction = state.summaryView.sort_direction;
       const indicator = isActiveSort ? (direction === 'asc' ? '↑' : '↓') : '↕';
       const ariaSort = isActiveSort ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
-      return `<th${rowspan ? ' rowspan="2"' : ''} class="summary-sortable-header${alignment}" data-summary-column="${column.key}" data-summary-sort="${column.key}" tabindex="0" role="button" aria-sort="${ariaSort}">${escapeHtml(column.label)} <span class="summary-sort-indicator">${indicator}</span></th>`;
+      const columnWidth = state.summaryView.column_widths[column.key];
+      return `<th${rowspan ? ' rowspan="2"' : ''} class="summary-sortable-header${alignment}" data-summary-column="${column.key}" data-summary-sort="${column.key}" tabindex="0" role="button" aria-sort="${ariaSort}">${escapeHtml(column.label)} <span class="summary-sort-indicator">${indicator}</span><span class="summary-column-resizer" data-summary-column-resizer="${column.key}" role="separator" aria-orientation="vertical" aria-label="Изменить ширину колонки ${escapeHtml(column.label)}" aria-valuemin="${SUMMARY_COLUMN_MIN_WIDTH}" aria-valuemax="${SUMMARY_COLUMN_MAX_WIDTH}" aria-valuenow="${columnWidth}" tabindex="0" title="Потяните для изменения ширины · двойной клик — сброс"></span></th>`;
     };
     const runs = [];
     orderedColumns.forEach(column => {
@@ -1588,6 +1590,106 @@
     }).join('');
   }
 
+  function summaryTableWidth() {
+    const visible = new Set(state.summaryView.visible_columns);
+    return state.summaryView.column_order
+      .filter(key => visible.has(key))
+      .reduce((total, key) => total + state.summaryView.column_widths[key], 0);
+  }
+
+  function updateSummaryTableWidth() {
+    const table = document.querySelector('.summary-metrics-table');
+    if (!table) return;
+    const width = Math.max(380, summaryTableWidth());
+    table.style.width = `${width}px`;
+    table.style.minWidth = `${width}px`;
+  }
+
+  function setSummaryColumnWidth(column, requestedWidth) {
+    if (!Object.hasOwn(SUMMARY_DEFAULT_COLUMN_WIDTHS, column)) return false;
+    const width = Math.max(
+      SUMMARY_COLUMN_MIN_WIDTH,
+      Math.min(SUMMARY_COLUMN_MAX_WIDTH, Math.round(Number(requestedWidth)))
+    );
+    if (!Number.isFinite(width) || state.summaryView.column_widths[column] === width) return false;
+    state.summaryView = {
+      ...state.summaryView,
+      column_widths: { ...state.summaryView.column_widths, [column]: width }
+    };
+    const col = document.querySelector(`#summaryTableColumns [data-summary-column-width="${column}"]`);
+    if (col) col.style.width = `${width}px`;
+    const resizer = document.querySelector(`#summaryTableHead [data-summary-column-resizer="${column}"]`);
+    if (resizer) resizer.setAttribute('aria-valuenow', String(width));
+    updateSummaryTableWidth();
+    return true;
+  }
+
+  function finishSummaryColumnResize() {
+    if (!summaryColumnResizeState) return;
+    const { resizer, changed } = summaryColumnResizeState;
+    resizer.classList.remove('active');
+    document.body.classList.remove('summary-column-resizing');
+    window.removeEventListener('pointermove', moveSummaryColumnResize);
+    window.removeEventListener('pointerup', finishSummaryColumnResize);
+    window.removeEventListener('pointercancel', finishSummaryColumnResize);
+    summaryColumnResizeState = null;
+    if (changed) persistSummaryView(state.summaryView);
+  }
+
+  function moveSummaryColumnResize(event) {
+    if (!summaryColumnResizeState) return;
+    const nextWidth = summaryColumnResizeState.startWidth + event.clientX - summaryColumnResizeState.startX;
+    if (setSummaryColumnWidth(summaryColumnResizeState.column, nextWidth)) {
+      summaryColumnResizeState.changed = true;
+    }
+  }
+
+  function startSummaryColumnResize(event) {
+    const resizer = event.target.closest('[data-summary-column-resizer]');
+    if (!resizer || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    finishSummaryColumnResize();
+    const column = resizer.dataset.summaryColumnResizer;
+    summaryColumnResizeState = {
+      column,
+      resizer,
+      startX: event.clientX,
+      startWidth: state.summaryView.column_widths[column],
+      changed: false
+    };
+    resizer.classList.add('active');
+    document.body.classList.add('summary-column-resizing');
+    window.addEventListener('pointermove', moveSummaryColumnResize);
+    window.addEventListener('pointerup', finishSummaryColumnResize);
+    window.addEventListener('pointercancel', finishSummaryColumnResize);
+  }
+
+  function resetSummaryColumnWidth(event) {
+    const resizer = event.target.closest('[data-summary-column-resizer]');
+    if (!resizer) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const column = resizer.dataset.summaryColumnResizer;
+    if (setSummaryColumnWidth(column, SUMMARY_DEFAULT_COLUMN_WIDTHS[column])) {
+      persistSummaryView(state.summaryView);
+    }
+  }
+
+  function resizeSummaryColumnWithKeyboard(event) {
+    const resizer = event.target.closest('[data-summary-column-resizer]');
+    if (!resizer || !['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const column = resizer.dataset.summaryColumnResizer;
+    const currentWidth = state.summaryView.column_widths[column];
+    const nextWidth = event.key === 'Home'
+      ? SUMMARY_DEFAULT_COLUMN_WIDTHS[column]
+      : currentWidth + (event.key === 'ArrowRight' ? 8 : -8);
+    if (setSummaryColumnWidth(column, nextWidth)) persistSummaryView(state.summaryView);
+    return true;
+  }
+
   function applySummaryColumnVisibility() {
     const visible = new Set(state.summaryView.visible_columns);
     renderSummaryTableHeader();
@@ -1605,14 +1707,7 @@
       });
     });
 
-    const table = document.querySelector('.summary-metrics-table');
-    if (table) {
-      const width = state.summaryView.column_order
-        .filter(key => visible.has(key))
-        .reduce((total, key) => total + state.summaryView.column_widths[key], 0);
-      table.style.width = `${Math.max(380, width)}px`;
-      table.style.minWidth = `${Math.max(380, width)}px`;
-    }
+    updateSummaryTableWidth();
     document.querySelectorAll('#summaryTableBody td[data-summary-empty]').forEach(cell => {
       cell.colSpan = summaryVisibleColumnCount();
     });
@@ -2880,17 +2975,22 @@
   }
 
   document.getElementById('summaryTableHead')?.addEventListener('click', event => {
+    if (event.target.closest('[data-summary-column-resizer]')) return;
     const header = event.target.closest('[data-summary-sort]');
     if (header) changeSummarySort(header.dataset.summarySort);
   });
 
   document.getElementById('summaryTableHead')?.addEventListener('keydown', event => {
+    if (resizeSummaryColumnWithKeyboard(event)) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const header = event.target.closest('[data-summary-sort]');
     if (!header) return;
     event.preventDefault();
     changeSummarySort(header.dataset.summarySort);
   });
+
+  document.getElementById('summaryTableHead')?.addEventListener('pointerdown', startSummaryColumnResize);
+  document.getElementById('summaryTableHead')?.addEventListener('dblclick', resetSummaryColumnWidth);
 
   // Period Switcher Listeners in Summary
   document.querySelectorAll('.period-btn').forEach(btn => {

@@ -1576,6 +1576,7 @@ input:checked + .slider:before {
 }
 
 .summary-sortable-header {
+  position: relative;
   cursor: pointer;
   user-select: none;
 }
@@ -1594,6 +1595,41 @@ input:checked + .slider:before {
 .summary-sortable-header[aria-sort="ascending"] .summary-sort-indicator,
 .summary-sortable-header[aria-sort="descending"] .summary-sort-indicator {
   opacity: 1;
+}
+
+.summary-column-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  z-index: 3;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.summary-column-resizer::after {
+  position: absolute;
+  top: 20%;
+  right: 4px;
+  width: 1px;
+  height: 60%;
+  background: var(--tg-link);
+  content: '';
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.summary-sortable-header:hover .summary-column-resizer::after,
+.summary-column-resizer:focus-visible::after,
+.summary-column-resizer.active::after {
+  opacity: 0.8;
+}
+
+.summary-column-resizing,
+.summary-column-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .summary-columns-sheet {

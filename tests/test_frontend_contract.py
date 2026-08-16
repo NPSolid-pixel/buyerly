@@ -189,7 +189,12 @@ class TestFrontendRuleContract(unittest.TestCase):
             'renderSummaryAccountRows',
             'summaryFilterSaveTimer',
             'data-summary-column-width-input',
+            'data-summary-column-resizer',
             'setupSummaryColumnEditor',
+            'startSummaryColumnResize',
+            'moveSummaryColumnResize',
+            'finishSummaryColumnResize',
+            'resetSummaryColumnWidth',
         ):
             self.assertIn(contract, self.script)
 
@@ -198,8 +203,10 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-drag', self.styles)
         self.assertIn('.summary-table-filterbar', self.styles)
         self.assertIn('.summary-sortable-header', self.styles)
+        self.assertIn('.summary-column-resizer', self.styles)
+        self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.8.0', self.index)
+        self.assertIn('v=9.9.0', self.index)
 
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (
