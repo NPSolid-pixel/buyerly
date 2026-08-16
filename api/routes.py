@@ -151,7 +151,14 @@ async def get_me(user: TelegramUser = Depends(get_current_user)):
 async def list_accounts(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
         accounts = await get_user_accounts(session, user)
+        
+        # Загружаем существующие ID пресетов пользователя
+        p_stmt = select(RulePreset.id).where(RulePreset.owner_id == user.telegram_id)
+        p_res = await session.execute(p_stmt)
+        valid_preset_ids = set(p_res.scalars().all())
+
         res_list = []
+        needs_commit = False
         for a in accounts:
             conds = []
             if a.rule_conditions:
@@ -160,6 +167,16 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                     conds = [ConditionItem(**c) for c in parsed if isinstance(c, dict)]
                 except Exception:
                     conds = []
+
+            # Если пресет был удален или условия пусты, очищаем старое название
+            preset_name = a.preset_name or ""
+            preset_id = a.preset_id
+            if (preset_id and preset_id not in valid_preset_ids) or (not conds and preset_name):
+                preset_name = ""
+                preset_id = None
+                a.preset_id = None
+                a.preset_name = ""
+                needs_commit = True
 
             res_list.append(AccountItem(
                 id=a.id,
@@ -172,8 +189,8 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 status_label=a.status_label or "🟢 Активен (ACTIVE)",
                 rules_enabled=a.rules_enabled,
                 is_active=a.is_active,
-                preset_id=a.preset_id,
-                preset_name=a.preset_name or "",
+                preset_id=preset_id,
+                preset_name=preset_name,
                 rule_action=a.rule_action or "turn_off",
                 rule_conditions=conds,
                 rule_condition_logic=a.rule_condition_logic or "and",
@@ -184,7 +201,10 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 rule_budget_max_daily=a.rule_budget_max_daily or 0.0,
                 created_at=a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else ""
             ))
+        if needs_commit:
+            await session.commit()
         return res_list
+
 
 
 # ----------------------------------------------------

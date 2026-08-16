@@ -231,16 +231,40 @@
 
       // Format rule summary pill
       let ruleBadgeText = 'Настроить правило';
-      if (acc.preset_name) {
+      const hasConditions = acc.rule_conditions && acc.rule_conditions.length > 0;
+      
+      if (acc.preset_name && hasConditions) {
         ruleBadgeText = acc.preset_name;
-      } else if (acc.rule_conditions && acc.rule_conditions.length > 0) {
+      } else if (hasConditions) {
         const first = acc.rule_conditions[0];
-        const mLabel = first.metric === 'spend' ? 'Спенд' : (first.metric === 'cpl' ? 'CPL' : 'CPR');
+        const metricLabels = {
+          'spend': 'Спенд',
+          'cpl': 'CPL',
+          'cpr': 'CPR',
+          'cpa': 'CPA',
+          'leads': 'Лиды',
+          'registrations': 'Реги',
+          'purchases': 'Покупки',
+          'ctr': 'CTR',
+          'cpc': 'CPC'
+        };
+        const mLabel = metricLabels[first.metric] || first.metric;
         const op = (first.operator === 'gte' || first.operator === 'gt') ? '≥' : ((first.operator === 'lte' || first.operator === 'lt') ? '≤' : '=');
-        ruleBadgeText = `${mLabel} ${op} $${first.value.toFixed(1)}`;
+        const unit = (first.metric === 'leads' || first.metric === 'registrations' || first.metric === 'purchases') ? ' шт' : (first.metric === 'ctr' ? '%' : '$');
+        const valStr = unit === '$' ? `$${first.value.toFixed(1)}` : `${first.value}${unit}`;
+        ruleBadgeText = `${mLabel} ${op} ${valStr}`;
+      } else {
+        ruleBadgeText = 'Настроить правило';
       }
 
-      const actionIcon = acc.rule_action === 'notify_only' ? '🔔' : (acc.rule_action === 'turn_on' ? '🟢' : '🛡');
+      const actionIcons = {
+        'turn_off': '🛑',
+        'notify_only': '🔔',
+        'turn_on': '🟢',
+        'increase_budget': '📈',
+        'decrease_budget': '📉'
+      };
+      const actionIcon = actionIcons[acc.rule_action] || '⚙️';
 
       return `
         <div class="${cardClass}" id="card-${acc.account_id}">
