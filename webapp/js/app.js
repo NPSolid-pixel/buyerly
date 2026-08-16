@@ -44,6 +44,14 @@
     } catch (e) {}
   }
 
+  function getTelegramInitData() {
+    try {
+      return window.Telegram?.WebApp?.initData || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
   // API Client with Bearer Token Authentication
   async function apiRequest(endpoint, options = {}) {
     const headers = {
@@ -51,10 +59,12 @@
       ...(options.headers || {})
     };
 
+    const telegramInitData = getTelegramInitData();
     const authToken = getWebAuthToken();
-    if (authToken) {
+    if (telegramInitData) {
+      headers['Authorization'] = `tma ${telegramInitData}`;
+    } else if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
-      headers['X-Auth-Token'] = authToken;
     }
 
     try {
@@ -1679,10 +1689,16 @@
     setupLogicToggle();
     setupModalListeners();
 
-    // Check if we have an active auth token
-    const authToken = getWebAuthToken();
+    try {
+      window.Telegram?.WebApp?.ready();
+      window.Telegram?.WebApp?.expand();
+    } catch (e) {}
 
-    if (!authToken) {
+    // Direct browser login uses a token; Telegram Mini App uses signed initData.
+    const authToken = getWebAuthToken();
+    const telegramInitData = getTelegramInitData();
+
+    if (!authToken && !telegramInitData) {
       // Immediate clean display of login screen
       const loginScreen = document.getElementById('loginScreen');
       const appEl = document.getElementById('app');
@@ -1731,6 +1747,7 @@
       console.warn("Unauthorized / access locked:", e);
       setWebAuthToken('');
       const loginScreen = document.getElementById('loginScreen');
+      const loginError = document.getElementById('loginError');
       const appEl = document.getElementById('app');
       if (appEl) {
         appEl.style.display = 'none';
@@ -1739,6 +1756,10 @@
       if (loginScreen) {
         loginScreen.style.display = 'flex';
         loginScreen.classList.remove('hidden');
+        if (loginError) {
+          loginError.textContent = e.message || 'Доступ к Buyerly не подтверждён';
+          loginError.classList.remove('hidden');
+        }
         try { window.history.replaceState({}, '', '/sign-in'); } catch (e) {}
       }
     }
@@ -1840,6 +1861,12 @@
   }
 
   window.logoutUser = async function () {
+    if (getTelegramInitData()) {
+      try {
+        window.Telegram.WebApp.close();
+        return;
+      } catch (e) {}
+    }
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {});
     } catch (e) {}

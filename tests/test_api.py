@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import time
 import unittest
 import urllib.parse
 
@@ -18,9 +19,14 @@ from database.db import Base, verify_password
 from database.models import Account, AppSettings, RulePreset, StoppedAdSet, TelegramUser
 
 
-def generate_valid_telegram_init_data(bot_token: str, user_dict: dict) -> str:
+def generate_valid_telegram_init_data(
+    bot_token: str,
+    user_dict: dict,
+    *,
+    auth_date: int = None,
+) -> str:
     params = {
-        "auth_date": "1723790000",
+        "auth_date": str(int(time.time()) if auth_date is None else auth_date),
         "query_id": "AAHdF6IQAAAAAN0XohD9KkG4",
         "user": json.dumps(user_dict, separators=(',', ':'))
     }
@@ -92,17 +98,51 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
     def test_init_data_validation(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
-        valid_init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)
+        now = 2_000_000_000
+        valid_init_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            user_info,
+            auth_date=now,
+        )
         
         # Valid signature
-        res = validate_telegram_init_data(valid_init_data, settings.BOT_TOKEN)
+        res = validate_telegram_init_data(valid_init_data, settings.BOT_TOKEN, now=now)
         self.assertIsNotNone(res)
         self.assertEqual(res["user"]["id"], 8948797431)
 
         # Tampered signature
         tampered_init_data = valid_init_data.replace("buyer_nick", "hacker")
-        tampered_res = validate_telegram_init_data(tampered_init_data, settings.BOT_TOKEN)
+        tampered_res = validate_telegram_init_data(
+            tampered_init_data,
+            settings.BOT_TOKEN,
+            now=now,
+        )
         self.assertIsNone(tampered_res)
+
+        stale_init_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            user_info,
+            auth_date=now - 86401,
+        )
+        stale_res = validate_telegram_init_data(
+            stale_init_data,
+            settings.BOT_TOKEN,
+            now=now,
+            max_age_seconds=86400,
+        )
+        self.assertIsNone(stale_res)
+
+        future_init_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            user_info,
+            auth_date=now + 61,
+        )
+        future_res = validate_telegram_init_data(
+            future_init_data,
+            settings.BOT_TOKEN,
+            now=now,
+        )
+        self.assertIsNone(future_res)
 
     async def test_health_endpoints(self):
         transport = httpx.ASGITransport(app=self.app)

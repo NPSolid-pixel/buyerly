@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     API_PORT: int = Field(default=8080, description="Web API and static files port")
     API_HOST: str = Field(default="0.0.0.0", description="Web API host")
     ENABLE_DEV_AUTH: bool = Field(default=False, description="Enable dev auth fallback for local tests")
+    TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: int = Field(
+        default=86400,
+        ge=60,
+        description="Maximum accepted age of Telegram Mini App initData",
+    )
     BOOTSTRAP_ADMIN_USERNAME: str = Field(
         default="",
         description="Optional first admin username for an empty installation",

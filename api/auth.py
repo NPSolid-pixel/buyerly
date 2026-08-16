@@ -14,12 +14,18 @@ from database.models import TelegramUser
 
 logger = logging.getLogger(__name__)
 
-def validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[Dict[str, Any]]:
+def validate_telegram_init_data(
+    init_data: str,
+    bot_token: str,
+    *,
+    now: Optional[int] = None,
+    max_age_seconds: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
     """
     Validates Telegram WebApp initData using HMAC-SHA256 signature verification.
     Reference: https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
     """
-    if not init_data or not bot_token:
+    if not init_data or not bot_token or len(init_data) > 16_384:
         return None
 
     try:
@@ -30,7 +36,7 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[Dict
         parsed_data = dict(urllib.parse.parse_qsl(clean_init_data, keep_blank_values=True))
         received_hash = parsed_data.pop("hash", None)
         if not received_hash:
-            logger.warning(f"validate_telegram_init_data: No hash found in init_data (keys: {list(parsed_data.keys())})")
+            logger.warning("Telegram initData rejected: signature is missing")
             return None
 
         # Data check string: alphabetically sorted key=value pairs separated by \n
@@ -44,7 +50,18 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[Dict
         calculated_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(calculated_hash, received_hash):
-            logger.warning(f"Telegram initData hash mismatch: calc={calculated_hash}, recv={received_hash}")
+            logger.warning("Telegram initData rejected: signature mismatch")
+            return None
+
+        auth_date = int(parsed_data.get("auth_date", ""))
+        current_time = int(time.time()) if now is None else now
+        max_age = (
+            settings.TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
+            if max_age_seconds is None
+            else max_age_seconds
+        )
+        if auth_date > current_time + 60 or current_time - auth_date > max_age:
+            logger.warning("Telegram initData rejected: auth_date is outside the allowed window")
             return None
 
         # Parse user JSON if present
@@ -53,8 +70,8 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[Dict
                 parsed_data["user"] = json.loads(parsed_data["user"])
 
         return parsed_data
-    except Exception as e:
-        logger.error(f"Error validating telegram initData: {e}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        logger.warning("Telegram initData rejected: malformed payload")
         return None
 
 
@@ -62,7 +79,6 @@ async def get_current_user(
     authorization: Optional[str] = Header(None),
     x_init_data: Optional[str] = Header(None),
     x_auth_token: Optional[str] = Header(None),
-    init_data_query: Optional[str] = Query(None, alias="initData"),
     dev_user_id: Optional[str] = Query(None, alias="dev_user_id")
 ) -> TelegramUser:
     """
@@ -85,8 +101,6 @@ async def get_current_user(
         raw_init_data = authorization.strip()
     elif x_init_data:
         raw_init_data = x_init_data.strip()
-    elif init_data_query:
-        raw_init_data = init_data_query.strip()
 
     async with async_session_maker() as session:
         # Check Bearer Token (Direct Web Login)
@@ -109,7 +123,16 @@ async def get_current_user(
                 tg_user_info = validated["user"]
 
         if tg_user_info:
-            tg_id = str(tg_user_info.get("id"))
+            try:
+                tg_id_number = int(tg_user_info.get("id"))
+                if tg_id_number <= 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Некорректные данные пользователя Telegram",
+                )
+            tg_id = str(tg_id_number)
             username = tg_user_info.get("username", "")
             first_name = tg_user_info.get("first_name", "")
             last_name = tg_user_info.get("last_name", "")
@@ -174,4 +197,3 @@ async def get_current_user(
         await session.commit()
         await session.refresh(fallback_user)
         return fallback_user
-
