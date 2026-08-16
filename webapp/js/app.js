@@ -12,6 +12,7 @@
   function getTelegramInitData() {
     // 1. Telegram WebApp SDK initData
     if (window.Telegram?.WebApp?.initData) {
+      try { sessionStorage.setItem('buyerly_init_data', window.Telegram.WebApp.initData); } catch (e) {}
       return window.Telegram.WebApp.initData;
     }
     // 2. Hash parameters (e.g. Telegram Desktop webview)
@@ -19,14 +20,26 @@
       const hash = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
       const hashParams = new URLSearchParams(hash);
       const tgWebAppData = hashParams.get('tgWebAppData');
-      if (tgWebAppData) return tgWebAppData;
+      if (tgWebAppData) {
+        try { sessionStorage.setItem('buyerly_init_data', tgWebAppData); } catch (e) {}
+        return tgWebAppData;
+      }
     }
     // 3. Query string parameters
     if (window.location.search) {
       const searchParams = new URLSearchParams(window.location.search);
       const tgWebAppData = searchParams.get('tgWebAppData') || searchParams.get('initData');
-      if (tgWebAppData) return tgWebAppData;
+      if (tgWebAppData) {
+        try { sessionStorage.setItem('buyerly_init_data', tgWebAppData); } catch (e) {}
+        return tgWebAppData;
+      }
     }
+    // 4. SessionStorage fallback
+    try {
+      const cached = sessionStorage.getItem('buyerly_init_data');
+      if (cached) return cached;
+    } catch (e) {}
+
     return '';
   }
 
@@ -1697,11 +1710,13 @@
       }
     }
 
-    // Give Telegram SDK a short moment to parse hash/params if needed
+    // Give Telegram SDK enough time to parse hash/params if needed (up to 1500ms)
     let initData = getTelegramInitData();
-    if (!initData && window.Telegram) {
+    let retries = 0;
+    while (!initData && retries < 15) {
       await new Promise(resolve => setTimeout(resolve, 100));
       initData = getTelegramInitData();
+      retries++;
     }
 
     setupSettingsChips();
