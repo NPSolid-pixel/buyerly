@@ -109,6 +109,16 @@
 
 
       if (!response.ok) {
+        if (response.status === 401 && endpoint !== '/api/auth/login') {
+          setWebAuthToken('');
+          const loginScreen = document.getElementById('loginScreen');
+          const appEl = document.getElementById('app');
+          if (appEl) appEl.style.display = 'none';
+          if (loginScreen) {
+            loginScreen.style.display = 'flex';
+            loginScreen.classList.remove('hidden');
+          }
+        }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `Ошибка сервера (${response.status})`);
       }
@@ -1537,11 +1547,61 @@
       });
 
       if (state.user) {
-        document.getElementById('settingsUserDesc').textContent = `@${state.user.username || 'user'} (ID: ${state.user.telegram_id})`;
-        document.getElementById('settingsUserRole').textContent = state.user.role;
+        const dName = document.getElementById('settingsDisplayName');
+        const uDesc = document.getElementById('settingsUserDesc');
+        const uRole = document.getElementById('settingsUserRole');
+        const tgInput = document.getElementById('settingsTelegramIdInput');
+        const aLarge = document.getElementById('settingsAvatarLarge');
+
+        const name = state.user.full_name || state.user.username || 'Пользователь';
+        if (dName) dName.textContent = name;
+        if (uDesc) uDesc.textContent = `@${state.user.username || 'user'}`;
+        if (uRole) uRole.textContent = state.user.role || 'buyer';
+        if (tgInput && state.user.telegram_id) tgInput.value = state.user.telegram_id;
+        if (aLarge) aLarge.textContent = name.charAt(0).toUpperCase();
       }
     } catch (err) {}
   }
+
+  window.saveTelegramId = async function () {
+    const input = document.getElementById('settingsTelegramIdInput');
+    const tgId = input?.value.trim();
+    if (!tgId) {
+      showToast('Введите Telegram ID', 'error');
+      return;
+    }
+    haptic('impact', 'medium');
+    try {
+      const res = await apiRequest('/api/auth/update-profile', {
+        method: 'POST',
+        body: JSON.stringify({ telegram_id: tgId })
+      });
+      if (state.user) state.user.telegram_id = tgId;
+      showToast(res.message || 'Telegram ID успешно сохранен', 'success');
+    } catch (e) {
+      showToast(`Ошибка: ${e.message}`, 'error');
+    }
+  };
+
+  window.changeUserPassword = async function () {
+    const input = document.getElementById('settingsNewPasswordInput');
+    const newPw = input?.value.trim();
+    if (!newPw || newPw.length < 4) {
+      showToast('Пароль должен быть не менее 4 символов', 'error');
+      return;
+    }
+    haptic('impact', 'medium');
+    try {
+      const res = await apiRequest('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ new_password: newPw })
+      });
+      showToast(res.message || 'Пароль успешно обновлен', 'success');
+      if (input) input.value = '';
+    } catch (e) {
+      showToast(`Ошибка: ${e.message}`, 'error');
+    }
+  };
 
   document.querySelectorAll('.btn-interval').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -1714,45 +1774,27 @@
   // APP INITIALIZATION
   // ==========================================================
   async function initApp() {
-    // Configure Telegram WebApp
-    if (window.Telegram?.WebApp) {
-      const tgApp = window.Telegram.WebApp;
-      tgApp.ready();
-      tgApp.expand();
-      try {
-        if (typeof tgApp.setHeaderColor === 'function') tgApp.setHeaderColor('#1a1b26');
-        if (typeof tgApp.setBackgroundColor === 'function') tgApp.setBackgroundColor('#1a1b26');
-        if (typeof tgApp.disableVerticalSwipes === 'function') tgApp.disableVerticalSwipes();
-        if (typeof tgApp.enableClosingConfirmation === 'function') tgApp.enableClosingConfirmation();
-      } catch (e) {}
-
-      // Register BackButton handler
-      if (tgApp.BackButton) {
-        tgApp.BackButton.onClick(() => {
-          if (activeModalStack.length > 0) {
-            const topModal = activeModalStack[activeModalStack.length - 1];
-            window.closeModal(topModal);
-          }
-        });
-      }
-    }
-
     setupSettingsChips();
     setupLogicToggle();
     setupLoginForm();
+    setupModalListeners();
 
-    // Check if we have web token or telegram initData
-    let authToken = getWebAuthToken();
-    let initData = getTelegramInitData();
+    // Check if we have an active auth token
+    const authToken = getWebAuthToken();
 
-    // If neither exists and in telegram, try short wait
-    if (!authToken && !initData && window.Telegram?.WebApp) {
-      let retries = 0;
-      while (!initData && retries < 5) {
-        await new Promise(resolve => setTimeout(resolve, 80));
-        initData = getTelegramInitData();
-        retries++;
+    if (!authToken) {
+      // Immediate clean display of login screen
+      const loginScreen = document.getElementById('loginScreen');
+      const appEl = document.getElementById('app');
+      if (appEl) {
+        appEl.style.display = 'none';
+        appEl.classList.add('hidden');
       }
+      if (loginScreen) {
+        loginScreen.style.display = 'flex';
+        loginScreen.classList.remove('hidden');
+      }
+      return;
     }
 
     // Authenticate and load initial profile
@@ -1787,6 +1829,7 @@
       window.switchTab('accounts');
     } catch (e) {
       console.warn("Unauthorized / access locked:", e);
+      setWebAuthToken('');
       const loginScreen = document.getElementById('loginScreen');
       const appEl = document.getElementById('app');
       if (appEl) {
@@ -1805,6 +1848,16 @@
     const form = document.getElementById('loginForm');
     const submitBtn = document.getElementById('btnLoginSubmit');
     const errorEl = document.getElementById('loginError');
+    const pwToggle = document.getElementById('btnLoginPasswordToggle');
+
+    if (pwToggle) {
+      pwToggle.addEventListener('click', () => {
+        const pwInput = document.getElementById('loginPassword');
+        if (pwInput) {
+          pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+        }
+      });
+    }
 
     if (form) {
       form.addEventListener('submit', async (e) => {
@@ -1846,6 +1899,25 @@
     }
   }
 
+  function setupModalListeners() {
+    // Close modals on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && activeModalStack.length > 0) {
+        const topModal = activeModalStack[activeModalStack.length - 1];
+        window.closeModal(topModal);
+      }
+    });
+
+    // Close modals on backdrop click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          window.closeModal(overlay.id);
+        }
+      });
+    });
+  }
+
   window.quickFillLogin = function (username, password) {
     const uInput = document.getElementById('loginUsername');
     const pInput = document.getElementById('loginPassword');
@@ -1868,3 +1940,12 @@
       window.location.reload();
     }, 300);
   };
+
+  // Run on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+  } else {
+    initApp();
+  }
+
+})();

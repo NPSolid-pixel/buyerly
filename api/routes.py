@@ -45,6 +45,14 @@ class LoginResponse(BaseModel):
     role: str
     message: str = "Успешный вход"
 
+class ChangePasswordRequest(BaseModel):
+    old_password: Optional[str] = ""
+    new_password: str
+
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = None
+    telegram_id: Optional[str] = None
+
 
 class ConditionItem(BaseModel):
     metric: str = "spend"  # spend, cpl, cpr, cpa, leads, registrations, purchases, ctr, cpc
@@ -155,16 +163,35 @@ from database.db import hash_password
 async def login_user(req: LoginRequest):
     async with async_session_maker() as session:
         uname = req.username.strip()
-        stmt = select(TelegramUser).where(TelegramUser.username.ilike(uname))
+        
+        # Look up user by username, full_name, or telegram_id (case-insensitive)
+        stmt = select(TelegramUser).where(
+            (TelegramUser.username.ilike(uname)) |
+            (TelegramUser.full_name.ilike(uname)) |
+            (TelegramUser.telegram_id == uname)
+        )
         res = await session.execute(stmt)
         user = res.scalar_one_or_none()
 
+        # Support alias mappings if typed
         if not user:
-            raise HTTPException(status_code=400, detail="Неверный логин или пароль")
+            lower_u = uname.lower()
+            if lower_u in ["xxq322", "artem"]:
+                res = await session.execute(select(TelegramUser).where((TelegramUser.username.ilike("Artem")) | (TelegramUser.telegram_id == "8634201356")))
+                user = res.scalar_one_or_none()
+            elif lower_u in ["nikolai_underdog", "nikolai"]:
+                res = await session.execute(select(TelegramUser).where((TelegramUser.username.ilike("Nikolai")) | (TelegramUser.telegram_id == "8948797431")))
+                user = res.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(status_code=400, detail="Пользователь не найден")
 
         pw_hash = hash_password(req.password.strip())
         if user.password_hash and user.password_hash != pw_hash:
-            raise HTTPException(status_code=400, detail="Неверный логин или пароль")
+            raise HTTPException(status_code=400, detail="Неверный пароль")
+
+        if not user.is_approved:
+            raise HTTPException(status_code=403, detail="Ваш аккаунт ожидает одобрения администратора.")
 
         if not user.auth_token:
             user.auth_token = str(uuid.uuid4())
@@ -179,6 +206,49 @@ async def login_user(req: LoginRequest):
         )
 
 
+@router.post("/auth/change-password")
+async def change_password(req: ChangePasswordRequest, user: TelegramUser = Depends(get_current_user)):
+    new_pw = req.new_password.strip()
+    if not new_pw or len(new_pw) < 4:
+        raise HTTPException(status_code=400, detail="Пароль должен содержать минимум 4 символа")
+
+    async with async_session_maker() as session:
+        res = await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
+        db_user = res.scalar_one_or_none()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+        if db_user.password_hash and req.old_password:
+            old_hash = hash_password(req.old_password.strip())
+            if db_user.password_hash != old_hash:
+                raise HTTPException(status_code=400, detail="Старый пароль указан неверно")
+
+        db_user.password_hash = hash_password(new_pw)
+        await session.commit()
+        return {"message": "Пароль успешно обновлен"}
+
+
+@router.post("/auth/update-profile")
+async def update_profile(req: UpdateProfileRequest, user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        res = await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
+        db_user = res.scalar_one_or_none()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+        if req.full_name is not None:
+            db_user.full_name = req.full_name.strip()
+        if req.telegram_id is not None:
+            db_user.telegram_id = req.telegram_id.strip()
+        await session.commit()
+        return {
+            "message": "Профиль успешно обновлен",
+            "username": db_user.username,
+            "full_name": db_user.full_name,
+            "telegram_id": db_user.telegram_id
+        }
+
+
 @router.post("/auth/logout")
 async def logout_user(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
@@ -188,6 +258,7 @@ async def logout_user(user: TelegramUser = Depends(get_current_user)):
             db_user.auth_token = str(uuid.uuid4())
             await session.commit()
     return {"message": "Успешный выход"}
+
 
 
 @router.get("/me", response_model=UserProfileResponse)

@@ -8,27 +8,20 @@
   <!-- Google Fonts: Inter & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-  
-  <!-- Telegram WebApp SDK -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   
   <!-- App Stylesheet & Favicon -->
-  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.6.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=8.6.0">
+  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.7.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=8.7.0">
 </head>
-
-
-
-
 
 <body>
   <!-- Standalone Web Login Screen -->
   <div id="loginScreen" class="login-screen-wrapper">
     <div class="login-card">
       <div class="login-logo-row">
-        <div class="brand-logo" style="width: 44px; height: 44px;">
-          <svg width="28" height="28" viewBox="0 0 512 512" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <div class="brand-logo" style="width: 48px; height: 48px;">
+          <svg width="30" height="30" viewBox="0 0 512 512" fill="none" stroke-linecap="round" stroke-linejoin="round">
             <path d="M 256 280 C 315 280, 370 240, 370 185 C 370 130, 315 95, 256 95 C 197 95, 142 140, 142 205" stroke="#BB9AF7" stroke-width="56" />
             <path d="M 142 95 L 142 320 C 142 375, 197 417, 256 417 C 315 417, 370 375, 370 320 C 370 265, 315 225, 256 225 C 197 225, 142 265, 142 320" stroke="#7AA2F7" stroke-width="56" />
           </svg>
@@ -42,19 +35,45 @@
       <form id="loginForm" class="login-form" onsubmit="return false;">
         <div class="form-group">
           <label class="form-label" for="loginUsername">Логин</label>
-          <input type="text" id="loginUsername" class="form-control" placeholder="Введите логин" required autocomplete="username">
+          <input type="text" id="loginUsername" class="form-control" placeholder="Введите логин (Artem / Nikolai)" required autocomplete="username">
         </div>
 
         <div class="form-group">
           <label class="form-label" for="loginPassword">Пароль</label>
-          <input type="password" id="loginPassword" class="form-control" placeholder="Введите пароль" required autocomplete="current-password">
+          <div class="input-password-wrapper">
+            <input type="password" id="loginPassword" class="form-control" placeholder="Введите пароль" required autocomplete="current-password">
+            <button type="button" id="btnLoginPasswordToggle" class="btn-eye" title="Показать/скрыть пароль">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </div>
 
         <div id="loginError" class="login-error-msg hidden"></div>
 
         <button type="submit" id="btnLoginSubmit" class="btn btn-primary btn-block btn-lg" style="margin-top: 14px;">
-          <span>Войти</span>
+          <span>Войти в систему</span>
         </button>
+
+        <div class="quick-login-divider">
+          <span>Быстрый вход</span>
+        </div>
+
+        <div class="quick-users-grid">
+          <button type="button" class="btn-quick-user" onclick="window.quickFillLogin('Artem', 'artem_buyer_2026')">
+            <span class="user-avatar-small">A</span>
+            <div style="text-align:left;">
+              <div style="font-weight:600; font-size:13px;">Artem</div>
+              <div style="font-size:11px; color:var(--tg-hint);">Администратор</div>
+            </div>
+          </button>
+          <button type="button" class="btn-quick-user" onclick="window.quickFillLogin('Nikolai', 'nikolai_buyer_2026')">
+            <span class="user-avatar-small">N</span>
+            <div style="text-align:left;">
+              <div style="font-weight:600; font-size:13px;">Nikolai</div>
+              <div style="font-size:11px; color:var(--tg-hint);">Администратор</div>
+            </div>
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -430,40 +449,82 @@
       </section>
 
       <!-- ============================================== -->
-      <!-- TAB 4: НАСТРОЙКИ (SETTINGS) -->
+      <!-- TAB 5: НАСТРОЙКИ (SETTINGS) -->
       <!-- ============================================== -->
       <section id="tab-settings" class="tab-content">
-        <div class="settings-card">
-          <div class="card-header">
-            <h2>Настройки сервиса Buyerly</h2>
+        <div class="settings-cards-grid">
+          <!-- Card 1: User Profile -->
+          <div class="settings-card">
+            <div class="card-header">
+              <h2>Профиль пользователя</h2>
+            </div>
+            
+            <div class="profile-summary-row">
+              <div class="profile-avatar-large" id="settingsAvatarLarge">B</div>
+              <div class="profile-info-block">
+                <div class="profile-display-name" id="settingsDisplayName">Пользователь</div>
+                <div class="profile-meta-line">
+                  <span class="profile-role-tag" id="settingsUserRole">admin</span>
+                  <span class="mono text-hint" id="settingsUserDesc" style="font-size:12px;">@user</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-form-group">
+              <label class="form-label" for="settingsTelegramIdInput">Telegram ID для персональных алертов</label>
+              <div class="settings-input-action-row">
+                <input type="text" id="settingsTelegramIdInput" class="form-input mono" placeholder="например: 8634201356">
+                <button type="button" id="btnSaveTelegramId" class="btn btn-secondary btn-sm" onclick="window.saveTelegramId()">
+                  Сохранить
+                </button>
+              </div>
+              <span class="input-hint">На этот ID бот отправляет персональные алерты об отключении адсетов и сбросе дня.</span>
+            </div>
           </div>
 
-          <!-- Monitoring Frequency -->
-          <div class="setting-item column">
-            <div class="setting-info">
-              <span class="setting-title">Частота фонового мониторинга</span>
-              <span class="setting-desc">Как часто сервис проверяет спенд и лимиты в Meta API</span>
+          <!-- Card 2: Password Management -->
+          <div class="settings-card">
+            <div class="card-header">
+              <h2>Безопасность и пароль</h2>
             </div>
-            <div class="interval-selector" id="intervalSelector">
-              <button class="btn-interval" data-interval="10">10 мин</button>
-              <button class="btn-interval" data-interval="15">15 мин</button>
-              <button class="btn-interval" data-interval="30">30 мин</button>
-              <button class="btn-interval" data-interval="60">60 мин</button>
+
+            <div class="settings-form-group">
+              <label class="form-label" for="settingsNewPasswordInput">Новый пароль</label>
+              <div class="settings-input-action-row">
+                <input type="password" id="settingsNewPasswordInput" class="form-input" placeholder="Введите новый пароль (мин. 4 симв.)">
+                <button type="button" id="btnChangePassword" class="btn btn-primary btn-sm" onclick="window.changeUserPassword()">
+                  Сменить пароль
+                </button>
+              </div>
+              <span class="input-hint">Пароль для входа в веб-интерфейс Buyerly.</span>
             </div>
           </div>
 
-          <!-- User Info -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <span class="setting-title">Пользователь</span>
-              <span class="setting-desc" id="settingsUserDesc">@username (ID: ...)</span>
+          <!-- Card 3: Monitoring Frequency -->
+          <div class="settings-card">
+            <div class="card-header">
+              <h2>Фоновый мониторинг</h2>
             </div>
-            <span class="role-badge" id="settingsUserRole">buyer</span>
+            <div class="setting-item column" style="border:none; padding:0;">
+              <div class="setting-info" style="margin-bottom:12px;">
+                <span class="setting-title">Интервал опроса Meta API</span>
+                <span class="setting-desc">Как часто сервис опрашивает кампании, проверяет спенд и авто-правила</span>
+              </div>
+              <div class="interval-selector" id="intervalSelector">
+                <button class="btn-interval" data-interval="5">5 мин</button>
+                <button class="btn-interval" data-interval="10">10 мин</button>
+                <button class="btn-interval" data-interval="15">15 мин</button>
+                <button class="btn-interval" data-interval="30">30 мин</button>
+                <button class="btn-interval" data-interval="60">60 мин</button>
+              </div>
+            </div>
           </div>
 
-          <!-- Rules Summary -->
-          <div class="setting-item column">
-            <span class="setting-title">Движок авто-правил Buyerly</span>
+          <!-- Card 4: Engine Info & System Status -->
+          <div class="settings-card">
+            <div class="card-header">
+              <h2>О системе Buyerly</h2>
+            </div>
             <div class="rules-explanation">
               <div class="rule-row">
                 <span class="step-badge">Условия</span>
@@ -477,21 +538,22 @@
                 <span class="step-badge">Действия</span>
                 <span><b>Авто-контроль:</b> Выключение/включение адсетов, масштабирование бюджета (±%), пуш-уведомления</span>
               </div>
-              <div class="rule-row">
-                <span class="step-badge highlight">Пресеты</span>
-                <span><b>Пресеты:</b> Сохраняйте правила в пресеты и применяйте их к кабинетам в 1 клик</span>
+            </div>
+            
+            <div class="settings-system-status-row" style="margin-top: 16px;">
+              <div class="setting-info">
+                <span class="setting-title">Системный статус</span>
+                <span class="setting-desc">Buyerly Engine v1.0 · Standalone Web App</span>
               </div>
+              <span class="badge badge-success"><span class="status-dot dot-success"></span>Онлайн 24/7</span>
             </div>
-          </div>
 
-
-          <!-- App Version & Status -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <span class="setting-title">Системный статус</span>
-              <span class="setting-desc">Buyerly Engine v1.0 · Graph API v20.0</span>
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
+              <button type="button" class="btn btn-danger btn-block" onclick="window.logoutUser()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:6px;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Выйти из аккаунта
+              </button>
             </div>
-            <span class="badge badge-success"><span class="status-dot dot-success"></span>Онлайн 24/7</span>
           </div>
         </div>
       </section>
@@ -517,10 +579,11 @@
         <span>Добавить</span>
       </button>
       <button class="mobile-nav-item" data-tab="settings">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="3"/><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>Настройки</span>
       </button>
     </nav>
+
 
     <!-- ============================================== -->
     <!-- MODALS & BOTTOM SHEETS -->
