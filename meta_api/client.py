@@ -199,7 +199,7 @@ class MetaClient:
         # 1. Получаем список всех адсетов и их текущие статусы
         adsets_url = f"{self.BASE_URL}/{acc_id}/adsets"
         adsets_params = {
-            "fields": "id,name,status,effective_status",
+            "fields": "id,name,status,effective_status,daily_budget",
             "limit": 100,
             "access_token": access_token
         }
@@ -268,7 +268,8 @@ class MetaClient:
                 "cpa": round(cpa, 2),
                 "impressions": impressions,
                 "cpc": round(cpc, 2),
-                "ctr": round(ctr, 2)
+                "ctr": round(ctr, 2),
+                "daily_budget": float(adset.get("daily_budget", 0)) / 100.0  # Meta returns in cents
             })
 
         return unified_adsets
@@ -300,3 +301,34 @@ class MetaClient:
             error_msg = error_data.get("message", resp.text)
             logger.error(f"Failed to set adset {adset_id} status: {error_msg}")
             raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
+
+    async def update_adset_budget(
+        self, 
+        adset_id: str, 
+        access_token: str, 
+        new_daily_budget_dollars: float
+    ) -> bool:
+        """
+        Обновляет дневной бюджет адсета через Meta Graph API.
+        Meta API принимает бюджет в центах (целое число).
+        """
+        new_budget_cents = int(round(new_daily_budget_dollars * 100))
+        if new_budget_cents < 100:  # Минимум $1.00
+            raise ValueError(f"Budget too low: ${new_daily_budget_dollars:.2f}. Minimum is $1.00.")
+
+        url = f"{self.BASE_URL}/{adset_id}"
+        payload = {
+            "daily_budget": str(new_budget_cents),
+            "access_token": access_token
+        }
+
+        resp = await self._request_with_retry("POST", url, data=payload, account_id=adset_id)
+        if resp.status_code == 200 and resp.json().get("success") is True:
+            logger.info(f"Successfully updated adset {adset_id} daily budget to ${new_daily_budget_dollars:.2f}")
+            return True
+        else:
+            error_data = resp.json().get("error", {})
+            error_msg = error_data.get("message", resp.text)
+            logger.error(f"Failed to update adset {adset_id} budget: {error_msg}")
+            raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
+

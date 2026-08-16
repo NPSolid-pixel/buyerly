@@ -7,7 +7,7 @@ from typing import Optional, Callable, Awaitable
 from sqlalchemy import select
 
 from database.db import async_session_maker
-from database.models import Account, StoppedAdSet
+from database.models import Account
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 
@@ -35,6 +35,7 @@ class MonitoringWorker:
             "accounts_checked": 0,
             "adsets_checked": 0,
             "adsets_stopped": 0,
+            "budgets_changed": 0,
             "proposals_sent": 0,
             "starts_notified": 0,
             "errors": []
@@ -89,13 +90,26 @@ class MonitoringWorker:
                     today_str = now_in_tz.strftime("%Y-%m-%d")
                     time_str = now_in_tz.strftime("%H:%M")
 
-                    # 4. Получаем список остановленных адсетов по этому аккаунту
-                    stopped_stmt = select(StoppedAdSet).where(
-                        StoppedAdSet.account_id == acc.account_id,
-                        StoppedAdSet.is_resolved == False
-                    )
-                    stopped_res = await session.execute(stopped_stmt)
-                    stopped_records = {s.adset_id: s for s in stopped_res.scalars().all()}
+                    # 4. Собираем данные за нужные time_windows, кроме 'today'
+                    windows = set()
+                    if acc.rule_conditions and isinstance(acc.rule_conditions, list):
+                        for cond in acc.rule_conditions:
+                            if isinstance(cond, dict):
+                                w = cond.get("time_window", "today")
+                                if w != "today":
+                                    windows.add(w)
+                    
+                    insights_by_window = {}
+                    for w in windows:
+                        try:
+                            w_insights = await self.meta_client.get_adsets_insights(
+                                account_id=acc.account_id,
+                                access_token=acc.access_token,
+                                date_preset=w
+                            )
+                            insights_by_window[w] = {str(a["adset_id"]): a for a in w_insights}
+                        except Exception as e:
+                            logger.error(f"Error fetching insights for window {w} (account {acc.account_id}): {e}")
 
                     # 5. Запрашиваем актуальные данные из Meta API за сегодня
                     adsets = await self.meta_client.get_adsets_insights(
@@ -137,12 +151,11 @@ class MonitoringWorker:
 
                     for adset in adsets:
                         a_id = str(adset["adset_id"])
-                        is_stopped_today = a_id in stopped_records
 
                         eval_res = RuleEngine.evaluate(
                             adset=adset,
                             account=acc,
-                            is_stopped_today=is_stopped_today
+                            insights_by_window=insights_by_window
                         )
 
                         # Проверка паузы между срабатываниями (cooldown)
@@ -162,17 +175,6 @@ class MonitoringWorker:
                                     status="PAUSED"
                                 )
                                 self._adset_cooldowns[cooldown_key] = time.time()
-                                if a_id not in stopped_records:
-                                    stopped_entry = StoppedAdSet(
-                                        account_id=acc.account_id,
-                                        adset_id=a_id,
-                                        adset_name=eval_res.adset_name,
-                                        stop_spend=eval_res.spend,
-                                        stop_leads=eval_res.leads,
-                                        stop_registrations=eval_res.registrations,
-                                        is_resolved=False
-                                    )
-                                    session.add(stopped_entry)
                                 
                                 stats["adsets_stopped"] += 1
                                 logger.info(f"STOPPED AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
@@ -225,8 +227,6 @@ class MonitoringWorker:
                                     access_token=acc.access_token,
                                     status="ACTIVE"
                                 )
-                                if a_id in stopped_records:
-                                    stopped_records[a_id].is_resolved = True
                                 
                                 logger.info(f"AUTO REACTIVATED AdSet: {a_id} ({eval_res.adset_name})")
 
@@ -241,6 +241,63 @@ class MonitoringWorker:
                             except Exception as e:
                                 logger.error(f"Error auto-reactivating adset {a_id}: {e}")
                                 stats["errors"].append(f"Auto-reactivate error {a_id}: {e}")
+
+                        # УВЕЛИЧЕНИЕ БЮДЖЕТА
+                        elif eval_res.action == RuleAction.INCREASE_BUDGET:
+                            current_budget = adset.get("daily_budget", 0.0)
+                            if current_budget > 0 and eval_res.budget_change_percent > 0:
+                                new_budget = current_budget * (1 + eval_res.budget_change_percent / 100.0)
+                                if eval_res.budget_max_daily > 0:
+                                    new_budget = min(new_budget, eval_res.budget_max_daily)
+                                try:
+                                    await self.meta_client.update_adset_budget(
+                                        adset_id=a_id,
+                                        access_token=acc.access_token,
+                                        new_daily_budget_dollars=new_budget
+                                    )
+                                    self._adset_cooldowns[cooldown_key] = time.time()
+                                    stats["budgets_changed"] += 1
+                                    if should_notify_tg and self.telegram_notifier:
+                                        await self.telegram_notifier(
+                                            event_type="INCREASE_BUDGET",
+                                            eval_result=eval_res,
+                                            account_name=acc.name,
+                                            account_id=acc.account_id,
+                                            target_chat_id=acc.owner_id,
+                                            old_budget=current_budget,
+                                            new_budget=new_budget
+                                        )
+                                except Exception as e:
+                                    logger.error(f"Error increasing budget for adset {a_id}: {e}")
+                                    stats["errors"].append(f"Budget increase error {a_id}: {e}")
+
+                        # УМЕНЬШЕНИЕ БЮДЖЕТА
+                        elif eval_res.action == RuleAction.DECREASE_BUDGET:
+                            current_budget = adset.get("daily_budget", 0.0)
+                            if current_budget > 0 and eval_res.budget_change_percent > 0:
+                                new_budget = current_budget * (1 - eval_res.budget_change_percent / 100.0)
+                                new_budget = max(new_budget, 1.0)
+                                try:
+                                    await self.meta_client.update_adset_budget(
+                                        adset_id=a_id,
+                                        access_token=acc.access_token,
+                                        new_daily_budget_dollars=new_budget
+                                    )
+                                    self._adset_cooldowns[cooldown_key] = time.time()
+                                    stats["budgets_changed"] += 1
+                                    if should_notify_tg and self.telegram_notifier:
+                                        await self.telegram_notifier(
+                                            event_type="DECREASE_BUDGET",
+                                            eval_result=eval_res,
+                                            account_name=acc.name,
+                                            account_id=acc.account_id,
+                                            target_chat_id=acc.owner_id,
+                                            old_budget=current_budget,
+                                            new_budget=new_budget
+                                        )
+                                except Exception as e:
+                                    logger.error(f"Error decreasing budget for adset {a_id}: {e}")
+                                    stats["errors"].append(f"Budget decrease error {a_id}: {e}")
 
                 except Exception as e:
                     logger.error(f"Error processing account {acc.account_id}: {e}")

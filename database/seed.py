@@ -1,32 +1,31 @@
 import asyncio
 from sqlalchemy import select
 from database.db import init_db, async_session_maker
-from database.models import Preset
+from database.models import RulePreset
 
 DEFAULT_PRESETS = [
     {
-        "name": "Германия 5-5-1 (Лимиты $2 / $6)",
-        "currency": "USD",
-        "max_spend_0_leads": 2.0,
-        "max_spend_1_lead": 6.0,
-        "max_cpa_multiple_leads": 6.0,
-        "auto_reactivate": False
+        "name": "Стоп при высоком CPL ($10+)",
+        "action": "turn_off",
+        "conditions": '[{"metric": "cpl", "operator": "gte", "value": 10.0, "time_window": "today"}]',
+        "condition_logic": "and",
+        "notify_tg": True
     },
     {
-        "name": "Швеция 5-5-1 (Лимиты $2 / $6)",
-        "currency": "USD",
-        "max_spend_0_leads": 2.0,
-        "max_spend_1_lead": 6.0,
-        "max_cpa_multiple_leads": 6.0,
-        "auto_reactivate": False
+        "name": "Увеличить бюджет при CPL < $5",
+        "action": "increase_budget",
+        "conditions": '[{"metric": "cpl", "operator": "lt", "value": 5.0, "time_window": "today"}, {"metric": "leads", "operator": "gte", "value": 3.0, "time_window": "today"}]',
+        "condition_logic": "and",
+        "budget_change_percent": 20.0,
+        "budget_max_daily": 500.0,
+        "notify_tg": True
     },
     {
-        "name": "Тестовый 5-5-1 (Лимиты $1 / $3)",
-        "currency": "USD",
-        "max_spend_0_leads": 1.0,
-        "max_spend_1_lead": 3.0,
-        "max_cpa_multiple_leads": 3.0,
-        "auto_reactivate": False
+        "name": "Алерт без лидов при спенде $15+",
+        "action": "notify_only",
+        "conditions": '[{"metric": "spend", "operator": "gte", "value": 15.0, "time_window": "today"}, {"metric": "leads", "operator": "eq", "value": 0.0, "time_window": "today"}]',
+        "condition_logic": "and",
+        "notify_tg": True
     }
 ]
 
@@ -34,11 +33,14 @@ async def seed_defaults():
     await init_db()
     async with async_session_maker() as session:
         for p_data in DEFAULT_PRESETS:
-            stmt = select(Preset).where(Preset.name == p_data["name"])
+            stmt = select(RulePreset).where(RulePreset.name == p_data["name"])
             res = await session.execute(stmt)
             existing = res.scalar_one_or_none()
             if not existing:
-                preset = Preset(**p_data)
+                preset = RulePreset(
+                    owner_id="system",
+                    **p_data
+                )
                 session.add(preset)
                 print(f"Added preset: {p_data['name']}")
         await session.commit()

@@ -35,36 +35,46 @@ class UserProfileResponse(BaseModel):
     is_approved: bool
 
 class ConditionItem(BaseModel):
-    metric: str = "spend"  # spend, cpl, cpr
+    metric: str = "spend"  # spend, cpl, cpr, cpa, leads, registrations, purchases, ctr, cpc
     operator: str = "gte"  # gte, gt, lte, lt, eq
     value: float = 0.0
+    time_window: str = "today"  # today, yesterday, last_3d, last_7d
 
 class RulePresetItem(BaseModel):
     id: int
     name: str
     action: str
     conditions: List[ConditionItem]
+    condition_logic: str = "and"
     cooldown_minutes: int = 0
     check_interval_minutes: int = 5
     notify_tg: bool = True
+    budget_change_percent: float = 0.0
+    budget_max_daily: float = 0.0
     created_at: str
 
 class CreatePresetRequest(BaseModel):
     name: str
     action: Optional[str] = "turn_off"
     conditions: List[ConditionItem] = Field(default_factory=list)
+    condition_logic: Optional[str] = "and"
     cooldown_minutes: Optional[int] = 0
     check_interval_minutes: Optional[int] = 5
     notify_tg: Optional[bool] = True
+    budget_change_percent: Optional[float] = 0.0
+    budget_max_daily: Optional[float] = 0.0
 
 class ApplyPresetRequest(BaseModel):
     preset_id: Optional[int] = None
     name: Optional[str] = ""
     action: Optional[str] = "turn_off"
     conditions: List[ConditionItem] = Field(default_factory=list)
+    condition_logic: Optional[str] = "and"
     cooldown_minutes: Optional[int] = 0
     check_interval_minutes: Optional[int] = 5
     notify_tg: Optional[bool] = True
+    budget_change_percent: Optional[float] = 0.0
+    budget_max_daily: Optional[float] = 0.0
 
 class AccountItem(BaseModel):
     id: int
@@ -81,22 +91,13 @@ class AccountItem(BaseModel):
     preset_name: Optional[str] = ""
     rule_action: Optional[str] = "turn_off"
     rule_conditions: Optional[List[ConditionItem]] = Field(default_factory=list)
+    rule_condition_logic: Optional[str] = "and"
     rule_cooldown_minutes: Optional[int] = 0
     rule_check_interval: Optional[int] = 5
     rule_notify_tg: Optional[bool] = True
-    max_spend_0_leads: float
-    max_spend_1_lead: float
-    max_cpa_multiple_leads: float
-    conversion_event: str
-    auto_reactivate: bool
+    rule_budget_change_percent: Optional[float] = 0.0
+    rule_budget_max_daily: Optional[float] = 0.0
     created_at: str
-
-class UpdateLimitsRequest(BaseModel):
-    max_spend_0_leads: float = Field(ge=0.0)
-    max_spend_1_lead: float = Field(ge=0.0)
-    max_cpa_multiple_leads: float = Field(ge=0.0)
-    conversion_event: Optional[str] = "all"
-    auto_reactivate: Optional[bool] = False
 
 class ParseRawRequest(BaseModel):
     raw_text: str
@@ -114,9 +115,6 @@ class BatchAddRequest(BaseModel):
     batch_name: Optional[str] = "-"
     access_token: str
     rules_enabled: Optional[bool] = False
-    max_spend_0_leads: Optional[float] = 2.0
-    max_spend_1_lead: Optional[float] = 6.0
-    max_cpa_multiple_leads: Optional[float] = 6.0
 
 class SetIntervalRequest(BaseModel):
     minutes: int = Field(ge=1, le=1440)
@@ -178,14 +176,12 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 preset_name=a.preset_name or "",
                 rule_action=a.rule_action or "turn_off",
                 rule_conditions=conds,
+                rule_condition_logic=a.rule_condition_logic or "and",
                 rule_cooldown_minutes=a.rule_cooldown_minutes or 0,
                 rule_check_interval=a.rule_check_interval or 5,
                 rule_notify_tg=a.rule_notify_tg if a.rule_notify_tg is not None else True,
-                max_spend_0_leads=a.max_spend_0_leads,
-                max_spend_1_lead=a.max_spend_1_lead,
-                max_cpa_multiple_leads=a.max_cpa_multiple_leads,
-                conversion_event=a.conversion_event or "all",
-                auto_reactivate=a.auto_reactivate,
+                rule_budget_change_percent=a.rule_budget_change_percent or 0.0,
+                rule_budget_max_daily=a.rule_budget_max_daily or 0.0,
                 created_at=a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else ""
             ))
         return res_list
@@ -212,9 +208,12 @@ async def list_presets(user: TelegramUser = Depends(get_current_user)):
                 name=p.name,
                 action=p.action,
                 conditions=[ConditionItem(**c) for c in conds if isinstance(c, dict)],
+                condition_logic=p.condition_logic or "and",
                 cooldown_minutes=p.cooldown_minutes or 0,
                 check_interval_minutes=p.check_interval_minutes or 5,
                 notify_tg=p.notify_tg if p.notify_tg is not None else True,
+                budget_change_percent=p.budget_change_percent or 0.0,
+                budget_max_daily=p.budget_max_daily or 0.0,
                 created_at=p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else ""
             ))
         return result
@@ -229,9 +228,12 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
             name=payload.name.strip() or "Новое правило",
             action=payload.action or "turn_off",
             conditions=conds_json,
+            condition_logic=payload.condition_logic or "and",
             cooldown_minutes=payload.cooldown_minutes or 0,
             check_interval_minutes=payload.check_interval_minutes or 5,
-            notify_tg=payload.notify_tg if payload.notify_tg is not None else True
+            notify_tg=payload.notify_tg if payload.notify_tg is not None else True,
+            budget_change_percent=payload.budget_change_percent or 0.0,
+            budget_max_daily=payload.budget_max_daily or 0.0
         )
         session.add(preset)
         await session.commit()
@@ -241,9 +243,12 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
             name=preset.name,
             action=preset.action,
             conditions=payload.conditions,
+            condition_logic=preset.condition_logic,
             cooldown_minutes=preset.cooldown_minutes,
             check_interval_minutes=preset.check_interval_minutes,
             notify_tg=preset.notify_tg,
+            budget_change_percent=preset.budget_change_percent,
+            budget_max_daily=preset.budget_max_daily,
             created_at=preset.created_at.strftime("%Y-%m-%d %H:%M") if preset.created_at else ""
         )
 
@@ -262,12 +267,18 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
         preset.name = payload.name.strip() or preset.name
         preset.action = payload.action or "turn_off"
         preset.conditions = json.dumps([c.model_dump() for c in payload.conditions])
+        if payload.condition_logic is not None:
+            preset.condition_logic = payload.condition_logic
         if payload.cooldown_minutes is not None:
             preset.cooldown_minutes = payload.cooldown_minutes
         if payload.check_interval_minutes is not None:
             preset.check_interval_minutes = payload.check_interval_minutes
         if payload.notify_tg is not None:
             preset.notify_tg = payload.notify_tg
+        if payload.budget_change_percent is not None:
+            preset.budget_change_percent = payload.budget_change_percent
+        if payload.budget_max_daily is not None:
+            preset.budget_max_daily = payload.budget_max_daily
 
         await session.commit()
         await session.refresh(preset)
@@ -276,9 +287,12 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
             name=preset.name,
             action=preset.action,
             conditions=payload.conditions,
+            condition_logic=preset.condition_logic,
             cooldown_minutes=preset.cooldown_minutes,
             check_interval_minutes=preset.check_interval_minutes,
             notify_tg=preset.notify_tg,
+            budget_change_percent=preset.budget_change_percent,
+            budget_max_daily=preset.budget_max_daily,
             created_at=preset.created_at.strftime("%Y-%m-%d %H:%M") if preset.created_at else ""
         )
 
@@ -340,25 +354,34 @@ async def apply_preset_to_account(
                 acc.preset_name = preset.name
                 acc.rule_action = preset.action
                 acc.rule_conditions = preset.conditions
+                acc.rule_condition_logic = preset.condition_logic or "and"
                 acc.rule_cooldown_minutes = preset.cooldown_minutes or 0
                 acc.rule_check_interval = preset.check_interval_minutes or 5
                 acc.rule_notify_tg = preset.notify_tg if preset.notify_tg is not None else True
+                acc.rule_budget_change_percent = preset.budget_change_percent or 0.0
+                acc.rule_budget_max_daily = preset.budget_max_daily or 0.0
         else:
             # Custom rule conditions from payload
             conds_json = json.dumps([c.model_dump() for c in payload.conditions])
             preset_name = payload.name.strip() or "Мое правило"
+            cond_logic = payload.condition_logic or "and"
             cooldown = payload.cooldown_minutes or 0
             check_interval = payload.check_interval_minutes or 5
             notify_tg = payload.notify_tg if payload.notify_tg is not None else True
+            budget_change = payload.budget_change_percent or 0.0
+            budget_max = payload.budget_max_daily or 0.0
 
             preset = RulePreset(
                 owner_id=user.telegram_id,
                 name=preset_name,
                 action=payload.action or "turn_off",
                 conditions=conds_json,
+                condition_logic=cond_logic,
                 cooldown_minutes=cooldown,
                 check_interval_minutes=check_interval,
-                notify_tg=notify_tg
+                notify_tg=notify_tg,
+                budget_change_percent=budget_change,
+                budget_max_daily=budget_max
             )
             session.add(preset)
             await session.flush()
@@ -367,9 +390,12 @@ async def apply_preset_to_account(
             acc.preset_name = preset.name
             acc.rule_action = preset.action
             acc.rule_conditions = conds_json
+            acc.rule_condition_logic = cond_logic
             acc.rule_cooldown_minutes = cooldown
             acc.rule_check_interval = check_interval
             acc.rule_notify_tg = notify_tg
+            acc.rule_budget_change_percent = budget_change
+            acc.rule_budget_max_daily = budget_max
 
         acc.rules_enabled = True
         await session.commit()
@@ -378,9 +404,12 @@ async def apply_preset_to_account(
             "preset_id": acc.preset_id,
             "preset_name": acc.preset_name,
             "rule_action": acc.rule_action,
+            "rule_condition_logic": acc.rule_condition_logic,
             "rule_cooldown_minutes": acc.rule_cooldown_minutes,
             "rule_check_interval": acc.rule_check_interval,
             "rule_notify_tg": acc.rule_notify_tg,
+            "rule_budget_change_percent": acc.rule_budget_change_percent,
+            "rule_budget_max_daily": acc.rule_budget_max_daily,
             "rule_conditions": acc.rule_conditions,
             "rules_enabled": acc.rules_enabled,
             "message": f"Правило '{acc.preset_name}' успешно применено к кабинету"
@@ -408,43 +437,6 @@ async def toggle_rules(account_id: str, user: TelegramUser = Depends(get_current
             "message": f"Авто-правила {'включены' if acc.rules_enabled else 'выключены'}"
         }
 
-
-@router.post("/accounts/{account_id}/limits")
-async def update_account_limits(
-    account_id: str, 
-    payload: UpdateLimitsRequest,
-    user: TelegramUser = Depends(get_current_user)
-):
-    async with async_session_maker() as session:
-        acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
-        stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            stmt = stmt.where(Account.owner_id == user.telegram_id)
-
-        res = await session.execute(stmt)
-        acc = res.scalar_one_or_none()
-        if not acc:
-            raise HTTPException(status_code=404, detail="Кабинет не найден.")
-
-        acc.max_spend_0_leads = payload.max_spend_0_leads
-        acc.max_spend_1_lead = payload.max_spend_1_lead
-        acc.max_cpa_multiple_leads = payload.max_cpa_multiple_leads
-        if payload.conversion_event:
-            acc.conversion_event = payload.conversion_event
-        if payload.auto_reactivate is not None:
-            acc.auto_reactivate = payload.auto_reactivate
-
-        await session.commit()
-        return {
-            "account_id": acc.account_id,
-            "name": acc.name,
-            "max_spend_0_leads": acc.max_spend_0_leads,
-            "max_spend_1_lead": acc.max_spend_1_lead,
-            "max_cpa_multiple_leads": acc.max_cpa_multiple_leads,
-            "conversion_event": acc.conversion_event,
-            "auto_reactivate": acc.auto_reactivate,
-            "message": "Лимиты успешно обновлены"
-        }
 
 
 @router.delete("/accounts/{account_id}")
@@ -526,9 +518,6 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                         timezone_name=timezone_name,
                         account_status=status_code,
                         status_label=status_label,
-                        max_spend_0_leads=payload.max_spend_0_leads or 2.0,
-                        max_spend_1_lead=payload.max_spend_1_lead or 6.0,
-                        max_cpa_multiple_leads=payload.max_cpa_multiple_leads or 6.0,
                         rules_enabled=payload.rules_enabled or False,
                         is_active=True
                     )

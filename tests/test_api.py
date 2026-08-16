@@ -70,9 +70,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 access_token="mock_token",
                 owner_id="8948797431",
                 timezone_name="UTC",
-                max_spend_0_leads=2.0,
-                max_spend_1_lead=6.0,
-                max_cpa_multiple_leads=6.0,
                 rules_enabled=False,
                 is_active=True
             )
@@ -98,34 +95,26 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res["user"]["id"], 8948797431)
 
         # Tampered signature
-        tampered = valid_init_data.replace("8948797431", "9999999999")
-        res_invalid = validate_telegram_init_data(tampered, settings.BOT_TOKEN)
-        self.assertIsNone(res_invalid)
+        tampered_init_data = valid_init_data.replace("buyer_nick", "hacker")
+        tampered_res = validate_telegram_init_data(tampered_init_data, settings.BOT_TOKEN)
+        self.assertIsNone(tampered_res)
 
-    async def test_get_me_and_accounts(self):
+    async def test_get_accounts_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
         init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)
 
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             headers = {"Authorization": f"tma {init_data}"}
+            resp = await client.get("/api/accounts", headers=headers)
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertEqual(len(data), 1)
+            self.assertEqual(data[0]["account_id"], "act_1018756607700064")
+            self.assertEqual(data[0]["name"], "Швеция 1")
+            self.assertEqual(data[0]["rule_condition_logic"], "and")
 
-            # /api/me
-            me_resp = await client.get("/api/me", headers=headers)
-            self.assertEqual(me_resp.status_code, 200)
-            me_data = me_resp.json()
-            self.assertEqual(me_data["telegram_id"], "8948797431")
-            self.assertEqual(me_data["role"], "buyer")
-
-            # /api/accounts
-            acc_resp = await client.get("/api/accounts", headers=headers)
-            self.assertEqual(acc_resp.status_code, 200)
-            accounts = acc_resp.json()
-            self.assertEqual(len(accounts), 1)
-            self.assertEqual(accounts[0]["account_id"], "act_1018756607700064")
-            self.assertEqual(accounts[0]["rules_enabled"], False)
-
-    async def test_toggle_rules_and_limits(self):
+    async def test_toggle_rules_and_presets(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
         init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)
 
@@ -138,20 +127,35 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(t_resp.status_code, 200)
             self.assertTrue(t_resp.json()["rules_enabled"])
 
-            # Update limits
-            limits_payload = {
-                "max_spend_0_leads": 3.5,
-                "max_spend_1_lead": 8.5,
-                "max_cpa_multiple_leads": 8.5,
-                "conversion_event": "leads",
-                "auto_reactivate": True
+            # Create Preset with OR logic, new metric, and budget scaling
+            preset_payload = {
+                "name": "Тестовый пресет",
+                "action": "increase_budget",
+                "condition_logic": "or",
+                "budget_change_percent": 25.0,
+                "budget_max_daily": 200.0,
+                "conditions": [
+                    {"metric": "leads", "operator": "gte", "value": 5.0, "time_window": "today"},
+                    {"metric": "cpl", "operator": "lt", "value": 3.0, "time_window": "yesterday"}
+                ]
             }
-            l_resp = await client.post("/api/accounts/act_1018756607700064/limits", headers=headers, json=limits_payload)
-            self.assertEqual(l_resp.status_code, 200)
-            l_data = l_resp.json()
-            self.assertEqual(l_data["max_spend_0_leads"], 3.5)
-            self.assertEqual(l_data["max_spend_1_lead"], 8.5)
-            self.assertEqual(l_data["auto_reactivate"], True)
+            p_resp = await client.post("/api/presets", headers=headers, json=preset_payload)
+            self.assertEqual(p_resp.status_code, 200)
+            p_data = p_resp.json()
+            self.assertEqual(p_data["condition_logic"], "or")
+            self.assertEqual(p_data["budget_change_percent"], 25.0)
+            self.assertEqual(len(p_data["conditions"]), 2)
+
+            # Apply Preset to Account
+            apply_payload = {
+                "preset_id": p_data["id"]
+            }
+            a_resp = await client.post("/api/accounts/act_1018756607700064/apply-preset", headers=headers, json=apply_payload)
+            self.assertEqual(a_resp.status_code, 200)
+            a_data = a_resp.json()
+            self.assertEqual(a_data["rule_action"], "increase_budget")
+            self.assertEqual(a_data["rule_condition_logic"], "or")
+            self.assertEqual(a_data["rule_budget_change_percent"], 25.0)
 
     async def test_parse_raw_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}

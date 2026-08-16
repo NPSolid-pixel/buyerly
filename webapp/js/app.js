@@ -462,6 +462,40 @@
     });
   }
 
+  function getLogicFromUI() {
+    const activeBtn = document.querySelector('#logicToggleGroup .chip-btn.active');
+    return activeBtn?.dataset.logic || 'and';
+  }
+
+  function setLogicUI(logic = 'and') {
+    document.querySelectorAll('#logicToggleGroup .chip-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.logic === (logic || 'and'));
+    });
+  }
+
+  function setupLogicToggle() {
+    document.querySelectorAll('#logicToggleGroup .chip-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        haptic('selection');
+        document.querySelectorAll('#logicToggleGroup .chip-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
+
+  function handleActionChange(action) {
+    const budgetSection = document.getElementById('budgetConfigSection');
+    if (action === 'increase_budget' || action === 'decrease_budget') {
+      budgetSection?.classList.remove('hidden');
+    } else {
+      budgetSection?.classList.add('hidden');
+    }
+  }
+
+  document.getElementById('ruleActionSelect')?.addEventListener('change', (e) => {
+    handleActionChange(e.target.value);
+  });
+
   window.selectPreset = function (presetId) {
     haptic('selection');
     const preset = state.presets.find(p => p.id === presetId);
@@ -470,7 +504,14 @@
     state.activePresetId = preset.id;
     document.getElementById('editingPresetId').value = preset.id;
     document.getElementById('ruleNameInput').value = preset.name;
-    document.getElementById('ruleActionSelect').value = preset.action || 'turn_off';
+    const action = preset.action || 'turn_off';
+    document.getElementById('ruleActionSelect').value = action;
+    handleActionChange(action);
+
+    document.getElementById('budgetChangePercentInput').value = preset.budget_change_percent || 20;
+    document.getElementById('budgetMaxDailyInput').value = preset.budget_max_daily || 0;
+    setLogicUI(preset.condition_logic || 'and');
+
     document.getElementById('builderModeTag').textContent = `Пресет: ${preset.name}`;
     document.getElementById('btnDeletePreset')?.classList.remove('hidden');
 
@@ -489,6 +530,12 @@
     document.getElementById('editingPresetId').value = '';
     document.getElementById('ruleNameInput').value = '';
     document.getElementById('ruleActionSelect').value = 'turn_off';
+    handleActionChange('turn_off');
+
+    document.getElementById('budgetChangePercentInput').value = 20;
+    document.getElementById('budgetMaxDailyInput').value = 0;
+    setLogicUI('and');
+
     document.getElementById('builderModeTag').textContent = 'Новое правило';
     document.getElementById('btnDeletePreset')?.classList.add('hidden');
 
@@ -498,13 +545,13 @@
     if (tgToggle) tgToggle.checked = true;
 
     renderConditions([
-      { metric: 'spend', operator: 'gte', value: 2.0 }
+      { metric: 'spend', operator: 'gte', value: 2.0, time_window: 'today' }
     ]);
     renderPresetsList(null);
     document.getElementById('ruleNameInput')?.focus();
   };
 
-  window.addConditionRow = function (metric = 'spend', operator = 'gte', value = '') {
+  window.addConditionRow = function (metric = 'spend', operator = 'gte', value = '', timeWindow = 'today') {
     haptic('selection');
     const container = document.getElementById('ruleConditionsContainer');
     if (!container) return;
@@ -520,6 +567,12 @@
         <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд ($)</option>
         <option value="cpl" ${metric === 'cpl' ? 'selected' : ''}>Цена за лид ($)</option>
         <option value="cpr" ${metric === 'cpr' ? 'selected' : ''}>Цена за регу ($)</option>
+        <option value="cpa" ${metric === 'cpa' ? 'selected' : ''}>CPA общий ($)</option>
+        <option value="leads" ${metric === 'leads' ? 'selected' : ''}>Лиды (шт)</option>
+        <option value="registrations" ${metric === 'registrations' ? 'selected' : ''}>Реги (шт)</option>
+        <option value="purchases" ${metric === 'purchases' ? 'selected' : ''}>Покупки (шт)</option>
+        <option value="ctr" ${metric === 'ctr' ? 'selected' : ''}>CTR (%)</option>
+        <option value="cpc" ${metric === 'cpc' ? 'selected' : ''}>CPC ($)</option>
       </select>
       <select class="cond-operator form-select">
         <option value="gte" ${isGte ? 'selected' : ''}>&ge; (больше или равно)</option>
@@ -527,6 +580,12 @@
         <option value="eq" ${isEq ? 'selected' : ''}>= (равно)</option>
       </select>
       <input type="number" class="cond-value form-input text-center" placeholder="0.0" step="0.5" min="0" inputmode="decimal" value="${value}">
+      <select class="cond-window form-select">
+        <option value="today" ${timeWindow === 'today' ? 'selected' : ''}>Сегодня</option>
+        <option value="yesterday" ${timeWindow === 'yesterday' ? 'selected' : ''}>Вчера</option>
+        <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
+        <option value="last_7d" ${timeWindow === 'last_7d' ? 'selected' : ''}>7 дней</option>
+      </select>
       <button type="button" class="btn-remove-cond" onclick="this.closest('.rule-condition-row').remove()" title="Удалить условие">&times;</button>
     `;
     container.appendChild(row);
@@ -538,12 +597,12 @@
     container.innerHTML = '';
 
     if (!conditionsList || conditionsList.length === 0) {
-      window.addConditionRow('spend', 'gte', 2.0);
+      window.addConditionRow('spend', 'gte', 2.0, 'today');
       return;
     }
 
     conditionsList.forEach(c => {
-      window.addConditionRow(c.metric, c.operator || 'gte', c.value);
+      window.addConditionRow(c.metric, c.operator || 'gte', c.value, c.time_window || 'today');
     });
   }
 
@@ -554,9 +613,10 @@
       const metric = r.querySelector('.cond-metric')?.value || 'spend';
       const operator = r.querySelector('.cond-operator')?.value || 'gte';
       const valInput = r.querySelector('.cond-value')?.value;
+      const timeWindow = r.querySelector('.cond-window')?.value || 'today';
       const value = parseFloat(valInput);
       if (!isNaN(value)) {
-        conds.push({ metric, operator, value });
+        conds.push({ metric, operator, value, time_window: timeWindow });
       }
     });
     return conds;
@@ -583,7 +643,14 @@
       state.activePresetId = null;
       document.getElementById('editingPresetId').value = '';
       document.getElementById('ruleNameInput').value = acc.preset_name || 'Кастомное правило';
-      document.getElementById('ruleActionSelect').value = acc.rule_action || 'turn_off';
+      const action = acc.rule_action || 'turn_off';
+      document.getElementById('ruleActionSelect').value = action;
+      handleActionChange(action);
+
+      document.getElementById('budgetChangePercentInput').value = acc.rule_budget_change_percent || 20;
+      document.getElementById('budgetMaxDailyInput').value = acc.rule_budget_max_daily || 0;
+      setLogicUI(acc.rule_condition_logic || 'and');
+
       document.getElementById('builderModeTag').textContent = 'Кастомное правило кабинета';
       document.getElementById('btnDeletePreset')?.classList.add('hidden');
       renderConditions(acc.rule_conditions);
@@ -620,9 +687,12 @@
     const ruleName = document.getElementById('ruleNameInput').value.trim() || 'Правило стопа';
     const action = document.getElementById('ruleActionSelect').value;
     const conditions = getConditionsFromUI();
+    const conditionLogic = getLogicFromUI();
     const cooldownMins = getCooldownFromUI();
     const checkIntervalMins = getIntervalFromUI();
     const notifyTg = document.getElementById('ruleNotifyTgToggle')?.checked !== false;
+    const budgetChangePercent = parseFloat(document.getElementById('budgetChangePercentInput')?.value) || 0.0;
+    const budgetMaxDaily = parseFloat(document.getElementById('budgetMaxDailyInput')?.value) || 0.0;
 
     if (conditions.length === 0) {
       showToast('Добавьте хотя бы одно условие правила', 'error');
@@ -635,9 +705,12 @@
         name: ruleName,
         action: action,
         conditions: conditions,
+        condition_logic: conditionLogic,
         cooldown_minutes: cooldownMins,
         check_interval_minutes: checkIntervalMins,
-        notify_tg: notifyTg
+        notify_tg: notifyTg,
+        budget_change_percent: budgetChangePercent,
+        budget_max_daily: budgetMaxDaily
       };
 
       const res = await apiRequest(`/api/accounts/${accountId}/apply-preset`, {
@@ -1316,6 +1389,7 @@
     }
 
     setupSettingsChips();
+    setupLogicToggle();
 
     // Authenticate and load initial profile
     try {

@@ -33,14 +33,21 @@ async def init_db():
             "ALTER TABLE accounts ADD COLUMN preset_name VARCHAR DEFAULT '';",
             "ALTER TABLE accounts ADD COLUMN rule_action VARCHAR DEFAULT 'turn_off';",
             "ALTER TABLE accounts ADD COLUMN rule_conditions TEXT DEFAULT '[]';",
+            "ALTER TABLE accounts ADD COLUMN rule_condition_logic VARCHAR DEFAULT 'and';",
             "ALTER TABLE accounts ADD COLUMN rule_cooldown_minutes INTEGER DEFAULT 0;",
             "ALTER TABLE accounts ADD COLUMN rule_check_interval INTEGER DEFAULT 5;",
             "ALTER TABLE accounts ADD COLUMN rule_notify_tg BOOLEAN DEFAULT 1;",
+            "ALTER TABLE accounts ADD COLUMN rule_budget_change_percent FLOAT DEFAULT 0.0;",
+            "ALTER TABLE accounts ADD COLUMN rule_budget_max_daily FLOAT DEFAULT 0.0;",
             "ALTER TABLE rule_presets ADD COLUMN cooldown_minutes INTEGER DEFAULT 0;",
             "ALTER TABLE rule_presets ADD COLUMN check_interval_minutes INTEGER DEFAULT 5;",
-            "ALTER TABLE rule_presets ADD COLUMN notify_tg BOOLEAN DEFAULT 1;"
+            "ALTER TABLE rule_presets ADD COLUMN notify_tg BOOLEAN DEFAULT 1;",
+            "ALTER TABLE rule_presets ADD COLUMN condition_logic VARCHAR DEFAULT 'and';",
+            "ALTER TABLE rule_presets ADD COLUMN budget_change_percent FLOAT DEFAULT 0.0;",
+            "ALTER TABLE rule_presets ADD COLUMN budget_max_daily FLOAT DEFAULT 0.0;"
         ]:
             try:
                 await conn.execute(text(col_sql))
             except Exception:
                 pass
+

@@ -92,27 +92,29 @@ graph TD
 flowchart TD
     Start([Оценка адсета]) --> IsActive{Адсет активен?}
     
-    IsActive -- ДА --> StepCheck{Количество конверсий}
+    IsActive -- НЕТ --> InactiveNoop[Action: NOOP (Адсет не активен)]
+    IsActive -- ДА --> HasConditions{Есть правила?}
     
-    StepCheck -- 0 конверсий --> ZeroLeads{Spend >= lim_0?}
-    ZeroLeads -- ДА --> ActionStop1[Action: STOP]
-    ZeroLeads -- НЕТ --> ActionNoop1[Action: NOOP]
+    HasConditions -- НЕТ --> NoCondNoop[Action: NOOP (Правила не настроены)]
+    HasConditions -- ДА --> EvalConditions[Оценка условий: spend, cpl, cpr, cpa, leads, regs, purch, ctr, cpc с учетом time_window]
     
-    StepCheck -- 1 конверсия --> OneLead{Spend >= lim_1?}
-    OneLead -- ДА --> ActionStop2[Action: STOP]
-    OneLead -- НЕТ --> ActionNoop2[Action: NOOP]
+    EvalConditions --> LogicCheck{Logic: AND или OR?}
     
-    StepCheck -- 2+ конверсий --> MultiLeads{CPA > lim_multi?}
-    MultiLeads -- ДА --> ActionStop3[Action: STOP]
-    MultiLeads -- НЕТ --> ActionNoop3[Action: NOOP]
+    LogicCheck -- AND --> AllMatch{Все условия совпали?}
+    LogicCheck -- OR --> AnyMatch{Хотя бы одно совпало?}
     
-    IsActive -- НЕТ (Остановлен) --> StoppedToday{Остановлен сегодня и Conversions > 0?}
-    StoppedToday -- ДА --> GoodCPA{CPA в пределах нормы?}
-    GoodCPA -- ДА --> ReactivateDecision{auto_reactivate?}
-    ReactivateDecision -- True --> ActionAutoReactivate[Action: AUTO_REACTIVATE]
-    ReactivateDecision -- False --> ActionPropose[Action: PROPOSE_REACTIVATE]
-    GoodCPA -- НЕТ --> ActionNoop4[Action: NOOP]
-    StoppedToday -- НЕТ --> ActionNoop4
+    AllMatch -- НЕТ --> Noop1[Action: NOOP]
+    AnyMatch -- НЕТ --> Noop2[Action: NOOP]
+    
+    AllMatch -- ДА --> TriggerAction[Действие правила]
+    AnyMatch -- ДА --> TriggerAction
+    
+    TriggerAction --> ActionType{Тип действия}
+    ActionType -- turn_off --> ActStop[Action: STOP (Пауза в Meta)]
+    ActionType -- notify_only --> ActNotify[Action: NOTIFY_ONLY (Пуш в TG)]
+    ActionType -- turn_on --> ActTurnOn[Action: AUTO_REACTIVATE (Включение)]
+    ActionType -- increase_budget --> ActIncB[Action: INCREASE_BUDGET (+% с потолком)]
+    ActionType -- decrease_budget --> ActDecB[Action: DECREASE_BUDGET (-% пол $1.00)]
 ```
 
 ---

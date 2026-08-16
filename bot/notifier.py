@@ -43,7 +43,8 @@ class TelegramNotifier:
         timezone_name: str = "",
         local_time: str = "",
         active_count: int = 0,
-        start_spend: float = 0.0
+        start_spend: float = 0.0,
+        **kwargs
     ):
         from core.config import settings
         chat_id = target_chat_id or self.default_chat_id or settings.ADMIN_CHAT_ID
@@ -108,6 +109,32 @@ class TelegramNotifier:
                 keyboard = get_pause_adset_keyboard(
                     account_id=account_id,
                     adset_id=eval_result.adset_id
+                )
+
+            # УВЕЛИЧЕНИЕ БЮДЖЕТА
+            elif event_type == "INCREASE_BUDGET" and eval_result:
+                old_b = kwargs.get("old_budget", 0.0)
+                new_b = kwargs.get("new_budget", 0.0)
+                text = (
+                    f"📈 <b>Увеличен бюджет AdSet</b>\n\n"
+                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
+                    f"💰 <b>Бюджет:</b> ${old_b:.2f} → <b>${new_b:.2f}</b> (+{eval_result.budget_change_percent:.0f}%)\n"
+                    f"📊 <b>Спенд:</b> ${eval_result.spend:.2f} | <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n\n"
+                    f"⚠️ <i>{eval_result.reason}</i>"
+                )
+
+            # УМЕНЬШЕНИЕ БЮДЖЕТА
+            elif event_type == "DECREASE_BUDGET" and eval_result:
+                old_b = kwargs.get("old_budget", 0.0)
+                new_b = kwargs.get("new_budget", 0.0)
+                text = (
+                    f"📉 <b>Уменьшен бюджет AdSet</b>\n\n"
+                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
+                    f"💰 <b>Бюджет:</b> ${old_b:.2f} → <b>${new_b:.2f}</b> (-{eval_result.budget_change_percent:.0f}%)\n"
+                    f"📊 <b>Спенд:</b> ${eval_result.spend:.2f} | <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n\n"
+                    f"⚠️ <i>{eval_result.reason}</i>"
                 )
 
             # 4. СТАРТ ОТКРУТА В 00:00 ПО ВРЕМЕНИ КАБИНЕТА

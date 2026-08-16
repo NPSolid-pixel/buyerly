@@ -37,11 +37,14 @@ class RulePreset(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_id = Column(String, nullable=False, index=True, doc="Telegram ID владельца")
     name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPA > $6')")
-    action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only'")
+    action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only', 'increase_budget', 'decrease_budget'")
     conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
+    condition_logic = Column(String, default="and", nullable=False, doc="'and' или 'or' — логика объединения условий")
     cooldown_minutes = Column(Integer, default=0, nullable=False, doc="Пауза между срабатываниями (мин, 0=нет)")
     check_interval_minutes = Column(Integer, default=5, nullable=False, doc="Интервал проверки воркером (мин)")
     notify_tg = Column(Boolean, default=True, nullable=False, doc="Уведомление в Telegram")
+    budget_change_percent = Column(Float, default=0.0, nullable=False, doc="На сколько % изменить бюджет")
+    budget_max_daily = Column(Float, default=0.0, nullable=False, doc="Макс. потолок бюджета ($/день), 0 = без ограничения")
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -68,26 +71,19 @@ class Account(Base):
     # Привязанный пресет и правила
     preset_id = Column(Integer, nullable=True, doc="ID привязанного пресета")
     preset_name = Column(String, default="", nullable=False, doc="Название активного пресета")
-    rule_action = Column(String, default="turn_off", nullable=False, doc="turn_off, turn_on, notify_only")
+    rule_action = Column(String, default="turn_off", nullable=False, doc="turn_off, turn_on, notify_only, increase_budget, decrease_budget")
     rule_conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
+    rule_condition_logic = Column(String, default="and", nullable=False, doc="'and' или 'or' — логика объединения условий")
     rule_cooldown_minutes = Column(Integer, default=0, nullable=False, doc="Пауза между срабатываниями (мин)")
     rule_check_interval = Column(Integer, default=5, nullable=False, doc="Интервал проверки (мин)")
     rule_notify_tg = Column(Boolean, default=True, nullable=False, doc="Уведомление в Telegram")
-
-    # Индивидуальные ступенчатые лимиты правил (в USD $)
-    max_spend_0_leads = Column(Float, default=2.0, nullable=False, doc="Макс спенд при 0 лидов/рег ($)")
-    max_spend_1_lead = Column(Float, default=6.0, nullable=False, doc="Макс спенд при 1 лиде/реге ($)")
-    max_cpa_multiple_leads = Column(Float, default=6.0, nullable=False, doc="Макс CPA при 2+ лидах/регах ($)")
-    
-    # Тип целевых действий: 'all' (лиды + реги), 'leads', 'registrations'
-    conversion_event = Column(String, default="all", nullable=False)
+    rule_budget_change_percent = Column(Float, default=0.0, nullable=False, doc="На сколько % изменить бюджет")
+    rule_budget_max_daily = Column(Float, default=0.0, nullable=False, doc="Макс. потолок бюджета ($/день), 0 = без ограничения")
     
     # Статус кабинета в Meta
     account_status = Column(Integer, default=1, nullable=False, doc="1: ACTIVE, 2: DISABLED, 3: UNSETTLED")
     status_label = Column(String, default="🟢 Активен (ACTIVE)", nullable=False)
     
-    # Флаг: включать автоматически или слать кнопку с подтверждением
-    auto_reactivate = Column(Boolean, default=False, nullable=False)
     rules_enabled = Column(Boolean, default=False, nullable=False, doc="Включены ли авто-правила стопов")
     is_active = Column(Boolean, default=True, nullable=False, doc="Включен ли кабинет в системе")
     created_at = Column(DateTime, default=utcnow, nullable=False)

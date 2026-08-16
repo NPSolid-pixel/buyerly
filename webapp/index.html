@@ -383,23 +383,23 @@
 
           <!-- Rules Summary -->
           <div class="setting-item column">
-            <span class="setting-title">Логика ступенчатых правил</span>
+            <span class="setting-title">Движок авто-правил Buyerly</span>
             <div class="rules-explanation">
               <div class="rule-row">
-                <span class="step-badge">Ступень 1</span>
-                <span><b>0 лидов/рег:</b> Остановка при достижении порога $2.00</span>
+                <span class="step-badge">Условия</span>
+                <span><b>Метрики:</b> Спенд, CPL, CPR, CPA, Лиды, Реги, Покупки, CTR, CPC с AND/OR логикой</span>
               </div>
               <div class="rule-row">
-                <span class="step-badge">Ступень 2</span>
-                <span><b>1 лид/рега:</b> Остановка при расходе ≥ $6.00 без второго результата</span>
+                <span class="step-badge">Окна</span>
+                <span><b>Периоды:</b> Сегодня, Вчера, 3 дня, 7 дней для каждого условия индивидуально</span>
               </div>
               <div class="rule-row">
-                <span class="step-badge">Ступень 3</span>
-                <span><b>2+ лида/реги:</b> Контроль допустимого CPA ≤ $6.00</span>
+                <span class="step-badge">Действия</span>
+                <span><b>Авто-контроль:</b> Выключение/включение адсетов, масштабирование бюджета (±%), пуш-уведомления</span>
               </div>
               <div class="rule-row">
-                <span class="step-badge highlight">Долет</span>
-                <span><b>Delayed Attribution:</b> Мгновенное предложение включить адсет при долете конверсии</span>
+                <span class="step-badge highlight">Пресеты</span>
+                <span><b>Пресеты:</b> Сохраняйте правила в пресеты и применяйте их к кабинетам в 1 клик</span>
               </div>
             </div>
           </div>
@@ -477,21 +477,44 @@
               <input type="text" id="ruleNameInput" class="form-input" placeholder="Например: Стоп CPA > $6">
             </div>
 
-            <!-- 2. Action Selector (3 options as in FB) -->
+            <!-- 2. Action Selector -->
             <div class="form-group" style="margin-bottom: 12px;">
               <label for="ruleActionSelect">Действие (Action):</label>
               <select id="ruleActionSelect" class="form-select dark-select">
                 <option value="turn_off">🔴 Turn off ad sets (Выключить адсеты)</option>
                 <option value="notify_only">🔔 Send notification only (Только прислать пуш)</option>
                 <option value="turn_on">🟢 Turn on ad sets (Включить адсеты)</option>
+                <option value="increase_budget">📈 Increase daily budget (Увеличить бюджет)</option>
+                <option value="decrease_budget">📉 Decrease daily budget (Уменьшить бюджет)</option>
               </select>
+            </div>
+
+            <!-- Budget Management Parameters (shown for increase/decrease budget) -->
+            <div id="budgetConfigSection" class="form-group hidden" style="margin-bottom: 12px; background: rgba(122, 162, 247, 0.08); padding: 12px; border-radius: 8px; border: 1px solid rgba(122, 162, 247, 0.2);">
+              <div style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                  <label for="budgetChangePercentInput" style="font-size: 12px;">Изменение (%)</label>
+                  <input type="number" id="budgetChangePercentInput" class="form-input" placeholder="20" min="1" max="500" step="5" value="20">
+                </div>
+                <div style="flex: 1;">
+                  <label for="budgetMaxDailyInput" style="font-size: 12px;">Потолок ($/день)</label>
+                  <input type="number" id="budgetMaxDailyInput" class="form-input" placeholder="0 (без лимита)" min="0" step="10" value="0">
+                </div>
+              </div>
+              <span class="input-hint" style="font-size: 11px; margin-top: 4px;">Потолок бюджета предотвратит чрезмерное увеличение при частых срабатываниях.</span>
             </div>
 
             <!-- 3. Conditions Builder -->
             <div class="form-group" style="margin-bottom: 8px;">
-              <div class="form-label-group">
+              <div class="form-label-group" style="display: flex; justify-content: space-between; align-items: center;">
                 <label>Условия (Conditions):</label>
-                <span class="sub-hint">Все условия должны совпасть</span>
+                <div class="logic-toggle-wrap">
+                  <span style="font-size: 12px; color: var(--tg-hint); margin-right: 6px;">Логика:</span>
+                  <div class="chip-group" id="logicToggleGroup" style="display: inline-flex; gap: 4px;">
+                    <button type="button" class="chip-btn active" data-logic="and" style="padding: 2px 10px; font-size: 11px;">AND (Все)</button>
+                    <button type="button" class="chip-btn" data-logic="or" style="padding: 2px 10px; font-size: 11px;">OR (Любое)</button>
+                  </div>
+                </div>
               </div>
               
               <div id="ruleConditionsContainer" class="conditions-container">

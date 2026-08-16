@@ -94,6 +94,7 @@ def get_reactivate_keyboard(account_id: str, adset_id: str) -> InlineKeyboardMar
             )
         ]
     ]
+    return InlineKeyboardMarkup(inline_keyboard=kb)
 def get_pause_adset_keyboard(account_id: str, adset_id: str) -> InlineKeyboardMarkup:
     """Инлайн-кнопка для ручной остановки адсета по алерту"""
     kb = [
@@ -114,25 +115,7 @@ def get_account_manage_keyboard(account_id: str, rules_enabled: bool) -> InlineK
             InlineKeyboardButton(text=rules_btn_text, callback_data=f"toggle_rules:{account_id}")
         ],
         [
-            InlineKeyboardButton(text="✏️ Настроить лимиты ($)", callback_data=f"edit_limits:{account_id}"),
             InlineKeyboardButton(text="🗑 Удалить", callback_data=f"delete_acc:{account_id}")
-        ]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=kb)
-
-def get_limits_preset_keyboard(account_id: str) -> InlineKeyboardMarkup:
-    """Быстрые пресеты лимитов + ручной ввод"""
-    kb = [
-        [
-            InlineKeyboardButton(text="🔹 $2.0 / $6.0 / $6.0", callback_data=f"set_preset:{account_id}:2.0:6.0:6.0"),
-            InlineKeyboardButton(text="🔹 $3.0 / $8.0 / $8.0", callback_data=f"set_preset:{account_id}:3.0:8.0:8.0")
-        ],
-        [
-            InlineKeyboardButton(text="🔹 $5.0 / $10.0 / $10.0", callback_data=f"set_preset:{account_id}:5.0:10.0:10.0"),
-            InlineKeyboardButton(text="✍️ Ввести вручную", callback_data=f"manual_limits:{account_id}")
-        ],
-        [
-            InlineKeyboardButton(text="🔙 Назад", callback_data=f"back_to_acc:{account_id}")
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
