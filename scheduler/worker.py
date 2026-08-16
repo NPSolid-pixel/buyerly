@@ -5,7 +5,7 @@ from typing import Optional, Callable, Awaitable
 from sqlalchemy import select
 
 from database.db import async_session_maker
-from database.models import Account, StoppedAdSet, AppSettings
+from database.models import Account, StoppedAdSet
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 
@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 class MonitoringWorker:
     """
     Фоновый воркер, выполняющий периодический опрос всех активных аккаунтов,
-    контроль часовых поясов, сброса суток и правил стопа/реактивации.
+    контроль часовых поясов, сброса суток и правил стопа/реактивации
+    с персональной доставкой уведомлений владельцу каждого кабинета.
     """
 
     def __init__(
@@ -58,6 +59,7 @@ class MonitoringWorker:
                                     event_type="ACCOUNT_ISSUE",
                                     account_name=acc.name,
                                     account_id=acc.account_id,
+                                    target_chat_id=acc.owner_id,
                                     local_time=status_label
                                 )
                             continue
@@ -68,7 +70,8 @@ class MonitoringWorker:
                             await self.telegram_notifier(
                                 event_type="TOKEN_EXPIRED",
                                 account_name=acc.name,
-                                account_id=acc.account_id
+                                account_id=acc.account_id,
+                                target_chat_id=acc.owner_id
                             )
                         continue
 
@@ -90,7 +93,7 @@ class MonitoringWorker:
                     stopped_res = await session.execute(stopped_stmt)
                     stopped_records = {s.adset_id: s for s in stopped_res.scalars().all()}
 
-                    # 4. Запрашиваем актуальные данные из Meta API за сегодня
+                    # 5. Запрашиваем актуальные данные из Meta API за сегодня
                     adsets = await self.meta_client.get_adsets_insights(
                         account_id=acc.account_id,
                         access_token=acc.access_token,
@@ -99,7 +102,7 @@ class MonitoringWorker:
 
                     stats["adsets_checked"] += len(adsets)
 
-                    # 5. Проверяем старт открута рекламы в новые сутки (00:00)
+                    # 6. Проверяем старт открута рекламы в новые сутки (00:00)
                     total_spend = sum(a["spend"] for a in adsets)
                     active_adsets = [a for a in adsets if a["status"] == "ACTIVE"]
 
@@ -113,13 +116,14 @@ class MonitoringWorker:
                                 event_type="DAY_START",
                                 account_name=acc.name,
                                 account_id=acc.account_id,
+                                target_chat_id=acc.owner_id,
                                 timezone_name=acc.timezone_name,
                                 local_time=f"{time_str} ({acc.timezone_name})",
                                 active_count=len(active_adsets),
                                 start_spend=total_spend
                             )
 
-                    # 6. Оцениваем каждый адсет через RuleEngine
+                    # 7. Оцениваем каждый адсет через RuleEngine
                     for adset in adsets:
                         a_id = str(adset["adset_id"])
                         is_stopped_today = a_id in stopped_records
@@ -158,7 +162,8 @@ class MonitoringWorker:
                                         event_type="STOP",
                                         eval_result=eval_res,
                                         account_name=acc.name,
-                                        account_id=acc.account_id
+                                        account_id=acc.account_id,
+                                        target_chat_id=acc.owner_id
                                     )
                             except Exception as e:
                                 logger.error(f"Error pausing adset {a_id}: {e}")
@@ -174,7 +179,8 @@ class MonitoringWorker:
                                     event_type="PROPOSE_REACTIVATE",
                                     eval_result=eval_res,
                                     account_name=acc.name,
-                                    account_id=acc.account_id
+                                    account_id=acc.account_id,
+                                    target_chat_id=acc.owner_id
                                 )
 
                         # АВТО-ВКЛЮЧЕНИЕ
@@ -195,7 +201,8 @@ class MonitoringWorker:
                                         event_type="AUTO_REACTIVATE",
                                         eval_result=eval_res,
                                         account_name=acc.name,
-                                        account_id=acc.account_id
+                                        account_id=acc.account_id,
+                                        target_chat_id=acc.owner_id
                                     )
                             except Exception as e:
                                 logger.error(f"Error auto-reactivating adset {a_id}: {e}")

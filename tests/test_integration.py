@@ -77,6 +77,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                 account_id="act_e2e_sweden_1083",
                 name="Underdog 3286 (Швеция)",
                 access_token="mock_token_123",
+                owner_id="123456789",
                 timezone_name="HST",
                 max_spend_0_leads=2.0,
                 max_spend_1_lead=6.0,

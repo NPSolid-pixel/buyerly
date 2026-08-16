@@ -5,11 +5,26 @@ from database.db import Base
 def utcnow():
     return datetime.now(timezone.utc)
 
+class TelegramUser(Base):
+    __tablename__ = "telegram_users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    telegram_id = Column(String, unique=True, nullable=False, index=True, doc="Telegram User ID")
+    username = Column(String, default="", nullable=False)
+    full_name = Column(String, default="", nullable=False)
+    role = Column(String, default="buyer", nullable=False, doc="'admin' или 'buyer'")
+    is_approved = Column(Boolean, default=False, nullable=False, doc="Одобрен ли доступ админом")
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<TelegramUser(tg_id='{self.telegram_id}', username='{self.username}', role='{self.role}', approved={self.is_approved})>"
+
+
 class AppSettings(Base):
     __tablename__ = "app_settings"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    poll_interval_minutes = Column(Integer, default=15, nullable=False, doc="Интервал опроса кабинетов (мин)")
+    poll_interval_minutes = Column(Integer, default=10, nullable=False, doc="Интервал опроса кабинетов (мин)")
     admin_chat_id = Column(String, default="", nullable=False)
 
     def __repr__(self):
@@ -20,9 +35,13 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    account_id = Column(String, unique=True, nullable=False, doc="Facebook Ad Account ID (act_...)")
+    account_id = Column(String, unique=True, nullable=False, index=True, doc="Facebook Ad Account ID (act_...)")
     name = Column(String, nullable=False, doc="Понятное название кабинета")
     access_token = Column(String, nullable=False, doc="User/System User Access Token")
+    
+    # Привязка к владельцу (мульти-пользовательская изоляция)
+    owner_id = Column(String, nullable=False, index=True, doc="Telegram ID байера-владельца")
+    batch_name = Column(String, default="", nullable=False, doc="Имя пачки кабинетов (если добавлялось пачкой)")
     
     # Часовой пояс и отслеживание старта нового дня
     timezone_name = Column(String, default="UTC", nullable=False, doc="Часовой пояс рекламного кабинета")
@@ -42,7 +61,7 @@ class Account(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<Account(account_id='{self.account_id}', name='{self.name}', limits=[${self.max_spend_0_leads}/${self.max_spend_1_lead}])>"
+        return f"<Account(account_id='{self.account_id}', name='{self.name}', owner='{self.owner_id}')>"
 
 
 class StoppedAdSet(Base):
@@ -62,4 +81,4 @@ class StoppedAdSet(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<StoppedAdSet(adset_id='{self.adset_id}', spend=${self.stop_spend}, leads={self.stop_leads})>"
+        return f"<StoppedAdSet(adset_id='{self.adset_id}', spend=${self.stop_spend})>"

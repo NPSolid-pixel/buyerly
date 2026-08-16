@@ -8,18 +8,19 @@ logger = logging.getLogger(__name__)
 
 class TelegramNotifier:
     """
-    Форматирует и отправляет алерты и отчеты в Telegram.
+    Форматирует и отправляет алерты и отчеты в Telegram конкретному владельцу или админу.
     """
 
-    def __init__(self, bot: Bot, target_chat_id: str):
+    def __init__(self, bot: Bot, target_chat_id: str = ""):
         self.bot = bot
-        self.target_chat_id = target_chat_id
+        self.default_chat_id = target_chat_id
 
     async def send_alert(
         self,
         event_type: str,
         account_name: str,
         account_id: str,
+        target_chat_id: str = "",
         eval_result: Optional[RuleEvaluationResult] = None,
         timezone_name: str = "",
         local_time: str = "",
@@ -27,7 +28,7 @@ class TelegramNotifier:
         start_spend: float = 0.0
     ):
         from core.config import settings
-        chat_id = self.target_chat_id or settings.ADMIN_CHAT_ID
+        chat_id = target_chat_id or self.default_chat_id or settings.ADMIN_CHAT_ID
         if not chat_id:
             logger.warning("No target_chat_id configured, cannot send Telegram alert.")
             return
@@ -123,8 +124,7 @@ class TelegramNotifier:
                     f"🔑 <b>ВНИМАНИЕ: Слетел Access Token Meta API!</b>\n\n"
                     f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
                     f"⚠️ <i>Токен доступа стал недействительным или истек срок действия.</i>\n\n"
-                    f"💡 <i>Обновите токен через команду:</i>\n"
-                    f"<code>/add {account_id} {account_name} НОВЫЙ_ТОКЕН</code>"
+                    f"💡 <i>Обновите токен через бота (кнопка '➕ Добавить кабинеты').</i>"
                 )
                 await self.bot.send_message(
                     chat_id=chat_id,

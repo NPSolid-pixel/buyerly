@@ -1,6 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
-def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
+def get_main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     """Главное меню команд бота"""
     kb = [
         [
@@ -8,15 +8,32 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton(text="💵 Расходы")
         ],
         [
-            KeyboardButton(text="🏢 Кабинеты"),
+            KeyboardButton(text="🏢 Мои кабинеты"),
             KeyboardButton(text="⚙️ Настройки")
         ],
         [
-            KeyboardButton(text="➕ Добавить кабинет"),
+            KeyboardButton(text="➕ Добавить кабинеты"),
             KeyboardButton(text="🔑 Инструкция по токену")
         ]
     ]
+    if is_admin:
+        kb.append([KeyboardButton(text="👑 Админ-панель")])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_cancel_keyboard() -> ReplyKeyboardMarkup:
+    """Клавиатура отмены пошагового мастера"""
+    kb = [[KeyboardButton(text="❌ Отменить добавление")]]
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_admin_approval_keyboard(telegram_id: str) -> InlineKeyboardMarkup:
+    """Инлайн-кнопки одобрения нового пользователя администратором"""
+    kb = [
+        [
+            InlineKeyboardButton(text="✅ Одобрить доступ", callback_data=f"approve_user:{telegram_id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_user:{telegram_id}")
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def get_period_keyboard() -> InlineKeyboardMarkup:
     """Выбор периода для аналитической сводки"""
@@ -32,7 +49,7 @@ def get_period_keyboard() -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-def get_interval_keyboard(current_interval: int = 15) -> InlineKeyboardMarkup:
+def get_interval_keyboard(current_interval: int = 10) -> InlineKeyboardMarkup:
     """Выбор интервала проверки (10, 15, 30, 60 мин)"""
     intervals = [10, 15, 30, 60]
     buttons = []
