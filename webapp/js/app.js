@@ -571,6 +571,8 @@
       showToast(`Ошибка: ${e.message}`, 'error');
     }
   };
+
+  async function loadPresets() {
     try {
       const data = await apiRequest('/api/presets');
       state.presets = data || [];
