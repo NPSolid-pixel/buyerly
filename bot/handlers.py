@@ -460,16 +460,10 @@ async def cb_report_period(callback: CallbackQuery):
         table_block = "<pre>" + "\n".join(lines) + "</pre>"
 
         report_lines = [
-            f"📊 <b>Отчёт за {period_title} · <code>{tz_name}</code></b>\n",
+            f"📊 <b>Отчёт за {period_title}</b>\n",
             f"💵 <code>${total_spend:.2f}</code>  ·  👆 <b>{total_clicks}</b>  ·  🎯 <b>{total_leads}</b>  ·  📝 <b>{total_regs}</b>  ·  💳 <b>{total_purchases}</b>\n",
-            table_block,
-            ""
+            table_block
         ]
-
-        if purchases_list:
-            report_lines.append(f"🏆 <b>Покупка:</b> {', '.join(purchases_list)}")
-        if no_spend_list:
-            report_lines.append(f"⚠️ <b>Нет спенда:</b> {', '.join(no_spend_list)}")
 
         report_text = "\n".join(report_lines)
         await callback.message.edit_text(report_text, reply_markup=get_period_keyboard(), parse_mode="HTML")
