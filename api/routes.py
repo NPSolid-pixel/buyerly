@@ -273,13 +273,8 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
         p_res = await session.execute(p_stmt)
         valid_preset_ids = set(p_res.scalars().all())
 
-        res_list = []
-        needs_commit = False
+        items = []
         for a in accounts:
-            conds = []
-            if a.rule_conditions:
-                try:
-                    parsed = json.loads(a.rule_conditions) if isinstance(a.rule_conditions, str) else a.rule_conditions
             try:
                 active_rules_list = json.loads(a.active_rules) if isinstance(a.active_rules, str) else []
             except Exception:
