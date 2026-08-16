@@ -1,47 +1,9 @@
 /**
- * Buyerly Telegram Web App — Core Frontend Application Logic
+ * Buyerly Web App — Core Frontend Application Logic (Standalone SaaS)
  */
 
 (function () {
   'use strict';
-
-  // Telegram WebApp SDK
-  const tg = window.Telegram?.WebApp;
-
-  // Helper to extract Telegram initData from multiple possible sources
-  function getTelegramInitData() {
-    // 1. Telegram WebApp SDK initData
-    if (window.Telegram?.WebApp?.initData) {
-      try { sessionStorage.setItem('buyerly_init_data', window.Telegram.WebApp.initData); } catch (e) {}
-      return window.Telegram.WebApp.initData;
-    }
-    // 2. Hash parameters (e.g. Telegram Desktop webview)
-    if (window.location.hash) {
-      const hash = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
-      const hashParams = new URLSearchParams(hash);
-      const tgWebAppData = hashParams.get('tgWebAppData');
-      if (tgWebAppData) {
-        try { sessionStorage.setItem('buyerly_init_data', tgWebAppData); } catch (e) {}
-        return tgWebAppData;
-      }
-    }
-    // 3. Query string parameters
-    if (window.location.search) {
-      const searchParams = new URLSearchParams(window.location.search);
-      const tgWebAppData = searchParams.get('tgWebAppData') || searchParams.get('initData');
-      if (tgWebAppData) {
-        try { sessionStorage.setItem('buyerly_init_data', tgWebAppData); } catch (e) {}
-        return tgWebAppData;
-      }
-    }
-    // 4. SessionStorage fallback
-    try {
-      const cached = sessionStorage.getItem('buyerly_init_data');
-      if (cached) return cached;
-    } catch (e) {}
-
-    return '';
-  }
 
   // Application State
   const state = {
@@ -82,7 +44,7 @@
     } catch (e) {}
   }
 
-  // API Client with Token / initData Authentication
+  // API Client with Bearer Token Authentication
   async function apiRequest(endpoint, options = {}) {
     const headers = {
       'Content-Type': 'application/json',
@@ -93,12 +55,6 @@
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
       headers['X-Auth-Token'] = authToken;
-    } else {
-      const initData = getTelegramInitData();
-      if (initData) {
-        headers['Authorization'] = `tma ${initData}`;
-        headers['X-Init-Data'] = initData;
-      }
     }
 
     try {
@@ -106,7 +62,6 @@
         ...options,
         headers
       });
-
 
       if (!response.ok) {
         if (response.status === 401 && endpoint !== '/api/auth/login') {
@@ -130,19 +85,11 @@
     }
   }
 
-  // Haptic Feedback Helper
+  // Haptic Feedback (Safe no-op in browser)
   function haptic(type = 'impact', style = 'medium') {
-    try {
-      if (tg?.HapticFeedback) {
-        if (type === 'impact') {
-          tg.HapticFeedback.impactOccurred(style);
-        } else if (type === 'notification') {
-          tg.HapticFeedback.notificationOccurred(style);
-        } else if (type === 'selection') {
-          tg.HapticFeedback.selectionChanged();
-        }
-      }
-    } catch (e) {}
+    if (navigator.vibrate) {
+      try { navigator.vibrate(20); } catch (e) {}
+    }
   }
 
   // Toast Notification System
@@ -1635,9 +1582,6 @@
     if (!activeModalStack.includes(modalId)) {
       activeModalStack.push(modalId);
     }
-    if (tg?.BackButton) {
-      tg.BackButton.show();
-    }
   };
 
   window.closeModal = function (modalId) {
@@ -1649,9 +1593,6 @@
     }
     if (activeModalStack.length === 0) {
       document.body.style.overflow = '';
-      if (tg?.BackButton) {
-        tg.BackButton.hide();
-      }
     }
   };
 
@@ -1776,7 +1717,6 @@
   async function initApp() {
     setupSettingsChips();
     setupLogicToggle();
-    setupLoginForm();
     setupModalListeners();
 
     // Check if we have an active auth token
@@ -1844,60 +1784,81 @@
     }
   }
 
-  function setupLoginForm() {
-    const form = document.getElementById('loginForm');
+  window.toggleLoginPassword = function () {
+    const pwInput = document.getElementById('loginPassword');
+    if (pwInput) {
+      pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+    }
+  };
+
+  window.submitLogin = async function () {
+    const usernameInput = document.getElementById('loginUsername');
+    const passwordInput = document.getElementById('loginPassword');
     const submitBtn = document.getElementById('btnLoginSubmit');
     const errorEl = document.getElementById('loginError');
-    const pwToggle = document.getElementById('btnLoginPasswordToggle');
 
-    if (pwToggle) {
-      pwToggle.addEventListener('click', () => {
-        const pwInput = document.getElementById('loginPassword');
-        if (pwInput) {
-          pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
-        }
-      });
+    const username = usernameInput?.value ? usernameInput.value.trim() : '';
+    const password = passwordInput?.value || '';
+
+    if (!username) {
+      if (errorEl) {
+        errorEl.textContent = 'Введите логин';
+        errorEl.classList.remove('hidden');
+      }
+      usernameInput?.focus();
+      return;
     }
 
-    if (form) {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const username = document.getElementById('loginUsername')?.value.trim();
-        const password = document.getElementById('loginPassword')?.value;
-
-        if (!username || !password) return;
-
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<div class="spinner" style="width:18px;height:18px;margin:0 auto;"></div>';
-        if (errorEl) errorEl.classList.add('hidden');
-
-        try {
-          const res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-          });
-          const data = await res.json();
-
-          if (!res.ok) {
-            throw new Error(data.detail || 'Неверный логин или пароль');
-          }
-
-          setWebAuthToken(data.token);
-          showToast(`Добро пожаловать, ${data.full_name || data.username}!`, 'success');
-          await initApp();
-        } catch (err) {
-          if (errorEl) {
-            errorEl.textContent = err.message || 'Ошибка входа';
-            errorEl.classList.remove('hidden');
-          }
-        } finally {
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = '<span>Войти в систему</span>';
-        }
-      });
+    if (!password) {
+      if (errorEl) {
+        errorEl.textContent = 'Введите пароль';
+        errorEl.classList.remove('hidden');
+      }
+      passwordInput?.focus();
+      return;
     }
-  }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="spinner" style="width:18px;height:18px;margin:0 auto;"></div>';
+    }
+    if (errorEl) errorEl.classList.add('hidden');
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.detail || 'Неверный логин или пароль');
+      }
+
+      setWebAuthToken(data.token);
+      showToast(`Добро пожаловать, ${data.full_name || data.username}!`, 'success');
+      await initApp();
+    } catch (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || 'Ошибка входа';
+        errorEl.classList.remove('hidden');
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Войти в систему</span>';
+      }
+    }
+  };
+
+  window.quickFillLogin = function (username, password) {
+    const uInput = document.getElementById('loginUsername');
+    const pInput = document.getElementById('loginPassword');
+    if (uInput) uInput.value = username;
+    if (pInput) pInput.value = password;
+    window.submitLogin();
+  };
 
   function setupModalListeners() {
     // Close modals on Escape key
@@ -1917,18 +1878,6 @@
       });
     });
   }
-
-  window.quickFillLogin = function (username, password) {
-    const uInput = document.getElementById('loginUsername');
-    const pInput = document.getElementById('loginPassword');
-    if (uInput) uInput.value = username;
-    if (pInput) pInput.value = password;
-    const form = document.getElementById('loginForm');
-    if (form) {
-      const event = new Event('submit', { cancelable: true });
-      form.dispatchEvent(event);
-    }
-  };
 
   window.logoutUser = async function () {
     try {

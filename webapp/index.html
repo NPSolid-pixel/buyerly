@@ -32,17 +32,17 @@
         </div>
       </div>
 
-      <form id="loginForm" class="login-form" onsubmit="return false;">
+      <form id="loginForm" class="login-form" onsubmit="event.preventDefault(); window.submitLogin(); return false;">
         <div class="form-group">
           <label class="form-label" for="loginUsername">Логин</label>
-          <input type="text" id="loginUsername" class="form-control" placeholder="Введите логин (Artem / Nikolai)" required autocomplete="username">
+          <input type="text" id="loginUsername" class="form-control" placeholder="Введите логин (Artem / Nikolai)" required autocomplete="username" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitLogin();}">
         </div>
 
         <div class="form-group">
           <label class="form-label" for="loginPassword">Пароль</label>
           <div class="input-password-wrapper">
-            <input type="password" id="loginPassword" class="form-control" placeholder="Введите пароль" required autocomplete="current-password">
-            <button type="button" id="btnLoginPasswordToggle" class="btn-eye" title="Показать/скрыть пароль">
+            <input type="password" id="loginPassword" class="form-control" placeholder="Введите пароль" required autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitLogin();}">
+            <button type="button" id="btnLoginPasswordToggle" class="btn-eye" title="Показать/скрыть пароль" onclick="window.toggleLoginPassword()">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
@@ -50,7 +50,7 @@
 
         <div id="loginError" class="login-error-msg hidden"></div>
 
-        <button type="submit" id="btnLoginSubmit" class="btn btn-primary btn-block btn-lg" style="margin-top: 14px;">
+        <button type="button" id="btnLoginSubmit" class="btn btn-primary btn-block btn-lg" style="margin-top: 14px;" onclick="window.submitLogin()">
           <span>Войти в систему</span>
         </button>
 
