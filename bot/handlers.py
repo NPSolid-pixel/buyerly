@@ -440,12 +440,13 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
     wait_msg = await message.answer("⏳ Считаю расходы по вашим кабинетам за сегодня...")
 
     async with async_session_maker() as session:
-        stmt = select(Account).where(Account.is_active == True, Account.owner_id == user_id)
+        # Получаем все кабинеты байера
+        stmt = select(Account).where(Account.owner_id == user_id)
         res = await session.execute(stmt)
         accounts = res.scalars().all()
 
         if not accounts:
-            await wait_msg.edit_text("ℹ️ У вас пока нет активных кабинетов.")
+            await wait_msg.edit_text("ℹ️ У вас пока нет подключенных кабинетов.")
             return
 
         total_spend = 0.0
@@ -460,14 +461,15 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
                 )
                 acc_spend = sum(a["spend"] for a in adsets)
                 total_spend += acc_spend
-                lines.append(f"• <b>{acc.name}</b>: ${acc_spend:.2f}")
+                lines.append(f"• {acc.name}: ${acc_spend:.2f}")
             except Exception as e:
-                lines.append(f"• <b>{acc.name}</b>: <i>ошибка API</i>")
+                # Если заблокирован или ошибка — показываем $0.00
+                lines.append(f"• {acc.name}: $0.00")
 
         text = (
-            f"💵 <b>Ваш суммарный расход за сегодня:</b>\n"
-            f"💰 <b>${total_spend:.2f} USD</b>\n\n"
-            f"<b>Разбивка по кабинетам:</b>\n" + "\n".join(lines)
+            "<b>Разбивка по кабинетам:</b>\n"
+            + "\n".join(lines) + "\n\n"
+            f"💵 <b>Ваш суммарный расход за сегодня:</b> <code>${total_spend:.2f}</code>"
         )
         await wait_msg.edit_text(text, parse_mode="HTML")
 
