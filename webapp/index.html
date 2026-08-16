@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.6.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.7.0">
 </head>
 
 <body>
@@ -501,37 +501,8 @@
           <!-- Desktop Table View -->
           <div class="table-responsive desktop-view">
             <table class="data-table summary-metrics-table">
-              <thead>
-                <tr class="table-group-header">
-                  <th rowspan="2" data-summary-column="account">Кабинет</th>
-                  <th rowspan="2" data-summary-column="data">Данные</th>
-                  <th rowspan="2" class="text-right" data-summary-column="spend">Spend</th>
-                  <th colspan="4" class="text-center" data-summary-group="delivery">Доставка</th>
-                  <th colspan="9" class="text-center" data-summary-group="traffic">Трафик</th>
-                  <th colspan="6" class="text-center" data-summary-group="funnel">Воронка</th>
-                </tr>
-                <tr>
-                  <th class="text-right" data-summary-column="impressions">Показы</th>
-                  <th class="text-right" data-summary-column="reach">Охват</th>
-                  <th class="text-right" data-summary-column="frequency">Частота</th>
-                  <th class="text-right" data-summary-column="cpm">CPM</th>
-                  <th class="text-right" data-summary-column="clicks">Все клики</th>
-                  <th class="text-right" data-summary-column="link_clicks">Link</th>
-                  <th class="text-right" data-summary-column="unique_clicks">Unique</th>
-                  <th class="text-right" data-summary-column="outbound_clicks">Outbound</th>
-                  <th class="text-right" data-summary-column="landing_page_views">LP Views</th>
-                  <th class="text-right" data-summary-column="ctr">CTR All</th>
-                  <th class="text-right" data-summary-column="ctr_link">CTR Link</th>
-                  <th class="text-right" data-summary-column="cpc">CPC All</th>
-                  <th class="text-right" data-summary-column="cpc_link">CPC Link</th>
-                  <th class="text-right" data-summary-column="leads">Лиды</th>
-                  <th class="text-right" data-summary-column="registrations">Реги</th>
-                  <th class="text-right" data-summary-column="purchases">Покупки</th>
-                  <th class="text-right" data-summary-column="cpl">CPL</th>
-                  <th class="text-right" data-summary-column="cpreg">CPReg</th>
-                  <th class="text-right" data-summary-column="cpp">CPP</th>
-                </tr>
-              </thead>
+              <colgroup id="summaryTableColumns"></colgroup>
+              <thead id="summaryTableHead"></thead>
               <tbody id="summaryTableBody">
                 <!-- Dynamically populated -->
               </tbody>
@@ -1199,7 +1170,7 @@
         <div class="sheet-header">
           <div>
             <h3>Колонки таблицы</h3>
-            <p class="summary-columns-description">Выберите показатели для разбивки по кабинетам. Настройка сохранится для вашего пользователя.</p>
+            <p class="summary-columns-description">Включайте показатели, перетаскивайте их в нужном порядке и задавайте ширину. Настройка сохранится для вашего пользователя.</p>
           </div>
           <button class="btn-close" type="button" onclick="window.closeModal('modalSummaryColumns')">&times;</button>
         </div>
@@ -1219,6 +1190,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.6.0"></script>
+  <script src="/static/js/app.js?v=9.7.0"></script>
 </body>
 </html>

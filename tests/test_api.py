@@ -568,10 +568,35 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 saved_view.json()["visible_columns"],
                 ["account", "data", "spend", "impressions", "cpm"],
             )
+            self.assertEqual(len(saved_view.json()["column_order"]), 22)
+            self.assertEqual(saved_view.json()["column_order"][:3], ["account", "data", "spend"])
+            self.assertEqual(saved_view.json()["column_widths"]["account"], 260)
 
             restored_view = await client.get("/api/analytics-view", headers=buyer_headers)
             self.assertEqual(restored_view.json()["view_mode"], "delivery")
             self.assertEqual(restored_view.json()["visible_columns"], saved_view.json()["visible_columns"])
+
+            reordered_view = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={
+                    "view_mode": "custom",
+                    "visible_columns": ["account", "data", "spend", "cpp"],
+                    "column_order": ["spend", "account", "data", "cpp"],
+                    "column_widths": {"spend": 176, "account": 320, "cpp": 88},
+                },
+            )
+            self.assertEqual(reordered_view.status_code, 200)
+            self.assertEqual(
+                reordered_view.json()["column_order"][:4],
+                ["spend", "account", "data", "cpp"],
+            )
+            self.assertEqual(reordered_view.json()["column_widths"]["spend"], 176)
+            self.assertEqual(reordered_view.json()["column_widths"]["account"], 320)
+
+            restored_reordered_view = await client.get("/api/analytics-view", headers=buyer_headers)
+            self.assertEqual(restored_reordered_view.json()["column_order"][:4], ["spend", "account", "data", "cpp"])
+            self.assertEqual(restored_reordered_view.json()["column_widths"]["cpp"], 88)
 
             isolated_admin_view = await client.get("/api/analytics-view", headers=admin_headers)
             self.assertFalse(isolated_admin_view.json()["is_saved"])
@@ -583,6 +608,20 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 json={"view_mode": "custom", "visible_columns": ["account", "secret_token"]},
             )
             self.assertEqual(invalid_view.status_code, 422)
+
+            invalid_order = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"view_mode": "custom", "column_order": ["account", "unknown_metric"]},
+            )
+            self.assertEqual(invalid_order.status_code, 422)
+
+            invalid_width = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"view_mode": "custom", "column_widths": {"spend": 421}},
+            )
+            self.assertEqual(invalid_width.status_code, 422)
 
         async with self.test_session_maker() as session:
             count = int(

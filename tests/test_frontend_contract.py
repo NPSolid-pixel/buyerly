@@ -137,7 +137,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             'CTR All',
             'CTR Link',
         ):
-            self.assertIn(contract, self.index)
+            self.assertIn(contract, self.index + self.script)
 
         for contract in (
             'data.total_reach',
@@ -158,6 +158,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="btnOpenSummaryColumns"',
             'id="modalSummaryColumns"',
             'id="summaryColumnOptions"',
+            'id="summaryTableColumns"',
+            'id="summaryTableHead"',
             'data-summary-view="overview"',
             'data-summary-view="delivery"',
             'data-summary-view="traffic"',
@@ -173,12 +175,18 @@ class TestFrontendRuleContract(unittest.TestCase):
             'loadSummaryViewPreference()',
             'applySummaryColumnVisibility()',
             'SUMMARY_VIEW_PRESETS',
+            'column_order',
+            'column_widths',
+            'data-summary-column-width-input',
+            'setupSummaryColumnEditor',
         ):
             self.assertIn(contract, self.script)
 
         self.assertIn('.summary-view-toolbar', self.styles)
         self.assertIn('.summary-column-hidden', self.styles)
-        self.assertIn('v=9.6.0', self.index)
+        self.assertIn('.summary-column-drag', self.styles)
+        self.assertIn('table-layout: fixed', self.styles)
+        self.assertIn('v=9.7.0', self.index)
 
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (

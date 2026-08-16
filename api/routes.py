@@ -72,6 +72,32 @@ SUMMARY_TABLE_COLUMNS = (
 )
 SUMMARY_REQUIRED_COLUMNS = ("account", "data")
 SUMMARY_VIEW_MODES = {"all", "overview", "delivery", "traffic", "funnel", "custom"}
+SUMMARY_COLUMN_MIN_WIDTH = 72
+SUMMARY_COLUMN_MAX_WIDTH = 420
+SUMMARY_DEFAULT_COLUMN_WIDTHS = {
+    "account": 260,
+    "data": 120,
+    "spend": 112,
+    "impressions": 104,
+    "reach": 104,
+    "frequency": 96,
+    "cpm": 96,
+    "clicks": 104,
+    "link_clicks": 104,
+    "unique_clicks": 104,
+    "outbound_clicks": 112,
+    "landing_page_views": 120,
+    "ctr": 96,
+    "ctr_link": 96,
+    "cpc": 96,
+    "cpc_link": 96,
+    "leads": 88,
+    "registrations": 96,
+    "purchases": 96,
+    "cpl": 96,
+    "cpreg": 96,
+    "cpp": 96,
+}
 
 # ----------------------------------------------------
 # Pydantic Schemas
@@ -195,6 +221,8 @@ class SetIntervalRequest(BaseModel):
 class AnalyticsViewPreferenceRequest(BaseModel):
     view_mode: str = Field(default="all", pattern="^(all|overview|delivery|traffic|funnel|custom)$")
     visible_columns: List[str] = Field(default_factory=lambda: list(SUMMARY_TABLE_COLUMNS), max_length=len(SUMMARY_TABLE_COLUMNS))
+    column_order: List[str] = Field(default_factory=lambda: list(SUMMARY_TABLE_COLUMNS), max_length=len(SUMMARY_TABLE_COLUMNS))
+    column_widths: Dict[str, int] = Field(default_factory=dict, max_length=len(SUMMARY_TABLE_COLUMNS))
 
 
 # ----------------------------------------------------
@@ -288,10 +316,53 @@ def _normalize_summary_view_config(config: Any, *, strict: bool = True) -> Dict[
     requested = [key for key in requested if key in SUMMARY_TABLE_COLUMNS]
     requested_set = set(requested) | set(SUMMARY_REQUIRED_COLUMNS)
     visible_columns = [key for key in SUMMARY_TABLE_COLUMNS if key in requested_set]
+
+    requested_order = config.get("column_order")
+    if not isinstance(requested_order, list):
+        requested_order = list(SUMMARY_TABLE_COLUMNS)
+    invalid_order = [key for key in requested_order if key not in SUMMARY_TABLE_COLUMNS]
+    if invalid_order and strict:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Неизвестные колонки в порядке аналитики: {', '.join(map(str, invalid_order))}",
+        )
+    column_order = []
+    for key in requested_order:
+        if key in SUMMARY_TABLE_COLUMNS and key not in column_order:
+            column_order.append(key)
+    column_order.extend(key for key in SUMMARY_TABLE_COLUMNS if key not in column_order)
+
+    requested_widths = config.get("column_widths")
+    if not isinstance(requested_widths, dict):
+        requested_widths = {}
+    invalid_width_keys = [key for key in requested_widths if key not in SUMMARY_TABLE_COLUMNS]
+    if invalid_width_keys and strict:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Неизвестные колонки в ширине аналитики: {', '.join(map(str, invalid_width_keys))}",
+        )
+    column_widths = {}
+    for key in SUMMARY_TABLE_COLUMNS:
+        default_width = SUMMARY_DEFAULT_COLUMN_WIDTHS[key]
+        raw_width = requested_widths.get(key, default_width)
+        try:
+            width = int(raw_width)
+        except (TypeError, ValueError):
+            if strict:
+                raise HTTPException(status_code=422, detail=f"Некорректная ширина колонки: {key}")
+            width = default_width
+        if strict and not SUMMARY_COLUMN_MIN_WIDTH <= width <= SUMMARY_COLUMN_MAX_WIDTH:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Ширина колонки {key} должна быть от {SUMMARY_COLUMN_MIN_WIDTH} до {SUMMARY_COLUMN_MAX_WIDTH}px",
+            )
+        column_widths[key] = max(SUMMARY_COLUMN_MIN_WIDTH, min(SUMMARY_COLUMN_MAX_WIDTH, width))
     return {
         "scope": SUMMARY_VIEW_SCOPE,
         "view_mode": view_mode,
         "visible_columns": visible_columns,
+        "column_order": column_order,
+        "column_widths": column_widths,
     }
 
 

@@ -43,6 +43,15 @@
     traffic: { label: 'Трафик', columns: ['clicks', 'link_clicks', 'unique_clicks', 'outbound_clicks', 'landing_page_views', 'ctr', 'ctr_link', 'cpc', 'cpc_link'] },
     funnel: { label: 'Воронка', columns: ['leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'] }
   };
+  const SUMMARY_DEFAULT_COLUMN_WIDTHS = {
+    account: 260, data: 120, spend: 112,
+    impressions: 104, reach: 104, frequency: 96, cpm: 96,
+    clicks: 104, link_clicks: 104, unique_clicks: 104, outbound_clicks: 112,
+    landing_page_views: 120, ctr: 96, ctr_link: 96, cpc: 96, cpc_link: 96,
+    leads: 88, registrations: 96, purchases: 96, cpl: 96, cpreg: 96, cpp: 96
+  };
+  const SUMMARY_COLUMN_MIN_WIDTH = 72;
+  const SUMMARY_COLUMN_MAX_WIDTH = 420;
   let summaryAutoRefreshTimer = null;
   let summaryViewSaveQueue = Promise.resolve();
   let summaryViewChangeVersion = 0;
@@ -55,7 +64,12 @@
     summaryCache: {},
     summaryLoading: false,
     summaryQueuedRequest: null,
-    summaryView: { view_mode: 'all', visible_columns: [...SUMMARY_VIEW_PRESETS.all] },
+    summaryView: {
+      view_mode: 'all',
+      visible_columns: [...SUMMARY_VIEW_PRESETS.all],
+      column_order: [...SUMMARY_VIEW_PRESETS.all],
+      column_widths: { ...SUMMARY_DEFAULT_COLUMN_WIDTHS }
+    },
     summaryViewLoaded: false,
     presets: [],
     ruleGroups: [],
@@ -1428,17 +1442,40 @@
   }
 
   function normalizeSummaryView(preference = {}) {
-    const knownColumns = new Set(SUMMARY_COLUMNS.map(column => column.key));
+    const canonicalOrder = SUMMARY_COLUMNS.map(column => column.key);
+    const knownColumns = new Set(canonicalOrder);
     const requested = Array.isArray(preference.visible_columns)
       ? preference.visible_columns.filter(key => knownColumns.has(key))
       : SUMMARY_VIEW_PRESETS.all;
     const visibleSet = new Set([...requested, 'account', 'data']);
+    const requestedOrder = Array.isArray(preference.column_order)
+      ? preference.column_order.filter(key => knownColumns.has(key))
+      : canonicalOrder;
+    const columnOrder = [];
+    requestedOrder.forEach(key => {
+      if (!columnOrder.includes(key)) columnOrder.push(key);
+    });
+    canonicalOrder.forEach(key => {
+      if (!columnOrder.includes(key)) columnOrder.push(key);
+    });
+    const requestedWidths = preference.column_widths && typeof preference.column_widths === 'object'
+      ? preference.column_widths
+      : {};
+    const columnWidths = Object.fromEntries(canonicalOrder.map(key => {
+      const requestedWidth = Number(requestedWidths[key]);
+      const width = Number.isFinite(requestedWidth)
+        ? Math.round(requestedWidth)
+        : SUMMARY_DEFAULT_COLUMN_WIDTHS[key];
+      return [key, Math.max(SUMMARY_COLUMN_MIN_WIDTH, Math.min(SUMMARY_COLUMN_MAX_WIDTH, width))];
+    }));
     const viewMode = ['all', 'overview', 'delivery', 'traffic', 'funnel', 'custom'].includes(preference.view_mode)
       ? preference.view_mode
       : 'all';
     return {
       view_mode: viewMode,
-      visible_columns: SUMMARY_COLUMNS.map(column => column.key).filter(key => visibleSet.has(key))
+      visible_columns: canonicalOrder.filter(key => visibleSet.has(key)),
+      column_order: columnOrder,
+      column_widths: columnWidths
     };
   }
 
@@ -1454,24 +1491,76 @@
     if (count) count.textContent = summaryVisibleColumnCount();
   }
 
-  function applySummaryColumnVisibility() {
+  function renderSummaryTableHeader() {
+    const head = document.getElementById('summaryTableHead');
+    const colgroup = document.getElementById('summaryTableColumns');
+    if (!head || !colgroup) return;
     const visible = new Set(state.summaryView.visible_columns);
-    document.querySelectorAll('[data-summary-column]').forEach(element => {
-      element.classList.toggle('summary-column-hidden', !visible.has(element.dataset.summaryColumn));
-    });
-
-    Object.entries(SUMMARY_COLUMN_GROUPS).forEach(([groupKey, group]) => {
-      if (groupKey === 'base') return;
-      const visibleCount = group.columns.filter(key => visible.has(key)).length;
-      const heading = document.querySelector(`[data-summary-group="${groupKey}"]`);
-      if (heading) {
-        heading.colSpan = Math.max(1, visibleCount);
-        heading.classList.toggle('summary-column-hidden', visibleCount === 0);
+    const definitions = new Map(SUMMARY_COLUMNS.map(column => [column.key, column]));
+    const orderedColumns = state.summaryView.column_order
+      .filter(key => visible.has(key))
+      .map(key => definitions.get(key))
+      .filter(Boolean);
+    const hasGroupedColumns = orderedColumns.some(column => column.group !== 'base');
+    const runs = [];
+    orderedColumns.forEach(column => {
+      const previous = runs[runs.length - 1];
+      if (column.group !== 'base' && previous?.group === column.group) {
+        previous.columns.push(column);
+      } else {
+        runs.push({ group: column.group, columns: [column] });
       }
     });
 
+    const firstRow = runs.map(run => {
+      if (run.group === 'base') {
+        const column = run.columns[0];
+        const alignment = column.key === 'account' || column.key === 'data' ? '' : ' class="text-right"';
+        return `<th${hasGroupedColumns ? ' rowspan="2"' : ''}${alignment} data-summary-column="${column.key}">${escapeHtml(column.label)}</th>`;
+      }
+      const groupLabel = SUMMARY_COLUMN_GROUPS[run.group]?.label || run.group;
+      return `<th colspan="${run.columns.length}" class="text-center" data-summary-group="${run.group}">${escapeHtml(groupLabel)}</th>`;
+    }).join('');
+    const secondRow = runs
+      .filter(run => run.group !== 'base')
+      .flatMap(run => run.columns)
+      .map(column => `<th class="text-right" data-summary-column="${column.key}">${escapeHtml(column.label)}</th>`)
+      .join('');
+    head.innerHTML = `
+      <tr class="table-group-header">${firstRow}</tr>
+      ${hasGroupedColumns ? `<tr>${secondRow}</tr>` : ''}`;
+
+    colgroup.innerHTML = orderedColumns.map(column => {
+      const width = state.summaryView.column_widths[column.key];
+      return `<col data-summary-column-width="${column.key}" style="width:${width}px;">`;
+    }).join('');
+  }
+
+  function applySummaryColumnVisibility() {
+    const visible = new Set(state.summaryView.visible_columns);
+    renderSummaryTableHeader();
+    document.querySelectorAll('#summaryTableBody tr').forEach(row => {
+      const cells = new Map(
+        Array.from(row.querySelectorAll('td[data-summary-column]'))
+          .map(cell => [cell.dataset.summaryColumn, cell])
+      );
+      state.summaryView.column_order.forEach(key => {
+        const cell = cells.get(key);
+        if (cell) row.appendChild(cell);
+      });
+      cells.forEach((cell, key) => {
+        cell.classList.toggle('summary-column-hidden', !visible.has(key));
+      });
+    });
+
     const table = document.querySelector('.summary-metrics-table');
-    if (table) table.style.minWidth = `${Math.max(760, 290 + summaryVisibleColumnCount() * 82)}px`;
+    if (table) {
+      const width = state.summaryView.column_order
+        .filter(key => visible.has(key))
+        .reduce((total, key) => total + state.summaryView.column_widths[key], 0);
+      table.style.width = `${Math.max(380, width)}px`;
+      table.style.minWidth = `${Math.max(380, width)}px`;
+    }
     document.querySelectorAll('#summaryTableBody td[data-summary-empty]').forEach(cell => {
       cell.colSpan = summaryVisibleColumnCount();
     });
@@ -1483,20 +1572,83 @@
     if (!container) return;
     const visible = new Set(state.summaryView.visible_columns);
     const definitions = new Map(SUMMARY_COLUMNS.map(column => [column.key, column]));
-    container.innerHTML = Object.entries(SUMMARY_COLUMN_GROUPS).map(([, group]) => `
-      <section class="summary-column-group">
-        <h4>${escapeHtml(group.label)}</h4>
-        ${group.columns.map(key => {
-          const column = definitions.get(key);
-          const isRequired = Boolean(column?.required);
-          return `
-            <label class="summary-column-choice${isRequired ? ' required' : ''}">
-              <input type="checkbox" value="${key}" ${visible.has(key) ? 'checked' : ''} ${isRequired ? 'disabled' : ''}>
-              <span>${escapeHtml(column?.label || key)}</span>
-              ${isRequired ? '<small class="summary-column-required">обязательно</small>' : ''}
-            </label>`;
-        }).join('')}
-      </section>`).join('');
+    container.innerHTML = state.summaryView.column_order.map((key, index) => {
+      const column = definitions.get(key);
+      const isRequired = Boolean(column?.required);
+      const groupLabel = SUMMARY_COLUMN_GROUPS[column?.group]?.label || '';
+      const width = state.summaryView.column_widths[key];
+      return `
+        <div class="summary-column-choice${isRequired ? ' required' : ''}" data-summary-column-option="${key}">
+          <span class="summary-column-drag" draggable="true" title="Перетащить" aria-hidden="true">⋮⋮</span>
+          <input class="summary-column-visible" type="checkbox" value="${key}" ${visible.has(key) ? 'checked' : ''} ${isRequired ? 'disabled' : ''} aria-label="Показывать ${escapeHtml(column?.label || key)}">
+          <div class="summary-column-copy">
+            <b>${escapeHtml(column?.label || key)}</b>
+            <small>${escapeHtml(groupLabel)}${isRequired ? ' · обязательно' : ''}</small>
+          </div>
+          <label class="summary-column-width-control">
+            <span>Ширина</span>
+            <input type="range" min="${SUMMARY_COLUMN_MIN_WIDTH}" max="${SUMMARY_COLUMN_MAX_WIDTH}" step="4" value="${width}" data-summary-column-width-input="${key}">
+            <output>${width}px</output>
+          </label>
+          <div class="summary-column-move-buttons">
+            <button type="button" data-summary-move="up" aria-label="Поднять колонку" ${index === 0 ? 'disabled' : ''}>↑</button>
+            <button type="button" data-summary-move="down" aria-label="Опустить колонку" ${index === state.summaryView.column_order.length - 1 ? 'disabled' : ''}>↓</button>
+          </div>
+        </div>`;
+    }).join('');
+    setupSummaryColumnEditor(container);
+  }
+
+  function setupSummaryColumnEditor(container) {
+    let draggedItem = null;
+    container.ondragstart = event => {
+      const item = event.target.closest('[data-summary-column-option]');
+      if (!item) return;
+      draggedItem = item;
+      item.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', item.dataset.summaryColumnOption);
+    };
+    container.ondragover = event => {
+      event.preventDefault();
+      const target = event.target.closest('[data-summary-column-option]');
+      if (!draggedItem || !target || target === draggedItem) return;
+      const rect = target.getBoundingClientRect();
+      const insertAfter = event.clientY > rect.top + rect.height / 2;
+      container.insertBefore(draggedItem, insertAfter ? target.nextSibling : target);
+    };
+    container.ondragend = () => {
+      draggedItem?.classList.remove('dragging');
+      draggedItem = null;
+      refreshSummaryColumnMoveButtons(container);
+    };
+    container.oninput = event => {
+      const range = event.target.closest('[data-summary-column-width-input]');
+      if (!range) return;
+      const output = range.parentElement.querySelector('output');
+      if (output) output.textContent = `${range.value}px`;
+    };
+    container.onclick = event => {
+      const button = event.target.closest('[data-summary-move]');
+      if (!button) return;
+      const item = button.closest('[data-summary-column-option]');
+      if (button.dataset.summaryMove === 'up' && item.previousElementSibling) {
+        container.insertBefore(item, item.previousElementSibling);
+      } else if (button.dataset.summaryMove === 'down' && item.nextElementSibling) {
+        container.insertBefore(item.nextElementSibling, item);
+      }
+      refreshSummaryColumnMoveButtons(container);
+    };
+  }
+
+  function refreshSummaryColumnMoveButtons(container) {
+    const items = Array.from(container.querySelectorAll('[data-summary-column-option]'));
+    items.forEach((item, index) => {
+      const up = item.querySelector('[data-summary-move="up"]');
+      const down = item.querySelector('[data-summary-move="down"]');
+      if (up) up.disabled = index === 0;
+      if (down) down.disabled = index === items.length - 1;
+    });
   }
 
   async function persistSummaryView(preference, options = {}) {
@@ -2476,17 +2628,28 @@
       const columns = SUMMARY_VIEW_PRESETS[viewMode];
       if (!columns) return;
       haptic('selection');
-      persistSummaryView({ view_mode: viewMode, visible_columns: columns });
+      persistSummaryView({ ...state.summaryView, view_mode: viewMode, visible_columns: columns });
     });
   });
 
   document.getElementById('btnSaveSummaryColumns')?.addEventListener('click', async () => {
     const button = document.getElementById('btnSaveSummaryColumns');
-    const selected = Array.from(document.querySelectorAll('#summaryColumnOptions input:checked'))
+    const selected = Array.from(document.querySelectorAll('#summaryColumnOptions .summary-column-visible:checked'))
       .map(input => input.value);
+    const columnOrder = Array.from(document.querySelectorAll('#summaryColumnOptions [data-summary-column-option]'))
+      .map(item => item.dataset.summaryColumnOption);
+    const columnWidths = { ...state.summaryView.column_widths };
+    document.querySelectorAll('#summaryColumnOptions [data-summary-column-width-input]').forEach(input => {
+      columnWidths[input.dataset.summaryColumnWidthInput] = Number(input.value);
+    });
     if (button) button.disabled = true;
     const saved = await persistSummaryView(
-      { view_mode: 'custom', visible_columns: selected },
+      {
+        view_mode: 'custom',
+        visible_columns: selected,
+        column_order: columnOrder,
+        column_widths: columnWidths
+      },
       { toast: 'Представление таблицы сохранено' }
     );
     if (button) button.disabled = false;
@@ -2495,7 +2658,12 @@
 
   document.getElementById('btnResetSummaryColumns')?.addEventListener('click', async () => {
     const saved = await persistSummaryView(
-      { view_mode: 'all', visible_columns: SUMMARY_VIEW_PRESETS.all },
+      {
+        view_mode: 'all',
+        visible_columns: SUMMARY_VIEW_PRESETS.all,
+        column_order: SUMMARY_VIEW_PRESETS.all,
+        column_widths: SUMMARY_DEFAULT_COLUMN_WIDTHS
+      },
       { toast: 'Восстановлен полный вид таблицы' }
     );
     if (saved) window.closeModal('modalSummaryColumns');
