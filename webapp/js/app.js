@@ -38,6 +38,7 @@
     currentPeriod: 'today',
     activeTab: 'accounts',
     filter: 'all',
+    sortBy: 'default',
     searchQuery: '',
     parsedAccounts: [],
     selectedPreset: { l0: 2.0, l1: 6.0, lcpa: 6.0 },
@@ -169,7 +170,7 @@
     const query = state.searchQuery.toLowerCase().trim();
 
     // Filter by search and chips
-    const filtered = state.accounts.filter(acc => {
+    let filtered = state.accounts.filter(acc => {
       const matchSearch = !query || 
         acc.name.toLowerCase().includes(query) || 
         acc.account_id.toLowerCase().includes(query);
@@ -181,6 +182,21 @@
       if (state.filter === 'issue') return acc.account_status !== 1 || !acc.is_active;
       return true;
     });
+
+    // Apply sorting
+    if (state.sortBy === 'name_asc') {
+      filtered.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    } else if (state.sortBy === 'name_desc') {
+      filtered.sort((a, b) => b.name.localeCompare(a.name, 'ru'));
+    } else if (state.sortBy === 'status') {
+      filtered.sort((a, b) => {
+        const aActive = a.is_active && a.account_status === 1 ? 1 : 0;
+        const bActive = b.is_active && b.account_status === 1 ? 1 : 0;
+        return bActive - aActive;
+      });
+    } else if (state.sortBy === 'rules') {
+      filtered.sort((a, b) => (b.rules_enabled ? 1 : 0) - (a.rules_enabled ? 1 : 0));
+    }
 
     // Update strip stats
     const totalCount = state.accounts.length;
@@ -486,12 +502,18 @@
       mobileCards.innerHTML = data.accounts.map(acc => {
         const displayName = acc.short_name || acc.name;
         const subLabel = acc.name !== displayName ? `${escapeHtml(acc.name)} · ${acc.account_id}` : acc.account_id;
+        const isBanned = acc.is_banned;
+        const statusPillHtml = isBanned
+          ? `<span class="mob-status-pill status-disabled"><span class="status-dot dot-danger"></span>Заблокирован</span>`
+          : `<span class="mob-status-pill status-active"><span class="status-dot dot-success"></span>Активен</span>`;
+
         return `
           <div class="mob-summary-card">
             <div class="mob-card-head">
               <div style="display:flex; flex-direction:column; overflow:hidden; padding-right:8px; flex:1;">
                 <b class="mob-card-name" style="font-size:14px; font-weight:600; color:var(--tg-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(displayName)}</b>
                 <span class="mono text-hint" style="font-size:11px; color:var(--tg-hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subLabel}</span>
+                ${statusPillHtml}
               </div>
               <span class="mono" style="font-size: 16px; font-weight:700; color: var(--tg-link); white-space:nowrap; flex-shrink:0;">$${acc.spend.toFixed(2)}</span>
             </div>
@@ -620,25 +642,41 @@
     return list;
   }
 
-  rawInput?.addEventListener('input', () => {
-    const parsed = parseAccountsLocally(rawInput.value);
-    state.parsedAccounts = parsed;
+  function renderParsedChips() {
+    parsedBadge.textContent = `Найдено: ${state.parsedAccounts.length}`;
 
-    parsedBadge.textContent = `Найдено: ${parsed.length}`;
-
-    if (parsed.length > 0) {
+    if (state.parsedAccounts.length > 0) {
       previewBox.classList.remove('hidden');
-      chipsList.innerHTML = parsed.map(p => {
+      chipsList.innerHTML = state.parsedAccounts.map((p, idx) => {
         const namePart = p.name ? ` (${escapeHtml(p.name)})` : '';
-        return `<span class="parsed-item-chip"><code>${p.account_id}</code>${namePart}</span>`;
+        return `
+          <span class="parsed-item-chip">
+            <code>${p.account_id}</code>${namePart}
+            <button type="button" class="chip-del-btn" title="Исключить кабинет" onclick="window.removeParsedChip(${idx})">&times;</button>
+          </span>
+        `;
       }).join('');
       btnSubmit.disabled = false;
-      btnSubmit.querySelector('span').textContent = `Подключить ${parsed.length} кабинетов`;
+      btnSubmit.querySelector('span').textContent = `Подключить ${state.parsedAccounts.length} кабинетов`;
     } else {
       previewBox.classList.add('hidden');
+      chipsList.innerHTML = '';
       btnSubmit.disabled = true;
       btnSubmit.querySelector('span').textContent = 'Подключить кабинеты';
     }
+  }
+
+  window.removeParsedChip = function (idx) {
+    haptic('impact', 'light');
+    if (idx >= 0 && idx < state.parsedAccounts.length) {
+      state.parsedAccounts.splice(idx, 1);
+      renderParsedChips();
+    }
+  };
+
+  rawInput?.addEventListener('input', () => {
+    state.parsedAccounts = parseAccountsLocally(rawInput.value);
+    renderParsedChips();
   });
 
   // Toggle Password Visibility
@@ -785,21 +823,41 @@
   // ==========================================================
   // GLOBAL MODALS & UTILS
   // ==========================================================
+  const activeModalStack = [];
+
   window.openModal = function (modalId) {
-    document.getElementById(modalId)?.classList.remove('hidden');
+    const el = document.getElementById(modalId);
+    if (!el) return;
+    el.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    if (!activeModalStack.includes(modalId)) {
+      activeModalStack.push(modalId);
+    }
+    if (tg?.BackButton) {
+      tg.BackButton.show();
+    }
   };
 
   window.closeModal = function (modalId) {
-    document.getElementById(modalId)?.classList.add('hidden');
-    document.body.style.overflow = '';
+    const el = document.getElementById(modalId);
+    if (el) el.classList.add('hidden');
+    const idx = activeModalStack.indexOf(modalId);
+    if (idx !== -1) {
+      activeModalStack.splice(idx, 1);
+    }
+    if (activeModalStack.length === 0) {
+      document.body.style.overflow = '';
+      if (tg?.BackButton) {
+        tg.BackButton.hide();
+      }
+    }
   };
 
   document.getElementById('btnOpenTokenGuide')?.addEventListener('click', () => {
     window.openModal('modalTokenGuide');
   });
 
-  // Search & Filter event listeners
+  // Search & Filter & Sort event listeners
   document.getElementById('accountSearchInput')?.addEventListener('input', (e) => {
     state.searchQuery = e.target.value;
     document.getElementById('searchClearBtn')?.classList.toggle('hidden', !state.searchQuery);
@@ -811,6 +869,12 @@
     input.value = '';
     state.searchQuery = '';
     document.getElementById('searchClearBtn')?.classList.add('hidden');
+    renderAccounts();
+  });
+
+  document.getElementById('accountSortSelect')?.addEventListener('change', (e) => {
+    state.sortBy = e.target.value;
+    haptic('selection');
     renderAccounts();
   });
 
@@ -894,8 +958,21 @@
       tgApp.ready();
       tgApp.expand();
       try {
-        tgApp.enableClosingConfirmation();
+        if (typeof tgApp.setHeaderColor === 'function') tgApp.setHeaderColor('#1a1b26');
+        if (typeof tgApp.setBackgroundColor === 'function') tgApp.setBackgroundColor('#1a1b26');
+        if (typeof tgApp.disableVerticalSwipes === 'function') tgApp.disableVerticalSwipes();
+        if (typeof tgApp.enableClosingConfirmation === 'function') tgApp.enableClosingConfirmation();
       } catch (e) {}
+
+      // Register BackButton handler
+      if (tgApp.BackButton) {
+        tgApp.BackButton.onClick(() => {
+          if (activeModalStack.length > 0) {
+            const topModal = activeModalStack[activeModalStack.length - 1];
+            window.closeModal(topModal);
+          }
+        });
+      }
     }
 
     // Give Telegram SDK a short moment to parse hash/params if needed

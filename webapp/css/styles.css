@@ -346,6 +346,47 @@ code, .mono {
   cursor: pointer;
 }
 
+.toolbar-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .toolbar-controls {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    width: auto;
+    gap: 12px;
+  }
+}
+
+.sort-selector-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.sort-select {
+  width: 100%;
+  padding: 6px 12px;
+  background: var(--tg-sec-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--tg-hint);
+  font-size: 12px;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sort-select:focus, .sort-select:hover {
+  border-color: var(--tg-link);
+  color: var(--tg-text);
+}
+
 .filter-chips {
   display: flex;
   gap: 8px;
@@ -920,7 +961,35 @@ input:checked + .slider:before {
 .mob-card-head {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mob-status-pill {
+  display: inline-flex;
   align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  margin-top: 4px;
+  width: fit-content;
+}
+
+.mob-status-pill.status-active {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.mob-status-pill.status-disabled {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.mob-status-pill.status-unsettled {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 
 .mob-card-stats {
@@ -1077,10 +1146,34 @@ input:checked + .slider:before {
   border-radius: var(--radius-sm);
   font-size: 11px;
   border: 1px solid var(--border-subtle);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: fadeIn 0.15s ease;
 }
 
 .parsed-item-chip code {
   color: var(--color-info);
+}
+
+.chip-del-btn {
+  background: none;
+  border: none;
+  color: var(--tg-hint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 3px;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chip-del-btn:hover {
+  color: var(--color-danger);
+  background: rgba(247, 118, 142, 0.15);
 }
 
 .preset-buttons {
