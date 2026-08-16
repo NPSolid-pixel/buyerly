@@ -28,6 +28,7 @@ from database.models import (
     RulePreset,
     RuleGroup,
     RuleGroupItem,
+    SummarySnapshot,
 )
 from meta_api.client import MetaClient
 from bot.handlers import parse_fb_raw_accounts, get_short_account_label
@@ -42,6 +43,7 @@ meta_client = MetaClient()
 # In-memory summary cache: key -> (timestamp, data)
 _summary_cache: Dict[str, Any] = {}
 SUMMARY_CACHE_TTL = 120  # 2 minutes cache
+SUMMARY_SNAPSHOT_RETENTION = 100
 
 # ----------------------------------------------------
 # Pydantic Schemas
@@ -215,6 +217,8 @@ def _summary_with_cache_metadata(
     *,
     is_cached: bool,
     age_seconds: float = 0.0,
+    origin: str = "live",
+    persisted_at: str = "",
 ) -> Dict[str, Any]:
     return {
         **payload,
@@ -222,7 +226,154 @@ def _summary_with_cache_metadata(
             "is_cached": is_cached,
             "age_seconds": round(max(0.0, age_seconds), 1),
             "ttl_seconds": SUMMARY_CACHE_TTL,
+            "origin": origin,
+            "persisted_at": persisted_at,
         },
+    }
+
+
+def _summary_owner_key(user: TelegramUser) -> str:
+    return str(user.telegram_id or f"user:{user.id}")
+
+
+def _summary_snapshot_reference(
+    row: SummarySnapshot,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "id": row.id,
+        "generated_at": payload.get("generated_at") or _utc_iso(row.generated_at),
+        "saved_at": _utc_iso(row.created_at),
+        "total_spend": payload.get("total_spend", 0.0),
+        "total_impressions": payload.get("total_impressions", 0),
+        "total_clicks": payload.get("total_clicks", 0),
+        "total_leads": payload.get("total_leads", 0),
+        "total_regs": payload.get("total_regs", 0),
+        "total_purchases": payload.get("total_purchases", 0),
+    }
+
+
+async def _load_persisted_summary(
+    session,
+    *,
+    owner_id: str,
+    period: str,
+) -> Optional[Dict[str, Any]]:
+    rows = (
+        await session.execute(
+            select(SummarySnapshot)
+            .where(
+                SummarySnapshot.owner_id == owner_id,
+                SummarySnapshot.period == period,
+            )
+            .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
+            .limit(5)
+        )
+    ).scalars().all()
+
+    valid_rows = []
+    for row in rows:
+        payload = _load_json_object(row.payload)
+        if payload:
+            valid_rows.append((row, payload))
+        if len(valid_rows) == 2:
+            break
+    if not valid_rows:
+        return None
+
+    latest_row, latest_payload = valid_rows[0]
+    previous = (
+        _summary_snapshot_reference(*valid_rows[1])
+        if len(valid_rows) > 1
+        else None
+    )
+    latest_payload["snapshot"] = {
+        "persisted": True,
+        "saved_at": _utc_iso(latest_row.created_at),
+        "previous": previous,
+    }
+
+    generated_at = latest_row.generated_at
+    if generated_at.tzinfo is None:
+        generated_at = generated_at.replace(tzinfo=timezone.utc)
+    age_seconds = (datetime.now(timezone.utc) - generated_at).total_seconds()
+    return _summary_with_cache_metadata(
+        latest_payload,
+        is_cached=True,
+        age_seconds=age_seconds,
+        origin="database",
+        persisted_at=_utc_iso(latest_row.created_at),
+    )
+
+
+async def _persist_summary(
+    session,
+    *,
+    owner_id: str,
+    period: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    previous_rows = (
+        await session.execute(
+            select(SummarySnapshot)
+            .where(
+                SummarySnapshot.owner_id == owner_id,
+                SummarySnapshot.period == period,
+            )
+            .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
+            .limit(5)
+        )
+    ).scalars().all()
+    previous = None
+    for previous_row in previous_rows:
+        previous_payload = _load_json_object(previous_row.payload)
+        if previous_payload:
+            previous = _summary_snapshot_reference(previous_row, previous_payload)
+            break
+
+    stored_payload = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"cache", "snapshot"}
+    }
+    generated_at = datetime.now(timezone.utc)
+    generated_raw = stored_payload.get("generated_at")
+    if isinstance(generated_raw, str):
+        try:
+            generated_at = datetime.fromisoformat(generated_raw.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+
+    snapshot = SummarySnapshot(
+        owner_id=owner_id,
+        period=period,
+        payload=json.dumps(stored_payload, ensure_ascii=False, separators=(",", ":")),
+        generated_at=generated_at,
+    )
+    session.add(snapshot)
+    await session.flush()
+
+    stale_ids = (
+        await session.execute(
+            select(SummarySnapshot.id)
+            .where(
+                SummarySnapshot.owner_id == owner_id,
+                SummarySnapshot.period == period,
+            )
+            .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
+            .offset(SUMMARY_SNAPSHOT_RETENTION)
+        )
+    ).scalars().all()
+    if stale_ids:
+        await session.execute(
+            delete(SummarySnapshot).where(SummarySnapshot.id.in_(stale_ids))
+        )
+    await session.commit()
+
+    return {
+        "persisted": True,
+        "saved_at": _utc_iso(snapshot.created_at),
+        "previous": previous,
     }
 
 
@@ -1028,7 +1179,8 @@ async def get_summary_report(
     force: bool = Query(False),
     user: TelegramUser = Depends(get_current_user)
 ):
-    cache_key = f"{user.telegram_id}:{period}"
+    owner_key = _summary_owner_key(user)
+    cache_key = f"{owner_key}:{period}"
     now_ts = time.time()
 
     # Return cached data if valid and force is False
@@ -1039,9 +1191,26 @@ async def get_summary_report(
                 cached_data,
                 is_cached=True,
                 age_seconds=now_ts - cached_ts,
+                origin="memory",
+                persisted_at=(cached_data.get("snapshot") or {}).get("saved_at", ""),
             )
 
     async with async_session_maker() as session:
+        if not force:
+            persisted = await _load_persisted_summary(
+                session,
+                owner_id=owner_key,
+                period=period,
+            )
+            if persisted:
+                cached_payload = {
+                    key: value
+                    for key, value in persisted.items()
+                    if key != "cache"
+                }
+                _summary_cache[cache_key] = (now_ts, cached_payload)
+                return persisted
+
         accounts = await get_user_accounts(session, user)
         if not accounts:
             empty_res = {
@@ -1071,8 +1240,19 @@ async def get_summary_report(
                 },
                 "metric_definitions": SUMMARY_METRIC_DEFINITIONS,
             }
+            empty_res["snapshot"] = await _persist_summary(
+                session,
+                owner_id=owner_key,
+                period=period,
+                payload=empty_res,
+            )
             _summary_cache[cache_key] = (now_ts, empty_res)
-            return _summary_with_cache_metadata(empty_res, is_cached=False)
+            return _summary_with_cache_metadata(
+                empty_res,
+                is_cached=False,
+                origin="live",
+                persisted_at=empty_res["snapshot"]["saved_at"],
+            )
 
         total_spend = 0.0
         total_clicks = 0
@@ -1178,6 +1358,15 @@ async def get_summary_report(
         metrics_coverage = round((accounts_synced / len(accounts)) * 100, 1) if accounts else 0.0
         quality_status = "complete" if accounts_synced == len(accounts) else ("partial" if accounts_synced else "unavailable")
 
+        if accounts_synced == 0:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Meta не вернула данные ни по одному кабинету. "
+                    "Последний сохранённый снимок не изменён."
+                ),
+            )
+
         res_data = {
             "period": period,
             "generated_at": _utc_iso(datetime.now(timezone.utc)),
@@ -1205,8 +1394,19 @@ async def get_summary_report(
             },
             "metric_definitions": SUMMARY_METRIC_DEFINITIONS,
         }
+        res_data["snapshot"] = await _persist_summary(
+            session,
+            owner_id=owner_key,
+            period=period,
+            payload=res_data,
+        )
         _summary_cache[cache_key] = (now_ts, res_data)
-        return _summary_with_cache_metadata(res_data, is_cached=False)
+        return _summary_with_cache_metadata(
+            res_data,
+            is_cached=False,
+            origin="live",
+            persisted_at=res_data["snapshot"]["saved_at"],
+        )
 
 
 

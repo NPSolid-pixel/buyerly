@@ -7,7 +7,7 @@ import urllib.parse
 from unittest.mock import AsyncMock, patch
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import api.auth as api_auth_module
@@ -24,6 +24,7 @@ from database.models import (
     RuleGroup,
     RuleGroupItem,
     RulePreset,
+    SummarySnapshot,
     StoppedAdSet,
     TelegramUser,
 )
@@ -619,8 +620,93 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(by_id["act_blocked"]["spend"], 30.0)
         self.assertEqual(by_id["act_sync_error"]["data_status"], "error")
         self.assertFalse(data["cache"]["is_cached"])
+        self.assertEqual(data["cache"]["origin"], "live")
+        self.assertTrue(data["snapshot"]["persisted"])
         self.assertTrue(cached.json()["cache"]["is_cached"])
+        self.assertEqual(cached.json()["cache"]["origin"], "memory")
         self.assertEqual(mocked_insights.await_count, 3)
+
+        async with self.test_session_maker() as session:
+            snapshot_count = (
+                await session.execute(select(func.count()).select_from(SummarySnapshot))
+            ).scalar_one()
+        self.assertEqual(snapshot_count, 1)
+
+    async def test_summary_survives_reload_and_keeps_previous_snapshot(self):
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        first_metrics = {
+            "spend": 100.0,
+            "clicks": 50,
+            "impressions": 1000,
+            "leads": 10,
+            "registrations": 5,
+            "purchases": 1,
+        }
+        second_metrics = {**first_metrics, "spend": 125.0, "clicks": 60}
+
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_account_insights_summary",
+            new=AsyncMock(side_effect=[first_metrics, second_metrics]),
+        ) as mocked_insights:
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                first = await client.get(
+                    "/api/summary?period=today&force=true",
+                    headers=headers,
+                )
+                api_routes_module._summary_cache.clear()
+                restored = await client.get(
+                    "/api/summary?period=today",
+                    headers=headers,
+                )
+                second = await client.get(
+                    "/api/summary?period=today&force=true",
+                    headers=headers,
+                )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(restored.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(restored.json()["total_spend"], 100.0)
+        self.assertEqual(restored.json()["cache"]["origin"], "database")
+        self.assertTrue(restored.json()["cache"]["is_cached"])
+        self.assertEqual(second.json()["total_spend"], 125.0)
+        self.assertEqual(second.json()["snapshot"]["previous"]["total_spend"], 100.0)
+        self.assertEqual(mocked_insights.await_count, 2)
+
+        async with self.test_session_maker() as session:
+            snapshots = (
+                await session.execute(
+                    select(SummarySnapshot).order_by(SummarySnapshot.id)
+                )
+            ).scalars().all()
+        self.assertEqual(len(snapshots), 2)
+        self.assertNotIn("access_token", snapshots[0].payload)
+
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_account_insights_summary",
+            new=AsyncMock(side_effect=RuntimeError("Meta unavailable")),
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                failed_refresh = await client.get(
+                    "/api/summary?period=today&force=true",
+                    headers=headers,
+                )
+
+        self.assertEqual(failed_refresh.status_code, 502)
+        self.assertIn("снимок не изменён", failed_refresh.json()["detail"])
+        async with self.test_session_maker() as session:
+            snapshot_count_after_failure = (
+                await session.execute(select(func.count()).select_from(SummarySnapshot))
+            ).scalar_one()
+        self.assertEqual(snapshot_count_after_failure, 2)
 
 
     async def test_settings_endpoint(self):

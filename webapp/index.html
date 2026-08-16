@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.3.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.4.0">
 </head>
 
 <body>
@@ -258,6 +258,7 @@
             <div class="summary-source-line">
               <span id="summaryStatusLabel">Данные ещё не запрошены</span>
               <span id="summaryFreshnessBadge" class="summary-freshness-badge">Нет данных</span>
+              <span class="summary-auto-refresh-note">Автообновление · каждые 3 мин</span>
             </div>
           </div>
           <button id="btnFetchSummary" class="btn btn-primary btn-fetch-summary">
@@ -287,6 +288,7 @@
             </div>
             <div class="kpi-value" id="kpiSpend">$0.00</div>
             <div class="kpi-subtext"><span id="kpiPeriodLabel">за сегодня</span> · из синхронизированных кабинетов</div>
+            <div class="kpi-comparison" id="kpiSpendPrevious">Предыдущий снимок появится после следующего обновления</div>
           </div>
 
           <div class="kpi-card">
@@ -1081,6 +1083,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.3.0"></script>
+  <script src="/static/js/app.js?v=9.4.0"></script>
 </body>
 </html>

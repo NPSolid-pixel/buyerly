@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Index, UniqueConstraint
 from database.db import Base
 
 def utcnow():
@@ -118,6 +118,31 @@ class Account(Base):
 
     def __repr__(self):
         return f"<Account(account_id='{self.account_id}', name='{self.name}', status={self.account_status})>"
+
+
+class SummarySnapshot(Base):
+    """Durable, owner-isolated history of successful dashboard refreshes."""
+
+    __tablename__ = "summary_snapshots"
+    __table_args__ = (
+        Index(
+            "ix_summary_snapshots_owner_period_created",
+            "owner_id",
+            "period",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String, nullable=False, index=True)
+    period = Column(String, nullable=False, index=True)
+    payload = Column(Text, nullable=False, doc="Безопасный JSON сводки без access token")
+    schema_version = Column(Integer, default=1, nullable=False)
+    generated_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<SummarySnapshot(owner='{self.owner_id}', period='{self.period}', generated='{self.generated_at}')>"
 
 
 class StoppedAdSet(Base):

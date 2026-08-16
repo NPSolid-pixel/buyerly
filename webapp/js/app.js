@@ -5,12 +5,17 @@
 (function () {
   'use strict';
 
+  const SUMMARY_AUTO_REFRESH_MS = 3 * 60 * 1000;
+  let summaryAutoRefreshTimer = null;
+
   // Application State
   const state = {
     user: null,
     accounts: [],
     summary: null,
     summaryCache: {},
+    summaryLoading: false,
+    summaryQueuedRequest: null,
     presets: [],
     ruleGroups: [],
     activePresetId: null,
@@ -159,6 +164,9 @@
       loadStoppedAdsets();
       if (state.summaryCache[state.currentPeriod]) {
         renderLocalSummaryCache(state.summaryCache[state.currentPeriod]);
+        refreshSummaryIfStale(state.currentPeriod, state.summaryCache[state.currentPeriod]);
+      } else {
+        loadSummary(state.currentPeriod, false, { silent: true, refreshIfStale: true });
       }
     } else if (tabName === 'logs') {
       loadLogsTab(1);
@@ -1345,15 +1353,51 @@
     const ageSeconds = generatedAt ? Math.max(0, (Date.now() - generatedAt) / 1000) : 0;
     renderSummaryData({
       ...data,
-      cache: { ...(data.cache || {}), is_cached: true, age_seconds: ageSeconds }
+      cache: { ...(data.cache || {}), is_cached: true, age_seconds: ageSeconds, origin: 'browser' }
     });
+  }
+
+  function summaryAgeMs(data) {
+    const generatedAt = new Date(data?.generated_at || 0).getTime();
+    return generatedAt ? Math.max(0, Date.now() - generatedAt) : Number.POSITIVE_INFINITY;
+  }
+
+  function refreshSummaryIfStale(period, data) {
+    if (
+      state.activeTab !== 'summary' ||
+      document.hidden ||
+      state.summaryLoading ||
+      summaryAgeMs(data) < SUMMARY_AUTO_REFRESH_MS
+    ) return;
+
+    window.setTimeout(() => {
+      if (state.activeTab === 'summary' && state.currentPeriod === period && !document.hidden) {
+        loadSummary(period, true, { silent: true, reason: 'auto' });
+      }
+    }, 0);
+  }
+
+  function startSummaryAutoRefresh() {
+    if (summaryAutoRefreshTimer) window.clearInterval(summaryAutoRefreshTimer);
+    summaryAutoRefreshTimer = window.setInterval(() => {
+      if (state.activeTab !== 'summary' || document.hidden || state.summaryLoading) return;
+      loadSummary(state.currentPeriod, true, { silent: true, reason: 'auto' });
+    }, SUMMARY_AUTO_REFRESH_MS);
   }
 
   // ==========================================================
   // TAB 2: SUMMARY (СВОДКА И АНАЛИТИКА)
   // ==========================================================
-  async function loadSummary(period = 'today', force = false) {
+  async function loadSummary(period = 'today', force = false, options = {}) {
     state.currentPeriod = period;
+    if (state.summaryLoading) {
+      state.summaryQueuedRequest = { period, force, options };
+      return state.summaryCache[period] || null;
+    }
+
+    const silent = options.silent === true;
+    const existingData = state.summaryCache[period] || null;
+    let loadedData = null;
     const tableBody = document.getElementById('summaryTableBody');
     const mobileCards = document.getElementById('summaryMobileCards');
     const fetchBtn = document.getElementById('btnFetchSummary');
@@ -1367,35 +1411,58 @@
     updateFetchButtonLabel(period);
     document.getElementById('kpiPeriodLabel').textContent = periodTextMap[period] || '';
 
+    state.summaryLoading = true;
     if (fetchBtn) {
       fetchBtn.classList.add('loading');
       fetchBtn.disabled = true;
     }
     if (statusLabel) {
-      statusLabel.textContent = 'Запрос данных из Meta API...';
+      statusLabel.textContent = existingData
+        ? `Обновляем данные · пока показываем снимок от ${formatSummaryTime(existingData.generated_at)}`
+        : 'Загружаем последние сохранённые данные...';
     }
 
     try {
       const data = await apiRequest(`/api/summary?period=${period}${force ? '&force=true' : ''}`);
+      loadedData = data;
       state.summary = data;
       state.summaryCache[period] = data;
 
-      renderSummaryData(data);
-      loadStoppedAdsets();
-
-      renderSummaryProvenance(data);
-      showToast('Сводка успешно сформирована', 'success');
-    } catch (err) {
-      tableBody.innerHTML = `<tr><td colspan="10" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
-      mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
-      if (statusLabel) {
-        statusLabel.textContent = `Ошибка: ${err.message}`;
+      if (state.currentPeriod === period) {
+        renderSummaryData(data);
+        loadStoppedAdsets();
       }
-      showToast(`Ошибка: ${err.message}`, 'error');
+
+      if (!silent) showToast('Сводка обновлена и сохранена', 'success');
+
+    } catch (err) {
+      if (existingData) {
+        if (state.currentPeriod === period) {
+          renderSummaryProvenance(existingData, { refreshError: err.message });
+        }
+      } else if (state.currentPeriod === period) {
+        tableBody.innerHTML = `<tr><td colspan="12" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
+        mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
+        if (statusLabel) statusLabel.textContent = `Не удалось загрузить данные: ${err.message}`;
+      }
+      if (!silent) showToast(`Ошибка обновления: ${err.message}`, 'error');
     } finally {
+      state.summaryLoading = false;
       if (fetchBtn) {
         fetchBtn.classList.remove('loading');
         fetchBtn.disabled = false;
+      }
+      if (!force && options.refreshIfStale !== false && loadedData) {
+        refreshSummaryIfStale(period, loadedData);
+      }
+      const queuedRequest = state.summaryQueuedRequest;
+      state.summaryQueuedRequest = null;
+      if (queuedRequest && queuedRequest.period !== period) {
+        window.setTimeout(() => loadSummary(
+          queuedRequest.period,
+          queuedRequest.force,
+          queuedRequest.options
+        ), 0);
       }
     }
   }
@@ -1417,20 +1484,57 @@
     }).format(date);
   }
 
-  function renderSummaryProvenance(data) {
+  function formatSummaryAge(ageSeconds) {
+    const seconds = Math.max(0, Number(ageSeconds || 0));
+    if (seconds < 60) return `${Math.round(seconds)} сек назад`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)} мин назад`;
+    return `${Math.round(seconds / 3600)} ч назад`;
+  }
+
+  function renderSummaryProvenance(data, options = {}) {
     const status = document.getElementById('summaryStatusLabel');
     const freshness = document.getElementById('summaryFreshnessBadge');
     const generatedLabel = formatSummaryTime(data.generated_at);
-    const isCached = data.cache?.is_cached === true;
-    if (status) status.textContent = `${data.source || 'Meta Marketing API'} · получено ${generatedLabel}`;
+    const ageSeconds = summaryAgeMs(data) / 1000;
+    const origin = data.cache?.origin || (data.cache?.is_cached ? 'memory' : 'live');
+    const isStale = ageSeconds >= (SUMMARY_AUTO_REFRESH_MS / 1000);
+    if (status) {
+      status.textContent = options.refreshError
+        ? `Обновление не удалось · показываем данные от ${generatedLabel}`
+        : `${data.source || 'Meta Marketing API'} · последнее обновление ${generatedLabel}`;
+    }
     if (freshness) {
-      freshness.className = `summary-freshness-badge ${isCached ? 'cached' : 'fresh'}`;
-      freshness.textContent = isCached
-        ? `Кеш · ${Math.round(data.cache?.age_seconds || 0)} сек`
-        : 'Свежие данные';
+      if (options.refreshError) {
+        freshness.className = 'summary-freshness-badge stale';
+        freshness.textContent = 'Сохранённые данные';
+      } else if (origin === 'live' && !isStale) {
+        freshness.className = 'summary-freshness-badge fresh';
+        freshness.textContent = 'Свежие данные';
+      } else {
+        freshness.className = `summary-freshness-badge ${isStale ? 'stale' : 'cached'}`;
+        freshness.textContent = `${origin === 'database' ? 'Сохранено' : 'Последние данные'} · ${formatSummaryAge(ageSeconds)}`;
+      }
     }
     const lastSync = document.getElementById('lastSyncLabel');
-    if (lastSync) lastSync.textContent = `${isCached ? 'Кешировано' : 'Синхронизировано'} · ${generatedLabel}`;
+    if (lastSync) lastSync.textContent = `Последнее обновление · ${generatedLabel}`;
+  }
+
+  function renderSpendComparison(data) {
+    const comparison = document.getElementById('kpiSpendPrevious');
+    if (!comparison) return;
+    const previous = data.snapshot?.previous;
+    if (!previous) {
+      comparison.className = 'kpi-comparison';
+      comparison.textContent = 'Предыдущий снимок появится после следующего обновления';
+      return;
+    }
+
+    const currentSpend = Number(data.total_spend || 0);
+    const previousSpend = Number(previous.total_spend || 0);
+    const delta = currentSpend - previousSpend;
+    const deltaLabel = `${delta > 0 ? '+' : delta < 0 ? '−' : '±'}$${Math.abs(delta).toFixed(2)}`;
+    comparison.className = 'kpi-comparison has-previous';
+    comparison.textContent = `До обновления ${formatSummaryTime(previous.generated_at)} · ${formatMoneyOrDash(previousSpend)} · изменение ${deltaLabel}`;
   }
 
   function renderMetricDefinitions(definitions = {}) {
@@ -1489,6 +1593,7 @@
     document.getElementById('kpiClicks').textContent = formatNumber(data.total_clicks);
     document.getElementById('kpiCtr').textContent = data.total_impressions > 0 ? `${Number(data.avg_ctr || 0).toFixed(2)}%` : '—';
     document.getElementById('kpiCpc').textContent = data.total_clicks > 0 ? formatMoneyOrDash(Number(data.avg_cpc || 0)) : '—';
+    renderSpendComparison(data);
     renderSummaryProvenance(data);
     renderSummaryQuality(data.data_quality || {});
     renderMetricDefinitions(data.metric_definitions || {});
@@ -2153,16 +2258,9 @@
 
       if (state.summaryCache[period]) {
         renderLocalSummaryCache(state.summaryCache[period]);
+        refreshSummaryIfStale(period, state.summaryCache[period]);
       } else {
-        const statusEl = document.getElementById('summaryStatusLabel');
-        if (statusEl) {
-          statusEl.textContent = 'Нажмите кнопку для расчета статистики из Meta';
-        }
-        const freshness = document.getElementById('summaryFreshnessBadge');
-        if (freshness) {
-          freshness.className = 'summary-freshness-badge';
-          freshness.textContent = 'Нет данных';
-        }
+        loadSummary(period, false, { silent: true, refreshIfStale: true });
       }
     });
   });
@@ -2311,6 +2409,7 @@
       }
 
       // Load initial tab (Accounts)
+      startSummaryAutoRefresh();
       window.switchTab('accounts');
     } catch (e) {
       console.warn("Unauthorized / access locked:", e);
@@ -2445,6 +2544,22 @@
       window.location.reload();
     }, 300);
   };
+
+  document.addEventListener('visibilitychange', () => {
+    if (
+      !document.hidden &&
+      state.user &&
+      state.activeTab === 'summary' &&
+      !state.summaryLoading
+    ) {
+      const data = state.summaryCache[state.currentPeriod];
+      if (!data) {
+        loadSummary(state.currentPeriod, false, { silent: true, refreshIfStale: true });
+      } else {
+        refreshSummaryIfStale(state.currentPeriod, data);
+      }
+    }
+  });
 
   // Run on DOM ready
   if (document.readyState === 'loading') {
