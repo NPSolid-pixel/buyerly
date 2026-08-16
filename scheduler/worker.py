@@ -3,6 +3,7 @@ import random
 import asyncio
 import json
 import time
+import uuid
 from datetime import datetime, timezone
 import zoneinfo
 from typing import Optional, Callable, Awaitable, Any
@@ -10,6 +11,7 @@ from sqlalchemy import select
 
 from database.db import async_session_maker
 from database.models import Account, AppSettings, StoppedAdSet
+from core.audit import build_audit_event
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 
@@ -34,6 +36,7 @@ class MonitoringWorker:
         self._adset_cooldowns: dict[str, float] = {}
         self._account_last_checked: dict[str, float] = {}
         self._rule_last_checked: dict[str, float] = {}
+        self._current_cycle_id = ""
 
     @staticmethod
     def _load_rules(raw_rules: Any) -> list[dict[str, Any]]:
@@ -95,8 +98,52 @@ class MonitoringWorker:
         if stopped:
             stopped.is_resolved = True
 
+    async def _persist_audit_event(
+        self,
+        session,
+        account: Account,
+        *,
+        event_type: str,
+        status: str,
+        evaluation: Optional[RuleEvaluationResult] = None,
+        category: str = "RULE_ACTION",
+        action: str = "",
+        message: str = "",
+        before_state: Any = None,
+        after_state: Any = None,
+        details: Any = None,
+        duration_ms: int = 0,
+    ) -> bool:
+        """Persist audit independently from Telegram without breaking automation."""
+
+        try:
+            session.add(
+                build_audit_event(
+                    account=account,
+                    event_type=event_type,
+                    status=status,
+                    correlation_id=self._current_cycle_id,
+                    category=category,
+                    evaluation=evaluation,
+                    action=action,
+                    message=message,
+                    before_state=before_state,
+                    after_state=after_state,
+                    details=details,
+                    duration_ms=duration_ms,
+                )
+            )
+            await session.commit()
+            return True
+        except Exception as audit_error:
+            await session.rollback()
+            logger.error("Failed to persist audit event %s: %s", event_type, audit_error)
+            return False
+
     async def run_cycle(self) -> dict:
+        self._current_cycle_id = uuid.uuid4().hex
         stats = {
+            "cycle_id": self._current_cycle_id,
             "accounts_checked": 0,
             "accounts_skipped": 0,
             "rules_checked": 0,
@@ -171,6 +218,18 @@ class MonitoringWorker:
                             status_label = acc_info.get("status_label", f"Статус #{status_code}")
                             logger.warning(f"Account {acc.account_id} has issue: {status_label}")
                             acc.is_active = False
+                            await self._persist_audit_event(
+                                session,
+                                acc,
+                                event_type="ACCOUNT_ISSUE",
+                                status="WARNING",
+                                category="ACCOUNT_HEALTH",
+                                action="DISABLE_MONITORING",
+                                message=status_label,
+                                before_state={"is_active": True, "account_status": acc.account_status},
+                                after_state={"is_active": False, "account_status": status_code},
+                                details={"status_label": status_label},
+                            )
                             if self.telegram_notifier:
                                 await self.telegram_notifier(
                                     event_type="ACCOUNT_ISSUE",
@@ -183,6 +242,17 @@ class MonitoringWorker:
                     except PermissionError as pe:
                         logger.error(f"Token expired for account {acc.account_id}: {pe}")
                         acc.is_active = False
+                        await self._persist_audit_event(
+                            session,
+                            acc,
+                            event_type="TOKEN_EXPIRED",
+                            status="ERROR",
+                            category="ACCOUNT_HEALTH",
+                            action="DISABLE_MONITORING",
+                            message=str(pe),
+                            before_state={"is_active": True},
+                            after_state={"is_active": False},
+                        )
                         if self.telegram_notifier:
                             await self.telegram_notifier(
                                 event_type="TOKEN_EXPIRED",
@@ -238,9 +308,26 @@ class MonitoringWorker:
                     active_adsets = [a for a in adsets if a["status"] == "ACTIVE"]
 
                     if total_spend > 0 and acc.last_started_date != today_str:
+                        previous_started_date = acc.last_started_date
                         acc.last_started_date = today_str
                         stats["starts_notified"] += 1
                         logger.info(f"Account {acc.name} started spending today ({today_str} {time_str} {acc.timezone_name})")
+                        await self._persist_audit_event(
+                            session,
+                            acc,
+                            event_type="DAY_START",
+                            status="SUCCESS",
+                            category="MONITORING",
+                            action="DETECT_SPEND_START",
+                            message=f"Кабинет начал открутку {today_str} в {time_str}",
+                            before_state={"last_started_date": previous_started_date},
+                            after_state={"last_started_date": today_str},
+                            details={
+                                "timezone_name": acc.timezone_name,
+                                "active_adsets": len(active_adsets),
+                                "start_spend": total_spend,
+                            },
+                        )
                         
                         if self.telegram_notifier:
                             await self.telegram_notifier(
@@ -282,10 +369,23 @@ class MonitoringWorker:
                             last_time = self._adset_cooldowns.get(cooldown_key)
                             if last_time and (time.time() - last_time < cooldown_mins * 60):
                                 logger.debug(f"AdSet {a_id} action {eval_res.action} in cooldown ({cooldown_mins}m). Skipping.")
+                                await self._persist_audit_event(
+                                    session,
+                                    acc,
+                                    event_type="RULE_ACTION_COOLDOWN",
+                                    status="SKIPPED",
+                                    evaluation=eval_res,
+                                    action=eval_res.action.value,
+                                    message=f"Действие пропущено: cooldown {cooldown_mins} мин.",
+                                    before_state={"status": adset.get("status", "UNKNOWN")},
+                                    after_state={"status": adset.get("status", "UNKNOWN")},
+                                    details={"cooldown_minutes": cooldown_mins},
+                                )
                                 continue
 
                         # СТОП адсета
                         if eval_res.action == RuleAction.STOP:
+                            action_started = time.perf_counter()
                             try:
                                 await self.meta_client.set_adset_status(
                                     adset_id=a_id,
@@ -299,11 +399,21 @@ class MonitoringWorker:
 
                                 try:
                                     await self._record_stopped_adset(session, acc, eval_res)
-                                    await session.commit()
                                 except Exception as db_error:
                                     await session.rollback()
                                     logger.error(f"Failed to persist stopped adset {a_id}: {db_error}")
                                     stats["errors"].append(f"Stopped-adset persistence error {a_id}: {db_error}")
+
+                                await self._persist_audit_event(
+                                    session,
+                                    acc,
+                                    event_type="STOP",
+                                    status="SUCCESS",
+                                    evaluation=eval_res,
+                                    before_state={"status": adset.get("status", "ACTIVE")},
+                                    after_state={"status": "PAUSED"},
+                                    duration_ms=(time.perf_counter() - action_started) * 1000,
+                                )
 
                                 if should_notify_tg and self.telegram_notifier:
                                     await self.telegram_notifier(
@@ -316,11 +426,32 @@ class MonitoringWorker:
                             except Exception as e:
                                 logger.error(f"Error pausing adset {a_id}: {e}")
                                 stats["errors"].append(f"Pause error {a_id}: {e}")
+                                await self._persist_audit_event(
+                                    session,
+                                    acc,
+                                    event_type="STOP",
+                                    status="ERROR",
+                                    evaluation=eval_res,
+                                    message=str(e),
+                                    before_state={"status": adset.get("status", "UNKNOWN")},
+                                    after_state={"status": adset.get("status", "UNKNOWN")},
+                                    duration_ms=(time.perf_counter() - action_started) * 1000,
+                                )
 
                         # ТОЛЬКО УВЕДОМЛЕНИЕ (Send notification only)
                         elif eval_res.action == RuleAction.NOTIFY_ONLY:
                             self._adset_cooldowns[cooldown_key] = time.time()
                             logger.info(f"NOTIFY ONLY AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
+                            await self._persist_audit_event(
+                                session,
+                                acc,
+                                event_type="NOTIFY_ONLY",
+                                status="SUCCESS",
+                                evaluation=eval_res,
+                                before_state={"status": adset.get("status", "UNKNOWN")},
+                                after_state={"status": adset.get("status", "UNKNOWN")},
+                                details={"telegram_requested": should_notify_tg},
+                            )
                             if should_notify_tg and self.telegram_notifier:
                                 await self.telegram_notifier(
                                     event_type="NOTIFY_ONLY",
@@ -335,6 +466,16 @@ class MonitoringWorker:
                             self._adset_cooldowns[cooldown_key] = time.time()
                             stats["proposals_sent"] += 1
                             logger.info(f"PROPOSE REACTIVATE AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
+                            await self._persist_audit_event(
+                                session,
+                                acc,
+                                event_type="PROPOSE_REACTIVATE",
+                                status="SUCCESS",
+                                evaluation=eval_res,
+                                before_state={"status": adset.get("status", "UNKNOWN")},
+                                after_state={"status": adset.get("status", "UNKNOWN")},
+                                details={"telegram_requested": should_notify_tg},
+                            )
 
                             if should_notify_tg and self.telegram_notifier:
                                 await self.telegram_notifier(
@@ -347,6 +488,7 @@ class MonitoringWorker:
 
                         # АВТО-ВКЛЮЧЕНИЕ
                         elif eval_res.action == RuleAction.AUTO_REACTIVATE:
+                            action_started = time.perf_counter()
                             try:
                                 await self.meta_client.set_adset_status(
                                     adset_id=a_id,
@@ -357,11 +499,21 @@ class MonitoringWorker:
 
                                 try:
                                     await self._resolve_stopped_adset(session, a_id)
-                                    await session.commit()
                                 except Exception as db_error:
                                     await session.rollback()
                                     logger.error(f"Failed to resolve stopped adset {a_id}: {db_error}")
                                     stats["errors"].append(f"Stopped-adset resolution error {a_id}: {db_error}")
+
+                                await self._persist_audit_event(
+                                    session,
+                                    acc,
+                                    event_type="AUTO_REACTIVATE",
+                                    status="SUCCESS",
+                                    evaluation=eval_res,
+                                    before_state={"status": adset.get("status", "PAUSED")},
+                                    after_state={"status": "ACTIVE"},
+                                    duration_ms=(time.perf_counter() - action_started) * 1000,
+                                )
                                 
                                 logger.info(f"AUTO REACTIVATED AdSet: {a_id} ({eval_res.adset_name})")
 
@@ -376,6 +528,17 @@ class MonitoringWorker:
                             except Exception as e:
                                 logger.error(f"Error auto-reactivating adset {a_id}: {e}")
                                 stats["errors"].append(f"Auto-reactivate error {a_id}: {e}")
+                                await self._persist_audit_event(
+                                    session,
+                                    acc,
+                                    event_type="AUTO_REACTIVATE",
+                                    status="ERROR",
+                                    evaluation=eval_res,
+                                    message=str(e),
+                                    before_state={"status": adset.get("status", "UNKNOWN")},
+                                    after_state={"status": adset.get("status", "UNKNOWN")},
+                                    duration_ms=(time.perf_counter() - action_started) * 1000,
+                                )
 
                         # УВЕЛИЧЕНИЕ БЮДЖЕТА
                         elif eval_res.action == RuleAction.INCREASE_BUDGET:
@@ -384,6 +547,7 @@ class MonitoringWorker:
                                 new_budget = current_budget * (1 + eval_res.budget_change_percent / 100.0)
                                 if eval_res.budget_max_daily > 0:
                                     new_budget = min(new_budget, eval_res.budget_max_daily)
+                                action_started = time.perf_counter()
                                 try:
                                     await self.meta_client.update_adset_budget(
                                         adset_id=a_id,
@@ -392,6 +556,16 @@ class MonitoringWorker:
                                     )
                                     self._adset_cooldowns[cooldown_key] = time.time()
                                     stats["budgets_changed"] += 1
+                                    await self._persist_audit_event(
+                                        session,
+                                        acc,
+                                        event_type="INCREASE_BUDGET",
+                                        status="SUCCESS",
+                                        evaluation=eval_res,
+                                        before_state={"daily_budget": current_budget},
+                                        after_state={"daily_budget": new_budget},
+                                        duration_ms=(time.perf_counter() - action_started) * 1000,
+                                    )
                                     if should_notify_tg and self.telegram_notifier:
                                         await self.telegram_notifier(
                                             event_type="INCREASE_BUDGET",
@@ -405,6 +579,17 @@ class MonitoringWorker:
                                 except Exception as e:
                                     logger.error(f"Error increasing budget for adset {a_id}: {e}")
                                     stats["errors"].append(f"Budget increase error {a_id}: {e}")
+                                    await self._persist_audit_event(
+                                        session,
+                                        acc,
+                                        event_type="INCREASE_BUDGET",
+                                        status="ERROR",
+                                        evaluation=eval_res,
+                                        message=str(e),
+                                        before_state={"daily_budget": current_budget},
+                                        after_state={"daily_budget": current_budget},
+                                        duration_ms=(time.perf_counter() - action_started) * 1000,
+                                    )
 
                         # УМЕНЬШЕНИЕ БЮДЖЕТА
                         elif eval_res.action == RuleAction.DECREASE_BUDGET:
@@ -412,6 +597,7 @@ class MonitoringWorker:
                             if current_budget > 0 and eval_res.budget_change_percent > 0:
                                 new_budget = current_budget * (1 - eval_res.budget_change_percent / 100.0)
                                 new_budget = max(new_budget, 1.0)
+                                action_started = time.perf_counter()
                                 try:
                                     await self.meta_client.update_adset_budget(
                                         adset_id=a_id,
@@ -420,6 +606,16 @@ class MonitoringWorker:
                                     )
                                     self._adset_cooldowns[cooldown_key] = time.time()
                                     stats["budgets_changed"] += 1
+                                    await self._persist_audit_event(
+                                        session,
+                                        acc,
+                                        event_type="DECREASE_BUDGET",
+                                        status="SUCCESS",
+                                        evaluation=eval_res,
+                                        before_state={"daily_budget": current_budget},
+                                        after_state={"daily_budget": new_budget},
+                                        duration_ms=(time.perf_counter() - action_started) * 1000,
+                                    )
                                     if should_notify_tg and self.telegram_notifier:
                                         await self.telegram_notifier(
                                             event_type="DECREASE_BUDGET",
@@ -433,6 +629,17 @@ class MonitoringWorker:
                                 except Exception as e:
                                     logger.error(f"Error decreasing budget for adset {a_id}: {e}")
                                     stats["errors"].append(f"Budget decrease error {a_id}: {e}")
+                                    await self._persist_audit_event(
+                                        session,
+                                        acc,
+                                        event_type="DECREASE_BUDGET",
+                                        status="ERROR",
+                                        evaluation=eval_res,
+                                        message=str(e),
+                                        before_state={"daily_budget": current_budget},
+                                        after_state={"daily_budget": current_budget},
+                                        duration_ms=(time.perf_counter() - action_started) * 1000,
+                                    )
 
                 except Exception as e:
                     logger.error(f"Error processing account {acc.account_id}: {e}")

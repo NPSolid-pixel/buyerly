@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from database.db import Base
-from database.models import Account, AppSettings, StoppedAdSet
+from database.models import Account, AppSettings, AuditEvent, StoppedAdSet
 from rules.engine import RuleEngine, RuleAction
 from scheduler.worker import MonitoringWorker
 from meta_api.client import MetaClient
@@ -170,6 +170,20 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(stored[0].stop_spend, 15.5)
             self.assertFalse(stored[0].is_resolved)
 
+            stop_events = (
+                await session.execute(
+                    select(AuditEvent).where(AuditEvent.event_type == "STOP")
+                )
+            ).scalars().all()
+            self.assertEqual(len(stop_events), 1)
+            self.assertEqual(stop_events[0].status, "SUCCESS")
+            self.assertEqual(stop_events[0].owner_id, "123456789")
+            self.assertEqual(stop_events[0].rule_id, 1)
+            self.assertEqual(stop_events[0].rule_name, "Stop spend without leads")
+            self.assertEqual(json.loads(stop_events[0].before_state)["status"], "ACTIVE")
+            self.assertEqual(json.loads(stop_events[0].after_state)["status"], "PAUSED")
+            self.assertTrue(stop_events[0].correlation_id)
+
         # Re-stopping the same ad set reopens and updates one durable record.
         mock_meta.adsets_state["adset_1"]["status"] = "ACTIVE"
         mock_meta.adsets_state["adset_1"]["effective_status"] = "ACTIVE"
@@ -222,6 +236,41 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("yesterday", mock_meta.requested_windows)
         self.assertEqual(stats["adsets_stopped"], 1)
         self.assertEqual(mock_meta.status_changes, [("adset_1", "PAUSED")])
+
+        async with self.test_session_maker() as session:
+            audit_event = (
+                await session.execute(
+                    select(AuditEvent).where(AuditEvent.event_type == "STOP")
+                )
+            ).scalar_one()
+            self.assertEqual(audit_event.status, "SUCCESS")
+            self.assertEqual(audit_event.rule_id, 3)
+            self.assertFalse(json.loads(audit_event.details)["notify_tg"])
+
+    async def test_failed_rule_action_is_audited_and_secret_safe(self):
+        mock_meta = MockMetaClient()
+        mock_meta.set_adset_status = AsyncMock(
+            side_effect=RuntimeError("Meta failed: access_token=private-secret")
+        )
+
+        worker = MonitoringWorker(meta_client=mock_meta)
+        stats = await worker.run_cycle()
+
+        self.assertEqual(stats["adsets_stopped"], 0)
+        self.assertTrue(any("Pause error adset_1" in error for error in stats["errors"]))
+
+        async with self.test_session_maker() as session:
+            failed_event = (
+                await session.execute(
+                    select(AuditEvent).where(
+                        AuditEvent.event_type == "STOP",
+                        AuditEvent.status == "ERROR",
+                    )
+                )
+            ).scalar_one()
+            self.assertNotIn("private-secret", failed_event.message)
+            self.assertIn("access_token=[REDACTED]", failed_event.message)
+            self.assertEqual(json.loads(failed_event.before_state)["status"], "ACTIVE")
 
     async def test_rule_check_interval_is_enforced_without_extra_meta_calls(self):
         async with self.test_session_maker() as session:

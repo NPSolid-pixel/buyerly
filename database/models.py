@@ -119,3 +119,37 @@ class EventLog(Base):
 
     def __repr__(self):
         return f"<EventLog(type='{self.event_type}', chat='{self.target_chat_id}', status='{self.status}', time='{self.created_at}')>"
+
+
+class AuditEvent(Base):
+    """Append-only product audit trail, independent from notification delivery."""
+
+    __tablename__ = "audit_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String, default="", nullable=False, index=True)
+    actor_type = Column(String, default="system", nullable=False, index=True)
+    actor_id = Column(String, default="monitoring_worker", nullable=False)
+    category = Column(String, default="RULE_ACTION", nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    status = Column(String, default="SUCCESS", nullable=False, index=True)
+    account_id = Column(String, default="", nullable=False, index=True)
+    account_name = Column(String, default="", nullable=False)
+    adset_id = Column(String, default="", nullable=False, index=True)
+    adset_name = Column(String, default="", nullable=False)
+    rule_id = Column(Integer, nullable=True, index=True)
+    rule_name = Column(String, default="", nullable=False)
+    action = Column(String, default="", nullable=False, index=True)
+    message = Column(Text, default="", nullable=False)
+    before_state = Column(Text, default="{}", nullable=False)
+    after_state = Column(Text, default="{}", nullable=False)
+    details = Column(Text, default="{}", nullable=False)
+    correlation_id = Column(String, default="", nullable=False, index=True)
+    duration_ms = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+
+    def __repr__(self):
+        return (
+            f"<AuditEvent(type='{self.event_type}', account='{self.account_id}', "
+            f"status='{self.status}', time='{self.created_at}')>"
+        )
