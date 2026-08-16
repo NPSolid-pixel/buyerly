@@ -14,7 +14,7 @@ from api.auth import validate_telegram_init_data
 from api.server import create_app
 from core.config import settings
 from database.db import Base
-from database.models import Account, AppSettings, TelegramUser
+from database.models import Account, AppSettings, StoppedAdSet, TelegramUser
 
 
 def generate_valid_telegram_init_data(bot_token: str, user_dict: dict) -> str:
@@ -250,6 +250,49 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             set_resp = await client.post("/api/settings/interval", headers=headers, json={"minutes": 30})
             self.assertEqual(set_resp.status_code, 200)
             self.assertEqual(set_resp.json()["poll_interval_minutes"], 30)
+
+    async def test_buyer_cannot_dismiss_another_users_stopped_adset(self):
+        async with self.test_session_maker() as session:
+            session.add(
+                Account(
+                    account_id="act_admin_account",
+                    name="Admin account",
+                    access_token="admin_mock_token",
+                    owner_id="8634201356",
+                    timezone_name="UTC",
+                )
+            )
+            session.add(
+                StoppedAdSet(
+                    account_id="act_admin_account",
+                    adset_id="admin_adset_1",
+                    adset_name="Admin ad set",
+                    stop_spend=10.0,
+                )
+            )
+            await session.commit()
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        admin_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8634201356, "first_name": "Admin", "username": "admin_user"},
+        )
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            forbidden = await client.post(
+                "/api/adsets/admin_adset_1/dismiss",
+                headers={"Authorization": f"tma {buyer_data}"},
+            )
+            allowed = await client.post(
+                "/api/adsets/admin_adset_1/dismiss",
+                headers={"Authorization": f"tma {admin_data}"},
+            )
+
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(allowed.status_code, 200)
 
     async def test_delete_account(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}

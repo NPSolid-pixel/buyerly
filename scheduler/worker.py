@@ -9,7 +9,7 @@ from typing import Optional, Callable, Awaitable, Any
 from sqlalchemy import select
 
 from database.db import async_session_maker
-from database.models import Account, AppSettings
+from database.models import Account, AppSettings, StoppedAdSet
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 
@@ -56,6 +56,44 @@ class MonitoringWorker:
     def _rule_key(account_id: str, index: int, rule: dict[str, Any]) -> str:
         rule_id = rule.get("preset_id")
         return f"{account_id}:{rule_id if rule_id is not None else f'index-{index}'}"
+
+    @staticmethod
+    async def _record_stopped_adset(session, account: Account, result: RuleEvaluationResult) -> None:
+        query = await session.execute(
+            select(StoppedAdSet).where(StoppedAdSet.adset_id == result.adset_id)
+        )
+        stopped = query.scalar_one_or_none()
+        stopped_at = datetime.now(timezone.utc)
+        if stopped:
+            stopped.account_id = account.account_id
+            stopped.adset_name = result.adset_name
+            stopped.stop_spend = result.spend
+            stopped.stop_leads = result.leads
+            stopped.stop_registrations = result.registrations
+            stopped.is_resolved = False
+            stopped.stopped_at = stopped_at
+        else:
+            session.add(
+                StoppedAdSet(
+                    account_id=account.account_id,
+                    adset_id=result.adset_id,
+                    adset_name=result.adset_name,
+                    stop_spend=result.spend,
+                    stop_leads=result.leads,
+                    stop_registrations=result.registrations,
+                    is_resolved=False,
+                    stopped_at=stopped_at,
+                )
+            )
+
+    @staticmethod
+    async def _resolve_stopped_adset(session, adset_id: str) -> None:
+        query = await session.execute(
+            select(StoppedAdSet).where(StoppedAdSet.adset_id == adset_id)
+        )
+        stopped = query.scalar_one_or_none()
+        if stopped:
+            stopped.is_resolved = True
 
     async def run_cycle(self) -> dict:
         stats = {
@@ -259,6 +297,14 @@ class MonitoringWorker:
                                 stats["adsets_stopped"] += 1
                                 logger.info(f"STOPPED AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
 
+                                try:
+                                    await self._record_stopped_adset(session, acc, eval_res)
+                                    await session.commit()
+                                except Exception as db_error:
+                                    await session.rollback()
+                                    logger.error(f"Failed to persist stopped adset {a_id}: {db_error}")
+                                    stats["errors"].append(f"Stopped-adset persistence error {a_id}: {db_error}")
+
                                 if should_notify_tg and self.telegram_notifier:
                                     await self.telegram_notifier(
                                         event_type="STOP",
@@ -308,6 +354,14 @@ class MonitoringWorker:
                                     status="ACTIVE"
                                 )
                                 stats["adsets_reactivated"] += 1
+
+                                try:
+                                    await self._resolve_stopped_adset(session, a_id)
+                                    await session.commit()
+                                except Exception as db_error:
+                                    await session.rollback()
+                                    logger.error(f"Failed to resolve stopped adset {a_id}: {db_error}")
+                                    stats["errors"].append(f"Stopped-adset resolution error {a_id}: {db_error}")
                                 
                                 logger.info(f"AUTO REACTIVATED AdSet: {a_id} ({eval_res.adset_name})")
 

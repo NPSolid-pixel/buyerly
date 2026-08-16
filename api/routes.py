@@ -950,6 +950,13 @@ async def dismiss_adset(adset_id: str, user: TelegramUser = Depends(get_current_
         if not stopped_entry:
             raise HTTPException(status_code=404, detail="Запись не найдена.")
 
+        account_res = await session.execute(
+            select(Account).where(Account.account_id == stopped_entry.account_id)
+        )
+        account = account_res.scalar_one_or_none()
+        if not account or (user.role != "admin" and account.owner_id != user.telegram_id):
+            raise HTTPException(status_code=403, detail="Доступ запрещен.")
+
         stopped_entry.is_resolved = True
         await session.commit()
         return {"success": True, "message": "Оставлен выключенным."}

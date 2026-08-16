@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from database.db import Base
-from database.models import Account, AppSettings
+from database.models import Account, AppSettings, StoppedAdSet
 from rules.engine import RuleEngine, RuleAction
 from scheduler.worker import MonitoringWorker
 from meta_api.client import MetaClient
@@ -162,6 +162,26 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         event_types = [a["event_type"] for a in sent_alerts]
         self.assertIn("DAY_START", event_types)
         self.assertIn("STOP", event_types)
+
+        async with self.test_session_maker() as session:
+            stored = (await session.execute(select(StoppedAdSet))).scalars().all()
+            self.assertEqual(len(stored), 1)
+            self.assertEqual(stored[0].adset_id, "adset_1")
+            self.assertEqual(stored[0].stop_spend, 15.5)
+            self.assertFalse(stored[0].is_resolved)
+
+        # Re-stopping the same ad set reopens and updates one durable record.
+        mock_meta.adsets_state["adset_1"]["status"] = "ACTIVE"
+        mock_meta.adsets_state["adset_1"]["effective_status"] = "ACTIVE"
+        mock_meta.adsets_state["adset_1"]["spend"] = 20.0
+        second_worker = MonitoringWorker(meta_client=mock_meta)
+        await second_worker.run_cycle()
+
+        async with self.test_session_maker() as session:
+            stored = (await session.execute(select(StoppedAdSet))).scalars().all()
+            self.assertEqual(len(stored), 1)
+            self.assertEqual(stored[0].stop_spend, 20.0)
+            self.assertFalse(stored[0].is_resolved)
 
     async def test_historical_window_uses_current_adset_metrics(self):
         """Yesterday metrics are matched by ad set instead of as one account-wide map."""
@@ -341,6 +361,17 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                     "notify_tg": False,
                 }
             ])
+            session.add(
+                StoppedAdSet(
+                    account_id=self.account_id,
+                    adset_id="adset_1",
+                    adset_name="Test_Sweden_1",
+                    stop_spend=5.0,
+                    stop_leads=0,
+                    stop_registrations=0,
+                    is_resolved=False,
+                )
+            )
             await session.commit()
 
         mock_meta = MockMetaClient()
@@ -359,6 +390,10 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["adsets_reactivated"], 1)
         self.assertEqual(mock_meta.status_changes, [("adset_1", "ACTIVE")])
         self.assertNotIn("AUTO_REACTIVATE", [alert["event_type"] for alert in sent_alerts])
+
+        async with self.test_session_maker() as session:
+            stopped = (await session.execute(select(StoppedAdSet))).scalar_one()
+            self.assertTrue(stopped.is_resolved)
 
     async def test_account_disabled_alert(self):
         """Если кабинет заблокирован в Meta → алерт ACCOUNT_ISSUE."""
