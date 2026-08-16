@@ -34,6 +34,18 @@ class UserProfileResponse(BaseModel):
     role: str
     is_approved: bool
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class LoginResponse(BaseModel):
+    token: str
+    username: str
+    full_name: str
+    role: str
+    message: str = "Успешный вход"
+
+
 class ConditionItem(BaseModel):
     metric: str = "spend"  # spend, cpl, cpr, cpa, leads, registrations, purchases, ctr, cpc
     operator: str = "gte"  # gte, gt, lte, lt, eq
@@ -135,6 +147,48 @@ async def get_user_accounts(session, user: TelegramUser) -> List[Account]:
 # ----------------------------------------------------
 # Endpoints
 # ----------------------------------------------------
+
+import uuid
+from database.db import hash_password
+
+@router.post("/auth/login", response_model=LoginResponse)
+async def login_user(req: LoginRequest):
+    async with async_session_maker() as session:
+        uname = req.username.strip()
+        stmt = select(TelegramUser).where(TelegramUser.username.ilike(uname))
+        res = await session.execute(stmt)
+        user = res.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(status_code=400, detail="Неверный логин или пароль")
+
+        pw_hash = hash_password(req.password.strip())
+        if user.password_hash and user.password_hash != pw_hash:
+            raise HTTPException(status_code=400, detail="Неверный логин или пароль")
+
+        if not user.auth_token:
+            user.auth_token = str(uuid.uuid4())
+            await session.commit()
+
+        return LoginResponse(
+            token=user.auth_token,
+            username=user.username,
+            full_name=user.full_name or user.username,
+            role=user.role,
+            message="Авторизация успешна"
+        )
+
+
+@router.post("/auth/logout")
+async def logout_user(user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        res = await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
+        db_user = res.scalar_one_or_none()
+        if db_user:
+            db_user.auth_token = str(uuid.uuid4())
+            await session.commit()
+    return {"message": "Успешный выход"}
+
 
 @router.get("/me", response_model=UserProfileResponse)
 async def get_me(user: TelegramUser = Depends(get_current_user)):

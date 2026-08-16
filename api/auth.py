@@ -61,37 +61,53 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[Dict
 async def get_current_user(
     authorization: Optional[str] = Header(None),
     x_init_data: Optional[str] = Header(None),
+    x_auth_token: Optional[str] = Header(None),
     init_data_query: Optional[str] = Query(None, alias="initData"),
     dev_user_id: Optional[str] = Query(None, alias="dev_user_id")
 ) -> TelegramUser:
     """
-    FastAPI dependency that extracts and validates the authenticated user from Telegram WebApp initData.
-    Supports Authorization header 'tma <initData>', X-Init-Data header, initData query param,
-    or dev fallback when testing locally.
+    FastAPI dependency that extracts and validates the authenticated user from:
+    1. Bearer <auth_token> (Web site direct login)
+    2. Header X-Auth-Token (Web site direct login)
+    3. Authorization 'tma <initData>' (Telegram Mini App)
+    4. Dev fallback if enabled
     """
+    token = ""
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:].strip()
+    elif x_auth_token:
+        token = x_auth_token.strip()
+
     raw_init_data = ""
     if authorization and authorization.startswith("tma "):
         raw_init_data = authorization[4:].strip()
-    elif authorization:
+    elif authorization and not authorization.startswith("Bearer "):
         raw_init_data = authorization.strip()
     elif x_init_data:
         raw_init_data = x_init_data.strip()
     elif init_data_query:
         raw_init_data = init_data_query.strip()
 
-    tg_user_info = None
-
-    if raw_init_data and settings.BOT_TOKEN:
-        validated = validate_telegram_init_data(raw_init_data, settings.BOT_TOKEN)
-        if validated and "user" in validated:
-            tg_user_info = validated["user"]
-        logger.info(f"Auth verification result: validated={validated is not None}, has_user={tg_user_info is not None}")
-    else:
-        logger.info(f"Auth verification: No raw_init_data provided (auth_header={bool(authorization)}, x_init={bool(x_init_data)})")
-
-
     async with async_session_maker() as session:
-        # If valid Telegram initData was provided
+        # Check Bearer Token (Direct Web Login)
+        if token:
+            res = await session.execute(select(TelegramUser).where(TelegramUser.auth_token == token))
+            user = res.scalar_one_or_none()
+            if user:
+                if not user.is_approved:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Ваш аккаунт ожидает одобрения администратора."
+                    )
+                return user
+
+        # Check Telegram WebApp initData
+        tg_user_info = None
+        if raw_init_data and settings.BOT_TOKEN:
+            validated = validate_telegram_init_data(raw_init_data, settings.BOT_TOKEN)
+            if validated and "user" in validated:
+                tg_user_info = validated["user"]
+
         if tg_user_info:
             tg_id = str(tg_user_info.get("id"))
             username = tg_user_info.get("username", "")
@@ -107,7 +123,7 @@ async def get_current_user(
             if not user:
                 user = TelegramUser(
                     telegram_id=tg_id,
-                    username=username,
+                    username=username or f"user_{tg_id}",
                     full_name=full_name,
                     role="admin" if is_super_admin else "buyer",
                     is_approved=True if is_super_admin else False
@@ -128,7 +144,7 @@ async def get_current_user(
         if not settings.ENABLE_DEV_AUTH:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Требуется авторизация через Telegram Web App (@buyerly_bot)"
+                detail="Требуется авторизация на сайте или через Telegram"
             )
 
         # Dev / Local preview fallback (ONLY active when ENABLE_DEV_AUTH=True)

@@ -9,15 +9,18 @@ class TelegramUser(Base):
     __tablename__ = "telegram_users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    telegram_id = Column(String, unique=True, nullable=False, index=True, doc="Telegram User ID")
-    username = Column(String, default="", nullable=False)
+    telegram_id = Column(String, unique=True, nullable=True, index=True, doc="Telegram User ID (для пушей)")
+    username = Column(String, unique=True, nullable=False, index=True, doc="Логин пользователя (e.g. Artem)")
     full_name = Column(String, default="", nullable=False)
-    role = Column(String, default="buyer", nullable=False, doc="'admin' или 'buyer'")
-    is_approved = Column(Boolean, default=False, nullable=False, doc="Одобрен ли доступ админом")
+    password_hash = Column(String, default="", nullable=False, doc="Хэш пароля sha256")
+    auth_token = Column(String, unique=True, nullable=True, index=True, doc="Постоянный токен авторизации веб-интерфейса")
+    role = Column(String, default="admin", nullable=False, doc="'admin' или 'buyer'")
+    is_approved = Column(Boolean, default=True, nullable=False, doc="Одобрен ли доступ")
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<TelegramUser(tg_id='{self.telegram_id}', username='{self.username}', role='{self.role}', approved={self.is_approved})>"
+        return f"<TelegramUser(username='{self.username}', role='{self.role}', approved={self.is_approved})>"
+
 
 
 class AppSettings(Base):

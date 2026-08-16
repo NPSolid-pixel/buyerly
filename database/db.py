@@ -21,11 +21,19 @@ async def get_db():
 
 from sqlalchemy import text
 
+import hashlib
+import uuid
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         # Безопасное добавление колонок если таблица уже существовала
         for col_sql in [
+            "ALTER TABLE telegram_users ADD COLUMN password_hash VARCHAR DEFAULT '';",
+            "ALTER TABLE telegram_users ADD COLUMN auth_token VARCHAR;",
             "ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;",
             "ALTER TABLE accounts ADD COLUMN account_status INTEGER DEFAULT 1;",
             "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT '🟢 Активен (ACTIVE)';",
@@ -50,4 +58,37 @@ async def init_db():
                 await conn.execute(text(col_sql))
             except Exception:
                 pass
+
+    # Seed default users Artem and Nikolai
+    from database.models import TelegramUser
+    from sqlalchemy import select
+
+    async with async_session_maker() as session:
+        default_users = [
+            {"username": "Artem", "full_name": "Artem", "password": "artem_buyer_2026", "role": "admin"},
+            {"username": "Nikolai", "full_name": "Nikolai", "password": "nikolai_buyer_2026", "role": "admin"}
+        ]
+        for u in default_users:
+            stmt = select(TelegramUser).where(TelegramUser.username == u["username"])
+            res = await session.execute(stmt)
+            existing = res.scalar_one_or_none()
+            if not existing:
+                new_u = TelegramUser(
+                    telegram_id=str(uuid.uuid4())[:8],
+                    username=u["username"],
+                    full_name=u["full_name"],
+                    password_hash=hash_password(u["password"]),
+                    auth_token=str(uuid.uuid4()),
+                    role=u["role"],
+                    is_approved=True
+                )
+                session.add(new_u)
+            else:
+                if not existing.password_hash:
+                    existing.password_hash = hash_password(u["password"])
+                if not existing.auth_token:
+                    existing.auth_token = str(uuid.uuid4())
+                existing.is_approved = True
+        await session.commit()
+
 

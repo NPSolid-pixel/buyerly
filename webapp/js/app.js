@@ -61,17 +61,44 @@
     settings: { poll_interval_minutes: 10 }
   };
 
-  // API Client with initData Authentication
+  // Helper to get Web Auth Token
+  function getWebAuthToken() {
+    try {
+      return localStorage.getItem('buyerly_auth_token') || sessionStorage.getItem('buyerly_auth_token') || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function setWebAuthToken(token) {
+    try {
+      if (token) {
+        localStorage.setItem('buyerly_auth_token', token);
+        sessionStorage.setItem('buyerly_auth_token', token);
+      } else {
+        localStorage.removeItem('buyerly_auth_token');
+        sessionStorage.removeItem('buyerly_auth_token');
+      }
+    } catch (e) {}
+  }
+
+  // API Client with Token / initData Authentication
   async function apiRequest(endpoint, options = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...(options.headers || {})
     };
 
-    const initData = getTelegramInitData();
-    if (initData) {
-      headers['Authorization'] = `tma ${initData}`;
-      headers['X-Init-Data'] = initData;
+    const authToken = getWebAuthToken();
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+      headers['X-Auth-Token'] = authToken;
+    } else {
+      const initData = getTelegramInitData();
+      if (initData) {
+        headers['Authorization'] = `tma ${initData}`;
+        headers['X-Init-Data'] = initData;
+      }
     }
 
     try {
@@ -1721,17 +1748,19 @@
 
     setupSettingsChips();
     setupLogicToggle();
+    setupLoginForm();
 
     // Authenticate and load initial profile
     try {
       const user = await apiRequest('/api/me');
       state.user = user;
-      // Hide unauthorized screen & reveal app UI
-      const unauthEl = document.getElementById('unauthorizedScreen');
+      
+      // Hide login screen & reveal app UI
+      const loginScreen = document.getElementById('loginScreen');
       const appEl = document.getElementById('app');
-      if (unauthEl) {
-        unauthEl.style.display = 'none';
-        unauthEl.classList.add('hidden');
+      if (loginScreen) {
+        loginScreen.style.display = 'none';
+        loginScreen.classList.add('hidden');
       }
       if (appEl) {
         appEl.style.display = 'block';
@@ -1749,35 +1778,83 @@
       window.switchTab('accounts');
     } catch (e) {
       console.warn("Unauthorized / access locked:", e);
-      const unauthEl = document.getElementById('unauthorizedScreen');
+      const loginScreen = document.getElementById('loginScreen');
       const appEl = document.getElementById('app');
       if (appEl) {
         appEl.style.display = 'none';
         appEl.classList.add('hidden');
       }
-      if (unauthEl) {
-        unauthEl.style.display = 'flex';
-        unauthEl.classList.remove('hidden');
-        if (e.message && e.message.includes('одобрения')) {
-          unauthEl.innerHTML = '<span>Ваш аккаунт ожидает одобрения администратора (@buyerly_bot)</span>';
-        } else {
-          unauthEl.innerHTML = '<span>Требуется авторизация через Telegram Web App (@buyerly_bot)</span>';
-        }
+      if (loginScreen) {
+        loginScreen.style.display = 'flex';
+        loginScreen.classList.remove('hidden');
       }
     }
   }
 
+  function setupLoginForm() {
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('btnLoginSubmit');
+    const errorEl = document.getElementById('loginError');
 
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('loginUsername')?.value.trim();
+        const password = document.getElementById('loginPassword')?.value;
 
+        if (!username || !password) return;
 
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<div class="spinner" style="width:18px;height:18px;margin:0 auto;"></div>';
+        if (errorEl) errorEl.classList.add('hidden');
 
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await res.json();
 
+          if (!res.ok) {
+            throw new Error(data.detail || 'Неверный логин или пароль');
+          }
 
-  // Run on DOM ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
-  } else {
-    initApp();
+          setWebAuthToken(data.token);
+          showToast(`Добро пожаловать, ${data.full_name || data.username}!`, 'success');
+          await initApp();
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = err.message || 'Ошибка входа';
+            errorEl.classList.remove('hidden');
+          }
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>Войти в систему</span>';
+        }
+      });
+    }
   }
 
-})();
+  window.quickFillLogin = function (username, password) {
+    const uInput = document.getElementById('loginUsername');
+    const pInput = document.getElementById('loginPassword');
+    if (uInput) uInput.value = username;
+    if (pInput) pInput.value = password;
+    const form = document.getElementById('loginForm');
+    if (form) {
+      const event = new Event('submit', { cancelable: true });
+      form.dispatchEvent(event);
+    }
+  };
+
+  window.logoutUser = async function () {
+    try {
+      await apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    } catch (e) {}
+    setWebAuthToken('');
+    showToast('Вы вышли из системы', 'info');
+    setTimeout(() => {
+      window.location.reload();
+    }, 300);
+  };
