@@ -23,9 +23,14 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[Dict
         return None
 
     try:
-        parsed_data = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
+        clean_init_data = init_data.strip()
+        if clean_init_data.startswith("tma "):
+            clean_init_data = clean_init_data[4:].strip()
+
+        parsed_data = dict(urllib.parse.parse_qsl(clean_init_data, keep_blank_values=True))
         received_hash = parsed_data.pop("hash", None)
         if not received_hash:
+            logger.warning(f"validate_telegram_init_data: No hash found in init_data (keys: {list(parsed_data.keys())})")
             return None
 
         # Data check string: alphabetically sorted key=value pairs separated by \n
@@ -39,12 +44,13 @@ def validate_telegram_init_data(init_data: str, bot_token: str) -> Optional[Dict
         calculated_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(calculated_hash, received_hash):
-            logger.warning("Telegram initData hash mismatch")
+            logger.warning(f"Telegram initData hash mismatch: calc={calculated_hash}, recv={received_hash}")
             return None
 
         # Parse user JSON if present
         if "user" in parsed_data:
-            parsed_data["user"] = json.loads(parsed_data["user"])
+            if isinstance(parsed_data["user"], str):
+                parsed_data["user"] = json.loads(parsed_data["user"])
 
         return parsed_data
     except Exception as e:
@@ -66,6 +72,8 @@ async def get_current_user(
     raw_init_data = ""
     if authorization and authorization.startswith("tma "):
         raw_init_data = authorization[4:].strip()
+    elif authorization:
+        raw_init_data = authorization.strip()
     elif x_init_data:
         raw_init_data = x_init_data.strip()
     elif init_data_query:
@@ -77,6 +85,10 @@ async def get_current_user(
         validated = validate_telegram_init_data(raw_init_data, settings.BOT_TOKEN)
         if validated and "user" in validated:
             tg_user_info = validated["user"]
+        logger.info(f"Auth verification result: validated={validated is not None}, has_user={tg_user_info is not None}")
+    else:
+        logger.info(f"Auth verification: No raw_init_data provided (auth_header={bool(authorization)}, x_init={bool(x_init_data)})")
+
 
     async with async_session_maker() as session:
         # If valid Telegram initData was provided

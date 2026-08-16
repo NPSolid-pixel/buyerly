@@ -8,6 +8,28 @@
   // Telegram WebApp SDK
   const tg = window.Telegram?.WebApp;
 
+  // Helper to extract Telegram initData from multiple possible sources
+  function getTelegramInitData() {
+    // 1. Telegram WebApp SDK initData
+    if (window.Telegram?.WebApp?.initData) {
+      return window.Telegram.WebApp.initData;
+    }
+    // 2. Hash parameters (e.g. Telegram Desktop webview)
+    if (window.location.hash) {
+      const hash = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
+      const hashParams = new URLSearchParams(hash);
+      const tgWebAppData = hashParams.get('tgWebAppData');
+      if (tgWebAppData) return tgWebAppData;
+    }
+    // 3. Query string parameters
+    if (window.location.search) {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tgWebAppData = searchParams.get('tgWebAppData') || searchParams.get('initData');
+      if (tgWebAppData) return tgWebAppData;
+    }
+    return '';
+  }
+
   // Application State
   const state = {
     user: null,
@@ -29,8 +51,10 @@
       ...(options.headers || {})
     };
 
-    if (tg?.initData) {
-      headers['Authorization'] = `tma ${tg.initData}`;
+    const initData = getTelegramInitData();
+    if (initData) {
+      headers['Authorization'] = `tma ${initData}`;
+      headers['X-Init-Data'] = initData;
     }
 
     try {
@@ -38,6 +62,7 @@
         ...options,
         headers
       });
+
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -852,12 +877,20 @@
   // ==========================================================
   async function initApp() {
     // Configure Telegram WebApp
-    if (tg) {
-      tg.ready();
-      tg.expand();
+    if (window.Telegram?.WebApp) {
+      const tgApp = window.Telegram.WebApp;
+      tgApp.ready();
+      tgApp.expand();
       try {
-        tg.enableClosingConfirmation();
+        tgApp.enableClosingConfirmation();
       } catch (e) {}
+    }
+
+    // Give Telegram SDK a short moment to parse hash/params if needed
+    let initData = getTelegramInitData();
+    if (!initData && window.Telegram) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      initData = getTelegramInitData();
     }
 
     // Authenticate and load initial profile
@@ -890,6 +923,7 @@
       }
     }
   }
+
 
 
 
