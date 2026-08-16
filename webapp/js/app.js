@@ -1737,18 +1737,23 @@
       }
     }
 
-    // Give Telegram SDK enough time to parse hash/params if needed (up to 1500ms)
-    let initData = getTelegramInitData();
-    let retries = 0;
-    while (!initData && retries < 15) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      initData = getTelegramInitData();
-      retries++;
-    }
-
     setupSettingsChips();
     setupLogicToggle();
     setupLoginForm();
+
+    // Check if we have web token or telegram initData
+    let authToken = getWebAuthToken();
+    let initData = getTelegramInitData();
+
+    // If neither exists and in telegram, try short wait
+    if (!authToken && !initData && window.Telegram?.WebApp) {
+      let retries = 0;
+      while (!initData && retries < 5) {
+        await new Promise(resolve => setTimeout(resolve, 80));
+        initData = getTelegramInitData();
+        retries++;
+      }
+    }
 
     // Authenticate and load initial profile
     try {
