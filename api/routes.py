@@ -9,9 +9,19 @@ from sqlalchemy import select, delete, func, or_
 
 from core.audit import build_audit_event
 from core.config import settings
-from database.db import async_session_maker
+from database.db import async_session_maker, hash_password, password_needs_rehash, verify_password
 import json
-from database.models import Account, AuditEvent, StoppedAdSet, AppSettings, TelegramUser, EventLog, RulePreset
+from database.models import (
+    Account,
+    AuditEvent,
+    StoppedAdSet,
+    AppSettings,
+    TelegramUser,
+    EventLog,
+    RulePreset,
+    RuleGroup,
+    RuleGroupItem,
+)
 from meta_api.client import MetaClient
 from bot.handlers import parse_fb_raw_accounts, get_short_account_label
 from api.auth import get_current_user
@@ -86,6 +96,19 @@ class CreatePresetRequest(BaseModel):
     notify_tg: Optional[bool] = True
     budget_change_percent: Optional[float] = 0.0
     budget_max_daily: Optional[float] = 0.0
+
+class RuleGroupWriteRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+    preset_ids: List[int] = Field(min_length=1, max_length=50)
+
+class RuleGroupResponse(BaseModel):
+    id: int
+    name: str
+    description: str
+    preset_ids: List[int]
+    rules: List[RulePresetItem]
+    created_at: str
 
 class ApplyPresetRequest(BaseModel):
     preset_id: Optional[int] = None
@@ -193,12 +216,97 @@ def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
     }
 
 
+def _preset_response(preset: RulePreset) -> RulePresetItem:
+    try:
+        raw_conditions = json.loads(preset.conditions) if preset.conditions else []
+    except (TypeError, ValueError):
+        raw_conditions = []
+    conditions = [
+        ConditionItem(**condition)
+        for condition in raw_conditions
+        if isinstance(condition, dict)
+    ]
+    return RulePresetItem(
+        id=preset.id,
+        name=preset.name,
+        action=preset.action,
+        conditions=conditions,
+        condition_logic=preset.condition_logic or "and",
+        cooldown_minutes=preset.cooldown_minutes or 0,
+        check_interval_minutes=preset.check_interval_minutes or 5,
+        notify_tg=preset.notify_tg if preset.notify_tg is not None else True,
+        budget_change_percent=preset.budget_change_percent or 0.0,
+        budget_max_daily=preset.budget_max_daily or 0.0,
+        created_at=preset.created_at.strftime("%Y-%m-%d %H:%M") if preset.created_at else "",
+    )
+
+
+def _unique_preset_ids(preset_ids: List[int]) -> List[int]:
+    return list(dict.fromkeys(preset_ids))
+
+
+def _clean_rule_group_name(value: str) -> str:
+    name = value.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Введите название группы.")
+    return name
+
+
+async def _get_owned_presets(session, owner_id: str, preset_ids: List[int]) -> List[RulePreset]:
+    ordered_ids = _unique_preset_ids(preset_ids)
+    result = await session.execute(
+        select(RulePreset).where(
+            RulePreset.owner_id == owner_id,
+            RulePreset.id.in_(ordered_ids),
+        )
+    )
+    by_id = {preset.id: preset for preset in result.scalars().all()}
+    missing_ids = [preset_id for preset_id in ordered_ids if preset_id not in by_id]
+    if missing_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Правила не найдены или недоступны: {', '.join(map(str, missing_ids))}",
+        )
+    return [by_id[preset_id] for preset_id in ordered_ids]
+
+
+def _rule_group_response(group: RuleGroup, presets: List[RulePreset]) -> RuleGroupResponse:
+    return RuleGroupResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description or "",
+        preset_ids=[preset.id for preset in presets],
+        rules=[_preset_response(preset) for preset in presets],
+        created_at=group.created_at.strftime("%Y-%m-%d %H:%M") if group.created_at else "",
+    )
+
+
+async def _load_group_presets(session, group_ids: List[int]) -> Dict[int, List[RulePreset]]:
+    if not group_ids:
+        return {}
+    item_rows = (
+        await session.execute(
+            select(RuleGroupItem)
+            .where(RuleGroupItem.group_id.in_(group_ids))
+            .order_by(RuleGroupItem.group_id, RuleGroupItem.position, RuleGroupItem.id)
+        )
+    ).scalars().all()
+    preset_ids = list(dict.fromkeys(item.preset_id for item in item_rows))
+    presets = (
+        await session.execute(select(RulePreset).where(RulePreset.id.in_(preset_ids)))
+    ).scalars().all() if preset_ids else []
+    by_id = {preset.id: preset for preset in presets}
+    grouped: Dict[int, List[RulePreset]] = {group_id: [] for group_id in group_ids}
+    for item in item_rows:
+        preset = by_id.get(item.preset_id)
+        if preset is not None:
+            grouped[item.group_id].append(preset)
+    return grouped
+
+
 # ----------------------------------------------------
 # Endpoints
 # ----------------------------------------------------
-
-import uuid
-from database.db import hash_password, password_needs_rehash, verify_password
 
 @router.post("/auth/login", response_model=LoginResponse)
 async def login_user(req: LoginRequest):
@@ -484,10 +592,104 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
                 acc.active_rules = json.dumps(remaining_rules)
                 if not remaining_rules:
                     acc.rules_enabled = False
-        
+
+        await session.execute(delete(RuleGroupItem).where(RuleGroupItem.preset_id == preset_id))
         await session.execute(delete(RulePreset).where(RulePreset.id == preset_id))
         await session.commit()
         return {"success": True, "message": "Пресет удален"}
+
+
+@router.get("/rule-groups", response_model=List[RuleGroupResponse])
+async def list_rule_groups(user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        groups = (
+            await session.execute(
+                select(RuleGroup)
+                .where(RuleGroup.owner_id == user.telegram_id)
+                .order_by(RuleGroup.id.desc())
+            )
+        ).scalars().all()
+        presets_by_group = await _load_group_presets(session, [group.id for group in groups])
+        return [
+            _rule_group_response(group, presets_by_group.get(group.id, []))
+            for group in groups
+        ]
+
+
+@router.post("/rule-groups", response_model=RuleGroupResponse)
+async def create_rule_group(
+    payload: RuleGroupWriteRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    async with async_session_maker() as session:
+        presets = await _get_owned_presets(session, user.telegram_id, payload.preset_ids)
+        group = RuleGroup(
+            owner_id=user.telegram_id,
+            name=_clean_rule_group_name(payload.name),
+            description=payload.description.strip(),
+        )
+        session.add(group)
+        await session.flush()
+        session.add_all(
+            RuleGroupItem(group_id=group.id, preset_id=preset.id, position=position)
+            for position, preset in enumerate(presets)
+        )
+        await session.commit()
+        await session.refresh(group)
+        return _rule_group_response(group, presets)
+
+
+@router.put("/rule-groups/{group_id}", response_model=RuleGroupResponse)
+async def update_rule_group(
+    group_id: int,
+    payload: RuleGroupWriteRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    async with async_session_maker() as session:
+        group = (
+            await session.execute(
+                select(RuleGroup).where(
+                    RuleGroup.id == group_id,
+                    RuleGroup.owner_id == user.telegram_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not group:
+            raise HTTPException(status_code=404, detail="Группа правил не найдена.")
+
+        presets = await _get_owned_presets(session, user.telegram_id, payload.preset_ids)
+        group.name = _clean_rule_group_name(payload.name)
+        group.description = payload.description.strip()
+        await session.execute(delete(RuleGroupItem).where(RuleGroupItem.group_id == group.id))
+        session.add_all(
+            RuleGroupItem(group_id=group.id, preset_id=preset.id, position=position)
+            for position, preset in enumerate(presets)
+        )
+        await session.commit()
+        await session.refresh(group)
+        return _rule_group_response(group, presets)
+
+
+@router.delete("/rule-groups/{group_id}")
+async def delete_rule_group(
+    group_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    async with async_session_maker() as session:
+        group = (
+            await session.execute(
+                select(RuleGroup).where(
+                    RuleGroup.id == group_id,
+                    RuleGroup.owner_id == user.telegram_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not group:
+            raise HTTPException(status_code=404, detail="Группа правил не найдена.")
+        await session.execute(delete(RuleGroupItem).where(RuleGroupItem.group_id == group.id))
+        await session.delete(group)
+        await session.commit()
+        return {"success": True, "message": "Группа удалена. Назначенные правила сохранены в кабинетах."}
 
 
 @router.post("/accounts/{account_id}/assign-rule")
@@ -539,6 +741,75 @@ async def assign_rule_to_account(
             "active_rules": active_rules,
             "rules_enabled": acc.rules_enabled,
             "message": f"Правило '{new_rule['name']}' успешно добавлено к кабинету"
+        }
+
+
+@router.post("/accounts/{account_id}/assign-rule-group/{group_id}")
+async def assign_rule_group_to_account(
+    account_id: str,
+    group_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Atomically attach every rule in a reusable group, skipping duplicates."""
+
+    async with async_session_maker() as session:
+        acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        account_stmt = select(Account).where(Account.account_id == acc_id)
+        if user.role != "admin":
+            account_stmt = account_stmt.where(Account.owner_id == user.telegram_id)
+        account = (await session.execute(account_stmt)).scalar_one_or_none()
+        if not account:
+            raise HTTPException(status_code=404, detail="Кабинет не найден.")
+
+        group = (
+            await session.execute(
+                select(RuleGroup).where(
+                    RuleGroup.id == group_id,
+                    RuleGroup.owner_id == account.owner_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not group:
+            raise HTTPException(status_code=404, detail="Группа правил не найдена.")
+
+        group_items = (
+            await session.execute(
+                select(RuleGroupItem)
+                .where(RuleGroupItem.group_id == group.id)
+                .order_by(RuleGroupItem.position, RuleGroupItem.id)
+            )
+        ).scalars().all()
+        if not group_items:
+            raise HTTPException(status_code=400, detail="В группе нет правил.")
+
+        presets = await _get_owned_presets(
+            session,
+            account.owner_id,
+            [item.preset_id for item in group_items],
+        )
+        active_rules = _load_active_rules(account.active_rules)
+        attached_ids = {rule.get("preset_id") for rule in active_rules}
+        added_presets = [preset for preset in presets if preset.id not in attached_ids]
+        active_rules.extend(_preset_snapshot(preset) for preset in added_presets)
+        account.active_rules = json.dumps(active_rules)
+        account.rules_enabled = bool(active_rules)
+        await session.commit()
+
+        skipped_count = len(presets) - len(added_presets)
+        message = (
+            f"Группа '{group.name}' назначена: добавлено правил — {len(added_presets)}"
+            if added_presets
+            else f"Все правила группы '{group.name}' уже назначены кабинету"
+        )
+        return {
+            "account_id": account.account_id,
+            "group_id": group.id,
+            "group_name": group.name,
+            "added_count": len(added_presets),
+            "skipped_count": skipped_count,
+            "active_rules": active_rules,
+            "rules_enabled": account.rules_enabled,
+            "message": message,
         }
 
 

@@ -17,7 +17,16 @@ from api.auth import validate_telegram_init_data
 from api.server import create_app
 from core.config import settings
 from database.db import Base, verify_password
-from database.models import Account, AppSettings, AuditEvent, RulePreset, StoppedAdSet, TelegramUser
+from database.models import (
+    Account,
+    AppSettings,
+    AuditEvent,
+    RuleGroup,
+    RuleGroupItem,
+    RulePreset,
+    StoppedAdSet,
+    TelegramUser,
+)
 
 
 def generate_valid_telegram_init_data(
@@ -335,6 +344,122 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(d_resp.status_code, 200)
             self.assertEqual(d_resp.json()["active_rules"], [])
             self.assertFalse(d_resp.json()["rules_enabled"])
+
+    async def test_rule_groups_are_isolated_editable_and_assigned_atomically(self):
+        async with self.test_session_maker() as session:
+            buyer_presets = [
+                RulePreset(
+                    owner_id="8948797431",
+                    name="Stop no leads",
+                    action="turn_off",
+                    conditions=json.dumps([{"metric": "spend", "operator": "gte", "value": 10}]),
+                ),
+                RulePreset(
+                    owner_id="8948797431",
+                    name="Notify high CPL",
+                    action="notify_only",
+                    conditions=json.dumps([{"metric": "cpl", "operator": "gte", "value": 7}]),
+                ),
+            ]
+            foreign_preset = RulePreset(
+                owner_id="8634201356",
+                name="Admin private rule",
+                action="turn_off",
+                conditions="[]",
+            )
+            session.add_all([*buyer_presets, foreign_preset])
+            await session.commit()
+            for preset in [*buyer_presets, foreign_preset]:
+                await session.refresh(preset)
+            buyer_ids = [preset.id for preset in buyer_presets]
+            foreign_id = foreign_preset.id
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        admin_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8634201356, "first_name": "Admin", "username": "admin_user"},
+        )
+        buyer_headers = {"Authorization": f"tma {buyer_data}"}
+        admin_headers = {"Authorization": f"tma {admin_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            foreign_response = await client.post(
+                "/api/rule-groups",
+                headers=buyer_headers,
+                json={"name": "Invalid", "preset_ids": [foreign_id]},
+            )
+            created = await client.post(
+                "/api/rule-groups",
+                headers=buyer_headers,
+                json={
+                    "name": "  Launch safety  ",
+                    "description": "Start-of-day protection",
+                    "preset_ids": [buyer_ids[0], buyer_ids[1], buyer_ids[0]],
+                },
+            )
+
+            self.assertEqual(foreign_response.status_code, 400)
+            self.assertEqual(created.status_code, 200)
+            group = created.json()
+            self.assertEqual(group["name"], "Launch safety")
+            self.assertEqual(group["preset_ids"], buyer_ids)
+            self.assertEqual([rule["name"] for rule in group["rules"]], ["Stop no leads", "Notify high CPL"])
+
+            group_id = group["id"]
+            buyer_list = await client.get("/api/rule-groups", headers=buyer_headers)
+            admin_list = await client.get("/api/rule-groups", headers=admin_headers)
+            forbidden_update = await client.put(
+                f"/api/rule-groups/{group_id}",
+                headers=admin_headers,
+                json={"name": "Hijack", "preset_ids": [foreign_id]},
+            )
+            self.assertEqual(len(buyer_list.json()), 1)
+            self.assertEqual(admin_list.json(), [])
+            self.assertEqual(forbidden_update.status_code, 404)
+
+            single_assign = await client.post(
+                "/api/accounts/act_1018756607700064/assign-rule",
+                headers=buyer_headers,
+                json={"preset_id": buyer_ids[0]},
+            )
+            grouped_assign = await client.post(
+                f"/api/accounts/act_1018756607700064/assign-rule-group/{group_id}",
+                headers=buyer_headers,
+            )
+            repeated_assign = await client.post(
+                f"/api/accounts/act_1018756607700064/assign-rule-group/{group_id}",
+                headers=buyer_headers,
+            )
+            self.assertEqual(single_assign.status_code, 200)
+            self.assertEqual(grouped_assign.status_code, 200)
+            self.assertEqual(grouped_assign.json()["added_count"], 1)
+            self.assertEqual(grouped_assign.json()["skipped_count"], 1)
+            self.assertEqual(len(grouped_assign.json()["active_rules"]), 2)
+            self.assertEqual(repeated_assign.json()["added_count"], 0)
+            self.assertEqual(repeated_assign.json()["skipped_count"], 2)
+
+            updated = await client.put(
+                f"/api/rule-groups/{group_id}",
+                headers=buyer_headers,
+                json={"name": "Launch bundle", "description": "Updated", "preset_ids": list(reversed(buyer_ids))},
+            )
+            self.assertEqual(updated.status_code, 200)
+            self.assertEqual(updated.json()["preset_ids"], list(reversed(buyer_ids)))
+
+            deleted = await client.delete(f"/api/rule-groups/{group_id}", headers=buyer_headers)
+            accounts = await client.get("/api/accounts", headers=buyer_headers)
+            self.assertEqual(deleted.status_code, 200)
+            self.assertEqual(len(accounts.json()[0]["active_rules"]), 2)
+
+        async with self.test_session_maker() as session:
+            self.assertIsNone(await session.get(RuleGroup, group_id))
+            group_items = (
+                await session.execute(select(RuleGroupItem).where(RuleGroupItem.group_id == group_id))
+            ).scalars().all()
+            self.assertEqual(group_items, [])
 
     async def test_parse_raw_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}

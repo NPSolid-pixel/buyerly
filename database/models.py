@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
 from database.db import Base
 
 def utcnow():
@@ -53,6 +53,40 @@ class RulePreset(Base):
 
     def __repr__(self):
         return f"<RulePreset(id={self.id}, name='{self.name}', action='{self.action}')>"
+
+
+class RuleGroup(Base):
+    """A reusable, ordered bundle of rule presets owned by one buyer."""
+
+    __tablename__ = "rule_groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, default="", nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<RuleGroup(id={self.id}, name='{self.name}', owner='{self.owner_id}')>"
+
+
+class RuleGroupItem(Base):
+    """Ordered membership table between groups and executable presets."""
+
+    __tablename__ = "rule_group_items"
+    __table_args__ = (
+        UniqueConstraint("group_id", "preset_id", name="uq_rule_group_preset"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_id = Column(Integer, ForeignKey("rule_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    preset_id = Column(Integer, ForeignKey("rule_presets.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<RuleGroupItem(group={self.group_id}, preset={self.preset_id}, position={self.position})>"
 
 
 class Account(Base):
