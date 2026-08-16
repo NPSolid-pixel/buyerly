@@ -95,7 +95,7 @@ class RuleEngine:
         registrations = int(adset.get("registrations", 0))
         total_conversions = leads + registrations
         cpa = (spend / total_conversions) if total_conversions > 0 else 0.0
-        is_active = status == "ACTIVE" or effective_status == "ACTIVE"
+        is_active = status == "ACTIVE" and effective_status == "ACTIVE"
 
         def noop(reason="Метрики в пределах нормы."):
             return RuleEvaluationResult(
@@ -127,9 +127,6 @@ class RuleEngine:
         if not active_rules or not isinstance(active_rules, list) or len(active_rules) == 0:
             return noop("Правила не настроены.")
 
-        if not is_active:
-            return noop("Адсет не активен.")
-
         def get_action_priority(action: RuleAction) -> int:
             priorities = {
                 RuleAction.STOP: 100,
@@ -153,6 +150,13 @@ class RuleEngine:
         triggered_actions = []
 
         for rule in active_rules:
+            action_type = rule.get("action", "turn_off")
+            if action_type == "turn_on":
+                if status != "PAUSED":
+                    continue
+            elif not is_active:
+                continue
+
             conditions = rule.get("conditions", [])
             if not conditions:
                 continue
@@ -204,7 +208,6 @@ class RuleEngine:
             triggered = any_match if condition_logic == "or" else all_match
 
             if triggered:
-                action_type = rule.get("action", "turn_off")
                 rule_action = action_map.get(action_type, RuleAction.STOP)
                 rule_name = rule.get("name", "Unknown Rule")
                 reason_str = f"[{rule_name}] " + ", ".join(matched_reasons)

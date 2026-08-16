@@ -53,8 +53,8 @@ class TestRuleEngine(unittest.TestCase):
         self.assertEqual(res.action, RuleAction.NOOP)
         self.assertIn("Правила не настроены", res.reason)
 
-    def test_inactive_adset_returns_noop(self):
-        """Неактивный адсет — всегда NOOP."""
+    def test_inactive_adset_is_ignored_by_turn_off(self):
+        """A paused ad set must not receive actions intended for active delivery."""
         self.set_rule(conditions=[{"metric": "spend", "operator": "gte", "value": 1.0}])
         adset = {"adset_id": "1", "adset_name": "Test", "status": "PAUSED", "spend": 100.0, "leads": 0, "registrations": 0}
         res = RuleEngine.evaluate(adset, self.account)
@@ -244,9 +244,19 @@ class TestRuleEngine(unittest.TestCase):
             conditions=[{"metric": "leads", "operator": "gte", "value": 1.0}],
         )
         
-        adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 5.0, "leads": 2, "registrations": 0}
+        adset = {"adset_id": "1", "adset_name": "Test", "status": "PAUSED", "spend": 5.0, "leads": 2, "registrations": 0}
         res = RuleEngine.evaluate(adset, self.account)
         self.assertEqual(res.action, RuleAction.AUTO_REACTIVATE)
+
+    def test_turn_on_does_not_touch_active_adset(self):
+        self.set_rule(
+            action="turn_on",
+            conditions=[{"metric": "leads", "operator": "gte", "value": 1.0}],
+        )
+
+        adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 5.0, "leads": 2, "registrations": 0}
+        res = RuleEngine.evaluate(adset, self.account)
+        self.assertEqual(res.action, RuleAction.NOOP)
 
     # --------------------------------------------------------
     # Time window: проверка передачи insights_by_window

@@ -324,6 +324,42 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mock_meta.budget_changes[0][0], "adset_2")
         self.assertAlmostEqual(mock_meta.budget_changes[0][1], 60.0, places=1)
 
+    async def test_turn_on_rule_reactivates_paused_adset(self):
+        async with self.test_session_maker() as session:
+            res = await session.execute(select(Account).where(Account.account_id == self.account_id))
+            acc = res.scalar_one()
+            acc.active_rules = json.dumps([
+                {
+                    "preset_id": 7,
+                    "name": "Reactivate after lead",
+                    "action": "turn_on",
+                    "conditions": [
+                        {"metric": "leads", "operator": "gte", "value": 1.0}
+                    ],
+                    "logic": "and",
+                    "check_interval": 5,
+                    "notify_tg": False,
+                }
+            ])
+            await session.commit()
+
+        mock_meta = MockMetaClient()
+        mock_meta.adsets_state["adset_1"]["status"] = "PAUSED"
+        mock_meta.adsets_state["adset_1"]["effective_status"] = "PAUSED"
+        mock_meta.adsets_state["adset_1"]["leads"] = 2
+
+        sent_alerts = []
+
+        async def mock_notifier(**kwargs):
+            sent_alerts.append(kwargs)
+
+        worker = MonitoringWorker(meta_client=mock_meta, telegram_notifier=mock_notifier)
+        stats = await worker.run_cycle()
+
+        self.assertEqual(stats["adsets_reactivated"], 1)
+        self.assertEqual(mock_meta.status_changes, [("adset_1", "ACTIVE")])
+        self.assertNotIn("AUTO_REACTIVATE", [alert["event_type"] for alert in sent_alerts])
+
     async def test_account_disabled_alert(self):
         """Если кабинет заблокирован в Meta → алерт ACCOUNT_ISSUE."""
         mock_meta = MockMetaClient()

@@ -64,6 +64,7 @@ class MonitoringWorker:
             "rules_checked": 0,
             "adsets_checked": 0,
             "adsets_stopped": 0,
+            "adsets_reactivated": 0,
             "budgets_changed": 0,
             "proposals_sent": 0,
             "starts_notified": 0,
@@ -306,10 +307,11 @@ class MonitoringWorker:
                                     access_token=acc.access_token,
                                     status="ACTIVE"
                                 )
+                                stats["adsets_reactivated"] += 1
                                 
                                 logger.info(f"AUTO REACTIVATED AdSet: {a_id} ({eval_res.adset_name})")
 
-                                if self.telegram_notifier:
+                                if should_notify_tg and self.telegram_notifier:
                                     await self.telegram_notifier(
                                         event_type="AUTO_REACTIVATE",
                                         eval_result=eval_res,
