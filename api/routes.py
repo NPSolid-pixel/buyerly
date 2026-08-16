@@ -36,6 +36,17 @@ meta_client = MetaClient()
 _summary_cache: Dict[str, Any] = {}
 SUMMARY_CACHE_TTL = 120  # 2 minutes cache
 
+SUMMARY_METRIC_DEFINITIONS = {
+    "spend": "Сумма spend из Meta по всем синхронизированным ad set за выбранный период.",
+    "results": "Лиды + регистрации. Покупки показываются отдельно и в results не входят.",
+    "cost_per_result": "Spend / (лиды + регистрации). Если результатов нет, значение отсутствует.",
+    "cost_per_lead": "Spend / лиды. Если лидов нет, значение отсутствует.",
+    "cost_per_registration": "Spend / регистрации. Если регистраций нет, значение отсутствует.",
+    "cost_per_purchase": "Spend / покупки. Если покупок нет, значение отсутствует.",
+    "ctr": "Клики / показы × 100.",
+    "cpc": "Spend / клики.",
+}
+
 
 # ----------------------------------------------------
 # Pydantic Schemas
@@ -193,6 +204,26 @@ def _utc_iso(value: Optional[datetime]) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _cost_or_none(spend: float, count: int) -> Optional[float]:
+    return round(spend / count, 2) if count > 0 else None
+
+
+def _summary_with_cache_metadata(
+    payload: Dict[str, Any],
+    *,
+    is_cached: bool,
+    age_seconds: float = 0.0,
+) -> Dict[str, Any]:
+    return {
+        **payload,
+        "cache": {
+            "is_cached": is_cached,
+            "age_seconds": round(max(0.0, age_seconds), 1),
+            "ttl_seconds": SUMMARY_CACHE_TTL,
+        },
+    }
 
 
 def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
@@ -997,13 +1028,19 @@ async def get_summary_report(
     if not force and cache_key in _summary_cache:
         cached_ts, cached_data = _summary_cache[cache_key]
         if now_ts - cached_ts < SUMMARY_CACHE_TTL:
-            return cached_data
+            return _summary_with_cache_metadata(
+                cached_data,
+                is_cached=True,
+                age_seconds=now_ts - cached_ts,
+            )
 
     async with async_session_maker() as session:
         accounts = await get_user_accounts(session, user)
         if not accounts:
             empty_res = {
                 "period": period,
+                "generated_at": _utc_iso(datetime.now(timezone.utc)),
+                "source": "Meta Marketing API",
                 "total_spend": 0.0,
                 "total_clicks": 0,
                 "total_leads": 0,
@@ -1013,11 +1050,25 @@ async def get_summary_report(
                 "avg_cpa": 0.0,
                 "avg_cpc": 0.0,
                 "avg_ctr": 0.0,
+                "total_results": 0,
+                "avg_cost_per_result": None,
+                "cost_per_lead": None,
+                "cost_per_registration": None,
+                "cost_per_purchase": None,
                 "accounts_count": 0,
-                "accounts": []
+                "accounts": [],
+                "data_quality": {
+                    "status": "unavailable",
+                    "accounts_total": 0,
+                    "accounts_synced": 0,
+                    "accounts_failed": 0,
+                    "accounts_blocked": 0,
+                    "metrics_coverage_percent": 0.0,
+                },
+                "metric_definitions": SUMMARY_METRIC_DEFINITIONS,
             }
             _summary_cache[cache_key] = (now_ts, empty_res)
-            return empty_res
+            return _summary_with_cache_metadata(empty_res, is_cached=False)
 
         total_spend = 0.0
         total_clicks = 0
@@ -1025,12 +1076,16 @@ async def get_summary_report(
         total_leads = 0
         total_regs = 0
         total_purchases = 0
+        accounts_synced = 0
+        accounts_failed = 0
+        accounts_blocked = 0
 
         account_results = []
 
         for acc in accounts:
             short_name = get_short_account_label(acc.name, acc.account_id)
             if not acc.is_active or acc.account_status in [2, 101]:
+                accounts_blocked += 1
                 account_results.append({
                     "account_id": acc.account_id,
                     "name": acc.name,
@@ -1046,12 +1101,19 @@ async def get_summary_report(
                     "registrations": 0,
                     "purchases": 0,
                     "total_conversions": 0,
+                    "results": 0,
                     "cpa": 0.0,
+                    "cost_per_result": None,
+                    "cost_per_lead": None,
+                    "cost_per_registration": None,
+                    "cost_per_purchase": None,
                     "cpc": 0.0,
                     "ctr": 0.0,
                     "adsets": [],
                     "has_error": False,
-                    "is_banned": True
+                    "is_banned": True,
+                    "data_status": "blocked",
+                    "data_status_label": "Meta не отдаёт метрики: кабинет заблокирован",
                 })
                 continue
 
@@ -1078,6 +1140,7 @@ async def get_summary_report(
                 total_leads += acc_leads
                 total_regs += acc_regs
                 total_purchases += acc_purchases
+                accounts_synced += 1
 
                 account_results.append({
                     "account_id": acc.account_id,
@@ -1094,15 +1157,23 @@ async def get_summary_report(
                     "registrations": acc_regs,
                     "purchases": acc_purchases,
                     "total_conversions": acc_conv,
+                    "results": acc_conv,
                     "cpa": round(acc_cpa, 2),
+                    "cost_per_result": _cost_or_none(acc_spend, acc_conv),
+                    "cost_per_lead": _cost_or_none(acc_spend, acc_leads),
+                    "cost_per_registration": _cost_or_none(acc_spend, acc_regs),
+                    "cost_per_purchase": _cost_or_none(acc_spend, acc_purchases),
                     "cpc": round(acc_cpc, 2),
                     "ctr": round(acc_ctr, 2),
                     "adsets": adsets,
                     "has_error": False,
-                    "is_banned": False
+                    "is_banned": False,
+                    "data_status": "synced",
+                    "data_status_label": "Метрики получены из Meta",
                 })
             except Exception as e:
                 logger.error(f"Error fetching insights for {acc.account_id}: {e}")
+                accounts_failed += 1
                 account_results.append({
                     "account_id": acc.account_id,
                     "name": acc.name,
@@ -1118,21 +1189,32 @@ async def get_summary_report(
                     "registrations": 0,
                     "purchases": 0,
                     "total_conversions": 0,
+                    "results": 0,
                     "cpa": 0.0,
+                    "cost_per_result": None,
+                    "cost_per_lead": None,
+                    "cost_per_registration": None,
+                    "cost_per_purchase": None,
                     "cpc": 0.0,
                     "ctr": 0.0,
                     "adsets": [],
                     "has_error": True,
-                    "is_banned": False
+                    "is_banned": False,
+                    "data_status": "error",
+                    "data_status_label": "Meta не вернула метрики",
                 })
 
         total_conversions = total_leads + total_regs
         avg_cpa = (total_spend / total_conversions) if total_conversions > 0 else 0.0
         avg_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0.0
         avg_ctr = ((total_clicks / total_impressions) * 100) if total_impressions > 0 else 0.0
+        metrics_coverage = round((accounts_synced / len(accounts)) * 100, 1) if accounts else 0.0
+        quality_status = "complete" if accounts_synced == len(accounts) else ("partial" if accounts_synced else "unavailable")
 
         res_data = {
             "period": period,
+            "generated_at": _utc_iso(datetime.now(timezone.utc)),
+            "source": "Meta Marketing API",
             "total_spend": round(total_spend, 2),
             "total_clicks": total_clicks,
             "total_leads": total_leads,
@@ -1142,11 +1224,25 @@ async def get_summary_report(
             "avg_cpa": round(avg_cpa, 2),
             "avg_cpc": round(avg_cpc, 2),
             "avg_ctr": round(avg_ctr, 2),
+            "total_results": total_conversions,
+            "avg_cost_per_result": _cost_or_none(total_spend, total_conversions),
+            "cost_per_lead": _cost_or_none(total_spend, total_leads),
+            "cost_per_registration": _cost_or_none(total_spend, total_regs),
+            "cost_per_purchase": _cost_or_none(total_spend, total_purchases),
             "accounts_count": len(accounts),
-            "accounts": account_results
+            "accounts": account_results,
+            "data_quality": {
+                "status": quality_status,
+                "accounts_total": len(accounts),
+                "accounts_synced": accounts_synced,
+                "accounts_failed": accounts_failed,
+                "accounts_blocked": accounts_blocked,
+                "metrics_coverage_percent": metrics_coverage,
+            },
+            "metric_definitions": SUMMARY_METRIC_DEFINITIONS,
         }
         _summary_cache[cache_key] = (now_ts, res_data)
-        return res_data
+        return _summary_with_cache_metadata(res_data, is_cached=False)
 
 
 
