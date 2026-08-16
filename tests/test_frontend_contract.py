@@ -8,6 +8,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         webapp = Path(__file__).parents[1] / "webapp"
         cls.script = (webapp / "js" / "app.js").read_text()
         cls.index = (webapp / "index.html").read_text()
+        cls.styles = (webapp / "css" / "styles.css").read_text()
 
     def test_frontend_uses_current_rule_endpoints(self):
         self.assertNotIn("/apply-preset", self.script)
@@ -45,3 +46,10 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("window.Telegram?.WebApp?.initData", self.script)
         self.assertIn("`tma ${telegramInitData}`", self.script)
         self.assertIn("!authToken && !telegramInitData", self.script)
+
+    def test_desktop_shell_uses_quiet_palette_and_sidebar_grid(self):
+        self.assertIn("QUIET GRAPHITE PALETTE", self.styles)
+        self.assertIn("grid-template-columns: 232px minmax(0, 1fr)", self.styles)
+        self.assertIn("--tg-bg: #0d0e11", self.styles)
+        self.assertNotIn("TOKYO NIGHT COLOR PALETTE", self.styles)
+        self.assertNotIn("appEl.style.display = 'block'", self.script)

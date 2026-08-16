@@ -254,16 +254,16 @@
               </button>
             `).join('')}
             <button type="button" class="card-limits-btn empty" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Добавить ещё одно правило">
-              <span class="plus-icon" style="font-size:14px; font-weight:700; color:#7aa2f7;">+</span>
-              <span class="limits-value" style="color:#7aa2f7; font-weight:600;">Добавить</span>
+              <span class="plus-icon" style="font-size:14px; font-weight:700; color:var(--tg-link);">+</span>
+              <span class="limits-value" style="color:var(--tg-link); font-weight:600;">Добавить</span>
             </button>
           </div>
         `;
       } else {
         rulePillHtml = `
           <button type="button" class="card-limits-btn empty" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Привязать правило к кабинету">
-            <span class="plus-icon" style="font-size:14px; font-weight:700; color:#7aa2f7;">+</span>
-            <span class="limits-value" style="color:#7aa2f7; font-weight:600;">Добавить правило</span>
+            <span class="plus-icon" style="font-size:14px; font-weight:700; color:var(--tg-link);">+</span>
+            <span class="limits-value" style="color:var(--tg-link); font-weight:600;">Добавить правило</span>
           </button>
         `;
       }
@@ -404,7 +404,7 @@
       if (p.action === 'increase_budget' || p.action === 'decrease_budget') {
         const sign = p.action === 'increase_budget' ? '+' : '-';
         const cap = p.budget_max_daily > 0 ? ` · Макс: $${p.budget_max_daily}/день` : '';
-        budgetInfoHtml = `<div style="font-size:11.5px; color:#7aa2f7; font-weight:600;">💰 Шаг: ${sign}${p.budget_change_percent || 20}%${cap}</div>`;
+        budgetInfoHtml = `<div style="font-size:11.5px; color:var(--tg-link); font-weight:600;">💰 Шаг: ${sign}${p.budget_change_percent || 20}%${cap}</div>`;
       }
 
       return `
@@ -1712,7 +1712,8 @@
         loginScreen.classList.add('hidden');
       }
       if (appEl) {
-        appEl.style.display = 'block';
+        // Let responsive CSS choose flex on mobile and grid on desktop.
+        appEl.style.display = '';
         appEl.classList.remove('hidden');
       }
 
