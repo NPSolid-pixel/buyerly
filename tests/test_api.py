@@ -112,7 +112,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(data), 1)
             self.assertEqual(data[0]["account_id"], "act_1018756607700064")
             self.assertEqual(data[0]["name"], "Швеция 1")
-            self.assertEqual(data[0]["rule_condition_logic"], "and")
+            self.assertEqual(data[0]["active_rules"], [])
 
     async def test_toggle_rules_and_presets(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
@@ -146,16 +146,19 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(p_data["budget_change_percent"], 25.0)
             self.assertEqual(len(p_data["conditions"]), 2)
 
-            # Apply Preset to Account
+            # Assign Preset to Account
             apply_payload = {
                 "preset_id": p_data["id"]
             }
-            a_resp = await client.post("/api/accounts/act_1018756607700064/apply-preset", headers=headers, json=apply_payload)
+            a_resp = await client.post("/api/accounts/act_1018756607700064/assign-rule", headers=headers, json=apply_payload)
             self.assertEqual(a_resp.status_code, 200)
             a_data = a_resp.json()
-            self.assertEqual(a_data["rule_action"], "increase_budget")
-            self.assertEqual(a_data["rule_condition_logic"], "or")
-            self.assertEqual(a_data["rule_budget_change_percent"], 25.0)
+            self.assertTrue(a_data["rules_enabled"])
+            self.assertEqual(len(a_data["active_rules"]), 1)
+            assigned_rule = a_data["active_rules"][0]
+            self.assertEqual(assigned_rule["action"], "increase_budget")
+            self.assertEqual(assigned_rule["logic"], "or")
+            self.assertEqual(assigned_rule["budget_change_percent"], 25.0)
 
     async def test_parse_raw_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
@@ -215,4 +218,3 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             # Request without Telegram initData header
             resp = await client.get("/api/me")
             self.assertEqual(resp.status_code, 401)
-

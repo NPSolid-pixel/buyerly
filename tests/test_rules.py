@@ -1,3 +1,4 @@
+import json
 import unittest
 from database.models import Account
 from rules.engine import RuleEngine, RuleAction
@@ -12,9 +13,33 @@ class TestRuleEngine(unittest.TestCase):
             timezone_name="UTC",
             owner_id="123",
             rules_enabled=True,
-            rule_action="turn_off",
-            rule_conditions="[]",
-            rule_condition_logic="and"
+            active_rules="[]",
+        )
+
+    def set_rule(
+        self,
+        *,
+        action="turn_off",
+        conditions=None,
+        logic="and",
+        budget_change_percent=0.0,
+        budget_max_daily=0.0,
+    ):
+        """Configure one rule using the current multi-rule account schema."""
+        self.account.active_rules = json.dumps(
+            [
+                {
+                    "preset_id": 1,
+                    "name": "Test rule",
+                    "action": action,
+                    "conditions": conditions or [],
+                    "logic": logic,
+                    "cooldown_minutes": 0,
+                    "notify_tg": True,
+                    "budget_change_percent": budget_change_percent,
+                    "budget_max_daily": budget_max_daily,
+                }
+            ]
         )
 
     # --------------------------------------------------------
@@ -30,7 +55,7 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_inactive_adset_returns_noop(self):
         """Неактивный адсет — всегда NOOP."""
-        self.account.rule_conditions = '[{"metric": "spend", "operator": "gte", "value": 1.0}]'
+        self.set_rule(conditions=[{"metric": "spend", "operator": "gte", "value": 1.0}])
         adset = {"adset_id": "1", "adset_name": "Test", "status": "PAUSED", "spend": 100.0, "leads": 0, "registrations": 0}
         res = RuleEngine.evaluate(adset, self.account)
         self.assertEqual(res.action, RuleAction.NOOP)
@@ -41,8 +66,10 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_spend_gte_turn_off(self):
         """Спенд >= $15 → STOP."""
-        self.account.rule_action = "turn_off"
-        self.account.rule_conditions = '[{"metric": "spend", "operator": "gte", "value": 15.0}]'
+        self.set_rule(
+            action="turn_off",
+            conditions=[{"metric": "spend", "operator": "gte", "value": 15.0}],
+        )
         
         adset_under = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 10.0, "leads": 2, "registrations": 0}
         self.assertEqual(RuleEngine.evaluate(adset_under, self.account).action, RuleAction.NOOP)
@@ -58,8 +85,10 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_cpl_notify_only(self):
         """CPL >= $7 → NOTIFY_ONLY."""
-        self.account.rule_action = "notify_only"
-        self.account.rule_conditions = '[{"metric": "cpl", "operator": "gte", "value": 7.0}]'
+        self.set_rule(
+            action="notify_only",
+            conditions=[{"metric": "cpl", "operator": "gte", "value": 7.0}],
+        )
         
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 20.0, "leads": 2, "registrations": 0}
         res = RuleEngine.evaluate(adset, self.account)
@@ -72,8 +101,12 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_leads_count_metric(self):
         """Лиды > 3 И CPL < $5 → STOP."""
-        self.account.rule_action = "turn_off"
-        self.account.rule_conditions = '[{"metric": "leads", "operator": "gte", "value": 3.0}, {"metric": "cpl", "operator": "lt", "value": 5.0}]'
+        self.set_rule(
+            conditions=[
+                {"metric": "leads", "operator": "gte", "value": 3.0},
+                {"metric": "cpl", "operator": "lt", "value": 5.0},
+            ]
+        )
         
         # 4 leads, CPL = $3 → match
         adset_match = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 12.0, "leads": 4, "registrations": 0}
@@ -89,8 +122,7 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_cpa_metric(self):
         """CPA > $10 → STOP."""
-        self.account.rule_action = "turn_off"
-        self.account.rule_conditions = '[{"metric": "cpa", "operator": "gte", "value": 10.0}]'
+        self.set_rule(conditions=[{"metric": "cpa", "operator": "gte", "value": 10.0}])
         
         # Spend $22, 1 lead + 1 reg = 2 conversions, CPA = $11
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 22.0, "leads": 1, "registrations": 1}
@@ -104,8 +136,10 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_ctr_metric(self):
         """CTR < 1.0% → NOTIFY_ONLY."""
-        self.account.rule_action = "notify_only"
-        self.account.rule_conditions = '[{"metric": "ctr", "operator": "lt", "value": 1.0}]'
+        self.set_rule(
+            action="notify_only",
+            conditions=[{"metric": "ctr", "operator": "lt", "value": 1.0}],
+        )
         
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 10.0, "leads": 0, "registrations": 0, "ctr": 0.5}
         res = RuleEngine.evaluate(adset, self.account)
@@ -118,9 +152,13 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_and_logic_all_match(self):
         """AND: Спенд >= $10 И CPR >= $5 → STOP."""
-        self.account.rule_action = "turn_off"
-        self.account.rule_condition_logic = "and"
-        self.account.rule_conditions = '[{"metric": "spend", "operator": "gte", "value": 10.0}, {"metric": "cpr", "operator": "gte", "value": 5.0}]'
+        self.set_rule(
+            logic="and",
+            conditions=[
+                {"metric": "spend", "operator": "gte", "value": 10.0},
+                {"metric": "cpr", "operator": "gte", "value": 5.0},
+            ],
+        )
         
         adset_match = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 12.0, "leads": 0, "registrations": 1}
         self.assertEqual(RuleEngine.evaluate(adset_match, self.account).action, RuleAction.STOP)
@@ -134,9 +172,13 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_or_logic_one_match(self):
         """OR: Спенд >= $20 ИЛИ Лиды >= 5 → STOP. Только спенд совпал."""
-        self.account.rule_action = "turn_off"
-        self.account.rule_condition_logic = "or"
-        self.account.rule_conditions = '[{"metric": "spend", "operator": "gte", "value": 20.0}, {"metric": "leads", "operator": "gte", "value": 5.0}]'
+        self.set_rule(
+            logic="or",
+            conditions=[
+                {"metric": "spend", "operator": "gte", "value": 20.0},
+                {"metric": "leads", "operator": "gte", "value": 5.0},
+            ],
+        )
         
         # Spend $25 (>= 20), leads = 1 (not >= 5) → OR → STOP
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 25.0, "leads": 1, "registrations": 0}
@@ -144,9 +186,13 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_or_logic_no_match(self):
         """OR: ни одно не совпало → NOOP."""
-        self.account.rule_action = "turn_off"
-        self.account.rule_condition_logic = "or"
-        self.account.rule_conditions = '[{"metric": "spend", "operator": "gte", "value": 20.0}, {"metric": "leads", "operator": "gte", "value": 5.0}]'
+        self.set_rule(
+            logic="or",
+            conditions=[
+                {"metric": "spend", "operator": "gte", "value": 20.0},
+                {"metric": "leads", "operator": "gte", "value": 5.0},
+            ],
+        )
         
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 10.0, "leads": 2, "registrations": 0}
         self.assertEqual(RuleEngine.evaluate(adset, self.account).action, RuleAction.NOOP)
@@ -157,10 +203,12 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_increase_budget_action(self):
         """CPL < $5 → INCREASE_BUDGET с процентом и потолком."""
-        self.account.rule_action = "increase_budget"
-        self.account.rule_conditions = '[{"metric": "cpl", "operator": "lt", "value": 5.0}]'
-        self.account.rule_budget_change_percent = 20.0
-        self.account.rule_budget_max_daily = 500.0
+        self.set_rule(
+            action="increase_budget",
+            conditions=[{"metric": "cpl", "operator": "lt", "value": 5.0}],
+            budget_change_percent=20.0,
+            budget_max_daily=500.0,
+        )
         
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 8.0, "leads": 3, "registrations": 0}
         res = RuleEngine.evaluate(adset, self.account)
@@ -174,10 +222,11 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_decrease_budget_action(self):
         """CPL >= $15 → DECREASE_BUDGET."""
-        self.account.rule_action = "decrease_budget"
-        self.account.rule_conditions = '[{"metric": "cpl", "operator": "gte", "value": 15.0}]'
-        self.account.rule_budget_change_percent = 30.0
-        self.account.rule_budget_max_daily = 0.0
+        self.set_rule(
+            action="decrease_budget",
+            conditions=[{"metric": "cpl", "operator": "gte", "value": 15.0}],
+            budget_change_percent=30.0,
+        )
         
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 45.0, "leads": 2, "registrations": 0}
         res = RuleEngine.evaluate(adset, self.account)
@@ -190,8 +239,10 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_turn_on_action(self):
         """turn_on → AUTO_REACTIVATE."""
-        self.account.rule_action = "turn_on"
-        self.account.rule_conditions = '[{"metric": "leads", "operator": "gte", "value": 1.0}]'
+        self.set_rule(
+            action="turn_on",
+            conditions=[{"metric": "leads", "operator": "gte", "value": 1.0}],
+        )
         
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 5.0, "leads": 2, "registrations": 0}
         res = RuleEngine.evaluate(adset, self.account)
@@ -203,8 +254,11 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_time_window_yesterday(self):
         """Условие с time_window='yesterday' использует данные из insights_by_window."""
-        self.account.rule_action = "turn_off"
-        self.account.rule_conditions = '[{"metric": "spend", "operator": "gte", "value": 50.0, "time_window": "yesterday"}]'
+        self.set_rule(
+            conditions=[
+                {"metric": "spend", "operator": "gte", "value": 50.0, "time_window": "yesterday"}
+            ]
+        )
         
         adset_today = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 5.0, "leads": 0, "registrations": 0}
         adset_yesterday = {"spend": 55.0, "leads": 3, "registrations": 1}
@@ -217,8 +271,11 @@ class TestRuleEngine(unittest.TestCase):
 
     def test_time_window_fallback_to_today(self):
         """Если insights_by_window не содержит нужного окна, используются данные today."""
-        self.account.rule_action = "turn_off"
-        self.account.rule_conditions = '[{"metric": "spend", "operator": "gte", "value": 10.0, "time_window": "last_3d"}]'
+        self.set_rule(
+            conditions=[
+                {"metric": "spend", "operator": "gte", "value": 10.0, "time_window": "last_3d"}
+            ]
+        )
         
         adset_today = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 15.0, "leads": 0, "registrations": 0}
         

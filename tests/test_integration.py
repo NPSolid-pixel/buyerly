@@ -1,4 +1,5 @@
 import asyncio
+import json
 import unittest
 from unittest.mock import AsyncMock
 from sqlalchemy import select
@@ -89,9 +90,22 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                 access_token="mock_token_123",
                 owner_id="123456789",
                 timezone_name="HST",
-                rule_action="turn_off",
-                rule_conditions='[{"metric": "spend", "operator": "gte", "value": 10.0, "time_window": "today"}, {"metric": "leads", "operator": "eq", "value": 0.0, "time_window": "today"}]',
-                rule_condition_logic="and",
+                active_rules=json.dumps([
+                    {
+                        "preset_id": 1,
+                        "name": "Stop spend without leads",
+                        "action": "turn_off",
+                        "conditions": [
+                            {"metric": "spend", "operator": "gte", "value": 10.0, "time_window": "today"},
+                            {"metric": "leads", "operator": "eq", "value": 0.0, "time_window": "today"},
+                        ],
+                        "logic": "and",
+                        "cooldown_minutes": 0,
+                        "notify_tg": True,
+                        "budget_change_percent": 0.0,
+                        "budget_max_daily": 0.0,
+                    }
+                ]),
                 rules_enabled=True,
                 is_active=True
             )
@@ -150,11 +164,22 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         async with self.test_session_maker() as session:
             res = await session.execute(select(Account).where(Account.account_id == self.account_id))
             acc = res.scalar_one()
-            acc.rule_action = "increase_budget"
-            acc.rule_conditions = '[{"metric": "cpl", "operator": "lt", "value": 5.0}, {"metric": "leads", "operator": "gte", "value": 2.0}]'
-            acc.rule_condition_logic = "and"
-            acc.rule_budget_change_percent = 20.0
-            acc.rule_budget_max_daily = 100.0
+            acc.active_rules = json.dumps([
+                {
+                    "preset_id": 2,
+                    "name": "Scale good CPL",
+                    "action": "increase_budget",
+                    "conditions": [
+                        {"metric": "cpl", "operator": "lt", "value": 5.0},
+                        {"metric": "leads", "operator": "gte", "value": 2.0},
+                    ],
+                    "logic": "and",
+                    "cooldown_minutes": 0,
+                    "notify_tg": True,
+                    "budget_change_percent": 20.0,
+                    "budget_max_daily": 100.0,
+                }
+            ])
             await session.commit()
 
         mock_meta = MockMetaClient()
