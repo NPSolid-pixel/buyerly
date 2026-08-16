@@ -99,11 +99,14 @@
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     
-    let icon = 'ℹ️';
-    if (type === 'success') icon = '✅';
-    if (type === 'error') icon = '❌';
+    let iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+    if (type === 'success') {
+      iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+    } else if (type === 'error') {
+      iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+    }
 
-    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+    toast.innerHTML = `<span>${iconSvg}</span> <span>${message}</span>`;
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -156,7 +159,7 @@
       state.accounts = data;
       renderAccounts();
     } catch (err) {
-      listEl.innerHTML = `<div class="empty-state"><p class="text-danger">❌ ${err.message}</p></div>`;
+      listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
     }
   }
 
@@ -179,10 +182,10 @@
       return true;
     });
 
-    // Update summary counts
+    // Update strip stats
     const totalCount = state.accounts.length;
-    const activeCount = state.accounts.filter(a => a.account_status === 1 && a.is_active).length;
     const rulesCount = state.accounts.filter(a => a.rules_enabled).length;
+    const activeCount = state.accounts.filter(a => a.account_status === 1 && a.is_active).length;
     const issueCount = state.accounts.filter(a => a.account_status !== 1 || !a.is_active).length;
 
     document.getElementById('countAll').textContent = totalCount;
@@ -203,14 +206,14 @@
     emptyEl.classList.add('hidden');
     listEl.innerHTML = filtered.map(acc => {
       let statusClass = 'status-active';
-      let statusText = '🟢 Активен';
+      let statusText = '<span class="status-dot dot-success"></span>Активен';
       
       if (acc.account_status === 2 || !acc.is_active) {
         statusClass = 'status-disabled';
-        statusText = '🔴 Заблокирован';
+        statusText = '<span class="status-dot dot-danger"></span>Заблокирован';
       } else if (acc.account_status === 3) {
         statusClass = 'status-unsettled';
-        statusText = '💳 Hold на карте';
+        statusText = '<span class="status-dot dot-warning"></span>Hold на карте';
       }
 
       const cardClass = [
@@ -235,8 +238,11 @@
           <!-- Master Auto-Rules Switch -->
           <div class="card-rules-section">
             <div class="rules-label-wrap">
-              <span class="rules-main-label">🛡 Авто-правила стопов</span>
-              <span class="rules-sub-label">${acc.rules_enabled ? '🟢 Включены (контроль $2/$6/$6)' : '⚪ Выключены (только статистика)'}</span>
+              <span class="rules-main-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Авто-правила стопов
+              </span>
+              <span class="rules-sub-label">${acc.rules_enabled ? '<span class="status-dot dot-success"></span>Включены (контроль $' + acc.max_spend_0_leads.toFixed(0) + '/$' + acc.max_spend_1_lead.toFixed(0) + '/$' + acc.max_cpa_multiple_leads.toFixed(0) + ')' : '<span class="status-dot dot-muted"></span>Выключены (только статистика)'}</span>
             </div>
             <label class="switch">
               <input type="checkbox" ${acc.rules_enabled ? 'checked' : ''} onchange="window.toggleRules('${acc.account_id}', this.checked)">
@@ -255,14 +261,16 @@
           <!-- Actions Footer -->
           <div class="card-actions-row">
             <div class="card-tz-info">
-              🕒 <code>${acc.timezone_name}</code>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:3px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <code>${acc.timezone_name}</code>
             </div>
             <div class="card-btns">
               <button class="btn btn-secondary btn-sm" onclick="window.openEditLimitsModal('${acc.account_id}')">
-                ⚙️ Лимиты
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Лимиты
               </button>
               <button class="btn btn-secondary btn-sm" style="color: var(--color-danger);" onclick="window.openDeleteConfirmModal('${acc.account_id}', '${escapeHtml(acc.name)}')">
-                🗑
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               </button>
             </div>
           </div>
@@ -424,8 +432,8 @@
       renderSummaryData(data);
       loadStoppedAdsets();
     } catch (err) {
-      tableBody.innerHTML = `<tr><td colspan="8" class="text-danger text-center">❌ ${err.message}</td></tr>`;
-      mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">❌ ${err.message}</p></div>`;
+      tableBody.innerHTML = `<tr><td colspan="8" class="text-danger text-center">${err.message}</td></tr>`;
+      mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
     }
   }
 
@@ -450,7 +458,7 @@
     } else {
       tableBody.innerHTML = data.accounts.map(acc => {
         const isBanned = acc.is_banned;
-        const statusLabel = isBanned ? '🔴 Блок' : '🟢 Ок';
+        const statusLabel = isBanned ? '<span class="status-dot dot-danger"></span>Блок' : '<span class="status-dot dot-success"></span>Ок';
         const spendStr = `$${acc.spend.toFixed(2)}`;
         const cpaStr = acc.total_conversions > 0 ? `$${acc.cpa.toFixed(2)}` : '—';
         const displayName = acc.short_name || acc.name;
@@ -461,8 +469,8 @@
             <td>${statusLabel}</td>
             <td class="text-right mono"><b>${spendStr}</b></td>
             <td class="text-right mono">${acc.clicks}</td>
-            <td class="text-right mono" style="color: #38bdf8;">${acc.leads}</td>
-            <td class="text-right mono" style="color: #22c55e;">${acc.registrations}</td>
+            <td class="text-right mono" style="color: var(--tg-link);">${acc.leads}</td>
+            <td class="text-right mono" style="color: var(--color-success);">${acc.registrations}</td>
             <td class="text-right mono">${acc.purchases}</td>
             <td class="text-right mono"><b>${cpaStr}</b></td>
           </tr>
@@ -485,7 +493,7 @@
                 <b class="mob-card-name" style="font-size:14px; font-weight:600; color:var(--tg-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(displayName)}</b>
                 <span class="mono text-hint" style="font-size:11px; color:var(--tg-hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subLabel}</span>
               </div>
-              <span class="mono" style="font-size: 16px; font-weight:700; color: #38bdf8; white-space:nowrap; flex-shrink:0;">$${acc.spend.toFixed(2)}</span>
+              <span class="mono" style="font-size: 16px; font-weight:700; color: var(--tg-link); white-space:nowrap; flex-shrink:0;">$${acc.spend.toFixed(2)}</span>
             </div>
             <div class="mob-card-stats">
               <div class="stat-box">
@@ -494,11 +502,11 @@
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">Лиды</span>
-                <span class="stat-box-val" style="color:#38bdf8;">${acc.leads}</span>
+                <span class="stat-box-val" style="color:var(--tg-link);">${acc.leads}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">Реги</span>
-                <span class="stat-box-val" style="color:#22c55e;">${acc.registrations}</span>
+                <span class="stat-box-val" style="color:var(--color-success);">${acc.registrations}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">CPA</span>
@@ -533,13 +541,16 @@
             </div>
             <div style="display:flex; gap:6px;">
               <button class="btn btn-primary btn-sm" onclick="window.reactivateAdset('${r.adset_id}')">Включить</button>
-              <button class="btn btn-secondary btn-sm" onclick="window.dismissAdset('${r.adset_id}')">✕</button>
+              <button class="btn btn-secondary btn-sm" onclick="window.dismissAdset('${r.adset_id}')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           </div>
         `).join('');
       } else {
         section.classList.add('hidden');
       }
+
     } catch (e) {
       section.classList.add('hidden');
     }
@@ -696,7 +707,7 @@
         res.added.forEach(item => {
           resultsHtml.push(`
             <div class="batch-res-item">
-              <span>🟢 <b>${escapeHtml(item.name)}</b> (${item.account_id})</span>
+              <span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${item.account_id})</span>
               <span class="badge badge-success">OK</span>
             </div>
           `);
@@ -706,7 +717,7 @@
         res.errors.forEach(item => {
           resultsHtml.push(`
             <div class="batch-res-item">
-              <span>🔴 <b>${item.account_id}</b>: ${escapeHtml(item.error)}</span>
+              <span><span class="status-dot dot-danger"></span><b>${item.account_id}</b>: ${escapeHtml(item.error)}</span>
               <span class="badge badge-danger">Ошибка</span>
             </div>
           `);
@@ -722,9 +733,10 @@
       rawInput.dispatchEvent(new Event('input'));
       document.getElementById('batchNameInput').value = '';
     } catch (err) {
-      document.getElementById('batchProgressText').textContent = `❌ Ошибка: ${err.message}`;
+      document.getElementById('batchProgressText').textContent = `Ошибка: ${err.message}`;
       document.getElementById('btnBatchDone').classList.remove('hidden');
     }
+
   });
 
   window.closeBatchProgress = function () {
@@ -930,13 +942,14 @@
         unauthEl.style.display = 'flex';
         unauthEl.classList.remove('hidden');
         if (e.message && e.message.includes('одобрения')) {
-          unauthEl.innerHTML = '<span>❌ Ваш аккаунт ожидает одобрения администратора (@buyerly_bot)</span>';
+          unauthEl.innerHTML = '<span>Ваш аккаунт ожидает одобрения администратора (@buyerly_bot)</span>';
         } else {
-          unauthEl.innerHTML = '<span>❌ Требуется авторизация через Telegram Web App (@buyerly_bot)</span>';
+          unauthEl.innerHTML = '<span>Требуется авторизация через Telegram Web App (@buyerly_bot)</span>';
         }
       }
     }
   }
+
 
 
 
