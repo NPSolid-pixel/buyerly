@@ -491,31 +491,6 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
         await wait_msg.edit_text(text, parse_mode="HTML")
 
 
-# ----------------------------------------------------
-# 5. СПИСОК КАБИНЕТОВ ПОЛЬЗОВАТЕЛЯ
-# ----------------------------------------------------
-@router.message(StateFilter("*"), F.text.in_(["🏢 Мои кабинеты", "🏢 Кабинеты", "/accounts"]))
-async def cmd_accounts(message: Message, bot: Bot, state: FSMContext):
-    await state.clear()
-    has_access = await check_user_access(message, bot)
-    if not has_access:
-        return
-
-    user_id = str(message.from_user.id)
-
-    async with async_session_maker() as session:
-        stmt = select(Account).where(Account.owner_id == user_id)
-        res = await session.execute(stmt)
-        accounts = res.scalars().all()
-
-        if not accounts:
-            await message.answer(
-                "ℹ️ У вас пока нет подключенных кабинетов.\n"
-                "Чтобы добавить кабинеты, нажмите кнопку <b>➕ Добавить кабинеты</b> в меню.",
-                parse_mode="HTML"
-            )
-            return
-
 def format_account_card(acc: Account) -> str:
     rules_icon = "🟢 <b>Авто-правила ВКЛЮЧЕНЫ</b>" if acc.rules_enabled else "👁 <b>Только статистика (Правила выключены)</b>"
     return (
