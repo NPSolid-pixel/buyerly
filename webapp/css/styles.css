@@ -710,6 +710,46 @@ input:checked + .slider:before {
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
 }
 
+.summary-action-wrap {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-fetch-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.fetch-icon {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.4s ease;
+}
+
+.btn-fetch-summary.loading {
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.btn-fetch-summary.loading .fetch-icon {
+  animation: spin 0.8s linear infinite;
+}
+
+.summary-status-line {
+  text-align: center;
+  font-size: 11px;
+  color: var(--tg-hint);
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

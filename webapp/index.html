@@ -138,6 +138,17 @@
           <button class="period-btn" data-period="last_7d">7 дней</button>
         </div>
 
+        <!-- Summary Action Button -->
+        <div class="summary-action-wrap">
+          <button id="btnFetchSummary" class="btn btn-primary btn-block btn-fetch-summary">
+            <svg class="fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span id="btnFetchSummaryText">Сформировать сводку за сегодня</span>
+          </button>
+          <div class="summary-status-line">
+            <span id="summaryStatusLabel">Нажмите кнопку для расчета статистики из Meta</span>
+          </div>
+        </div>
+
         <!-- KPI Metrics Cards Grid -->
         <div class="kpi-grid">
           <div class="kpi-card spend-card">

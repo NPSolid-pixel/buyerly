@@ -35,6 +35,8 @@
     user: null,
     accounts: [],
     summary: null,
+    summaryCache: {},
+    summaryLastFetchedAt: {},
     currentPeriod: 'today',
     activeTab: 'accounts',
     filter: 'all',
@@ -138,7 +140,14 @@
     if (tabName === 'accounts') {
       loadAccounts();
     } else if (tabName === 'summary') {
-      loadSummary(state.currentPeriod);
+      updateFetchButtonLabel(state.currentPeriod);
+      if (state.summaryCache[state.currentPeriod]) {
+        renderSummaryData(state.summaryCache[state.currentPeriod]);
+        const statusEl = document.getElementById('summaryStatusLabel');
+        if (statusEl && state.summaryLastFetchedAt[state.currentPeriod]) {
+          statusEl.textContent = `Сводка сформирована в ${state.summaryLastFetchedAt[state.currentPeriod]}`;
+        }
+      }
     } else if (tabName === 'settings') {
       loadSettings();
     }
@@ -401,6 +410,21 @@
     }
   });
 
+  const periodTextMap = {
+    'today': 'за сегодня',
+    'yesterday': 'за вчера',
+    'last_3d': 'за 3 дня',
+    'last_7d': 'за 7 дней'
+  };
+
+  function updateFetchButtonLabel(period) {
+    const label = periodTextMap[period] || 'за период';
+    const textEl = document.getElementById('btnFetchSummaryText');
+    if (textEl) {
+      textEl.textContent = `Сформировать сводку ${label}`;
+    }
+  }
+
   // ==========================================================
   // TAB 2: SUMMARY (СВОДКА И АНАЛИТИКА)
   // ==========================================================
@@ -408,28 +432,53 @@
     state.currentPeriod = period;
     const tableBody = document.getElementById('summaryTableBody');
     const mobileCards = document.getElementById('summaryMobileCards');
+    const fetchBtn = document.getElementById('btnFetchSummary');
+    const statusLabel = document.getElementById('summaryStatusLabel');
     
     // Update period switchers
     document.querySelectorAll('.period-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.period === period);
     });
 
-    const periodLabels = {
-      'today': 'за сегодня',
-      'yesterday': 'за вчера',
-      'last_3d': 'за 3 дня',
-      'last_7d': 'за 7 дней'
-    };
-    document.getElementById('kpiPeriodLabel').textContent = periodLabels[period] || '';
+    updateFetchButtonLabel(period);
+    document.getElementById('kpiPeriodLabel').textContent = periodTextMap[period] || '';
+
+    if (fetchBtn) {
+      fetchBtn.classList.add('loading');
+      fetchBtn.disabled = true;
+    }
+    if (statusLabel) {
+      statusLabel.textContent = 'Запрос данных из Meta API...';
+    }
 
     try {
       const data = await apiRequest(`/api/summary?period=${period}${force ? '&force=true' : ''}`);
       state.summary = data;
+      state.summaryCache[period] = data;
+
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      state.summaryLastFetchedAt[period] = timeStr;
+
       renderSummaryData(data);
       loadStoppedAdsets();
+
+      if (statusLabel) {
+        statusLabel.textContent = `Сводка успешно сформирована в ${timeStr}`;
+      }
+      showToast('Сводка успешно сформирована', 'success');
     } catch (err) {
       tableBody.innerHTML = `<tr><td colspan="8" class="text-danger text-center">${err.message}</td></tr>`;
       mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
+      if (statusLabel) {
+        statusLabel.textContent = `Ошибка: ${err.message}`;
+      }
+      showToast(`Ошибка: ${err.message}`, 'error');
+    } finally {
+      if (fetchBtn) {
+        fetchBtn.classList.remove('loading');
+        fetchBtn.disabled = false;
+      }
     }
   }
 
@@ -865,9 +914,35 @@
   // Period Switcher Listeners in Summary
   document.querySelectorAll('.period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      const period = btn.dataset.period;
+      state.currentPeriod = period;
       haptic('selection');
-      loadSummary(btn.dataset.period);
+
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      updateFetchButtonLabel(period);
+      document.getElementById('kpiPeriodLabel').textContent = periodTextMap[period] || '';
+
+      if (state.summaryCache[period]) {
+        renderSummaryData(state.summaryCache[period]);
+        const statusEl = document.getElementById('summaryStatusLabel');
+        if (statusEl && state.summaryLastFetchedAt[period]) {
+          statusEl.textContent = `Сводка сформирована в ${state.summaryLastFetchedAt[period]}`;
+        }
+      } else {
+        const statusEl = document.getElementById('summaryStatusLabel');
+        if (statusEl) {
+          statusEl.textContent = 'Нажмите кнопку для расчета статистики из Meta';
+        }
+      }
     });
+  });
+
+  // Fetch summary button listener
+  document.getElementById('btnFetchSummary')?.addEventListener('click', () => {
+    haptic('impact', 'medium');
+    loadSummary(state.currentPeriod, true);
   });
 
   // Sync Button with 30-sec Cooldown & In-Flight Protection
