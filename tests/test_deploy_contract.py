@@ -18,9 +18,25 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("buyerly-app:${EXPECTED_SHA}", self.script)
         self.assertIn("is already deployed and healthy", self.script)
 
+    def test_production_roles_are_separate_services(self):
+        for service in ("db:", "api:", "web:", "bot:", "worker:", "migrate:"):
+            self.assertIn(f"  {service}", self.compose)
+        self.assertIn("postgres:16-alpine", self.compose)
+        self.assertIn('command: ["python", "-m", "services.api"]', self.compose)
+        self.assertIn('command: ["python", "-m", "services.bot"]', self.compose)
+        self.assertIn('command: ["python", "-m", "services.worker"]', self.compose)
+
+    def test_cutover_has_migration_healthcheck_and_rollback(self):
+        self.assertIn("docker compose run --rm migrate", self.script)
+        self.assertIn("wait_for_container buyerly-api", self.script)
+        self.assertIn("wait_for_container buyerly-telegram-bot", self.script)
+        self.assertIn("wait_for_container buyerly-worker", self.script)
+        self.assertIn("wait_for_container buyerly-web", self.script)
+        self.assertIn("rollback", self.script)
+
     def test_production_mini_app_has_https_url(self):
         self.assertIn(
-            "WEBAPP_URL=${WEBAPP_URL:-https://smattrades.com}",
+            "WEBAPP_URL: ${WEBAPP_URL:-https://smattrades.com}",
             self.compose,
         )
 

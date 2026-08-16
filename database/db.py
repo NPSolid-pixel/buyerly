@@ -199,7 +199,11 @@ async def migrate_legacy_account_rules(conn) -> int:
     return migrated_count
 
 
-async def init_db():
+async def init_schema():
+    # Importing the models registers every table on Base.metadata. This makes
+    # database initialization reliable for all independent process entrypoints.
+    import database.models  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         migrated_rules = await migrate_legacy_account_rules(conn)
@@ -208,8 +212,9 @@ async def init_db():
                 "Migrated %s account(s) from legacy rule fields to active_rules.",
                 migrated_rules,
             )
-        # Безопасное добавление колонок если таблица уже существовала
-        for col_sql in [
+        # These statements support the historical SQLite schema. PostgreSQL is
+        # initialized from current metadata and must not receive SQLite defaults.
+        legacy_sqlite_columns = [
             "ALTER TABLE telegram_users ADD COLUMN password_hash VARCHAR DEFAULT '';",
             "ALTER TABLE telegram_users ADD COLUMN auth_token VARCHAR;",
             "ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;",
@@ -231,12 +236,15 @@ async def init_db():
             "ALTER TABLE rule_presets ADD COLUMN condition_logic VARCHAR DEFAULT 'and';",
             "ALTER TABLE rule_presets ADD COLUMN budget_change_percent FLOAT DEFAULT 0.0;",
             "ALTER TABLE rule_presets ADD COLUMN budget_max_daily FLOAT DEFAULT 0.0;"
-        ]:
-            try:
-                await conn.execute(text(col_sql))
-            except Exception:
-                pass
+        ]
+        if conn.dialect.name == "sqlite":
+            for col_sql in legacy_sqlite_columns:
+                try:
+                    await conn.execute(text(col_sql))
+                except Exception:
+                    pass
 
+async def ensure_bootstrap_admin():
     if settings.BOOTSTRAP_ADMIN_USERNAME and settings.BOOTSTRAP_ADMIN_PASSWORD:
         from sqlalchemy import select
         from database.models import TelegramUser
@@ -261,3 +269,20 @@ async def init_db():
                 )
                 await session.commit()
                 logger.info("Created bootstrap admin from environment configuration.")
+
+
+async def ensure_default_settings():
+    from sqlalchemy import select
+    from database.models import AppSettings
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(AppSettings).limit(1))
+        if not result.scalar_one_or_none():
+            session.add(AppSettings(poll_interval_minutes=10))
+            await session.commit()
+
+
+async def init_db():
+    await init_schema()
+    await ensure_bootstrap_admin()
+    await ensure_default_settings()

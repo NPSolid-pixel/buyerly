@@ -5,12 +5,14 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     APP_VERSION: str = Field(default="dev", description="Deployed Git commit SHA")
     BOT_TOKEN: str = Field(default="", description="Telegram Bot Token from @BotFather")
-    DATABASE_URL: str = Field(default="sqlite+aiosqlite:///mediabuyer.db", description="SQLite database URL")
+    DATABASE_URL: str = Field(default="sqlite+aiosqlite:///mediabuyer.db", description="Async SQLAlchemy database URL")
+    LEGACY_SQLITE_PATH: str = Field(default="", description="Optional SQLite source for the one-time PostgreSQL migration")
     DEFAULT_POLL_INTERVAL_MINUTES: int = Field(default=5, description="Monitoring interval in minutes")
     ADMIN_CHAT_ID: str = Field(default="", description="Default Telegram Chat ID for alerts")
     WEBAPP_URL: str = Field(default="", description="Public HTTPS URL for Telegram Web App")
     API_PORT: int = Field(default=8080, description="Web API and static files port")
     API_HOST: str = Field(default="0.0.0.0", description="Web API host")
+    SERVE_STATIC: bool = Field(default=True, description="Serve the bundled web app from FastAPI in local/legacy mode")
     ENABLE_DEV_AUTH: bool = Field(default=False, description="Enable dev auth fallback for local tests")
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: int = Field(
         default=86400,

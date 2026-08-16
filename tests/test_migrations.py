@@ -1,10 +1,14 @@
 import json
+import sqlite3
 import unittest
+from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from database.db import migrate_legacy_account_rules
+from database.migrate_sqlite import _source_rows
+from database.models import Account
 
 
 class TestLegacyAccountRulesMigration(unittest.IsolatedAsyncioTestCase):
@@ -130,6 +134,25 @@ class TestLegacyAccountRulesMigration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_count, 1)
         self.assertEqual(second_count, 0)
         self.assertEqual(second_value, first_value)
+
+
+class TestSQLiteToPostgresConversion(unittest.TestCase):
+    def test_converts_boolean_and_datetime_values_for_asyncpg(self):
+        source = sqlite3.connect(":memory:")
+        try:
+            source.execute(
+                "CREATE TABLE accounts (id INTEGER, rules_enabled BOOLEAN, created_at DATETIME)"
+            )
+            source.execute(
+                "INSERT INTO accounts VALUES (1, 1, '2026-08-17 12:30:00+00:00')"
+            )
+            rows = _source_rows(source, Account.__table__)
+        finally:
+            source.close()
+
+        self.assertEqual(rows[0]["rules_enabled"], True)
+        self.assertIsInstance(rows[0]["created_at"], datetime)
+        self.assertIsNone(rows[0]["created_at"].tzinfo)
 
 
 if __name__ == "__main__":

@@ -59,7 +59,10 @@ def create_app() -> FastAPI:
             )
         return {"status": "ready", "version": settings.APP_VERSION}
 
-    # Static Web App files
+    if not settings.SERVE_STATIC:
+        return app
+
+    # Static Web App files (local development and legacy fallback only).
     webapp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "webapp")
     os.makedirs(webapp_dir, exist_ok=True)
 
