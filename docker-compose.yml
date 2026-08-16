@@ -1,11 +1,13 @@
 services:
-  ai-mediabuyer:
+  buyerly:
     build: .
-    container_name: ai-mediabuyer-bot
-    restart: unless-stopped
+    container_name: buyerly-bot
+    restart: always
     env_file:
       - .env
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
     environment:
       - DATABASE_URL=sqlite+aiosqlite:////app/data/mediabuyer.db
+      - TZ=UTC

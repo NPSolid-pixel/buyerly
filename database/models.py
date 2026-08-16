@@ -55,6 +55,10 @@ class Account(Base):
     # Тип целевых действий: 'all' (лиды + реги), 'leads', 'registrations'
     conversion_event = Column(String, default="all", nullable=False)
     
+    # Статус кабинета в Meta
+    account_status = Column(Integer, default=1, nullable=False, doc="1: ACTIVE, 2: DISABLED, 3: UNSETTLED")
+    status_label = Column(String, default="🟢 Активен (ACTIVE)", nullable=False)
+    
     # Флаг: включать автоматически или слать кнопку с подтверждением
     auto_reactivate = Column(Boolean, default=False, nullable=False)
     rules_enabled = Column(Boolean, default=False, nullable=False, doc="Включены ли авто-правила стопов")
@@ -62,7 +66,7 @@ class Account(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<Account(account_id='{self.account_id}', name='{self.name}', rules={self.rules_enabled})>"
+        return f"<Account(account_id='{self.account_id}', name='{self.name}', status={self.account_status})>"
 
 
 class StoppedAdSet(Base):

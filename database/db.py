@@ -24,8 +24,13 @@ from sqlalchemy import text
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Безопасное добавление колонки rules_enabled если таблица уже существовала
-        try:
-            await conn.execute(text("ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;"))
-        except Exception:
-            pass  # Колонка уже есть
+        # Безопасное добавление колонок если таблица уже существовала
+        for col_sql in [
+            "ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;",
+            "ALTER TABLE accounts ADD COLUMN account_status INTEGER DEFAULT 1;",
+            "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT '🟢 Активен (ACTIVE)';"
+        ]:
+            try:
+                await conn.execute(text(col_sql))
+            except Exception:
+                pass

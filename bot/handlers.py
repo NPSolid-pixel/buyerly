@@ -414,6 +414,8 @@ async def cb_report_period(callback: CallbackQuery):
         for acc in accounts:
             tz_name = acc.timezone_name or tz_name
             short_name = get_short_account_label(acc.name, acc.account_id)
+            is_banned = (acc.account_status in [2, 101] or not acc.is_active)
+            disp_name = f"{short_name} 🔴" if is_banned else short_name
             try:
                 adsets = await meta_client.get_adsets_insights(
                     account_id=acc.account_id,
@@ -434,7 +436,7 @@ async def cb_report_period(callback: CallbackQuery):
                 total_purchases += acc_purchases
 
                 table_rows.append({
-                    "name": short_name,
+                    "name": disp_name,
                     "spend": acc_spend,
                     "clicks": acc_clicks,
                     "leads": acc_leads,
@@ -442,29 +444,23 @@ async def cb_report_period(callback: CallbackQuery):
                     "purchases": acc_purchases
                 })
 
-                if acc_purchases > 0:
-                    purchases_list.append(short_name)
-                if acc_spend == 0.0:
-                    no_spend_list.append(short_name)
-
             except Exception as e:
                 logger.error(f"Error fetching report for {acc.account_id}: {e}")
                 table_rows.append({
-                    "name": short_name,
+                    "name": f"{short_name} 🔴",
                     "spend": 0.0,
                     "clicks": 0,
                     "leads": 0,
                     "regs": 0,
                     "purchases": 0
                 })
-                no_spend_list.append(short_name)
 
         # Формируем аккуратную таблицу в блоке <pre>
-        header = f"{'Кабинет':<8}{'Спенд':>8}{'Клики':>6}{'Лиды':>5}{'Реги':>5}{'Пок':>4}"
+        header = f"{'Кабинет':<9}{'Спенд':>8}{'Клики':>6}{'Лиды':>5}{'Реги':>5}{'Пок':>4}"
         lines = [header]
         for r in table_rows:
             spend_str = f"${r['spend']:.2f}"
-            lines.append(f"{r['name']:<8}{spend_str:>8}{r['clicks']:>6}{r['leads']:>5}{r['regs']:>5}{r['purchases']:>4}")
+            lines.append(f"{r['name']:<9}{spend_str:>8}{r['clicks']:>6}{r['leads']:>5}{r['regs']:>5}{r['purchases']:>4}")
 
         table_block = "<pre>" + "\n".join(lines) + "</pre>"
 
@@ -502,6 +498,9 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
         lines = []
 
         for acc in accounts:
+            if acc.account_status in [2, 101] or not acc.is_active:
+                lines.append(f"• {acc.name}: 🔴 Заблокирован ($0.00)")
+                continue
             try:
                 adsets = await meta_client.get_adsets_insights(
                     account_id=acc.account_id,
@@ -512,8 +511,7 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
                 total_spend += acc_spend
                 lines.append(f"• {acc.name}: ${acc_spend:.2f}")
             except Exception as e:
-                # Если заблокирован или ошибка — показываем $0.00
-                lines.append(f"• {acc.name}: $0.00")
+                lines.append(f"• {acc.name}: 🔴 Ошибка ($0.00)")
 
         text = (
             "<b>Разбивка по кабинетам:</b>\n"
@@ -525,8 +523,17 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
 
 def format_account_card(acc: Account) -> str:
     rules_icon = "🟢 <b>Авто-правила ВКЛЮЧЕНЫ</b>" if acc.rules_enabled else "👁 <b>Только статистика (Правила выключены)</b>"
+    
+    if acc.account_status == 2 or not acc.is_active:
+        status_line = "🔴 <b>Заблокирован в Meta (DISABLED / Policy Ban)</b>"
+    elif acc.account_status == 3:
+        status_line = "💳 <b>Проблема с картой / холдом (UNSETTLED)</b>"
+    else:
+        status_line = "🟢 <b>Активен (ACTIVE)</b>"
+
     return (
         f"🏢 <b>{acc.name}</b> (<code>{acc.account_id}</code>)\n"
+        f"Статус в Meta: {status_line}\n"
         f"Режим: {rules_icon}\n"
         f"🕒 Таймзона: <code>{acc.timezone_name}</code>\n\n"
         f"⚙️ <b>Текущие лимиты авто-стопов:</b>\n"
