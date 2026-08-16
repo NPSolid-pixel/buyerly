@@ -1035,6 +1035,17 @@ input:checked + .slider:before {
   border-color: var(--tg-link);
 }
 
+/* Remove native number spin-buttons / arrows */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+input[type=number] { 
+  -moz-appearance: textfield; 
+  appearance: textfield;
+}
+
 .input-password-wrapper {
   position: relative;
   display: flex;

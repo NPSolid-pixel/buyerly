@@ -307,7 +307,6 @@
     document.getElementById('lim0Input').value = acc.max_spend_0_leads;
     document.getElementById('lim1Input').value = acc.max_spend_1_lead;
     document.getElementById('limCpaInput').value = acc.max_cpa_multiple_leads;
-    document.getElementById('autoReactivateSwitch').checked = !!acc.auto_reactivate;
 
     window.openModal('modalEditLimits');
   };
@@ -324,7 +323,6 @@
     const l0 = parseFloat(document.getElementById('lim0Input').value);
     const l1 = parseFloat(document.getElementById('lim1Input').value);
     const lcpa = parseFloat(document.getElementById('limCpaInput').value);
-    const autoReactivate = document.getElementById('autoReactivateSwitch').checked;
 
     if (isNaN(l0) || isNaN(l1) || isNaN(lcpa)) {
       showToast('Заполните все поля лимитов числами', 'error');
@@ -339,7 +337,7 @@
           max_spend_1_lead: l1,
           max_cpa_multiple_leads: lcpa,
           conversion_event: 'all',
-          auto_reactivate: autoReactivate
+          auto_reactivate: false
         })
       });
 
@@ -353,7 +351,7 @@
         acc.max_spend_1_lead = l1;
         acc.max_cpa_multiple_leads = lcpa;
         acc.conversion_event = 'all';
-        acc.auto_reactivate = autoReactivate;
+        acc.auto_reactivate = false;
         renderAccounts();
       }
     } catch (err) {

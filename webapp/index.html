@@ -463,27 +463,19 @@
           <div class="form-grid-3">
             <div class="form-group">
               <label for="lim0Input">0 лидов ($)</label>
-              <input type="number" id="lim0Input" class="form-input text-center" step="0.5" min="0.5">
+              <input type="number" id="lim0Input" class="form-input text-center" step="0.5" min="0.5" inputmode="decimal">
             </div>
             <div class="form-group">
               <label for="lim1Input">1 лид ($)</label>
-              <input type="number" id="lim1Input" class="form-input text-center" step="0.5" min="0.5">
+              <input type="number" id="lim1Input" class="form-input text-center" step="0.5" min="0.5" inputmode="decimal">
             </div>
             <div class="form-group">
               <label for="limCpaInput">Макс CPA 2+ ($)</label>
-              <input type="number" id="limCpaInput" class="form-input text-center" step="0.5" min="0.5">
+              <input type="number" id="limCpaInput" class="form-input text-center" step="0.5" min="0.5" inputmode="decimal">
             </div>
           </div>
 
-          <div class="form-check" style="margin-top: 14px;">
-            <label class="switch">
-              <input type="checkbox" id="autoReactivateSwitch">
-              <span class="slider round"></span>
-            </label>
-            <span class="check-label">Автоматически включать адсет при долете лида (без кнопки подтверждения)</span>
-          </div>
-
-          <div class="sheet-actions" style="flex-direction: column; gap: 8px;">
+          <div class="sheet-actions" style="flex-direction: column; gap: 8px; margin-top: 16px;">
             <button id="btnSaveLimits" class="btn btn-primary btn-block btn-lg">Сохранить лимиты</button>
             <button type="button" id="btnOpenDeleteFromModal" class="btn btn-secondary btn-block" style="color: var(--color-danger); border-color: rgba(247, 118, 142, 0.3);">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
