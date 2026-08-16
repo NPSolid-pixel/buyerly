@@ -3,33 +3,38 @@
    ========================================================== */
 
 :root {
-  /* ColorDrop #41 «Midnight Sky» Palette */
-  --tg-bg: #1e222b;
-  --tg-sec-bg: #282c37;
-  --tg-card-bg: #282c37;
-  --tg-card-hover: #313744;
-  --tg-text: #d9e1e8;
-  --tg-hint: #9baec8;
-  --tg-link: #2b90d9;
-  --tg-btn: #2b90d9;
-  --tg-btn-text: #ffffff;
+  /* ==========================================================
+     TOKYO NIGHT COLOR PALETTE SYSTEM (Vibrant Dark)
+     ========================================================== */
+  --tg-bg: #1a1b26;
+  --tg-sec-bg: #24283b;
+  --tg-card-bg: #24283b;
+  --tg-card-hover: #292e42;
+  --tg-text: #c0caf5;
+  --tg-hint: #9aa5ce;
+  --tg-link: #7aa2f7;
+  --tg-btn: #7aa2f7;
+  --tg-btn-text: #15161e;
 
-  /* Functional Palette */
-  --color-success: #34d399;
-  --color-success-bg: rgba(52, 211, 153, 0.14);
-  --color-danger: #f87171;
-  --color-danger-bg: rgba(248, 113, 113, 0.14);
-  --color-warning: #fbbf24;
-  --color-warning-bg: rgba(251, 191, 36, 0.14);
-  --color-info: #2b90d9;
-  --color-info-bg: rgba(43, 144, 217, 0.14);
+  /* Functional Palette (Tokyo Night Colors) */
+  --color-success: #9ece6a;
+  --color-success-bg: rgba(158, 206, 106, 0.16);
+  --color-danger: #f7768e;
+  --color-danger-bg: rgba(247, 118, 142, 0.16);
+  --color-warning: #e0af68;
+  --color-warning-bg: rgba(224, 175, 104, 0.16);
+  --color-info: #7dcfff;
+  --color-info-bg: rgba(125, 207, 255, 0.16);
+  --color-purple: #bb9af7;
+  --color-purple-bg: rgba(187, 154, 247, 0.16);
+  --color-orange: #ff9e64;
   
   /* Borders & Shadows */
-  --border-subtle: rgba(155, 174, 200, 0.15);
-  --border-active: rgba(43, 144, 217, 0.45);
-  --shadow-sm: 0 2px 6px rgba(15, 17, 23, 0.25);
-  --shadow-md: 0 6px 20px rgba(15, 17, 23, 0.35);
-  --shadow-lg: 0 14px 36px rgba(15, 17, 23, 0.5);
+  --border-subtle: #414868;
+  --border-active: rgba(122, 162, 247, 0.6);
+  --shadow-sm: 0 2px 8px rgba(15, 16, 26, 0.35);
+  --shadow-md: 0 6px 20px rgba(15, 16, 26, 0.5);
+  --shadow-lg: 0 14px 36px rgba(15, 16, 26, 0.65);
 
   /* Radii */
   --radius-sm: 8px;
@@ -41,6 +46,7 @@
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 
 
 
@@ -110,12 +116,12 @@ code, .mono {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
-  background: #282c37;
+  background: #24283b;
   border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: #c0caf5;
   box-shadow: var(--shadow-sm);
 }
 
@@ -237,7 +243,7 @@ code, .mono {
   height: 26px;
   border-radius: var(--radius-full);
   background: var(--tg-btn);
-  color: #ffffff;
+  color: #15161e;
   font-weight: 700;
   font-size: 12px;
   display: flex;
@@ -418,11 +424,11 @@ code, .mono {
 }
 
 .strip-value.highlight {
-  color: #38bdf8;
+  color: var(--color-info);
 }
 
 .strip-value.success {
-  color: #22c55e;
+  color: var(--color-success);
 }
 
 /* ==========================================================
@@ -625,12 +631,12 @@ code, .mono {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: var(--tg-sec-bg);
+  background: #1f2335;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: #38bdf8;
+  color: var(--color-info);
   border: 1px solid var(--border-subtle);
 }
 
@@ -1074,7 +1080,7 @@ input:checked + .slider:before {
 }
 
 .parsed-item-chip code {
-  color: #38bdf8;
+  color: var(--color-info);
 }
 
 .preset-buttons {
@@ -1102,7 +1108,7 @@ input:checked + .slider:before {
 }
 
 .btn-preset.active {
-  background: rgba(56, 189, 248, 0.15);
+  background: rgba(122, 162, 247, 0.18);
   border-color: var(--tg-link);
   color: var(--tg-text);
   font-weight: 600;
@@ -1154,11 +1160,11 @@ input:checked + .slider:before {
 .btn-primary {
   background: var(--tg-btn);
   color: var(--tg-btn-text);
-  box-shadow: 0 4px 14px rgba(43, 144, 217, 0.3);
+  box-shadow: 0 4px 14px rgba(122, 162, 247, 0.35);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #237bbd;
+  background: #89b4fa;
 }
 
 
@@ -1179,11 +1185,11 @@ input:checked + .slider:before {
 
 .btn-danger {
   background: var(--color-danger);
-  color: #fff;
+  color: #15161e;
 }
 
 .btn-danger:hover {
-  background: #dc2626;
+  background: #ff7a93;
 }
 
 .btn-link {
@@ -1287,8 +1293,8 @@ input:checked + .slider:before {
 
 .role-badge {
   padding: 3px 10px;
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
+  background: rgba(125, 207, 255, 0.16);
+  color: var(--color-info);
   border-radius: var(--radius-full);
   font-size: 11px;
   font-weight: 700;
@@ -1321,8 +1327,8 @@ input:checked + .slider:before {
 }
 
 .step-badge.highlight {
-  background: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
+  background: rgba(158, 206, 106, 0.2);
+  color: var(--color-success);
 }
 
 /* ==========================================================
@@ -1334,7 +1340,7 @@ input:checked + .slider:before {
   left: 0;
   right: 0;
   height: 64px;
-  background: rgba(19, 27, 44, 0.95);
+  background: rgba(26, 27, 38, 0.95);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--border-subtle);
   display: flex;
@@ -1566,7 +1572,7 @@ input:checked + .slider:before {
 .progress-bar-fill {
   width: 30%;
   height: 100%;
-  background: linear-gradient(90deg, #2563eb, #38bdf8);
+  background: linear-gradient(90deg, #7aa2f7, #7dcfff);
   transition: width 0.3s ease;
   animation: pulseProgress 1.5s infinite linear;
 }
