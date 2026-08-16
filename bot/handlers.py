@@ -34,7 +34,7 @@ async def cmd_start(message: Message):
         logger.info(f"Auto-configured ADMIN_CHAT_ID: {message.chat.id}")
 
     text = (
-        "👋 <b>Добро пожаловать в AI Media Buyer Bot!</b>\n\n"
+        "👋 <b>Добро пожаловать в Buyerly!</b>\n\n"
         f"Ваш Telegram Chat ID (<code>{message.chat.id}</code>) подключен для получения алертов.\n\n"
         "<b>Возможности системы:</b>\n"
         "• ⏱ <b>Авто-мониторинг:</b> регулярная проверка спенда и конверсий (лиды + реги)\n"
