@@ -236,7 +236,7 @@
       } else if (acc.rule_conditions && acc.rule_conditions.length > 0) {
         const first = acc.rule_conditions[0];
         const mLabel = first.metric === 'spend' ? 'Спенд' : (first.metric === 'cpl' ? 'CPL' : 'CPR');
-        const op = first.operator === 'gt' ? '>' : (first.operator === 'lt' ? '<' : '=');
+        const op = (first.operator === 'gte' || first.operator === 'gt') ? '≥' : ((first.operator === 'lte' || first.operator === 'lt') ? '≤' : '=');
         ruleBadgeText = `${mLabel} ${op} $${first.value.toFixed(1)}`;
       }
 
@@ -369,16 +369,20 @@
     document.getElementById('btnDeletePreset')?.classList.add('hidden');
 
     renderConditions([
-      { metric: 'spend', operator: 'gt', value: 2.0 }
+      { metric: 'spend', operator: 'gte', value: 2.0 }
     ]);
     renderPresetsList(null);
     document.getElementById('ruleNameInput')?.focus();
   };
 
-  window.addConditionRow = function (metric = 'spend', operator = 'gt', value = '') {
+  window.addConditionRow = function (metric = 'spend', operator = 'gte', value = '') {
     haptic('selection');
     const container = document.getElementById('ruleConditionsContainer');
     if (!container) return;
+
+    const isGte = operator === 'gte' || operator === 'gt';
+    const isLte = operator === 'lte' || operator === 'lt';
+    const isEq = operator === 'eq';
 
     const row = document.createElement('div');
     row.className = 'rule-condition-row';
@@ -389,9 +393,9 @@
         <option value="cpr" ${metric === 'cpr' ? 'selected' : ''}>Цена за регу ($)</option>
       </select>
       <select class="cond-operator form-select">
-        <option value="gt" ${operator === 'gt' ? 'selected' : ''}>&gt; (больше)</option>
-        <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt; (меньше)</option>
-        <option value="eq" ${operator === 'eq' ? 'selected' : ''}>= (равно)</option>
+        <option value="gte" ${isGte ? 'selected' : ''}>&ge; (больше или равно)</option>
+        <option value="lte" ${isLte ? 'selected' : ''}>&le; (меньше или равно)</option>
+        <option value="eq" ${isEq ? 'selected' : ''}>= (равно)</option>
       </select>
       <input type="number" class="cond-value form-input text-center" placeholder="0.0" step="0.5" min="0" inputmode="decimal" value="${value}">
       <button type="button" class="btn-remove-cond" onclick="this.closest('.rule-condition-row').remove()" title="Удалить условие">&times;</button>
@@ -405,12 +409,12 @@
     container.innerHTML = '';
 
     if (!conditionsList || conditionsList.length === 0) {
-      window.addConditionRow('spend', 'gt', 2.0);
+      window.addConditionRow('spend', 'gte', 2.0);
       return;
     }
 
     conditionsList.forEach(c => {
-      window.addConditionRow(c.metric, c.operator, c.value);
+      window.addConditionRow(c.metric, c.operator || 'gte', c.value);
     });
   }
 

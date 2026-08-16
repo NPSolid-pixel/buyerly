@@ -31,10 +31,10 @@ class RuleEngine:
 
     @staticmethod
     def _eval_condition(metric_val: float, operator: str, target_val: float) -> bool:
-        if operator == "gt":
-            return metric_val > target_val
-        elif operator == "lt":
-            return metric_val < target_val
+        if operator in ("gte", "gt"):
+            return metric_val >= (target_val - 0.001)
+        elif operator in ("lte", "lt"):
+            return metric_val <= (target_val + 0.001)
         elif operator == "eq":
             return abs(metric_val - target_val) < 0.01
         return False
@@ -83,7 +83,7 @@ class RuleEngine:
 
             for cond in conditions:
                 metric = cond.get("metric", "spend")
-                operator = cond.get("operator", "gt")
+                operator = cond.get("operator", "gte")
                 target_val = float(cond.get("value", 0.0))
 
                 metric_val = 0.0
@@ -99,7 +99,7 @@ class RuleEngine:
                     metric_val = cpr
                     metric_name = "Цена за регу (CPR)"
 
-                op_symbol = ">" if operator == "gt" else ("<" if operator == "lt" else "=")
+                op_symbol = "≥" if operator in ("gte", "gt") else ("≤" if operator in ("lte", "lt") else "=")
                 matches = RuleEngine._eval_condition(metric_val, operator, target_val)
 
                 if not matches:
