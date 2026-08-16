@@ -160,6 +160,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="summaryColumnOptions"',
             'id="summaryTableColumns"',
             'id="summaryTableHead"',
+            'id="summaryAccountSearch"',
+            'id="summaryStatusFilters"',
+            'id="summaryRowsCount"',
             'data-summary-view="overview"',
             'data-summary-view="delivery"',
             'data-summary-view="traffic"',
@@ -177,6 +180,14 @@ class TestFrontendRuleContract(unittest.TestCase):
             'SUMMARY_VIEW_PRESETS',
             'column_order',
             'column_widths',
+            'sort_column',
+            'sort_direction',
+            'filters',
+            'period',
+            'data-summary-sort',
+            'initializeSummaryTab',
+            'renderSummaryAccountRows',
+            'summaryFilterSaveTimer',
             'data-summary-column-width-input',
             'setupSummaryColumnEditor',
         ):
@@ -185,8 +196,10 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-view-toolbar', self.styles)
         self.assertIn('.summary-column-hidden', self.styles)
         self.assertIn('.summary-column-drag', self.styles)
+        self.assertIn('.summary-table-filterbar', self.styles)
+        self.assertIn('.summary-sortable-header', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.7.0', self.index)
+        self.assertIn('v=9.8.0', self.index)
 
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (

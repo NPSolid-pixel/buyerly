@@ -556,6 +556,9 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(default_view.json()["is_saved"])
             self.assertEqual(default_view.json()["view_mode"], "all")
             self.assertEqual(len(default_view.json()["visible_columns"]), 22)
+            self.assertEqual(default_view.json()["sort_column"], "")
+            self.assertEqual(default_view.json()["filters"], {"query": "", "status": "all"})
+            self.assertEqual(default_view.json()["period"], "today")
 
             saved_view = await client.put(
                 "/api/analytics-view",
@@ -584,6 +587,10 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     "visible_columns": ["account", "data", "spend", "cpp"],
                     "column_order": ["spend", "account", "data", "cpp"],
                     "column_widths": {"spend": 176, "account": 320, "cpp": 88},
+                    "sort_column": "spend",
+                    "sort_direction": "desc",
+                    "filters": {"query": "sweden", "status": "synced"},
+                    "period": "last_7d",
                 },
             )
             self.assertEqual(reordered_view.status_code, 200)
@@ -593,10 +600,17 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(reordered_view.json()["column_widths"]["spend"], 176)
             self.assertEqual(reordered_view.json()["column_widths"]["account"], 320)
+            self.assertEqual(reordered_view.json()["sort_column"], "spend")
+            self.assertEqual(reordered_view.json()["sort_direction"], "desc")
+            self.assertEqual(reordered_view.json()["filters"], {"query": "sweden", "status": "synced"})
+            self.assertEqual(reordered_view.json()["period"], "last_7d")
 
             restored_reordered_view = await client.get("/api/analytics-view", headers=buyer_headers)
             self.assertEqual(restored_reordered_view.json()["column_order"][:4], ["spend", "account", "data", "cpp"])
             self.assertEqual(restored_reordered_view.json()["column_widths"]["cpp"], 88)
+            self.assertEqual(restored_reordered_view.json()["sort_column"], "spend")
+            self.assertEqual(restored_reordered_view.json()["filters"]["status"], "synced")
+            self.assertEqual(restored_reordered_view.json()["period"], "last_7d")
 
             isolated_admin_view = await client.get("/api/analytics-view", headers=admin_headers)
             self.assertFalse(isolated_admin_view.json()["is_saved"])
@@ -622,6 +636,34 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 json={"view_mode": "custom", "column_widths": {"spend": 421}},
             )
             self.assertEqual(invalid_width.status_code, 422)
+
+            invalid_sort = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"sort_column": "unknown_metric"},
+            )
+            self.assertEqual(invalid_sort.status_code, 422)
+
+            invalid_filter = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"filters": {"owner": "somebody"}},
+            )
+            self.assertEqual(invalid_filter.status_code, 422)
+
+            invalid_status = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"filters": {"status": "archived"}},
+            )
+            self.assertEqual(invalid_status.status_code, 422)
+
+            invalid_period = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"period": "last_30d"},
+            )
+            self.assertEqual(invalid_period.status_code, 422)
 
         async with self.test_session_maker() as session:
             count = int(

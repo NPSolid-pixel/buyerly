@@ -55,6 +55,7 @@
   let summaryAutoRefreshTimer = null;
   let summaryViewSaveQueue = Promise.resolve();
   let summaryViewChangeVersion = 0;
+  let summaryFilterSaveTimer = null;
 
   // Application State
   const state = {
@@ -68,7 +69,11 @@
       view_mode: 'all',
       visible_columns: [...SUMMARY_VIEW_PRESETS.all],
       column_order: [...SUMMARY_VIEW_PRESETS.all],
-      column_widths: { ...SUMMARY_DEFAULT_COLUMN_WIDTHS }
+      column_widths: { ...SUMMARY_DEFAULT_COLUMN_WIDTHS },
+      sort_column: '',
+      sort_direction: 'desc',
+      filters: { query: '', status: 'all' },
+      period: 'today'
     },
     summaryViewLoaded: false,
     presets: [],
@@ -215,15 +220,7 @@
     } else if (tabName === 'rules') {
       loadRulesTab();
     } else if (tabName === 'summary') {
-      updateFetchButtonLabel(state.currentPeriod);
-      loadSummaryViewPreference();
-      loadStoppedAdsets();
-      if (state.summaryCache[state.currentPeriod]) {
-        renderLocalSummaryCache(state.summaryCache[state.currentPeriod]);
-        refreshSummaryIfStale(state.currentPeriod, state.summaryCache[state.currentPeriod]);
-      } else {
-        loadSummary(state.currentPeriod, false, { silent: true, refreshIfStale: true });
-      }
+      initializeSummaryTab();
     } else if (tabName === 'logs') {
       loadLogsTab(1);
     } else if (tabName === 'settings') {
@@ -1441,6 +1438,24 @@
     }, SUMMARY_AUTO_REFRESH_MS);
   }
 
+  async function initializeSummaryTab() {
+    await loadSummaryViewPreference();
+    if (state.activeTab !== 'summary') return;
+
+    state.currentPeriod = state.summaryView.period;
+    updateFetchButtonLabel(state.currentPeriod);
+    document.getElementById('kpiPeriodLabel').textContent = periodTextMap[state.currentPeriod] || '';
+    loadStoppedAdsets();
+
+    const savedData = state.summaryCache[state.currentPeriod];
+    if (savedData) {
+      renderLocalSummaryCache(savedData);
+      refreshSummaryIfStale(state.currentPeriod, savedData);
+    } else {
+      loadSummary(state.currentPeriod, false, { silent: true, refreshIfStale: true });
+    }
+  }
+
   function normalizeSummaryView(preference = {}) {
     const canonicalOrder = SUMMARY_COLUMNS.map(column => column.key);
     const knownColumns = new Set(canonicalOrder);
@@ -1468,6 +1483,18 @@
         : SUMMARY_DEFAULT_COLUMN_WIDTHS[key];
       return [key, Math.max(SUMMARY_COLUMN_MIN_WIDTH, Math.min(SUMMARY_COLUMN_MAX_WIDTH, width))];
     }));
+    const sortColumn = knownColumns.has(preference.sort_column) ? preference.sort_column : '';
+    const sortDirection = preference.sort_direction === 'asc' ? 'asc' : 'desc';
+    const rawFilters = preference.filters && typeof preference.filters === 'object'
+      ? preference.filters
+      : {};
+    const statusFilter = ['all', 'synced', 'blocked', 'error'].includes(rawFilters.status)
+      ? rawFilters.status
+      : 'all';
+    const queryFilter = String(rawFilters.query || '').trim().slice(0, 120);
+    const period = ['today', 'yesterday', 'last_3d', 'last_7d'].includes(preference.period)
+      ? preference.period
+      : 'today';
     const viewMode = ['all', 'overview', 'delivery', 'traffic', 'funnel', 'custom'].includes(preference.view_mode)
       ? preference.view_mode
       : 'all';
@@ -1475,7 +1502,11 @@
       view_mode: viewMode,
       visible_columns: canonicalOrder.filter(key => visibleSet.has(key)),
       column_order: columnOrder,
-      column_widths: columnWidths
+      column_widths: columnWidths,
+      sort_column: sortColumn,
+      sort_direction: sortDirection,
+      filters: { query: queryFilter, status: statusFilter },
+      period
     };
   }
 
@@ -1489,6 +1520,20 @@
     });
     const count = document.getElementById('summaryVisibleColumnsCount');
     if (count) count.textContent = summaryVisibleColumnCount();
+    const searchInput = document.getElementById('summaryAccountSearch');
+    if (searchInput && searchInput.value !== state.summaryView.filters.query) {
+      searchInput.value = state.summaryView.filters.query;
+    }
+    document.getElementById('summaryAccountSearchClear')?.classList.toggle(
+      'hidden',
+      !state.summaryView.filters.query
+    );
+    document.querySelectorAll('[data-summary-status-filter]').forEach(button => {
+      button.classList.toggle('active', button.dataset.summaryStatusFilter === state.summaryView.filters.status);
+    });
+    document.querySelectorAll('.period-btn').forEach(button => {
+      button.classList.toggle('active', button.dataset.period === state.summaryView.period);
+    });
   }
 
   function renderSummaryTableHeader() {
@@ -1502,6 +1547,14 @@
       .map(key => definitions.get(key))
       .filter(Boolean);
     const hasGroupedColumns = orderedColumns.some(column => column.group !== 'base');
+    const leafHeader = (column, rowspan = false) => {
+      const alignment = column.key === 'account' || column.key === 'data' ? '' : ' text-right';
+      const isActiveSort = state.summaryView.sort_column === column.key;
+      const direction = state.summaryView.sort_direction;
+      const indicator = isActiveSort ? (direction === 'asc' ? '↑' : '↓') : '↕';
+      const ariaSort = isActiveSort ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
+      return `<th${rowspan ? ' rowspan="2"' : ''} class="summary-sortable-header${alignment}" data-summary-column="${column.key}" data-summary-sort="${column.key}" tabindex="0" role="button" aria-sort="${ariaSort}">${escapeHtml(column.label)} <span class="summary-sort-indicator">${indicator}</span></th>`;
+    };
     const runs = [];
     orderedColumns.forEach(column => {
       const previous = runs[runs.length - 1];
@@ -1515,8 +1568,7 @@
     const firstRow = runs.map(run => {
       if (run.group === 'base') {
         const column = run.columns[0];
-        const alignment = column.key === 'account' || column.key === 'data' ? '' : ' class="text-right"';
-        return `<th${hasGroupedColumns ? ' rowspan="2"' : ''}${alignment} data-summary-column="${column.key}">${escapeHtml(column.label)}</th>`;
+        return leafHeader(column, hasGroupedColumns);
       }
       const groupLabel = SUMMARY_COLUMN_GROUPS[run.group]?.label || run.group;
       return `<th colspan="${run.columns.length}" class="text-center" data-summary-group="${run.group}">${escapeHtml(groupLabel)}</th>`;
@@ -1524,7 +1576,7 @@
     const secondRow = runs
       .filter(run => run.group !== 'base')
       .flatMap(run => run.columns)
-      .map(column => `<th class="text-right" data-summary-column="${column.key}">${escapeHtml(column.label)}</th>`)
+      .map(column => leafHeader(column))
       .join('');
     head.innerHTML = `
       <tr class="table-group-header">${firstRow}</tr>
@@ -1913,9 +1965,120 @@
   }
 
   function summaryDataStatus(account) {
-    const status = account.data_status || (account.has_error ? 'error' : (account.is_banned ? 'blocked' : 'synced'));
+    const status = summaryAccountStatusKey(account);
     const labels = { synced: 'Получены', blocked: 'Недоступны', error: 'Ошибка Meta' };
     return `<span class="summary-data-status ${status}" title="${escapeHtml(account.data_status_label || '')}">${labels[status] || 'Нет данных'}</span>`;
+  }
+
+  function summaryAccountStatusKey(account) {
+    return account.data_status || (account.has_error ? 'error' : (account.is_banned ? 'blocked' : 'synced'));
+  }
+
+  function summaryAccountHasMetrics(account) {
+    return summaryAccountStatusKey(account) === 'synced';
+  }
+
+  function summaryAccountSortValue(account, key) {
+    if (key === 'account') return String(account.short_name || account.name || account.account_id || '').toLocaleLowerCase('ru');
+    if (key === 'data') return summaryAccountStatusKey(account);
+    if (!summaryAccountHasMetrics(account)) return null;
+    const metricMap = {
+      spend: 'spend', impressions: 'impressions', reach: 'reach', frequency: 'frequency', cpm: 'cpm',
+      clicks: 'clicks', link_clicks: 'link_clicks', unique_clicks: 'unique_clicks',
+      outbound_clicks: 'outbound_clicks', landing_page_views: 'landing_page_views',
+      ctr: 'ctr', ctr_link: 'ctr_link', cpc: 'cpc', cpc_link: 'cpc_link',
+      leads: 'leads', registrations: 'registrations', purchases: 'purchases',
+      cpl: 'cost_per_lead', cpreg: 'cost_per_registration', cpp: 'cost_per_purchase'
+    };
+    const value = account[metricMap[key]];
+    if (value === null || value === undefined || value === '') return null;
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+  }
+
+  function filteredSortedSummaryAccounts(accounts = []) {
+    const query = state.summaryView.filters.query.toLocaleLowerCase('ru');
+    const status = state.summaryView.filters.status;
+    const filtered = accounts.filter(account => {
+      if (status !== 'all' && summaryAccountStatusKey(account) !== status) return false;
+      if (!query) return true;
+      return [account.short_name, account.name, account.account_id]
+        .some(value => String(value || '').toLocaleLowerCase('ru').includes(query));
+    });
+
+    const sortColumn = state.summaryView.sort_column;
+    if (!sortColumn) return filtered;
+    const direction = state.summaryView.sort_direction === 'asc' ? 1 : -1;
+    return filtered
+      .map((account, index) => ({ account, index }))
+      .sort((left, right) => {
+        const leftValue = summaryAccountSortValue(left.account, sortColumn);
+        const rightValue = summaryAccountSortValue(right.account, sortColumn);
+        const leftMissing = leftValue === null || leftValue === undefined || Number.isNaN(leftValue);
+        const rightMissing = rightValue === null || rightValue === undefined || Number.isNaN(rightValue);
+        if (leftMissing && rightMissing) return left.index - right.index;
+        if (leftMissing) return 1;
+        if (rightMissing) return -1;
+        const comparison = typeof leftValue === 'string'
+          ? leftValue.localeCompare(String(rightValue), 'ru', { numeric: true, sensitivity: 'base' })
+          : leftValue - rightValue;
+        return comparison === 0 ? left.index - right.index : comparison * direction;
+      })
+      .map(item => item.account);
+  }
+
+  function renderSummaryAccountRows(data) {
+    const allAccounts = Array.isArray(data?.accounts) ? data.accounts : [];
+    const accounts = filteredSortedSummaryAccounts(allAccounts);
+    const rowsCount = document.getElementById('summaryRowsCount');
+    const hasActiveFilters = Boolean(state.summaryView.filters.query) || state.summaryView.filters.status !== 'all';
+    if (rowsCount) {
+      rowsCount.textContent = hasActiveFilters
+        ? `${accounts.length} из ${allAccounts.length} кабинетов`
+        : `${accounts.length} кабинетов`;
+    }
+
+    const tableBody = document.getElementById('summaryTableBody');
+    if (accounts.length === 0) {
+      const emptyMessage = allAccounts.length === 0
+        ? 'Нет подключенных кабинетов'
+        : 'По выбранным фильтрам кабинеты не найдены';
+      tableBody.innerHTML = `<tr><td data-summary-empty colspan="${summaryVisibleColumnCount()}" class="text-center" style="color: var(--tg-hint);">${emptyMessage}</td></tr>`;
+    } else {
+      tableBody.innerHTML = accounts.map(acc => {
+        const hasMetrics = summaryAccountHasMetrics(acc);
+        const spendStr = hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0)) : '—';
+        const displayName = acc.short_name || acc.name;
+
+        return `
+          <tr>
+            <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
+            <td data-summary-column="data">${summaryDataStatus(acc)}</td>
+            <td class="text-right mono" data-summary-column="spend"><b>${spendStr}</b></td>
+            <td class="text-right mono" data-summary-column="impressions">${hasMetrics ? formatNumber(acc.impressions) : '—'}</td>
+            <td class="text-right mono" data-summary-column="reach">${hasMetrics ? formatOptionalNumber(acc.reach) : '—'}</td>
+            <td class="text-right mono" data-summary-column="frequency">${hasMetrics ? formatDecimalOrDash(acc.frequency) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpm">${hasMetrics ? formatMoneyOrDash(acc.cpm) : '—'}</td>
+            <td class="text-right mono" data-summary-column="clicks">${hasMetrics ? formatNumber(acc.clicks) : '—'}</td>
+            <td class="text-right mono" data-summary-column="link_clicks">${hasMetrics ? formatOptionalNumber(acc.link_clicks) : '—'}</td>
+            <td class="text-right mono" data-summary-column="unique_clicks">${hasMetrics ? formatOptionalNumber(acc.unique_clicks) : '—'}</td>
+            <td class="text-right mono" data-summary-column="outbound_clicks">${hasMetrics ? formatOptionalNumber(acc.outbound_clicks) : '—'}</td>
+            <td class="text-right mono" data-summary-column="landing_page_views">${hasMetrics ? formatOptionalNumber(acc.landing_page_views) : '—'}</td>
+            <td class="text-right mono" data-summary-column="ctr">${hasMetrics ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</td>
+            <td class="text-right mono" data-summary-column="ctr_link">${hasMetrics ? formatDecimalOrDash(acc.ctr_link, 2, '%') : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpc">${hasMetrics ? formatMoneyOrDash(acc.cpc) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpc_link">${hasMetrics ? formatMoneyOrDash(acc.cpc_link) : '—'}</td>
+            <td class="text-right mono" data-summary-column="leads" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
+            <td class="text-right mono" data-summary-column="registrations" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
+            <td class="text-right mono" data-summary-column="purchases">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpl">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpreg">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpp"><b>${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase) : '—'}</b></td>
+          </tr>`;
+      }).join('');
+    }
+    applySummaryColumnVisibility();
+    return accounts;
   }
 
   function renderSummaryData(data) {
@@ -1947,55 +2110,20 @@
     renderSummaryQuality(data.data_quality || {});
     renderMetricDefinitions(data.metric_definitions || {});
 
-    // Desktop Table
-    const tableBody = document.getElementById('summaryTableBody');
-    if (!data.accounts || data.accounts.length === 0) {
-      tableBody.innerHTML = `<tr><td data-summary-empty colspan="${summaryVisibleColumnCount()}" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
-    } else {
-      tableBody.innerHTML = data.accounts.map(acc => {
-        const hasMetrics = acc.data_status === 'synced' || (!acc.data_status && !acc.is_banned && !acc.has_error);
-        const spendStr = hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0)) : '—';
-        const displayName = acc.short_name || acc.name;
-        
-        return `
-          <tr>
-            <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
-            <td data-summary-column="data">${summaryDataStatus(acc)}</td>
-            <td class="text-right mono" data-summary-column="spend"><b>${spendStr}</b></td>
-            <td class="text-right mono" data-summary-column="impressions">${hasMetrics ? formatNumber(acc.impressions) : '—'}</td>
-            <td class="text-right mono" data-summary-column="reach">${hasMetrics ? formatOptionalNumber(acc.reach) : '—'}</td>
-            <td class="text-right mono" data-summary-column="frequency">${hasMetrics ? formatDecimalOrDash(acc.frequency) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpm">${hasMetrics ? formatMoneyOrDash(acc.cpm) : '—'}</td>
-            <td class="text-right mono" data-summary-column="clicks">${hasMetrics ? formatNumber(acc.clicks) : '—'}</td>
-            <td class="text-right mono" data-summary-column="link_clicks">${hasMetrics ? formatOptionalNumber(acc.link_clicks) : '—'}</td>
-            <td class="text-right mono" data-summary-column="unique_clicks">${hasMetrics ? formatOptionalNumber(acc.unique_clicks) : '—'}</td>
-            <td class="text-right mono" data-summary-column="outbound_clicks">${hasMetrics ? formatOptionalNumber(acc.outbound_clicks) : '—'}</td>
-            <td class="text-right mono" data-summary-column="landing_page_views">${hasMetrics ? formatOptionalNumber(acc.landing_page_views) : '—'}</td>
-            <td class="text-right mono" data-summary-column="ctr">${hasMetrics ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</td>
-            <td class="text-right mono" data-summary-column="ctr_link">${hasMetrics ? formatDecimalOrDash(acc.ctr_link, 2, '%') : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpc">${hasMetrics ? formatMoneyOrDash(acc.cpc) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpc_link">${hasMetrics ? formatMoneyOrDash(acc.cpc_link) : '—'}</td>
-            <td class="text-right mono" data-summary-column="leads" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
-            <td class="text-right mono" data-summary-column="registrations" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
-            <td class="text-right mono" data-summary-column="purchases">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpl">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpreg">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpp"><b>${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase) : '—'}</b></td>
-          </tr>
-        `;
-      }).join('');
-    }
-    applySummaryColumnVisibility();
+    const visibleAccounts = renderSummaryAccountRows(data);
 
     // Mobile Cards
     const mobileCards = document.getElementById('summaryMobileCards');
-    if (!data.accounts || data.accounts.length === 0) {
-      mobileCards.innerHTML = `<div class="empty-state"><p>Нет данных для отображения</p></div>`;
+    if (visibleAccounts.length === 0) {
+      const emptyMessage = Array.isArray(data.accounts) && data.accounts.length > 0
+        ? 'По выбранным фильтрам кабинеты не найдены'
+        : 'Нет данных для отображения';
+      mobileCards.innerHTML = `<div class="empty-state"><p>${emptyMessage}</p></div>`;
     } else {
-      mobileCards.innerHTML = data.accounts.map(acc => {
+      mobileCards.innerHTML = visibleAccounts.map(acc => {
         const displayName = acc.short_name || acc.name;
         const subLabel = acc.name !== displayName ? `${escapeHtml(acc.name)} · ${acc.account_id}` : acc.account_id;
-        const hasMetrics = acc.data_status === 'synced' || (!acc.data_status && !acc.is_banned && !acc.has_error);
+        const hasMetrics = summaryAccountHasMetrics(acc);
         const statusPillHtml = summaryDataStatus(acc);
 
         return `
@@ -2645,6 +2773,7 @@
     if (button) button.disabled = true;
     const saved = await persistSummaryView(
       {
+        ...state.summaryView,
         view_mode: 'custom',
         visible_columns: selected,
         column_order: columnOrder,
@@ -2659,6 +2788,7 @@
   document.getElementById('btnResetSummaryColumns')?.addEventListener('click', async () => {
     const saved = await persistSummaryView(
       {
+        ...state.summaryView,
         view_mode: 'all',
         visible_columns: SUMMARY_VIEW_PRESETS.all,
         column_order: SUMMARY_VIEW_PRESETS.all,
@@ -2694,11 +2824,80 @@
     });
   });
 
+  function rerenderSummaryForTableControls() {
+    const data = state.summaryCache[state.currentPeriod] || state.summary;
+    if (data) renderSummaryData(data);
+  }
+
+  function updateSummaryFilters(patch, options = {}) {
+    state.summaryView = normalizeSummaryView({
+      ...state.summaryView,
+      filters: { ...state.summaryView.filters, ...patch }
+    });
+    rerenderSummaryForTableControls();
+    updateSummaryViewControls();
+
+    if (summaryFilterSaveTimer) window.clearTimeout(summaryFilterSaveTimer);
+    if (options.immediate) {
+      persistSummaryView(state.summaryView);
+    } else {
+      summaryFilterSaveTimer = window.setTimeout(() => {
+        summaryFilterSaveTimer = null;
+        persistSummaryView(state.summaryView);
+      }, 500);
+    }
+  }
+
+  document.getElementById('summaryAccountSearch')?.addEventListener('input', event => {
+    updateSummaryFilters({ query: event.target.value });
+  });
+
+  document.getElementById('summaryAccountSearchClear')?.addEventListener('click', () => {
+    updateSummaryFilters({ query: '' }, { immediate: true });
+    document.getElementById('summaryAccountSearch')?.focus();
+  });
+
+  document.querySelectorAll('[data-summary-status-filter]').forEach(button => {
+    button.addEventListener('click', () => {
+      haptic('selection');
+      updateSummaryFilters({ status: button.dataset.summaryStatusFilter }, { immediate: true });
+    });
+  });
+
+  function changeSummarySort(column) {
+    const isSameColumn = state.summaryView.sort_column === column;
+    const defaultDirection = ['account', 'data'].includes(column) ? 'asc' : 'desc';
+    state.summaryView = normalizeSummaryView({
+      ...state.summaryView,
+      sort_column: column,
+      sort_direction: isSameColumn
+        ? (state.summaryView.sort_direction === 'asc' ? 'desc' : 'asc')
+        : defaultDirection
+    });
+    haptic('selection');
+    rerenderSummaryForTableControls();
+    persistSummaryView(state.summaryView);
+  }
+
+  document.getElementById('summaryTableHead')?.addEventListener('click', event => {
+    const header = event.target.closest('[data-summary-sort]');
+    if (header) changeSummarySort(header.dataset.summarySort);
+  });
+
+  document.getElementById('summaryTableHead')?.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const header = event.target.closest('[data-summary-sort]');
+    if (!header) return;
+    event.preventDefault();
+    changeSummarySort(header.dataset.summarySort);
+  });
+
   // Period Switcher Listeners in Summary
   document.querySelectorAll('.period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const period = btn.dataset.period;
       state.currentPeriod = period;
+      state.summaryView = normalizeSummaryView({ ...state.summaryView, period });
       haptic('selection');
 
       document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
@@ -2706,6 +2905,7 @@
 
       updateFetchButtonLabel(period);
       document.getElementById('kpiPeriodLabel').textContent = periodTextMap[period] || '';
+      persistSummaryView(state.summaryView);
 
       if (state.summaryCache[period]) {
         renderLocalSummaryCache(state.summaryCache[period]);

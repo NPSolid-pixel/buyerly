@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.7.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.8.0">
 </head>
 
 <body>
@@ -496,6 +496,21 @@
             <button id="btnOpenSummaryColumns" class="btn btn-secondary summary-columns-button" type="button">
               Колонки таблицы <span id="summaryVisibleColumnsCount" class="summary-columns-count">22</span>
             </button>
+          </div>
+
+          <div class="summary-table-filterbar" aria-label="Фильтры таблицы">
+            <div class="summary-table-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="summaryAccountSearch" type="search" maxlength="120" placeholder="Найти кабинет или act_ID…" autocomplete="off">
+              <button id="summaryAccountSearchClear" class="hidden" type="button" aria-label="Очистить поиск">&times;</button>
+            </div>
+            <div class="summary-status-filters" id="summaryStatusFilters">
+              <button class="active" type="button" data-summary-status-filter="all">Все</button>
+              <button type="button" data-summary-status-filter="synced">Получены</button>
+              <button type="button" data-summary-status-filter="blocked">Недоступны</button>
+              <button type="button" data-summary-status-filter="error">Ошибки Meta</button>
+            </div>
+            <span id="summaryRowsCount" class="summary-rows-count">0 кабинетов</span>
           </div>
 
           <!-- Desktop Table View -->
@@ -1190,6 +1205,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.7.0"></script>
+  <script src="/static/js/app.js?v=9.8.0"></script>
 </body>
 </html>

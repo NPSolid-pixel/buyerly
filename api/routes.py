@@ -72,6 +72,9 @@ SUMMARY_TABLE_COLUMNS = (
 )
 SUMMARY_REQUIRED_COLUMNS = ("account", "data")
 SUMMARY_VIEW_MODES = {"all", "overview", "delivery", "traffic", "funnel", "custom"}
+SUMMARY_VIEW_PERIODS = {"today", "yesterday", "last_3d", "last_7d"}
+SUMMARY_FILTER_KEYS = {"query", "status"}
+SUMMARY_FILTER_STATUSES = {"all", "synced", "blocked", "error"}
 SUMMARY_COLUMN_MIN_WIDTH = 72
 SUMMARY_COLUMN_MAX_WIDTH = 420
 SUMMARY_DEFAULT_COLUMN_WIDTHS = {
@@ -223,6 +226,10 @@ class AnalyticsViewPreferenceRequest(BaseModel):
     visible_columns: List[str] = Field(default_factory=lambda: list(SUMMARY_TABLE_COLUMNS), max_length=len(SUMMARY_TABLE_COLUMNS))
     column_order: List[str] = Field(default_factory=lambda: list(SUMMARY_TABLE_COLUMNS), max_length=len(SUMMARY_TABLE_COLUMNS))
     column_widths: Dict[str, int] = Field(default_factory=dict, max_length=len(SUMMARY_TABLE_COLUMNS))
+    sort_column: str = Field(default="", max_length=64)
+    sort_direction: str = Field(default="desc", pattern="^(asc|desc)$")
+    filters: Dict[str, str] = Field(default_factory=dict, max_length=len(SUMMARY_FILTER_KEYS))
+    period: str = Field(default="today", pattern="^(today|yesterday|last_3d|last_7d)$")
 
 
 # ----------------------------------------------------
@@ -357,12 +364,48 @@ def _normalize_summary_view_config(config: Any, *, strict: bool = True) -> Dict[
                 detail=f"Ширина колонки {key} должна быть от {SUMMARY_COLUMN_MIN_WIDTH} до {SUMMARY_COLUMN_MAX_WIDTH}px",
             )
         column_widths[key] = max(SUMMARY_COLUMN_MIN_WIDTH, min(SUMMARY_COLUMN_MAX_WIDTH, width))
+
+    sort_column = str(config.get("sort_column") or "")
+    if sort_column and sort_column not in SUMMARY_TABLE_COLUMNS:
+        if strict:
+            raise HTTPException(status_code=422, detail=f"Неизвестная колонка сортировки: {sort_column}")
+        sort_column = ""
+    sort_direction = str(config.get("sort_direction") or "desc")
+    if sort_direction not in {"asc", "desc"}:
+        sort_direction = "desc"
+
+    raw_filters = config.get("filters")
+    if not isinstance(raw_filters, dict):
+        raw_filters = {}
+    invalid_filter_keys = [key for key in raw_filters if key not in SUMMARY_FILTER_KEYS]
+    if invalid_filter_keys and strict:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Неизвестные фильтры аналитики: {', '.join(map(str, invalid_filter_keys))}",
+        )
+    query_filter = str(raw_filters.get("query") or "").strip()
+    if strict and len(query_filter) > 120:
+        raise HTTPException(status_code=422, detail="Поиск по кабинетам не должен превышать 120 символов")
+    query_filter = query_filter[:120]
+    status_filter = str(raw_filters.get("status") or "all")
+    if status_filter not in SUMMARY_FILTER_STATUSES:
+        if strict:
+            raise HTTPException(status_code=422, detail=f"Неизвестный фильтр статуса: {status_filter}")
+        status_filter = "all"
+
+    period = str(config.get("period") or "today")
+    if period not in SUMMARY_VIEW_PERIODS:
+        period = "today"
     return {
         "scope": SUMMARY_VIEW_SCOPE,
         "view_mode": view_mode,
         "visible_columns": visible_columns,
         "column_order": column_order,
         "column_widths": column_widths,
+        "sort_column": sort_column,
+        "sort_direction": sort_direction,
+        "filters": {"query": query_filter, "status": status_filter},
+        "period": period,
     }
 
 
