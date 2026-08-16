@@ -7,7 +7,8 @@ from sqlalchemy import select, delete
 
 from core.config import settings
 from database.db import async_session_maker
-from database.models import Account, StoppedAdSet, AppSettings, TelegramUser, EventLog
+import json
+from database.models import Account, StoppedAdSet, AppSettings, TelegramUser, EventLog, RulePreset
 from meta_api.client import MetaClient
 from bot.handlers import parse_fb_raw_accounts, scheduler_ref, get_short_account_label
 from api.auth import get_current_user
@@ -33,6 +34,29 @@ class UserProfileResponse(BaseModel):
     role: str
     is_approved: bool
 
+class ConditionItem(BaseModel):
+    metric: str = "spend"  # spend, cpl, cpr
+    operator: str = "gt"   # gt, lt, eq
+    value: float = 0.0
+
+class RulePresetItem(BaseModel):
+    id: int
+    name: str
+    action: str
+    conditions: List[ConditionItem]
+    created_at: str
+
+class CreatePresetRequest(BaseModel):
+    name: str
+    action: Optional[str] = "turn_off"
+    conditions: List[ConditionItem] = Field(default_factory=list)
+
+class ApplyPresetRequest(BaseModel):
+    preset_id: Optional[int] = None
+    name: Optional[str] = ""
+    action: Optional[str] = "turn_off"
+    conditions: List[ConditionItem] = Field(default_factory=list)
+
 class AccountItem(BaseModel):
     id: int
     account_id: str
@@ -44,6 +68,10 @@ class AccountItem(BaseModel):
     status_label: str
     rules_enabled: bool
     is_active: bool
+    preset_id: Optional[int] = None
+    preset_name: Optional[str] = ""
+    rule_action: Optional[str] = "turn_off"
+    rule_conditions: Optional[List[ConditionItem]] = Field(default_factory=list)
     max_spend_0_leads: float
     max_spend_1_lead: float
     max_cpa_multiple_leads: float
@@ -113,8 +141,17 @@ async def get_me(user: TelegramUser = Depends(get_current_user)):
 async def list_accounts(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
         accounts = await get_user_accounts(session, user)
-        return [
-            AccountItem(
+        res_list = []
+        for a in accounts:
+            conds = []
+            if a.rule_conditions:
+                try:
+                    parsed = json.loads(a.rule_conditions) if isinstance(a.rule_conditions, str) else a.rule_conditions
+                    conds = [ConditionItem(**c) for c in parsed if isinstance(c, dict)]
+                except Exception:
+                    conds = []
+
+            res_list.append(AccountItem(
                 id=a.id,
                 account_id=a.account_id,
                 name=a.name,
@@ -125,15 +162,167 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 status_label=a.status_label or "🟢 Активен (ACTIVE)",
                 rules_enabled=a.rules_enabled,
                 is_active=a.is_active,
+                preset_id=a.preset_id,
+                preset_name=a.preset_name or "",
+                rule_action=a.rule_action or "turn_off",
+                rule_conditions=conds,
                 max_spend_0_leads=a.max_spend_0_leads,
                 max_spend_1_lead=a.max_spend_1_lead,
                 max_cpa_multiple_leads=a.max_cpa_multiple_leads,
                 conversion_event=a.conversion_event or "all",
                 auto_reactivate=a.auto_reactivate,
                 created_at=a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else ""
+            ))
+        return res_list
+
+
+# ----------------------------------------------------
+# RULE PRESETS ENDPOINTS
+# ----------------------------------------------------
+
+@router.get("/presets", response_model=List[RulePresetItem])
+async def list_presets(user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        stmt = select(RulePreset).where(RulePreset.owner_id == user.telegram_id).order_by(RulePreset.id.desc())
+        res = await session.execute(stmt)
+        presets = res.scalars().all()
+        result = []
+        for p in presets:
+            try:
+                conds = json.loads(p.conditions) if p.conditions else []
+            except Exception:
+                conds = []
+            result.append(RulePresetItem(
+                id=p.id,
+                name=p.name,
+                action=p.action,
+                conditions=[ConditionItem(**c) for c in conds if isinstance(c, dict)],
+                created_at=p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else ""
+            ))
+        return result
+
+
+@router.post("/presets", response_model=RulePresetItem)
+async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        conds_json = json.dumps([c.model_dump() for c in payload.conditions])
+        preset = RulePreset(
+            owner_id=user.telegram_id,
+            name=payload.name.strip() or "Новое правило",
+            action=payload.action or "turn_off",
+            conditions=conds_json
+        )
+        session.add(preset)
+        await session.commit()
+        await session.refresh(preset)
+        return RulePresetItem(
+            id=preset.id,
+            name=preset.name,
+            action=preset.action,
+            conditions=payload.conditions,
+            created_at=preset.created_at.strftime("%Y-%m-%d %H:%M") if preset.created_at else ""
+        )
+
+
+@router.put("/presets/{preset_id}", response_model=RulePresetItem)
+async def update_preset(preset_id: int, payload: CreatePresetRequest, user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        stmt = select(RulePreset).where(RulePreset.id == preset_id)
+        if user.role != "admin":
+            stmt = stmt.where(RulePreset.owner_id == user.telegram_id)
+        res = await session.execute(stmt)
+        preset = res.scalar_one_or_none()
+        if not preset:
+            raise HTTPException(status_code=404, detail="Пресет не найден")
+        
+        preset.name = payload.name.strip() or preset.name
+        preset.action = payload.action or "turn_off"
+        preset.conditions = json.dumps([c.model_dump() for c in payload.conditions])
+        await session.commit()
+        await session.refresh(preset)
+        return RulePresetItem(
+            id=preset.id,
+            name=preset.name,
+            action=preset.action,
+            conditions=payload.conditions,
+            created_at=preset.created_at.strftime("%Y-%m-%d %H:%M") if preset.created_at else ""
+        )
+
+
+@router.delete("/presets/{preset_id}")
+async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        stmt = select(RulePreset).where(RulePreset.id == preset_id)
+        if user.role != "admin":
+            stmt = stmt.where(RulePreset.owner_id == user.telegram_id)
+        res = await session.execute(stmt)
+        preset = res.scalar_one_or_none()
+        if not preset:
+            raise HTTPException(status_code=404, detail="Пресет не найден")
+        
+        await session.execute(delete(RulePreset).where(RulePreset.id == preset_id))
+        await session.commit()
+        return {"success": True, "message": "Пресет удален"}
+
+
+@router.post("/accounts/{account_id}/apply-preset")
+async def apply_preset_to_account(
+    account_id: str,
+    payload: ApplyPresetRequest,
+    user: TelegramUser = Depends(get_current_user)
+):
+    async with async_session_maker() as session:
+        acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        stmt = select(Account).where(Account.account_id == acc_id)
+        if user.role != "admin":
+            stmt = stmt.where(Account.owner_id == user.telegram_id)
+
+        res = await session.execute(stmt)
+        acc = res.scalar_one_or_none()
+        if not acc:
+            raise HTTPException(status_code=404, detail="Кабинет не найден.")
+
+        # If preset_id provided, load preset
+        if payload.preset_id:
+            p_stmt = select(RulePreset).where(RulePreset.id == payload.preset_id)
+            if user.role != "admin":
+                p_stmt = p_stmt.where(RulePreset.owner_id == user.telegram_id)
+            p_res = await session.execute(p_stmt)
+            preset = p_res.scalar_one_or_none()
+            if preset:
+                acc.preset_id = preset.id
+                acc.preset_name = preset.name
+                acc.rule_action = preset.action
+                acc.rule_conditions = preset.conditions
+        else:
+            # Custom rule conditions from payload
+            conds_json = json.dumps([c.model_dump() for c in payload.conditions])
+            preset_name = payload.name.strip() or "Мое правило"
+            preset = RulePreset(
+                owner_id=user.telegram_id,
+                name=preset_name,
+                action=payload.action or "turn_off",
+                conditions=conds_json
             )
-            for a in accounts
-        ]
+            session.add(preset)
+            await session.flush()
+            
+            acc.preset_id = preset.id
+            acc.preset_name = preset.name
+            acc.rule_action = preset.action
+            acc.rule_conditions = conds_json
+
+        acc.rules_enabled = True
+        await session.commit()
+        return {
+            "account_id": acc.account_id,
+            "preset_id": acc.preset_id,
+            "preset_name": acc.preset_name,
+            "rule_action": acc.rule_action,
+            "rule_conditions": acc.rule_conditions,
+            "rules_enabled": acc.rules_enabled,
+            "message": f"Правило '{acc.preset_name}' успешно применено к кабинету"
+        }
 
 
 @router.post("/accounts/{account_id}/toggle-rules")

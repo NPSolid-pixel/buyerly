@@ -93,6 +93,23 @@ class TelegramNotifier:
                     f"✅ <i>Адсет автоматически переведен в статус ACTIVE.</i>"
                 )
 
+            # 3.1. ТОЛЬКО УВЕДОМЛЕНИЕ (Send notification only)
+            elif event_type == "NOTIFY_ONLY" and eval_result:
+                text = (
+                    f"🔔 <b>Внимание: Сработало правило (Только пуш)</b>\n\n"
+                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
+                    f"💰 <b>Спенд:</b> ${eval_result.spend:.2f}\n"
+                    f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n"
+                    f"📊 <b>CPA:</b> ${eval_result.cpa:.2f}\n\n"
+                    f"⚠️ <i>{eval_result.reason}</i>"
+                )
+                from bot.keyboards import get_pause_adset_keyboard
+                keyboard = get_pause_adset_keyboard(
+                    account_id=account_id,
+                    adset_id=eval_result.adset_id
+                )
+
             # 4. СТАРТ ОТКРУТА В 00:00 ПО ВРЕМЕНИ КАБИНЕТА
             elif event_type == "DAY_START":
                 text = (

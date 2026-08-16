@@ -28,7 +28,11 @@ async def init_db():
         for col_sql in [
             "ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;",
             "ALTER TABLE accounts ADD COLUMN account_status INTEGER DEFAULT 1;",
-            "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT '🟢 Активен (ACTIVE)';"
+            "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT '🟢 Активен (ACTIVE)';",
+            "ALTER TABLE accounts ADD COLUMN preset_id INTEGER;",
+            "ALTER TABLE accounts ADD COLUMN preset_name VARCHAR DEFAULT '';",
+            "ALTER TABLE accounts ADD COLUMN rule_action VARCHAR DEFAULT 'turn_off';",
+            "ALTER TABLE accounts ADD COLUMN rule_conditions TEXT DEFAULT '[]';"
         ]:
             try:
                 await conn.execute(text(col_sql))

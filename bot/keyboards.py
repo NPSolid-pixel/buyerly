@@ -94,6 +94,16 @@ def get_reactivate_keyboard(account_id: str, adset_id: str) -> InlineKeyboardMar
             )
         ]
     ]
+def get_pause_adset_keyboard(account_id: str, adset_id: str) -> InlineKeyboardMarkup:
+    """Инлайн-кнопка для ручной остановки адсета по алерту"""
+    kb = [
+        [
+            InlineKeyboardButton(
+                text="🛑 Остановить адсет вручную", 
+                callback_data=f"pause_adset:{account_id}:{adset_id}"
+            )
+        ]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def get_account_manage_keyboard(account_id: str, rules_enabled: bool) -> InlineKeyboardMarkup:

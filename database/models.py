@@ -31,6 +31,21 @@ class AppSettings(Base):
         return f"<AppSettings(interval={self.poll_interval_minutes}m)>"
 
 
+class RulePreset(Base):
+    __tablename__ = "rule_presets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String, nullable=False, index=True, doc="Telegram ID владельца")
+    name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPA > $6')")
+    action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only'")
+    conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<RulePreset(id={self.id}, name='{self.name}', action='{self.action}')>"
+
+
 class Account(Base):
     __tablename__ = "accounts"
 
@@ -47,6 +62,12 @@ class Account(Base):
     timezone_name = Column(String, default="UTC", nullable=False, doc="Часовой пояс рекламного кабинета")
     last_started_date = Column(String, default="", nullable=False, doc="Дата последнего зафиксированного старта открута")
     
+    # Привязанный пресет и правила
+    preset_id = Column(Integer, nullable=True, doc="ID привязанного пресета")
+    preset_name = Column(String, default="", nullable=False, doc="Название активного пресета")
+    rule_action = Column(String, default="turn_off", nullable=False, doc="turn_off, turn_on, notify_only")
+    rule_conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
+
     # Индивидуальные ступенчатые лимиты правил (в USD $)
     max_spend_0_leads = Column(Float, default=2.0, nullable=False, doc="Макс спенд при 0 лидов/рег ($)")
     max_spend_1_lead = Column(Float, default=6.0, nullable=False, doc="Макс спенд при 1 лиде/реге ($)")

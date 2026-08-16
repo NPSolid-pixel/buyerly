@@ -57,5 +57,39 @@ class TestRuleEngine(unittest.TestCase):
         self.assertEqual(res.action, RuleAction.PROPOSE_REACTIVATE)
         self.assertIn("Долетел(а)", res.reason)
 
+    def test_custom_rule_spend_gt_turn_off(self):
+        self.account.rule_action = "turn_off"
+        self.account.rule_conditions = '[{"metric": "spend", "operator": "gt", "value": 15.0}]'
+        
+        adset_under = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 10.0, "leads": 2, "registrations": 0}
+        self.assertEqual(RuleEngine.evaluate(adset_under, self.account).action, RuleAction.NOOP)
+
+        adset_over = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 15.5, "leads": 2, "registrations": 0}
+        res = RuleEngine.evaluate(adset_over, self.account)
+        self.assertEqual(res.action, RuleAction.STOP)
+        self.assertIn("Спенд ($15.50) > $15.00", res.reason)
+
+    def test_custom_rule_cpl_notify_only(self):
+        self.account.rule_action = "notify_only"
+        self.account.rule_conditions = '[{"metric": "cpl", "operator": "gt", "value": 7.0}]'
+        
+        # Spend $20, 2 leads -> CPL = $10 > $7 -> NOTIFY_ONLY
+        adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 20.0, "leads": 2, "registrations": 0}
+        res = RuleEngine.evaluate(adset, self.account)
+        self.assertEqual(res.action, RuleAction.NOTIFY_ONLY)
+        self.assertIn("Цена за лид (CPL) ($10.00) > $7.00", res.reason)
+
+    def test_custom_rule_multiple_conditions_all_match(self):
+        self.account.rule_action = "turn_off"
+        self.account.rule_conditions = '[{"metric": "spend", "operator": "gt", "value": 10.0}, {"metric": "cpr", "operator": "gt", "value": 5.0}]'
+        
+        # Spend $12 (>10), 1 reg -> CPR $12 (>5) -> STOP
+        adset_match = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 12.0, "leads": 0, "registrations": 1}
+        self.assertEqual(RuleEngine.evaluate(adset_match, self.account).action, RuleAction.STOP)
+
+        # Spend $8 (not >10) -> NOOP
+        adset_no_match = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 8.0, "leads": 0, "registrations": 1}
+        self.assertEqual(RuleEngine.evaluate(adset_no_match, self.account).action, RuleAction.NOOP)
+
 if __name__ == "__main__":
     unittest.main()

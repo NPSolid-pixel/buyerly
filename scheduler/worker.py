@@ -175,6 +175,18 @@ class MonitoringWorker:
                                 logger.error(f"Error pausing adset {a_id}: {e}")
                                 stats["errors"].append(f"Pause error {a_id}: {e}")
 
+                        # ТОЛЬКО УВЕДОМЛЕНИЕ (Send notification only)
+                        elif eval_res.action == RuleAction.NOTIFY_ONLY:
+                            logger.info(f"NOTIFY ONLY AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
+                            if self.telegram_notifier:
+                                await self.telegram_notifier(
+                                    event_type="NOTIFY_ONLY",
+                                    eval_result=eval_res,
+                                    account_name=acc.name,
+                                    account_id=acc.account_id,
+                                    target_chat_id=acc.owner_id
+                                )
+
                         # ПРЕДЛОЖЕНИЕ ВКЛЮЧИТЬ (долет)
                         elif eval_res.action == RuleAction.PROPOSE_REACTIVATE:
                             stats["proposals_sent"] += 1

@@ -1011,3 +1011,31 @@ async def cb_dismiss(callback: CallbackQuery):
     await callback.answer("Оставлен выключенным.")
     new_text = callback.message.text + "\n\n⚪ <b>СТАТУС: Оставлен выключенным пользователем ❌</b>"
     await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("pause_adset:"))
+async def cb_pause_adset(callback: CallbackQuery):
+    _, account_id, adset_id = callback.data.split(":")
+
+    async with async_session_maker() as session:
+        acc_res = await session.execute(select(Account).where(Account.account_id == account_id))
+        account = acc_res.scalar_one_or_none()
+
+        if not account:
+            await callback.answer("❌ Кабинет не найден в базе данных.", show_alert=True)
+            return
+
+        try:
+            await meta_client.set_adset_status(
+                adset_id=adset_id,
+                access_token=account.access_token,
+                status="PAUSED"
+            )
+
+            await callback.answer("🛑 Адсет успешно остановлен!")
+            new_text = callback.message.text + "\n\n🔴 <b>СТАТУС: Остановлен вручную по алерту 🛑</b>"
+            await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")
+
+        except Exception as e:
+            logger.error(f"Error pausing adset {adset_id}: {e}")
+            await callback.answer(f"❌ Ошибка Meta API: {e}", show_alert=True)

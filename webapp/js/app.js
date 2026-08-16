@@ -37,12 +37,14 @@
     summary: null,
     summaryCache: {},
     summaryLastFetchedAt: {},
+    presets: [],
+    activePresetId: null,
+    selectedPreset: { l0: 2.0, l1: 6.0, lcpa: 6.0 },
     currentPeriod: 'today',
     activeTab: 'accounts',
     filter: 'all',
     searchQuery: '',
     parsedAccounts: [],
-    selectedPreset: { l0: 2.0, l1: 6.0, lcpa: 6.0 },
     settings: { poll_interval_minutes: 10 }
   };
 
@@ -227,6 +229,19 @@
         acc.account_status !== 1 ? 'account-disabled' : ''
       ].filter(Boolean).join(' ');
 
+      // Format rule summary pill
+      let ruleBadgeText = 'Настроить правило';
+      if (acc.preset_name) {
+        ruleBadgeText = acc.preset_name;
+      } else if (acc.rule_conditions && acc.rule_conditions.length > 0) {
+        const first = acc.rule_conditions[0];
+        const mLabel = first.metric === 'spend' ? 'Спенд' : (first.metric === 'cpl' ? 'CPL' : 'CPR');
+        const op = first.operator === 'gt' ? '>' : (first.operator === 'lt' ? '<' : '=');
+        ruleBadgeText = `${mLabel} ${op} $${first.value.toFixed(1)}`;
+      }
+
+      const actionIcon = acc.rule_action === 'notify_only' ? '🔔' : (acc.rule_action === 'turn_on' ? '🟢' : '🛡');
+
       return `
         <div class="${cardClass}" id="card-${acc.account_id}">
           <div class="card-header-row">
@@ -247,12 +262,12 @@
             <span class="status-badge ${statusClass}">${statusText}</span>
           </div>
 
-          <!-- Bottom Row: Unified Interactive Limits + Master Rules Toggle -->
+          <!-- Bottom Row: Unified Interactive Rule Pill + Master Rules Toggle -->
           <div class="card-control-row">
-            <div class="card-limits-btn ${acc.rules_enabled ? 'active' : ''}" onclick="window.openEditLimitsModal('${acc.account_id}')" title="Нажмите, чтобы настроить лимиты">
-              <svg class="limits-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              <span class="limits-label">Автостоп:</span>
-              <span class="limits-value mono">$${acc.max_spend_0_leads.toFixed(1)} / $${acc.max_spend_1_lead.toFixed(1)} / $${acc.max_cpa_multiple_leads.toFixed(1)}</span>
+            <div class="card-limits-btn ${acc.rules_enabled ? 'active' : ''}" onclick="window.openEditLimitsModal('${acc.account_id}')" title="Нажмите, чтобы настроить правило">
+              <span style="font-size:13px; line-height:1;">${actionIcon}</span>
+              <span class="limits-label">Правило:</span>
+              <span class="limits-value">${escapeHtml(ruleBadgeText)}</span>
               <svg class="limits-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             </div>
 
@@ -295,65 +310,202 @@
   };
 
   // ==========================================================
-  // LIMITS EDIT MODAL
+  // RULE BUILDER & PRESETS LOGIC
   // ==========================================================
-  window.openEditLimitsModal = function (accountId) {
+  async function loadPresets() {
+    try {
+      const data = await apiRequest('/api/presets');
+      state.presets = data || [];
+      renderPresetsList(state.activePresetId);
+    } catch (e) {
+      console.error('Failed to load presets:', e);
+    }
+  }
+
+  function renderPresetsList(selectedId = null) {
+    const listEl = document.getElementById('userPresetsList');
+    if (!listEl) return;
+
+    if (!state.presets || state.presets.length === 0) {
+      listEl.innerHTML = '<span style="font-size:12px; color:var(--tg-hint); padding: 4px 0;">Нет сохраненных пресетов. Соберите первое правило ниже.</span>';
+      return;
+    }
+
+    listEl.innerHTML = state.presets.map(p => {
+      const isSelected = selectedId === p.id;
+      const actionBadge = p.action === 'turn_off' ? '🔴 Стоп' : (p.action === 'notify_only' ? '🔔 Пуш' : '🟢 Старт');
+      return `
+        <div class="preset-chip-item ${isSelected ? 'active' : ''}" onclick="window.selectPreset(${p.id})">
+          <span class="preset-chip-badge">${actionBadge}</span>
+          <span>${escapeHtml(p.name)}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  window.selectPreset = function (presetId) {
+    haptic('selection');
+    const preset = state.presets.find(p => p.id === presetId);
+    if (!preset) return;
+
+    state.activePresetId = preset.id;
+    document.getElementById('editingPresetId').value = preset.id;
+    document.getElementById('ruleNameInput').value = preset.name;
+    document.getElementById('ruleActionSelect').value = preset.action || 'turn_off';
+    document.getElementById('builderModeTag').textContent = `Пресет: ${preset.name}`;
+    document.getElementById('btnDeletePreset')?.classList.remove('hidden');
+
+    renderConditions(preset.conditions || []);
+    renderPresetsList(preset.id);
+  };
+
+  window.newPresetMode = function () {
+    haptic('selection');
+    state.activePresetId = null;
+    document.getElementById('editingPresetId').value = '';
+    document.getElementById('ruleNameInput').value = '';
+    document.getElementById('ruleActionSelect').value = 'turn_off';
+    document.getElementById('builderModeTag').textContent = 'Новое правило';
+    document.getElementById('btnDeletePreset')?.classList.add('hidden');
+
+    renderConditions([
+      { metric: 'spend', operator: 'gt', value: 2.0 }
+    ]);
+    renderPresetsList(null);
+    document.getElementById('ruleNameInput')?.focus();
+  };
+
+  window.addConditionRow = function (metric = 'spend', operator = 'gt', value = '') {
+    haptic('selection');
+    const container = document.getElementById('ruleConditionsContainer');
+    if (!container) return;
+
+    const row = document.createElement('div');
+    row.className = 'rule-condition-row';
+    row.innerHTML = `
+      <select class="cond-metric form-select">
+        <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд ($)</option>
+        <option value="cpl" ${metric === 'cpl' ? 'selected' : ''}>Цена за лид ($)</option>
+        <option value="cpr" ${metric === 'cpr' ? 'selected' : ''}>Цена за регу ($)</option>
+      </select>
+      <select class="cond-operator form-select">
+        <option value="gt" ${operator === 'gt' ? 'selected' : ''}>&gt; (больше)</option>
+        <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt; (меньше)</option>
+        <option value="eq" ${operator === 'eq' ? 'selected' : ''}>= (равно)</option>
+      </select>
+      <input type="number" class="cond-value form-input text-center" placeholder="0.0" step="0.5" min="0" inputmode="decimal" value="${value}">
+      <button type="button" class="btn-remove-cond" onclick="this.closest('.rule-condition-row').remove()" title="Удалить условие">&times;</button>
+    `;
+    container.appendChild(row);
+  };
+
+  function renderConditions(conditionsList) {
+    const container = document.getElementById('ruleConditionsContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!conditionsList || conditionsList.length === 0) {
+      window.addConditionRow('spend', 'gt', 2.0);
+      return;
+    }
+
+    conditionsList.forEach(c => {
+      window.addConditionRow(c.metric, c.operator, c.value);
+    });
+  }
+
+  function getConditionsFromUI() {
+    const rows = document.querySelectorAll('.rule-condition-row');
+    const conds = [];
+    rows.forEach(r => {
+      const metric = r.querySelector('.cond-metric')?.value || 'spend';
+      const operator = r.querySelector('.cond-operator')?.value || 'gt';
+      const valInput = r.querySelector('.cond-value')?.value;
+      const value = parseFloat(valInput);
+      if (!isNaN(value)) {
+        conds.push({ metric, operator, value });
+      }
+    });
+    return conds;
+  }
+
+  window.openEditLimitsModal = async function (accountId) {
     haptic('impact', 'medium');
     const acc = state.accounts.find(a => a.account_id === accountId);
     if (!acc) return;
 
+    await loadPresets();
+
     document.getElementById('editLimitsAccountId').value = acc.account_id;
-    document.getElementById('modalLimitsTitle').textContent = `Лимиты для ${acc.name}`;
-    document.getElementById('lim0Input').value = acc.max_spend_0_leads;
-    document.getElementById('lim1Input').value = acc.max_spend_1_lead;
-    document.getElementById('limCpaInput').value = acc.max_cpa_multiple_leads;
+    document.getElementById('modalLimitsTitle').textContent = `Правило для ${acc.name}`;
+
+    if (acc.preset_id && state.presets.some(p => p.id === acc.preset_id)) {
+      window.selectPreset(acc.preset_id);
+    } else if (acc.rule_conditions && acc.rule_conditions.length > 0) {
+      state.activePresetId = null;
+      document.getElementById('editingPresetId').value = '';
+      document.getElementById('ruleNameInput').value = acc.preset_name || 'Кастомное правило';
+      document.getElementById('ruleActionSelect').value = acc.rule_action || 'turn_off';
+      document.getElementById('builderModeTag').textContent = 'Кастомное правило кабинета';
+      document.getElementById('btnDeletePreset')?.classList.add('hidden');
+      renderConditions(acc.rule_conditions);
+      renderPresetsList(null);
+    } else if (state.presets.length > 0) {
+      window.selectPreset(state.presets[0].id);
+    } else {
+      window.newPresetMode();
+    }
 
     window.openModal('modalEditLimits');
   };
 
-  window.fillLimitsPreset = function (l0, l1, lcpa) {
-    haptic('selection');
-    document.getElementById('lim0Input').value = l0;
-    document.getElementById('lim1Input').value = l1;
-    document.getElementById('limCpaInput').value = lcpa;
+  window.deleteActivePreset = async function () {
+    const presetId = state.activePresetId;
+    if (!presetId) return;
+
+    haptic('impact', 'medium');
+    try {
+      await apiRequest(`/api/presets/${presetId}`, { method: 'DELETE' });
+      showToast('Пресет удален', 'success');
+      state.activePresetId = null;
+      await loadPresets();
+      window.newPresetMode();
+    } catch (e) {
+      showToast(`Ошибка: ${e.message}`, 'error');
+    }
   };
 
   document.getElementById('btnSaveLimits')?.addEventListener('click', async () => {
     const accountId = document.getElementById('editLimitsAccountId').value;
-    const l0 = parseFloat(document.getElementById('lim0Input').value);
-    const l1 = parseFloat(document.getElementById('lim1Input').value);
-    const lcpa = parseFloat(document.getElementById('limCpaInput').value);
+    const editingPresetId = document.getElementById('editingPresetId').value;
+    const ruleName = document.getElementById('ruleNameInput').value.trim() || 'Правило стопа';
+    const action = document.getElementById('ruleActionSelect').value;
+    const conditions = getConditionsFromUI();
 
-    if (isNaN(l0) || isNaN(l1) || isNaN(lcpa)) {
-      showToast('Заполните все поля лимитов числами', 'error');
+    if (conditions.length === 0) {
+      showToast('Добавьте хотя бы одно условие правила', 'error');
       return;
     }
 
     try {
-      const res = await apiRequest(`/api/accounts/${accountId}/limits`, {
+      const payload = {
+        preset_id: editingPresetId ? parseInt(editingPresetId) : null,
+        name: ruleName,
+        action: action,
+        conditions: conditions
+      };
+
+      const res = await apiRequest(`/api/accounts/${accountId}/apply-preset`, {
         method: 'POST',
-        body: JSON.stringify({
-          max_spend_0_leads: l0,
-          max_spend_1_lead: l1,
-          max_cpa_multiple_leads: lcpa,
-          conversion_event: 'all',
-          auto_reactivate: false
-        })
+        body: JSON.stringify(payload)
       });
 
       haptic('notification', 'success');
-      showToast('Лимиты успешно сохранены!', 'success');
+      showToast(res.message || 'Правило успешно сохранено и применено!', 'success');
       window.closeModal('modalEditLimits');
 
-      const acc = state.accounts.find(a => a.account_id === accountId);
-      if (acc) {
-        acc.max_spend_0_leads = l0;
-        acc.max_spend_1_lead = l1;
-        acc.max_cpa_multiple_leads = lcpa;
-        acc.conversion_event = 'all';
-        acc.auto_reactivate = false;
-        renderAccounts();
-      }
+      await loadPresets();
+      await loadAccounts();
     } catch (err) {
       showToast(`Ошибка сохранения: ${err.message}`, 'error');
     }

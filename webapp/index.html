@@ -442,45 +442,79 @@
     <!-- MODALS & BOTTOM SHEETS -->
     <!-- ============================================== -->
 
-    <!-- Modal 1: Edit Limits Bottom Sheet -->
+    <!-- Modal 1: Rule & Presets Builder Bottom Sheet -->
     <div id="modalEditLimits" class="modal-overlay hidden">
-      <div class="bottom-sheet">
+      <div class="bottom-sheet" style="max-height: 90vh;">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
-          <h3 id="modalLimitsTitle">Настройка лимитов кабинета</h3>
+          <h3 id="modalLimitsTitle">Настройка правила</h3>
           <button class="btn-close" onclick="window.closeModal('modalEditLimits')">&times;</button>
         </div>
         <div class="sheet-body">
           <input type="hidden" id="editLimitsAccountId">
+          <input type="hidden" id="editingPresetId" value="">
           
-          <label class="section-label">Быстрые пресеты лимитов:</label>
-          <div class="preset-chips">
-            <button type="button" class="chip-btn" onclick="window.fillLimitsPreset(2.0, 6.0, 6.0)">$2.0 / $6.0 / $6.0 (Стандарт)</button>
-            <button type="button" class="chip-btn" onclick="window.fillLimitsPreset(3.0, 8.0, 8.0)">$3.0 / $8.0 / $8.0 (Средний)</button>
-            <button type="button" class="chip-btn" onclick="window.fillLimitsPreset(5.0, 10.0, 10.0)">$5.0 / $10.0 / $10.0 (Широкий)</button>
+          <!-- Saved User Presets List -->
+          <div class="presets-section">
+            <div class="presets-section-head">
+              <label class="section-label" style="margin-bottom:0;">Сохраненные пресеты:</label>
+              <button type="button" class="btn-link-action" onclick="window.newPresetMode()">+ Новое правило</button>
+            </div>
+            <div id="userPresetsList" class="preset-chips-list">
+              <!-- Dynamically populated user presets -->
+            </div>
           </div>
 
-          <div class="form-grid-3">
-            <div class="form-group">
-              <label for="lim0Input">0 лидов ($)</label>
-              <input type="number" id="lim0Input" class="form-input text-center" step="0.5" min="0.5" inputmode="decimal">
+          <!-- Rule Builder Card -->
+          <div class="rule-builder-card">
+            <div class="builder-card-head">
+              <span class="builder-tag" id="builderModeTag">Параметры правила</span>
             </div>
-            <div class="form-group">
-              <label for="lim1Input">1 лид ($)</label>
-              <input type="number" id="lim1Input" class="form-input text-center" step="0.5" min="0.5" inputmode="decimal">
+
+            <!-- 1. Rule Name -->
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label for="ruleNameInput">Название правила (пресета):</label>
+              <input type="text" id="ruleNameInput" class="form-input" placeholder="Например: Стоп CPA > $6">
             </div>
-            <div class="form-group">
-              <label for="limCpaInput">Макс CPA 2+ ($)</label>
-              <input type="number" id="limCpaInput" class="form-input text-center" step="0.5" min="0.5" inputmode="decimal">
+
+            <!-- 2. Action Selector (3 options as in FB) -->
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label for="ruleActionSelect">Действие (Action):</label>
+              <select id="ruleActionSelect" class="form-select dark-select">
+                <option value="turn_off">🔴 Turn off ad sets (Выключить адсеты)</option>
+                <option value="notify_only">🔔 Send notification only (Только прислать пуш)</option>
+                <option value="turn_on">🟢 Turn on ad sets (Включить адсеты)</option>
+              </select>
+            </div>
+
+            <!-- 3. Conditions Builder -->
+            <div class="form-group" style="margin-bottom: 8px;">
+              <div class="form-label-group">
+                <label>Условия (Conditions):</label>
+                <span class="sub-hint">Все условия должны совпасть</span>
+              </div>
+              
+              <div id="ruleConditionsContainer" class="conditions-container">
+                <!-- Condition rows dynamically added -->
+              </div>
+
+              <button type="button" class="btn btn-secondary btn-sm btn-add-cond" onclick="window.addConditionRow()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Добавить условие
+              </button>
             </div>
           </div>
 
           <div class="sheet-actions" style="flex-direction: column; gap: 8px; margin-top: 16px;">
-            <button id="btnSaveLimits" class="btn btn-primary btn-block btn-lg">Сохранить лимиты</button>
-            <button type="button" id="btnOpenDeleteFromModal" class="btn btn-secondary btn-block" style="color: var(--color-danger); border-color: rgba(247, 118, 142, 0.3);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              Удалить кабинет из мониторинга
-            </button>
+            <button id="btnSaveLimits" class="btn btn-primary btn-block btn-lg">Сохранить и применить</button>
+            <div class="modal-sub-actions">
+              <button type="button" id="btnDeletePreset" class="btn-sub-link hidden" style="color: var(--tg-hint);" onclick="window.deleteActivePreset()">
+                Удалить этот пресет
+              </button>
+              <button type="button" id="btnOpenDeleteFromModal" class="btn-sub-link" style="color: var(--color-danger);" title="Удалить кабинет из мониторинга">
+                Удалить кабинет
+              </button>
+            </div>
           </div>
         </div>
       </div>
