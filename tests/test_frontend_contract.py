@@ -67,3 +67,18 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('role="button" tabindex="0"', self.index)
         self.assertIn("window.switchTab('settings')", self.script)
         self.assertNotIn('class="mobile-nav-item" data-tab="settings"', self.index)
+
+    def test_rule_groups_can_be_managed_and_assigned_from_the_ui(self):
+        for contract in (
+            'id="ruleGroupsContainer"',
+            'id="modalRuleGroup"',
+            'id="ruleGroupRulesList"',
+            'id="assignGroupsList"',
+            'Новая группа',
+        ):
+            self.assertIn(contract, self.index)
+
+        self.assertIn("apiRequest('/api/rule-groups')", self.script)
+        self.assertIn('/assign-rule-group/${groupId}', self.script)
+        self.assertIn('window.pickRuleGroupForAccount', self.script)
+        self.assertIn('rule-groups-grid', self.styles)

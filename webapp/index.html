@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.0.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.1.0">
 </head>
 
 <body>
@@ -177,16 +177,35 @@
               Правила проверяются автоматически с настроенным интервалом. При выполнении условий выбранные действия выполняются автоматически.
             </p>
           </div>
-          <button class="btn btn-primary btn-add-rule-main" onclick="window.openCreateRuleFromTab()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span>Новое правило</span>
-          </button>
+          <div class="rules-header-actions">
+            <button class="btn btn-secondary" onclick="window.openCreateRuleGroup()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="3"/></svg>
+              <span>Новая группа</span>
+            </button>
+            <button class="btn btn-primary btn-add-rule-main" onclick="window.openCreateRuleFromTab()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Новое правило</span>
+            </button>
+          </div>
         </div>
 
         <!-- Rules Stats Banner -->
         <div class="rules-stats-bar" id="rulesStatsBar">
           <div class="stat-pill"><span class="status-dot dot-success"></span> <span id="rulesActiveCount">0</span> активных правил</div>
+          <div class="stat-pill"><span id="rulesGroupsCount">0</span> групп</div>
           <div class="stat-pill"><span id="rulesLinkedAccsCount">0</span> привязанных кабинетов</div>
+        </div>
+
+        <section id="ruleGroupsSection" class="rule-groups-section hidden">
+          <div class="rules-section-heading">
+            <div><span class="eyebrow">Наборы</span><h3>Группы правил</h3></div>
+            <p>Назначайте готовый сценарий кабинету одним действием.</p>
+          </div>
+          <div id="ruleGroupsContainer" class="rule-groups-grid"></div>
+        </section>
+
+        <div id="singleRulesHeading" class="rules-section-heading hidden">
+          <div><span class="eyebrow">Библиотека</span><h3>Отдельные правила</h3></div>
         </div>
 
         <!-- Rules Cards List -->
@@ -886,6 +905,19 @@
         <div class="sheet-body">
           <input type="hidden" id="assignRuleAccountId">
           <p class="text-hint" style="margin-bottom: 14px; font-size: 13px;">Привязывайте несколько правил к кабинету. Нажмите на уже привязанное правило, чтобы отвязать его.</p>
+
+          <section id="assignGroupsSection" class="assign-groups-section hidden">
+            <div class="assign-list-heading">
+              <span>Группы правил</span>
+              <small>Весь набор в одно нажатие</small>
+            </div>
+            <div id="assignGroupsList" class="assign-groups-list"></div>
+          </section>
+
+          <div class="assign-list-heading">
+            <span>Отдельные правила</span>
+            <small>Точечная настройка</small>
+          </div>
           
           <div class="assign-presets-list" id="assignPresetsList">
             <!-- Dynamically populated list of rules to pick in 1 click -->
@@ -897,6 +929,39 @@
               Создать новое правило
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 6: Rule Group Builder -->
+    <div id="modalRuleGroup" class="modal-overlay hidden">
+      <div class="bottom-sheet rule-group-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3 id="ruleGroupModalTitle">Новая группа правил</h3>
+          <button class="btn-close" onclick="window.closeModal('modalRuleGroup')">&times;</button>
+        </div>
+        <div class="sheet-body">
+          <input id="editingRuleGroupId" type="hidden" value="">
+          <div class="form-group">
+            <label for="ruleGroupName">Название группы</label>
+            <input id="ruleGroupName" class="form-input" maxlength="120" placeholder="Например: Безопасный запуск">
+          </div>
+          <div class="form-group">
+            <label for="ruleGroupDescription">Короткое описание</label>
+            <textarea id="ruleGroupDescription" class="form-textarea" rows="2" maxlength="500" placeholder="Когда и для каких кабинетов использовать этот набор"></textarea>
+          </div>
+          <div class="form-group">
+            <div class="form-label-group">
+              <label>Правила в группе</label>
+              <span id="ruleGroupSelectedCount" class="label-badge">Выбрано: 0</span>
+            </div>
+            <div id="ruleGroupRulesList" class="rule-group-rules-list"></div>
+          </div>
+        </div>
+        <div class="modal-footer rule-group-modal-footer">
+          <button id="btnDeleteRuleGroup" class="btn btn-danger hidden" type="button">Удалить</button>
+          <button id="btnSaveRuleGroup" class="btn btn-primary" type="button">Сохранить группу</button>
         </div>
       </div>
     </div>
@@ -921,6 +986,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.0.0"></script>
+  <script src="/static/js/app.js?v=9.1.0"></script>
 </body>
 </html>

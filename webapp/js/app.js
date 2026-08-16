@@ -13,6 +13,7 @@
     summaryCache: {},
     summaryLastFetchedAt: {},
     presets: [],
+    ruleGroups: [],
     activePresetId: null,
     currentPeriod: 'today',
     activeTab: 'accounts',
@@ -341,8 +342,7 @@
   // TAB: RULES & PRESETS MANAGEMENT (PHOTO 2 & TAB LOGIC)
   // ==========================================================
   async function loadRulesTab() {
-    await loadPresets();
-    await loadAccounts();
+    await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
     renderRulesTab();
   }
 
@@ -350,6 +350,7 @@
     const container = document.getElementById('rulesCardsContainer');
     const emptyEl = document.getElementById('rulesEmptyState');
     const activeCountEl = document.getElementById('rulesActiveCount');
+    const groupsCountEl = document.getElementById('rulesGroupsCount');
     const linkedCountEl = document.getElementById('rulesLinkedAccsCount');
     if (!container || !emptyEl) return;
 
@@ -362,7 +363,9 @@
     });
 
     if (activeCountEl) activeCountEl.textContent = totalPresets;
+    if (groupsCountEl) groupsCountEl.textContent = state.ruleGroups.length;
     if (linkedCountEl) linkedCountEl.textContent = linkedAccountsCount;
+    renderRuleGroups();
 
     if (totalPresets === 0) {
       container.innerHTML = '';
@@ -449,6 +452,175 @@
     }).join('');
   }
 
+  async function loadRuleGroups() {
+    try {
+      state.ruleGroups = await apiRequest('/api/rule-groups') || [];
+    } catch (error) {
+      state.ruleGroups = [];
+      console.error('Failed to load rule groups:', error);
+    }
+  }
+
+  function renderRuleGroups() {
+    const section = document.getElementById('ruleGroupsSection');
+    const container = document.getElementById('ruleGroupsContainer');
+    const singleHeading = document.getElementById('singleRulesHeading');
+    if (!section || !container) return;
+
+    const hasGroups = state.ruleGroups.length > 0;
+    section.classList.toggle('hidden', !hasGroups);
+    singleHeading?.classList.toggle('hidden', !hasGroups || state.presets.length === 0);
+    if (!hasGroups) {
+      container.innerHTML = '';
+      return;
+    }
+
+    const actionLabels = {
+      turn_off: 'Стоп', notify_only: 'Пуш', turn_on: 'Старт',
+      increase_budget: '+Бюджет', decrease_budget: '-Бюджет'
+    };
+    container.innerHTML = state.ruleGroups.map(group => {
+      const presetIds = new Set(group.preset_ids || []);
+      const linkedAccounts = state.accounts.filter(account => {
+        if (!account.rules_enabled || presetIds.size === 0) return false;
+        const attached = new Set((account.active_rules || []).map(rule => rule.preset_id));
+        return [...presetIds].every(id => attached.has(id));
+      }).length;
+      const chips = (group.rules || []).map(rule => `
+        <span class="rule-group-rule-chip">
+          <span>${escapeHtml(actionLabels[rule.action] || rule.action)}</span>
+          <span>${escapeHtml(rule.name)}</span>
+        </span>`).join('');
+      return `
+        <article class="rule-group-card">
+          <div class="rule-group-card-head">
+            <div>
+              <div class="rule-group-card-title">${escapeHtml(group.name)}</div>
+              <div class="rule-group-card-description">${escapeHtml(group.description || 'Готовый набор автоматических действий')}</div>
+            </div>
+            <span class="rule-group-count">${(group.rules || []).length} правил</span>
+          </div>
+          <div class="rule-group-rule-stack">${chips || '<span class="text-hint">В группе пока нет доступных правил</span>'}</div>
+          <div class="rule-group-card-footer">
+            <span>Подключена к ${linkedAccounts} кабинетам</span>
+            <div class="rule-card-actions">
+              <button class="btn-rule-action" onclick="window.editRuleGroup(${group.id})">Изменить</button>
+              <button class="btn-rule-action danger" onclick="window.deleteRuleGroup(${group.id})">Удалить</button>
+            </div>
+          </div>
+        </article>`;
+    }).join('');
+  }
+
+  function renderRuleGroupChoices(selectedIds = []) {
+    const container = document.getElementById('ruleGroupRulesList');
+    const selected = new Set(selectedIds);
+    if (!container) return;
+    const actionLabels = {
+      turn_off: 'Выключить', notify_only: 'Уведомить', turn_on: 'Включить',
+      increase_budget: 'Увеличить бюджет', decrease_budget: 'Уменьшить бюджет'
+    };
+    container.innerHTML = state.presets.map(preset => `
+      <label class="rule-group-choice">
+        <input class="rule-group-preset-check" type="checkbox" value="${preset.id}" ${selected.has(preset.id) ? 'checked' : ''}>
+        <span class="rule-group-choice-copy">
+          <b>${escapeHtml(preset.name)}</b>
+          <small>${(preset.conditions || []).length} условий · каждые ${preset.check_interval_minutes || 5} мин</small>
+        </span>
+        <span class="rule-group-choice-action">${escapeHtml(actionLabels[preset.action] || preset.action)}</span>
+      </label>`).join('');
+    updateRuleGroupSelectedCount();
+    container.querySelectorAll('.rule-group-preset-check').forEach(input => {
+      input.addEventListener('change', updateRuleGroupSelectedCount);
+    });
+  }
+
+  function updateRuleGroupSelectedCount() {
+    const count = document.querySelectorAll('.rule-group-preset-check:checked').length;
+    const badge = document.getElementById('ruleGroupSelectedCount');
+    if (badge) badge.textContent = `Выбрано: ${count}`;
+  }
+
+  window.openCreateRuleGroup = async function () {
+    if (state.presets.length === 0) await loadPresets();
+    if (state.presets.length === 0) {
+      showToast('Сначала создайте хотя бы одно правило', 'info');
+      window.openCreateRuleFromTab();
+      return;
+    }
+    document.getElementById('editingRuleGroupId').value = '';
+    document.getElementById('ruleGroupName').value = '';
+    document.getElementById('ruleGroupDescription').value = '';
+    document.getElementById('ruleGroupModalTitle').textContent = 'Новая группа правил';
+    document.getElementById('btnDeleteRuleGroup').classList.add('hidden');
+    renderRuleGroupChoices([]);
+    window.openModal('modalRuleGroup');
+    document.getElementById('ruleGroupName')?.focus();
+  };
+
+  window.editRuleGroup = async function (groupId) {
+    const group = state.ruleGroups.find(item => item.id === groupId);
+    if (!group) return;
+    if (state.presets.length === 0) await loadPresets();
+    document.getElementById('editingRuleGroupId').value = group.id;
+    document.getElementById('ruleGroupName').value = group.name;
+    document.getElementById('ruleGroupDescription').value = group.description || '';
+    document.getElementById('ruleGroupModalTitle').textContent = `Группа: ${group.name}`;
+    document.getElementById('btnDeleteRuleGroup').classList.remove('hidden');
+    renderRuleGroupChoices(group.preset_ids || []);
+    window.openModal('modalRuleGroup');
+  };
+
+  window.deleteRuleGroup = async function (groupId) {
+    const group = state.ruleGroups.find(item => item.id === groupId);
+    if (!group || !window.confirm(`Удалить группу «${group.name}»? Уже назначенные правила останутся в кабинетах.`)) return;
+    try {
+      await apiRequest(`/api/rule-groups/${groupId}`, { method: 'DELETE' });
+      showToast('Группа удалена. Активные правила сохранены.', 'success');
+      await loadRuleGroups();
+      renderRulesTab();
+      window.closeModal('modalRuleGroup');
+    } catch (error) {
+      showToast(`Ошибка: ${error.message}`, 'error');
+    }
+  };
+
+  document.getElementById('btnSaveRuleGroup')?.addEventListener('click', async () => {
+    const groupId = document.getElementById('editingRuleGroupId').value;
+    const name = document.getElementById('ruleGroupName').value.trim();
+    const description = document.getElementById('ruleGroupDescription').value.trim();
+    const presetIds = [...document.querySelectorAll('.rule-group-preset-check:checked')].map(input => Number(input.value));
+    if (!name) {
+      showToast('Введите название группы', 'error');
+      return;
+    }
+    if (presetIds.length === 0) {
+      showToast('Выберите хотя бы одно правило', 'error');
+      return;
+    }
+    const button = document.getElementById('btnSaveRuleGroup');
+    button.disabled = true;
+    try {
+      await apiRequest(groupId ? `/api/rule-groups/${groupId}` : '/api/rule-groups', {
+        method: groupId ? 'PUT' : 'POST',
+        body: JSON.stringify({ name, description, preset_ids: presetIds })
+      });
+      showToast(groupId ? 'Группа обновлена' : 'Группа создана', 'success');
+      await loadRuleGroups();
+      renderRulesTab();
+      window.closeModal('modalRuleGroup');
+    } catch (error) {
+      showToast(`Ошибка: ${error.message}`, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.getElementById('btnDeleteRuleGroup')?.addEventListener('click', () => {
+    const groupId = Number(document.getElementById('editingRuleGroupId').value);
+    if (groupId) window.deleteRuleGroup(groupId);
+  });
+
   window.openCreateRuleFromTab = function () {
     haptic('selection');
     document.getElementById('editLimitsAccountId').value = '';
@@ -470,8 +642,7 @@
     try {
       await apiRequest(`/api/presets/${presetId}`, { method: 'DELETE' });
       showToast('Правило удалено', 'success');
-      await loadPresets();
-      await loadAccounts();
+      await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
       renderRulesTab();
     } catch (e) {
       showToast(`Ошибка удаления: ${e.message}`, 'error');
@@ -489,10 +660,36 @@
     const acc = state.accounts.find(a => a.account_id === accountId);
     if (!acc) return;
 
-    await loadPresets();
+    await Promise.all([loadPresets(), loadRuleGroups()]);
 
     document.getElementById('assignRuleAccountId').value = acc.account_id;
-    document.getElementById('assignRuleModalTitle').textContent = `Правило для ${acc.name}`;
+    document.getElementById('assignRuleModalTitle').textContent = `Правила для ${acc.name}`;
+
+    const groupsSection = document.getElementById('assignGroupsSection');
+    const groupsList = document.getElementById('assignGroupsList');
+    groupsSection?.classList.toggle('hidden', state.ruleGroups.length === 0);
+    if (groupsList) {
+      const attachedIds = new Set((acc.active_rules || []).map(rule => rule.preset_id));
+      groupsList.innerHTML = state.ruleGroups.map(group => {
+        const groupIds = group.preset_ids || [];
+        const attachedCount = groupIds.filter(id => attachedIds.has(id)).length;
+        const complete = groupIds.length > 0 && attachedCount === groupIds.length;
+        const missingCount = groupIds.length - attachedCount;
+        const detail = complete
+          ? `${groupIds.length} из ${groupIds.length} правил уже подключены`
+          : `Подключено ${attachedCount} · будет добавлено ${missingCount}`;
+        return `
+          <div class="assign-group-item ${complete ? 'complete' : ''}">
+            <div class="assign-group-copy">
+              <b>${complete ? '✓ ' : ''}${escapeHtml(group.name)}</b>
+              <small>${escapeHtml(detail)}</small>
+            </div>
+            <button class="btn ${complete ? 'btn-secondary' : 'btn-primary'} btn-sm" ${complete ? 'disabled' : ''} onclick="window.pickRuleGroupForAccount(${group.id})">
+              ${complete ? 'Подключена' : 'Назначить группу'}
+            </button>
+          </div>`;
+      }).join('');
+    }
 
     const listEl = document.getElementById('assignPresetsList');
     if (!state.presets || state.presets.length === 0) {
@@ -545,6 +742,22 @@
       if (state.activeTab === 'rules') renderRulesTab();
     } catch (e) {
       showToast(`Ошибка: ${e.message}`, 'error');
+    }
+  };
+
+  window.pickRuleGroupForAccount = async function (groupId) {
+    if (!currentAssignAccountId) return;
+    haptic('impact', 'medium');
+    try {
+      const result = await apiRequest(`/api/accounts/${currentAssignAccountId}/assign-rule-group/${groupId}`, {
+        method: 'POST'
+      });
+      showToast(result.message || 'Группа правил назначена', 'success');
+      window.closeModal('modalAssignRule');
+      await loadAccounts();
+      if (state.activeTab === 'rules') renderRulesTab();
+    } catch (error) {
+      showToast(`Ошибка: ${error.message}`, 'error');
     }
   };
 
@@ -916,8 +1129,7 @@
       await apiRequest(`/api/presets/${presetId}`, { method: 'DELETE' });
       showToast('Пресет удален', 'success');
       state.activePresetId = null;
-      await loadPresets();
-      await loadAccounts();
+      await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
       window.newPresetMode();
     } catch (e) {
       showToast(`Ошибка: ${e.message}`, 'error');
@@ -998,8 +1210,7 @@
 
       window.closeModal('modalEditLimits');
 
-      await loadPresets();
-      await loadAccounts();
+      await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
       if (state.activeTab === 'rules') renderRulesTab();
     } catch (err) {
       showToast(`Ошибка сохранения: ${err.message}`, 'error');
