@@ -118,17 +118,24 @@ class MetaClient:
                 cpc = float(insight.get("cpc", 0.0)) if "cpc" in insight else 0.0
                 ctr = float(insight.get("ctr", 0.0)) if "ctr" in insight else 0.0
 
-                # Раздельный подсчет Лидов и Регистраций
+                # Раздельный подсчет: Клики, Лиды, Реги, Покупки (Пурчейс)
                 leads = 0
                 registrations = 0
+                purchases = 0
                 actions = insight.get("actions", [])
                 for act in actions:
                     act_type = act.get("action_type", "")
-                    val = int(act.get("value", 0))
-                    if act_type in ["lead", "offsite_conversion.fb_pixel_lead", "contact"]:
+                    try:
+                        val = int(act.get("value", 0))
+                    except (ValueError, TypeError):
+                        val = 0
+                        
+                    if act_type in ["lead", "offsite_conversion.fb_pixel_lead", "contact", "onsite_conversion.lead_grouped"]:
                         leads += val
                     elif act_type in ["complete_registration", "offsite_conversion.fb_pixel_complete_registration", "registration"]:
                         registrations += val
+                    elif act_type in ["purchase", "offsite_conversion.fb_pixel_purchase", "omni_purchase", "onsite_conversion.purchase"]:
+                        purchases += val
 
                 total_conversions = leads + registrations
                 cpa = (spend / total_conversions) if total_conversions > 0 else 0.0
@@ -139,12 +146,13 @@ class MetaClient:
                     "status": status,
                     "effective_status": effective_status,
                     "spend": spend,
+                    "clicks": clicks,
                     "leads": leads,
                     "registrations": registrations,
+                    "purchases": purchases,
                     "total_conversions": total_conversions,
                     "cpa": round(cpa, 2),
                     "impressions": impressions,
-                    "clicks": clicks,
                     "cpc": round(cpc, 2),
                     "ctr": round(ctr, 2)
                 })

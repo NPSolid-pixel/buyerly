@@ -373,8 +373,10 @@ async def cb_report_period(callback: CallbackQuery):
             return
 
         total_spend = 0.0
+        total_clicks = 0
         total_leads = 0
         total_regs = 0
+        total_purchases = 0
         total_active_adsets = 0
         total_paused_adsets = 0
         account_summaries = []
@@ -387,40 +389,50 @@ async def cb_report_period(callback: CallbackQuery):
                     date_preset=period
                 )
                 
-                acc_spend = sum(a["spend"] for a in adsets)
-                acc_leads = sum(a["leads"] for a in adsets)
-                acc_regs = sum(a["registrations"] for a in adsets)
-                acc_conversions = acc_leads + acc_regs
+                acc_spend = sum(a.get("spend", 0.0) for a in adsets)
+                acc_clicks = sum(a.get("clicks", 0) for a in adsets)
+                acc_leads = sum(a.get("leads", 0) for a in adsets)
+                acc_regs = sum(a.get("registrations", 0) for a in adsets)
+                acc_purchases = sum(a.get("purchases", 0) for a in adsets)
+                acc_conversions = acc_leads + acc_regs + acc_purchases
                 acc_active = sum(1 for a in adsets if a["status"] == "ACTIVE")
                 acc_paused = sum(1 for a in adsets if a["status"] == "PAUSED")
 
                 total_spend += acc_spend
+                total_clicks += acc_clicks
                 total_leads += acc_leads
                 total_regs += acc_regs
+                total_purchases += acc_purchases
                 total_active_adsets += acc_active
                 total_paused_adsets += acc_paused
 
                 acc_cpa = (acc_spend / acc_conversions) if acc_conversions > 0 else 0.0
+                acc_cpc = (acc_spend / acc_clicks) if acc_clicks > 0 else 0.0
+
                 account_summaries.append(
                     f"🏢 <b>{acc.name}</b> (<code>{acc.timezone_name}</code>):\n"
-                    f"   💰 Спенд: <b>${acc_spend:.2f}</b> | 🎯 Лиды: {acc_leads} | 📝 Реги: {acc_regs}\n"
+                    f"   💰 Спенд: <b>${acc_spend:.2f}</b> | 👆 Клики: <b>{acc_clicks}</b> (CPC: ${acc_cpc:.2f})\n"
+                    f"   🎯 Лиды: <b>{acc_leads}</b> | 📝 Реги: <b>{acc_regs}</b> | 💳 Пурчейз: <b>{acc_purchases}</b>\n"
                     f"   📈 CPA: <b>${acc_cpa:.2f}</b> | Адсеты: {acc_active} акт. / {acc_paused} пауза"
                 )
             except Exception as e:
                 logger.error(f"Error fetching report for {acc.account_id}: {e}")
-                account_summaries.append(f"⚠️ <b>{acc.name}</b>: Ошибка API ({e})")
+                account_summaries.append(f"⚠️ <b>{acc.name}</b>: <i>Ошибка API ({e})</i>")
 
-        total_all_conversions = total_leads + total_regs
-        overall_cpa = (total_spend / total_all_conversions) if total_all_conversions > 0 else 0.0
+        total_conversions = total_leads + total_regs + total_purchases
+        overall_cpa = (total_spend / total_conversions) if total_conversions > 0 else 0.0
+        overall_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0.0
 
         report_text = (
             f"📊 <b>Ваш сводный отчет ({period_title}):</b>\n\n"
-            f"💵 <b>Общий спенд:</b> ${total_spend:.2f} USD\n"
-            f"🎯 <b>Всего лидов:</b> {total_leads}\n"
-            f"📝 <b>Всего регистраций:</b> {total_regs}\n"
+            f"💵 <b>Общий спенд:</b> <code>${total_spend:.2f}</code>\n"
+            f"👆 <b>Клики:</b> {total_clicks} (CPC: ${overall_cpc:.2f})\n"
+            f"🎯 <b>Лиды:</b> {total_leads}\n"
+            f"📝 <b>Реги (Регистрации):</b> {total_regs}\n"
+            f"💳 <b>Пурчейз (Покупки):</b> {total_purchases}\n"
             f"📈 <b>Средний CPA:</b> ${overall_cpa:.2f}\n"
-            f"⚡ <b>Адсеты:</b> {total_active_adsets} активных / {total_paused_adsets} остановлено\n\n"
-            f"<b>По вашим кабинетам:</b>\n\n" + "\n\n".join(account_summaries)
+            f"⚡ <b>Адсеты:</b> {total_active_adsets} активных / {total_paused_adsets} на паузе\n\n"
+            f"<b>По кабинетам:</b>\n\n" + "\n\n".join(account_summaries)
         )
 
         await callback.message.edit_text(report_text, reply_markup=get_period_keyboard(), parse_mode="HTML")
