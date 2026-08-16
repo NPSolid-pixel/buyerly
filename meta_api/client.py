@@ -31,6 +31,101 @@ class MetaClient:
     def __init__(self, timeout: float = 15.0):
         self.timeout = timeout
 
+    @staticmethod
+    def _safe_int(value: Any) -> int:
+        try:
+            return int(float(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _safe_float(value: Any) -> float:
+        try:
+            return float(value or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @classmethod
+    def _conversion_counts(cls, insight: Dict[str, Any]) -> Dict[str, int]:
+        """Extract independent funnel actions without summing synonymous rows."""
+
+        actions: Dict[str, int] = {}
+        for action in insight.get("actions", []) or []:
+            action_type = str(action.get("action_type", ""))
+            actions[action_type] = cls._safe_int(action.get("value", 0))
+
+        def first_value(*aliases: str) -> int:
+            for alias in aliases:
+                if alias in actions:
+                    return actions[alias]
+            return 0
+
+        return {
+            "leads": first_value(
+                "lead",
+                "offsite_conversion.fb_pixel_lead",
+                "onsite_web_lead",
+            ),
+            "registrations": first_value(
+                "complete_registration",
+                "offsite_conversion.fb_pixel_complete_registration",
+                "omni_complete_registration",
+            ),
+            "purchases": first_value(
+                "purchase",
+                "offsite_conversion.fb_pixel_purchase",
+                "omni_purchase",
+            ),
+        }
+
+    @classmethod
+    def _normalize_basic_insight(cls, insight: Dict[str, Any]) -> Dict[str, Any]:
+        counts = cls._conversion_counts(insight)
+        return {
+            "spend": cls._safe_float(insight.get("spend", 0.0)),
+            "impressions": cls._safe_int(insight.get("impressions", 0)),
+            "clicks": cls._safe_int(insight.get("clicks", 0)),
+            **counts,
+        }
+
+    async def _fetch_paginated_data(
+        self,
+        url: str,
+        params: Dict[str, Any],
+        *,
+        account_id: str,
+        max_pages: int = 500,
+    ) -> List[Dict[str, Any]]:
+        """Fetch every cursor page without following token-bearing `paging.next` URLs."""
+
+        page_params = dict(params)
+        rows: List[Dict[str, Any]] = []
+        seen_cursors = set()
+
+        for _ in range(max_pages):
+            response = await self._request_with_retry(
+                "GET",
+                url,
+                params=page_params,
+                account_id=account_id,
+            )
+            payload = response.json()
+            page_rows = payload.get("data", [])
+            if isinstance(page_rows, list):
+                rows.extend(row for row in page_rows if isinstance(row, dict))
+
+            paging = payload.get("paging") or {}
+            next_page = paging.get("next")
+            cursor = (paging.get("cursors") or {}).get("after")
+            if not next_page:
+                return rows
+            if not cursor or cursor in seen_cursors:
+                raise RuntimeError("Meta pagination stopped on an invalid cursor")
+            seen_cursors.add(cursor)
+            page_params["after"] = cursor
+
+        raise RuntimeError(f"Meta pagination exceeded {max_pages} pages")
+
     def _parse_usage_headers(self, headers: httpx.Headers, account_id: str = "") -> Dict[str, Any]:
         """
         Парсит диагностический заголовок X-Business-Use-Case-Usage и X-App-Usage.
@@ -184,6 +279,41 @@ class MetaClient:
         data["status_label"] = ACCOUNT_STATUS_MAP.get(status_code, f"Неизвестный статус ({status_code})")
         return data
 
+    async def get_account_insights_summary(
+        self,
+        account_id: str,
+        access_token: str,
+        date_preset: str = "today",
+    ) -> Dict[str, Any]:
+        """Return exact account-level totals for a Meta reporting period.
+
+        These totals intentionally do not depend on the current ad set list or
+        delivery status. Meta therefore includes spend from ad sets that ran in
+        the period and were paused, archived or otherwise absent from the
+        current operational list later in the day.
+        """
+
+        acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        insights_url = f"{self.BASE_URL}/{acc_id}/insights"
+        rows = await self._fetch_paginated_data(
+            insights_url,
+            {
+                "level": "account",
+                "fields": "spend,impressions,clicks,actions",
+                "date_preset": date_preset,
+                "limit": 100,
+                "access_token": access_token,
+            },
+            account_id=acc_id,
+        )
+        if not rows:
+            return self._normalize_basic_insight({})
+        if len(rows) != 1:
+            raise RuntimeError(
+                f"Meta returned {len(rows)} account-level insight rows without a time breakdown"
+            )
+        return self._normalize_basic_insight(rows[0])
+
     async def get_adsets_insights(
         self, 
         account_id: str, 
@@ -203,8 +333,11 @@ class MetaClient:
             "limit": 100,
             "access_token": access_token
         }
-        adsets_resp = await self._request_with_retry("GET", adsets_url, params=adsets_params, account_id=acc_id)
-        adsets_list = adsets_resp.json().get("data", [])
+        adsets_list = await self._fetch_paginated_data(
+            adsets_url,
+            adsets_params,
+            account_id=acc_id,
+        )
 
         # 2. Получаем Insights за указанный период
         insights_url = f"{self.BASE_URL}/{acc_id}/insights"
@@ -215,11 +348,15 @@ class MetaClient:
             "limit": 100,
             "access_token": access_token
         }
-        insights_resp = await self._request_with_retry("GET", insights_url, params=insights_params, account_id=acc_id)
-        
+        insights_rows = await self._fetch_paginated_data(
+            insights_url,
+            insights_params,
+            account_id=acc_id,
+        )
         insights_data = {
             item["adset_id"]: item 
-            for item in insights_resp.json().get("data", [])
+            for item in insights_rows
+            if item.get("adset_id")
         }
 
         # 3. Объединяем статус и метрики с канонической дедупликацией
@@ -231,25 +368,12 @@ class MetaClient:
             effective_status = adset.get("effective_status", status)
 
             insight = insights_data.get(a_id, {})
-            spend = float(insight.get("spend", 0.0))
-            impressions = int(insight.get("impressions", 0))
-            clicks = int(insight.get("clicks", 0))
-            cpc = float(insight.get("cpc", 0.0)) if "cpc" in insight else 0.0
-            ctr = float(insight.get("ctr", 0.0)) if "ctr" in insight else 0.0
-
-            # Канонический точный подсчет: Лиды, Реги, Покупки (Пурчейс) без дублирования
-            actions_dict = {}
-            for act in insight.get("actions", []):
-                act_type = act.get("action_type", "")
-                try:
-                    val = int(act.get("value", 0))
-                except (ValueError, TypeError):
-                    val = 0
-                actions_dict[act_type] = val
-
-            leads = actions_dict.get("lead", actions_dict.get("offsite_conversion.fb_pixel_lead", actions_dict.get("onsite_web_lead", 0)))
-            registrations = actions_dict.get("complete_registration", actions_dict.get("offsite_conversion.fb_pixel_complete_registration", actions_dict.get("omni_complete_registration", 0)))
-            purchases = actions_dict.get("purchase", actions_dict.get("offsite_conversion.fb_pixel_purchase", actions_dict.get("omni_purchase", 0)))
+            normalized = self._normalize_basic_insight(insight)
+            spend = normalized["spend"]
+            impressions = normalized["impressions"]
+            clicks = normalized["clicks"]
+            cpc = self._safe_float(insight.get("cpc", 0.0))
+            ctr = self._safe_float(insight.get("ctr", 0.0))
 
             unified_adsets.append({
                 "adset_id": a_id,
@@ -258,9 +382,9 @@ class MetaClient:
                 "effective_status": effective_status,
                 "spend": spend,
                 "clicks": clicks,
-                "leads": leads,
-                "registrations": registrations,
-                "purchases": purchases,
+                "leads": normalized["leads"],
+                "registrations": normalized["registrations"],
+                "purchases": normalized["purchases"],
                 "impressions": impressions,
                 "cpc": round(cpc, 2),
                 "ctr": round(ctr, 2),

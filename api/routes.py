@@ -1088,47 +1088,18 @@ async def get_summary_report(
 
         for acc in accounts:
             short_name = get_short_account_label(acc.name, acc.account_id)
-            if not acc.is_active or acc.account_status in [2, 101]:
-                accounts_blocked += 1
-                account_results.append({
-                    "account_id": acc.account_id,
-                    "name": acc.name,
-                    "short_name": short_name,
-                    "timezone_name": acc.timezone_name,
-                    "account_status": acc.account_status,
-                    "status_label": acc.status_label,
-                    "rules_enabled": acc.rules_enabled,
-                    "spend": 0.0,
-                    "clicks": 0,
-                    "impressions": 0,
-                    "leads": 0,
-                    "registrations": 0,
-                    "purchases": 0,
-                    "cost_per_lead": None,
-                    "cost_per_registration": None,
-                    "cost_per_purchase": None,
-                    "cpc": 0.0,
-                    "ctr": 0.0,
-                    "adsets": [],
-                    "has_error": False,
-                    "is_banned": True,
-                    "data_status": "blocked",
-                    "data_status_label": "Meta не отдаёт метрики: кабинет заблокирован",
-                })
-                continue
-
             try:
-                adsets = await meta_client.get_adsets_insights(
+                account_insights = await meta_client.get_account_insights_summary(
                     account_id=acc.account_id,
                     access_token=acc.access_token,
                     date_preset=period
                 )
-                acc_spend = sum(a.get("spend", 0.0) for a in adsets)
-                acc_clicks = sum(a.get("clicks", 0) for a in adsets)
-                acc_impressions = sum(a.get("impressions", 0) for a in adsets)
-                acc_leads = sum(a.get("leads", 0) for a in adsets)
-                acc_regs = sum(a.get("registrations", 0) for a in adsets)
-                acc_purchases = sum(a.get("purchases", 0) for a in adsets)
+                acc_spend = account_insights.get("spend", 0.0)
+                acc_clicks = account_insights.get("clicks", 0)
+                acc_impressions = account_insights.get("impressions", 0)
+                acc_leads = account_insights.get("leads", 0)
+                acc_regs = account_insights.get("registrations", 0)
+                acc_purchases = account_insights.get("purchases", 0)
                 acc_cpc = (acc_spend / acc_clicks) if acc_clicks > 0 else 0.0
                 acc_ctr = ((acc_clicks / acc_impressions) * 100) if acc_impressions > 0 else 0.0
 
@@ -1159,15 +1130,19 @@ async def get_summary_report(
                     "cost_per_purchase": _cost_or_none(acc_spend, acc_purchases),
                     "cpc": round(acc_cpc, 2),
                     "ctr": round(acc_ctr, 2),
-                    "adsets": adsets,
+                    "adsets": [],
                     "has_error": False,
-                    "is_banned": False,
+                    "is_banned": not acc.is_active or acc.account_status in [2, 101],
                     "data_status": "synced",
-                    "data_status_label": "Метрики получены из Meta",
+                    "data_status_label": "Account-level метрики получены из Meta независимо от текущего статуса",
                 })
             except Exception as e:
                 logger.error(f"Error fetching insights for {acc.account_id}: {e}")
-                accounts_failed += 1
+                is_blocked = not acc.is_active or acc.account_status in [2, 101]
+                if is_blocked:
+                    accounts_blocked += 1
+                else:
+                    accounts_failed += 1
                 account_results.append({
                     "account_id": acc.account_id,
                     "name": acc.name,
@@ -1188,10 +1163,14 @@ async def get_summary_report(
                     "cpc": 0.0,
                     "ctr": 0.0,
                     "adsets": [],
-                    "has_error": True,
-                    "is_banned": False,
-                    "data_status": "error",
-                    "data_status_label": "Meta не вернула метрики",
+                    "has_error": not is_blocked,
+                    "is_banned": is_blocked,
+                    "data_status": "blocked" if is_blocked else "error",
+                    "data_status_label": (
+                        "Исторические метрики недоступны для текущего статуса кабинета"
+                        if is_blocked
+                        else "Meta не вернула метрики"
+                    ),
                 })
 
         avg_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0.0

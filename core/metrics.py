@@ -57,7 +57,7 @@ METRIC_UNITS = {
 }
 
 SUMMARY_METRIC_DEFINITIONS = {
-    "spend": "Сумма spend из Meta по всем успешно синхронизированным ad set за выбранный период.",
+    "spend": "Account-level Spend из Meta за выбранный период. Включает расходы всех объявлений и ad set, которые откручивались в периоде, независимо от их текущего статуса.",
     "leads": "События lead из Meta. Не складываются с регистрациями или покупками.",
     "cost_per_lead": "Spend / лиды. Если лидов нет, значение отсутствует.",
     "registrations": "События complete_registration из Meta. Считаются отдельно от лидов.",

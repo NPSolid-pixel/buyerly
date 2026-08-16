@@ -562,17 +562,14 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         async def insights_side_effect(account_id, access_token, date_preset):
             if account_id == "act_sync_error":
                 raise RuntimeError("Meta unavailable")
-            return [
-                {
-                    "adset_id": "adset_summary",
-                    "spend": 30.0,
-                    "clicks": 50,
-                    "impressions": 1000,
-                    "leads": 2,
-                    "registrations": 1,
-                    "purchases": 1,
-                }
-            ]
+            return {
+                "spend": 30.0,
+                "clicks": 50,
+                "impressions": 1000,
+                "leads": 2,
+                "registrations": 1,
+                "purchases": 1,
+            }
 
         buyer_data = generate_valid_telegram_init_data(
             settings.BOT_TOKEN,
@@ -581,7 +578,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         headers = {"Authorization": f"tma {buyer_data}"}
         transport = httpx.ASGITransport(app=self.app)
         mocked_insights = AsyncMock(side_effect=insights_side_effect)
-        with patch.object(api_routes_module.meta_client, "get_adsets_insights", new=mocked_insights):
+        with patch.object(api_routes_module.meta_client, "get_account_insights_summary", new=mocked_insights):
             async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 fresh = await client.get("/api/summary?period=today&force=true", headers=headers)
                 cached = await client.get("/api/summary?period=today", headers=headers)
@@ -593,33 +590,37 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("total_results", data)
         self.assertNotIn("avg_cost_per_result", data)
         self.assertNotIn("total_conversions", data)
+        self.assertEqual(data["total_spend"], 60.0)
         self.assertEqual(data["cost_per_lead"], 15.0)
         self.assertEqual(data["cost_per_registration"], 30.0)
         self.assertEqual(data["cost_per_purchase"], 30.0)
         self.assertEqual(data["avg_ctr"], 5.0)
         self.assertEqual(data["avg_cpc"], 0.6)
-        self.assertEqual(data["total_impressions"], 1000)
+        self.assertEqual(data["total_impressions"], 2000)
         self.assertIn("Не складываются", data["metric_definitions"]["leads"])
         self.assertIn("Считаются отдельно", data["metric_definitions"]["registrations"])
         self.assertIn("Считаются отдельно", data["metric_definitions"]["purchases"])
+        self.assertIn("независимо от их текущего статуса", data["metric_definitions"]["spend"])
         self.assertEqual(
             data["data_quality"],
             {
                 "status": "partial",
                 "accounts_total": 3,
-                "accounts_synced": 1,
+                "accounts_synced": 2,
                 "accounts_failed": 1,
-                "accounts_blocked": 1,
-                "metrics_coverage_percent": 33.3,
+                "accounts_blocked": 0,
+                "metrics_coverage_percent": 66.7,
             },
         )
         by_id = {account["account_id"]: account for account in data["accounts"]}
         self.assertEqual(by_id["act_1018756607700064"]["data_status"], "synced")
-        self.assertEqual(by_id["act_blocked"]["data_status"], "blocked")
+        self.assertEqual(by_id["act_blocked"]["data_status"], "synced")
+        self.assertTrue(by_id["act_blocked"]["is_banned"])
+        self.assertEqual(by_id["act_blocked"]["spend"], 30.0)
         self.assertEqual(by_id["act_sync_error"]["data_status"], "error")
         self.assertFalse(data["cache"]["is_cached"])
         self.assertTrue(cached.json()["cache"]["is_cached"])
-        self.assertEqual(mocked_insights.await_count, 2)
+        self.assertEqual(mocked_insights.await_count, 3)
 
 
     async def test_settings_endpoint(self):
