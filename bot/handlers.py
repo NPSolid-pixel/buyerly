@@ -522,19 +522,19 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
 
 
 def format_account_card(acc: Account) -> str:
-    rules_icon = "🟢 <b>Авто-правила ВКЛЮЧЕНЫ</b>" if acc.rules_enabled else "👁 <b>Только статистика (Правила выключены)</b>"
-    
     if acc.account_status == 2 or not acc.is_active:
-        status_line = "🔴 <b>Заблокирован в Meta (DISABLED / Policy Ban)</b>"
+        status_line = "🔴 <b>Заблокирован в Meta</b>"
     elif acc.account_status == 3:
-        status_line = "💳 <b>Проблема с картой / холдом (UNSETTLED)</b>"
+        status_line = "💳 <b>Проблема с оплатой (Hold)</b>"
     else:
-        status_line = "🟢 <b>Активен (ACTIVE)</b>"
+        status_line = "🟢 <b>Активен</b>"
+
+    rules_line = "🛡 <b>Авто-правила: ВКЛЮЧЕНЫ</b>\n" if acc.rules_enabled else ""
 
     return (
         f"🏢 <b>{acc.name}</b> (<code>{acc.account_id}</code>)\n"
-        f"Статус в Meta: {status_line}\n"
-        f"Режим: {rules_icon}\n"
+        f"{status_line}\n"
+        f"{rules_line}"
         f"🕒 Таймзона: <code>{acc.timezone_name}</code>\n\n"
         f"⚙️ <b>Текущие лимиты авто-стопов:</b>\n"
         f"• 0 лидов/рег → стоп при <b>${acc.max_spend_0_leads:.2f}</b>\n"
