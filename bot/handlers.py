@@ -104,7 +104,7 @@ async def check_user_access(message: Message, bot: Bot) -> bool:
 # ----------------------------------------------------
 # 1. КОМАНДА /START И ГЛАВНОЕ МЕНЮ
 # ----------------------------------------------------
-@router.message(CommandStart())
+@router.message(StateFilter("*"), CommandStart())
 async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     await state.clear()
     has_access = await check_user_access(message, bot)
@@ -131,9 +131,9 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
 # ----------------------------------------------------
 # 2. ПОШАГОВОЕ ДОБАВЛЕНИЕ КАБИНЕТОВ (ПАЧКОЙ)
 # ----------------------------------------------------
-@router.message(F.text == "➕ Добавить кабинеты")
-@router.message(Command("add"))
+@router.message(StateFilter("*"), F.text.in_(["➕ Добавить кабинеты", "➕ Добавить кабинет", "/add"]))
 async def start_add_wizard(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     has_access = await check_user_access(message, bot)
     if not has_access:
         return
@@ -151,7 +151,7 @@ async def start_add_wizard(message: Message, bot: Bot, state: FSMContext):
     await message.answer(text, reply_markup=get_cancel_keyboard(), parse_mode="HTML")
 
 
-@router.message(F.text == "❌ Отменить добавление", StateFilter(BatchAccountAddStates))
+@router.message(StateFilter("*"), F.text.in_(["❌ Отменить добавление", "❌ Отмена", "/cancel"]))
 async def cancel_add_wizard(message: Message, state: FSMContext):
     await state.clear()
     tg_id = str(message.from_user.id)
@@ -162,15 +162,23 @@ async def cancel_add_wizard(message: Message, state: FSMContext):
 @router.message(BatchAccountAddStates.waiting_for_ids)
 async def process_account_ids(message: Message, state: FSMContext):
     raw_text = message.text.strip()
-    # Извлекаем все ID (с префиксом act_ или чисто цифры)
+    
+    # Если нажал отмену
+    if raw_text in ["❌ Отменить добавление", "❌ Отмена", "/cancel"]:
+        await state.clear()
+        tg_id = str(message.from_user.id)
+        is_admin = (tg_id == str(settings.ADMIN_CHAT_ID))
+        await message.answer("❌ Добавление кабинетов отменено.", reply_markup=get_main_menu_keyboard(is_admin=is_admin))
+        return
+
+    # Извлекаем все ID
     found_ids = re.findall(r"(?:act_)?(\d{6,25})", raw_text)
     
     if not found_ids:
-        await message.answer("❌ Не удалось найти ID кабинетов. Пожалуйста, отправьте корректные числовые ID.")
+        await message.answer("❌ Не удалось найти ID кабинетов. Пожалуйста, отправьте числовые ID (например: <code>1083480094013618</code>).", parse_mode="HTML")
         return
 
-    # Нормализуем к виду act_...
-    clean_ids = [f"act_{i}" for i in list(dict.fromkeys(found_ids))] # убираем дубликаты
+    clean_ids = [f"act_{i}" for i in list(dict.fromkeys(found_ids))]
     await state.update_data(account_ids=clean_ids)
     await state.set_state(BatchAccountAddStates.waiting_for_name)
 
@@ -280,9 +288,9 @@ async def process_token_and_save(message: Message, state: FSMContext):
 # ----------------------------------------------------
 # 3. СВОДКА (ПЕРСОНАЛЬНАЯ ПО БАЙЕРУ)
 # ----------------------------------------------------
-@router.message(F.text == "📊 Сводка")
-@router.message(Command("summary"))
-async def cmd_summary(message: Message, bot: Bot):
+@router.message(StateFilter("*"), F.text.in_(["📊 Сводка", "/summary"]))
+async def cmd_summary(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     has_access = await check_user_access(message, bot)
     if not has_access:
         return
@@ -380,9 +388,9 @@ async def cb_report_period(callback: CallbackQuery):
 # ----------------------------------------------------
 # 4. РАСХОДЫ (В 1 КЛИК ПО БАЙЕРУ)
 # ----------------------------------------------------
-@router.message(F.text == "💵 Расходы")
-@router.message(Command("spend"))
-async def cmd_spend(message: Message, bot: Bot):
+@router.message(StateFilter("*"), F.text.in_(["💵 Расходы", "/spend"]))
+async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     has_access = await check_user_access(message, bot)
     if not has_access:
         return
@@ -426,9 +434,9 @@ async def cmd_spend(message: Message, bot: Bot):
 # ----------------------------------------------------
 # 5. СПИСОК КАБИНЕТОВ ПОЛЬЗОВАТЕЛЯ
 # ----------------------------------------------------
-@router.message(F.text == "🏢 Мои кабинеты")
-@router.message(Command("accounts"))
-async def cmd_accounts(message: Message, bot: Bot):
+@router.message(StateFilter("*"), F.text.in_(["🏢 Мои кабинеты", "🏢 Кабинеты", "/accounts"]))
+async def cmd_accounts(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     has_access = await check_user_access(message, bot)
     if not has_access:
         return
@@ -505,8 +513,9 @@ async def cb_edit_limits(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.message(Command("set_limits"))
-async def cmd_set_limits(message: Message, bot: Bot):
+@router.message(StateFilter("*"), Command("set_limits"))
+async def cmd_set_limits(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     has_access = await check_user_access(message, bot)
     if not has_access:
         return
@@ -557,9 +566,9 @@ async def cmd_set_limits(message: Message, bot: Bot):
 # ----------------------------------------------------
 # 6. НАСТРОЙКИ ЧАСТОТЫ ОПРОСА
 # ----------------------------------------------------
-@router.message(F.text == "⚙️ Настройки")
-@router.message(Command("settings"))
-async def cmd_settings(message: Message, bot: Bot):
+@router.message(StateFilter("*"), F.text.in_(["⚙️ Настройки", "/settings"]))
+async def cmd_settings(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     has_access = await check_user_access(message, bot)
     if not has_access:
         return
@@ -611,9 +620,9 @@ async def cb_set_interval(callback: CallbackQuery):
 # ----------------------------------------------------
 # 7. ИНСТРУКЦИЯ ПО ТОКЕНУ
 # ----------------------------------------------------
-@router.message(F.text == "🔑 Инструкция по токену")
-@router.message(Command("token_help"))
-async def cmd_token_help(message: Message, bot: Bot):
+@router.message(StateFilter("*"), F.text.in_(["🔑 Инструкция по токену", "🔑 Инструкция к токену", "/token_help"]))
+async def cmd_token_help(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     has_access = await check_user_access(message, bot)
     if not has_access:
         return
@@ -641,9 +650,9 @@ async def cmd_token_help(message: Message, bot: Bot):
 # ----------------------------------------------------
 # 8. АДМИН-ПАНЕЛЬ И ОДОБРЕНИЕ ДОСТУПА
 # ----------------------------------------------------
-@router.message(F.text == "👑 Админ-панель")
-@router.message(Command("admin"))
-async def cmd_admin_panel(message: Message, bot: Bot):
+@router.message(StateFilter("*"), F.text.in_(["👑 Админ-панель", "/admin"]))
+async def cmd_admin_panel(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
     tg_id = str(message.from_user.id)
     if tg_id != str(settings.ADMIN_CHAT_ID):
         await message.answer("⛔️ Эта панель доступна только главному администратору.")
