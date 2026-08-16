@@ -38,7 +38,6 @@
     currentPeriod: 'today',
     activeTab: 'accounts',
     filter: 'all',
-    sortBy: 'default',
     searchQuery: '',
     parsedAccounts: [],
     selectedPreset: { l0: 2.0, l1: 6.0, lcpa: 6.0 },
@@ -170,7 +169,7 @@
     const query = state.searchQuery.toLowerCase().trim();
 
     // Filter by search and chips
-    let filtered = state.accounts.filter(acc => {
+    const filtered = state.accounts.filter(acc => {
       const matchSearch = !query || 
         acc.name.toLowerCase().includes(query) || 
         acc.account_id.toLowerCase().includes(query);
@@ -183,22 +182,7 @@
       return true;
     });
 
-    // Apply sorting
-    if (state.sortBy === 'name_asc') {
-      filtered.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-    } else if (state.sortBy === 'name_desc') {
-      filtered.sort((a, b) => b.name.localeCompare(a.name, 'ru'));
-    } else if (state.sortBy === 'status') {
-      filtered.sort((a, b) => {
-        const aActive = a.is_active && a.account_status === 1 ? 1 : 0;
-        const bActive = b.is_active && b.account_status === 1 ? 1 : 0;
-        return bActive - aActive;
-      });
-    } else if (state.sortBy === 'rules') {
-      filtered.sort((a, b) => (b.rules_enabled ? 1 : 0) - (a.rules_enabled ? 1 : 0));
-    }
-
-    // Update strip stats
+    // Update chip counters
     const totalCount = state.accounts.length;
     const rulesCount = state.accounts.filter(a => a.rules_enabled).length;
     const activeCount = state.accounts.filter(a => a.account_status === 1 && a.is_active).length;
@@ -208,10 +192,6 @@
     document.getElementById('countActive').textContent = activeCount;
     document.getElementById('countRules').textContent = rulesCount;
     document.getElementById('countIssue').textContent = issueCount;
-
-    document.getElementById('stripTotal').textContent = totalCount;
-    document.getElementById('stripRulesActive').textContent = rulesCount;
-    document.getElementById('stripMetaActive').textContent = activeCount;
 
     if (filtered.length === 0) {
       listEl.innerHTML = '';
@@ -869,12 +849,6 @@
     input.value = '';
     state.searchQuery = '';
     document.getElementById('searchClearBtn')?.classList.add('hidden');
-    renderAccounts();
-  });
-
-  document.getElementById('accountSortSelect')?.addEventListener('change', (e) => {
-    state.sortBy = e.target.value;
-    haptic('selection');
     renderAccounts();
   });
 

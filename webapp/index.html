@@ -94,38 +94,11 @@
             <button id="searchClearBtn" class="search-clear hidden">&times;</button>
           </div>
           
-          <div class="toolbar-controls">
-            <div class="filter-chips">
-              <button class="chip active" data-filter="all">Все <span class="chip-count" id="countAll">0</span></button>
-              <button class="chip" data-filter="active"><span class="status-dot dot-success"></span>Активные <span class="chip-count" id="countActive">0</span></button>
-              <button class="chip" data-filter="rules"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>С правилами <span class="chip-count" id="countRules">0</span></button>
-              <button class="chip" data-filter="issue"><span class="status-dot dot-danger"></span>Проблемные <span class="chip-count" id="countIssue">0</span></button>
-            </div>
-            <div class="sort-selector-wrap">
-              <select id="accountSortSelect" class="sort-select" title="Сортировка кабинетов">
-                <option value="default">Сортировка: По умолчанию</option>
-                <option value="name_asc">По имени (А → Я)</option>
-                <option value="name_desc">По имени (Я → А)</option>
-                <option value="status">Сначала активные</option>
-                <option value="rules">Сначала с авто-правилами</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <!-- Quick Summary Strip -->
-        <div class="accounts-summary-strip">
-          <div class="strip-item">
-            <span class="strip-label">Всего кабинетов</span>
-            <span class="strip-value" id="stripTotal">0</span>
-          </div>
-          <div class="strip-item">
-            <span class="strip-label">Авто-правила активны</span>
-            <span class="strip-value highlight" id="stripRulesActive">0</span>
-          </div>
-          <div class="strip-item">
-            <span class="strip-label">Активных в Meta</span>
-            <span class="strip-value success" id="stripMetaActive">0</span>
+          <div class="filter-chips">
+            <button class="chip active" data-filter="all">Все <span class="chip-count" id="countAll">0</span></button>
+            <button class="chip" data-filter="active"><span class="status-dot dot-success"></span>Активные <span class="chip-count" id="countActive">0</span></button>
+            <button class="chip" data-filter="rules"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>С правилами <span class="chip-count" id="countRules">0</span></button>
+            <button class="chip" data-filter="issue"><span class="status-dot dot-danger"></span>Проблемные <span class="chip-count" id="countIssue">0</span></button>
           </div>
         </div>
 

@@ -346,47 +346,6 @@ code, .mono {
   cursor: pointer;
 }
 
-.toolbar-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-
-@media (min-width: 768px) {
-  .toolbar-controls {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-end;
-    width: auto;
-    gap: 12px;
-  }
-}
-
-.sort-selector-wrap {
-  display: flex;
-  align-items: center;
-}
-
-.sort-select {
-  width: 100%;
-  padding: 6px 12px;
-  background: var(--tg-sec-bg);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--tg-hint);
-  font-size: 12px;
-  font-weight: 500;
-  outline: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.sort-select:focus, .sort-select:hover {
-  border-color: var(--tg-link);
-  color: var(--tg-text);
-}
-
 .filter-chips {
   display: flex;
   gap: 8px;
@@ -432,44 +391,6 @@ code, .mono {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.08);
   font-size: 11px;
-}
-
-/* Accounts Summary Strip */
-.accounts-summary-strip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.strip-item {
-  background: var(--tg-card-bg);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-}
-
-.strip-label {
-  font-size: 11px;
-  color: var(--tg-hint);
-  font-weight: 500;
-}
-
-.strip-value {
-  font-size: 18px;
-  font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-  margin-top: 2px;
-}
-
-.strip-value.highlight {
-  color: var(--color-info);
-}
-
-.strip-value.success {
-  color: var(--color-success);
 }
 
 /* ==========================================================
