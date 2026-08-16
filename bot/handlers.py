@@ -128,6 +128,36 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
     await message.answer(text, reply_markup=get_main_menu_keyboard(is_admin=is_admin), parse_mode="HTML")
 
 
+def parse_fb_raw_accounts(raw_text: str) -> List[dict]:
+    """
+    Умный парсер: извлекает ID кабинетов и их имена даже из сырого текста Facebook Business Manager.
+    """
+    lines = [l.strip() for l in raw_text.strip().split("\n") if l.strip()]
+    id_name_pairs = []
+    
+    for i, line in enumerate(lines):
+        match = re.search(r"(?:Ad account ID|Account ID|ID|act_)[:\s]*(\d{8,25})", line, re.IGNORECASE)
+        if match:
+            acc_id = f"act_{match.group(1)}"
+            name = ""
+            if i > 0 and not re.search(r"(?:Ad account ID|Owned by|info for|scope|permission)", lines[i-1], re.IGNORECASE):
+                name = lines[i-1]
+            id_name_pairs.append((acc_id, name))
+            
+    if not id_name_pairs:
+        all_ids = re.findall(r"(?:act_)?(\d{8,25})", raw_text)
+        for num in list(dict.fromkeys(all_ids)):
+            id_name_pairs.append((f"act_{num}", ""))
+            
+    seen = set()
+    final_list = []
+    for acc_id, name in id_name_pairs:
+        if acc_id not in seen:
+            seen.add(acc_id)
+            final_list.append({"account_id": acc_id, "parsed_name": name})
+    return final_list
+
+
 # ----------------------------------------------------
 # 2. ПОШАГОВОЕ ДОБАВЛЕНИЕ КАБИНЕТОВ (ПАЧКОЙ)
 # ----------------------------------------------------
@@ -141,12 +171,12 @@ async def start_add_wizard(message: Message, bot: Bot, state: FSMContext):
     await state.set_state(BatchAccountAddStates.waiting_for_ids)
     text = (
         "➕ <b>Добавление рекламных кабинетов (Шаг 1 из 3)</b>\n\n"
-        "Отправьте ID рекламных кабинетов (каждый с новой строки или через пробел).\n"
-        "<i>Можно отправить один или сразу пачку из 5–20 кабинетов!</i>\n\n"
+        "Отправьте список ID кабинетов или <b>скопируйте текст прямо из Facebook Business Manager</b>!\n\n"
+        "💡 <i>Бот сам автоматически распознает все ID кабинетов и их названия из текста.</i>\n\n"
         "<b>Пример:</b>\n"
         "<code>act_1083480094013618\n"
-        "1070862758952340\n"
-        "1387608033301866</code>"
+        "1070862758952340</code>\n"
+        "<i>или вставьте скопированный блок с 'Ad account ID: ...'</i>"
     )
     await message.answer(text, reply_markup=get_cancel_keyboard(), parse_mode="HTML")
 
@@ -171,23 +201,29 @@ async def process_account_ids(message: Message, state: FSMContext):
         await message.answer("❌ Добавление кабинетов отменено.", reply_markup=get_main_menu_keyboard(is_admin=is_admin))
         return
 
-    # Извлекаем все ID
-    found_ids = re.findall(r"(?:act_)?(\d{6,25})", raw_text)
+    parsed_accounts = parse_fb_raw_accounts(raw_text)
     
-    if not found_ids:
-        await message.answer("❌ Не удалось найти ID кабинетов. Пожалуйста, отправьте числовые ID (например: <code>1083480094013618</code>).", parse_mode="HTML")
+    if not parsed_accounts:
+        await message.answer("❌ Не удалось найти ID кабинетов. Пожалуйста, отправьте числовые ID или скопируйте текст из Facebook.", parse_mode="HTML")
         return
 
-    clean_ids = [f"act_{i}" for i in list(dict.fromkeys(found_ids))]
-    await state.update_data(account_ids=clean_ids)
+    await state.update_data(parsed_accounts=parsed_accounts)
     await state.set_state(BatchAccountAddStates.waiting_for_name)
 
+    lines = []
+    for a in parsed_accounts[:10]:
+        name_str = f" ({a['parsed_name']})" if a['parsed_name'] else ""
+        lines.append(f"• <code>{a['account_id']}</code>{name_str}")
+    if len(parsed_accounts) > 10:
+        lines.append(f"<i>...и еще {len(parsed_accounts) - 10} кабинетов</i>")
+
     text = (
-        f"✅ <b>Распознано кабинетов: {len(clean_ids)} шт.</b>\n\n"
+        f"✅ <b>Распознано кабинетов: {len(parsed_accounts)} шт.</b>\n"
+        + "\n".join(lines) + "\n\n"
         "📝 <b>Шаг 2 из 3: Название для пачки</b>\n\n"
-        "Введите общее название для этих кабинетов (например: <code>Швеция</code> или <code>Underdog</code>).\n"
-        "<i>Бот автоматически пронумерует их: Швеция 1, Швеция 2, Швеция 3...</i>\n\n"
-        "💡 <i>Или отправьте знак <code>-</code> (дефис), чтобы сохранить оригинальные названия из Facebook.</i>"
+        "Введите общее название (например: <code>Швеция</code> или <code>Underdog</code>).\n"
+        "<i>Бот автоматически пронумерует их: Швеция 1, Швеция 2...</i>\n\n"
+        "💡 <i>Или отправьте <code>-</code> (дефис), чтобы сохранить найденные названия из Facebook.</i>"
     )
     await message.answer(text, reply_markup=get_cancel_keyboard(), parse_mode="HTML")
 
@@ -211,25 +247,30 @@ async def process_batch_name(message: Message, state: FSMContext):
 async def process_token_and_save(message: Message, state: FSMContext):
     token = message.text.strip()
     data = await state.get_data()
-    account_ids: List[str] = data.get("account_ids", [])
+    parsed_accounts: List[dict] = data.get("parsed_accounts", [])
     batch_name = data.get("batch_name", "-")
     owner_id = str(message.from_user.id)
 
-    progress_msg = await message.answer(f"⏳ Проверяю и подключаю {len(account_ids)} кабинетов через Meta API...")
+    progress_msg = await message.answer(f"⏳ Проверяю и подключаю {len(parsed_accounts)} кабинетов через Meta API...")
 
     added_results = []
     error_results = []
 
     async with async_session_maker() as session:
-        for idx, acc_id in enumerate(account_ids, start=1):
+        for idx, item in enumerate(parsed_accounts, start=1):
+            acc_id = item["account_id"]
+            parsed_name = item.get("parsed_name", "")
+
             try:
                 acc_info = await meta_client.get_account_info(acc_id, token)
                 timezone_name = acc_info.get("timezone_name", "UTC")
                 fb_name = acc_info.get("name", acc_id)
                 
-                # Формируем имя с авто-нумерацией если задано общее имя
+                # Формируем имя
                 if batch_name != "-" and len(batch_name) > 0:
-                    display_name = f"{batch_name} {idx}" if len(account_ids) > 1 else batch_name
+                    display_name = f"{batch_name} {idx}" if len(parsed_accounts) > 1 else batch_name
+                elif parsed_name:
+                    display_name = parsed_name
                 else:
                     display_name = fb_name
 
@@ -270,7 +311,7 @@ async def process_token_and_save(message: Message, state: FSMContext):
     await state.clear()
     is_admin = (owner_id == str(settings.ADMIN_CHAT_ID))
 
-    result_text = f"🎉 <b>Успешно подключено: {len(added_results)} из {len(account_ids)} кабинетов!</b>\n\n"
+    result_text = f"🎉 <b>Успешно подключено: {len(added_results)} из {len(parsed_accounts)} кабинетов!</b>\n\n"
     if added_results:
         result_text += "<b>Подключенные кабинеты:</b>\n" + "\n".join(added_results) + "\n\n"
     if error_results:
