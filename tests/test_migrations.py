@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from database.db import migrate_legacy_account_rules
+from database.db import migrate_legacy_account_rules, migrate_rule_metric_contract
 from database.migrate_sqlite import _source_rows
 from database.models import Account
 
@@ -153,6 +153,87 @@ class TestSQLiteToPostgresConversion(unittest.TestCase):
         self.assertEqual(rows[0]["rules_enabled"], True)
         self.assertIsInstance(rows[0]["created_at"], datetime)
         self.assertIsNone(rows[0]["created_at"].tzinfo)
+
+
+class TestRuleMetricContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE rule_presets (id INTEGER PRIMARY KEY, conditions TEXT NOT NULL)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE TABLE accounts (id INTEGER PRIMARY KEY, active_rules TEXT NOT NULL)"
+                )
+            )
+            await conn.execute(
+                text("INSERT INTO rule_presets (id, conditions) VALUES (1, :conditions)"),
+                {
+                    "conditions": json.dumps(
+                        [
+                            {"metric": "cpr", "operator": "gte", "value": 5},
+                            {"metric": "cpa", "operator": "lte", "value": 10},
+                        ]
+                    )
+                },
+            )
+            await conn.execute(
+                text("INSERT INTO accounts (id, active_rules) VALUES (1, :rules)"),
+                {
+                    "rules": json.dumps(
+                        [
+                            {
+                                "preset_id": 1,
+                                "conditions": [
+                                    {"metric": "cpr", "operator": "gte", "value": 5}
+                                ],
+                            },
+                            {
+                                "preset_id": 2,
+                                "conditions": [
+                                    {"metric": "cpa", "operator": "lte", "value": 10}
+                                ],
+                            },
+                        ]
+                    )
+                },
+            )
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+
+    async def test_normalizes_cpreg_and_disables_combined_cpa_rule(self):
+        async with self.engine.begin() as conn:
+            first = await migrate_rule_metric_contract(conn)
+            preset_conditions = json.loads(
+                (
+                    await conn.execute(
+                        text("SELECT conditions FROM rule_presets WHERE id = 1")
+                    )
+                ).scalar_one()
+            )
+            account_rules = json.loads(
+                (
+                    await conn.execute(
+                        text("SELECT active_rules FROM accounts WHERE id = 1")
+                    )
+                ).scalar_one()
+            )
+            second = await migrate_rule_metric_contract(conn)
+
+        self.assertEqual(first["presets_updated"], 1)
+        self.assertEqual(first["account_rules_updated"], 1)
+        self.assertEqual(first["rules_disabled"], 1)
+        self.assertEqual(preset_conditions[0]["metric"], "cpreg")
+        self.assertEqual(preset_conditions[1]["metric"], "legacy_cpa")
+        self.assertEqual(account_rules[0]["conditions"][0]["metric"], "cpreg")
+        self.assertNotIn("needs_review", account_rules[0])
+        self.assertFalse(account_rules[1]["enabled"])
+        self.assertTrue(account_rules[1]["needs_review"])
+        self.assertEqual(second, {"presets_updated": 0, "account_rules_updated": 0, "rules_disabled": 0})
 
 
 if __name__ == "__main__":

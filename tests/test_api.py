@@ -281,6 +281,18 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(invalid_interval.status_code, 422)
 
+            removed_cpa = await client.post(
+                "/api/presets",
+                headers=headers,
+                json={
+                    "name": "Unsafe combined CPA",
+                    "conditions": [
+                        {"metric": "cpa", "operator": "gte", "value": 10.0}
+                    ],
+                },
+            )
+            self.assertEqual(removed_cpa.status_code, 400)
+
             # An account cannot be enabled before at least one rule is attached.
             t_resp = await client.post("/api/accounts/act_1018756607700064/toggle-rules", headers=headers)
             self.assertEqual(t_resp.status_code, 400)
@@ -578,15 +590,18 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         data = fresh.json()
         self.assertEqual(data["source"], "Meta Marketing API")
         self.assertTrue(data["generated_at"].endswith("Z"))
-        self.assertEqual(data["total_results"], 3)
-        self.assertEqual(data["avg_cost_per_result"], 10.0)
+        self.assertNotIn("total_results", data)
+        self.assertNotIn("avg_cost_per_result", data)
+        self.assertNotIn("total_conversions", data)
         self.assertEqual(data["cost_per_lead"], 15.0)
         self.assertEqual(data["cost_per_registration"], 30.0)
         self.assertEqual(data["cost_per_purchase"], 30.0)
         self.assertEqual(data["avg_ctr"], 5.0)
         self.assertEqual(data["avg_cpc"], 0.6)
         self.assertEqual(data["total_impressions"], 1000)
-        self.assertIn("Покупки показываются отдельно", data["metric_definitions"]["results"])
+        self.assertIn("Не складываются", data["metric_definitions"]["leads"])
+        self.assertIn("Считаются отдельно", data["metric_definitions"]["registrations"])
+        self.assertIn("Считаются отдельно", data["metric_definitions"]["purchases"])
         self.assertEqual(
             data["data_quality"],
             {

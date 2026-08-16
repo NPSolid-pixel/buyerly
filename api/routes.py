@@ -9,6 +9,13 @@ from sqlalchemy import select, delete, func, or_
 
 from core.audit import build_audit_event
 from core.config import settings
+from core.metrics import (
+    SUMMARY_METRIC_DEFINITIONS,
+    cost_per_event,
+    normalize_rule_conditions,
+    normalize_runtime_rule,
+    validate_public_rule_conditions,
+)
 from database.db import async_session_maker, hash_password, password_needs_rehash, verify_password
 import json
 from database.models import (
@@ -35,18 +42,6 @@ meta_client = MetaClient()
 # In-memory summary cache: key -> (timestamp, data)
 _summary_cache: Dict[str, Any] = {}
 SUMMARY_CACHE_TTL = 120  # 2 minutes cache
-
-SUMMARY_METRIC_DEFINITIONS = {
-    "spend": "Сумма spend из Meta по всем синхронизированным ad set за выбранный период.",
-    "results": "Лиды + регистрации. Покупки показываются отдельно и в results не входят.",
-    "cost_per_result": "Spend / (лиды + регистрации). Если результатов нет, значение отсутствует.",
-    "cost_per_lead": "Spend / лиды. Если лидов нет, значение отсутствует.",
-    "cost_per_registration": "Spend / регистрации. Если регистраций нет, значение отсутствует.",
-    "cost_per_purchase": "Spend / покупки. Если покупок нет, значение отсутствует.",
-    "ctr": "Клики / показы × 100.",
-    "cpc": "Spend / клики.",
-}
-
 
 # ----------------------------------------------------
 # Pydantic Schemas
@@ -79,7 +74,7 @@ class UpdateProfileRequest(BaseModel):
 
 
 class ConditionItem(BaseModel):
-    metric: str = "spend"  # spend, cpl, cpr, cpa, leads, registrations, purchases, ctr, cpc
+    metric: str = "spend"  # spend, cpl, cpreg, cpp, leads, registrations, purchases, ctr, cpc
     operator: str = "gte"  # gte, gt, lte, lt, eq
     value: float = 0.0
     time_window: str = "today"  # today, yesterday, last_3d, last_7d
@@ -187,7 +182,12 @@ def _load_active_rules(raw_rules: Any) -> List[Dict[str, Any]]:
         return []
     if not isinstance(rules, list):
         return []
-    return [rule for rule in rules if isinstance(rule, dict)]
+    normalized = []
+    for rule in rules:
+        if isinstance(rule, dict):
+            normalized_rule, _, _ = normalize_runtime_rule(rule)
+            normalized.append(normalized_rule)
+    return normalized
 
 
 def _load_json_object(raw_value: Any) -> Dict[str, Any]:
@@ -207,7 +207,7 @@ def _utc_iso(value: Optional[datetime]) -> str:
 
 
 def _cost_or_none(spend: float, count: int) -> Optional[float]:
-    return round(spend / count, 2) if count > 0 else None
+    return cost_per_event(spend, count, digits=2)
 
 
 def _summary_with_cache_metadata(
@@ -233,11 +233,12 @@ def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
     except (TypeError, ValueError):
         conditions = []
 
-    return {
+    normalized_conditions, _, has_legacy_cpa = normalize_rule_conditions(conditions)
+    snapshot = {
         "preset_id": preset.id,
         "name": preset.name,
         "action": preset.action,
-        "conditions": conditions if isinstance(conditions, list) else [],
+        "conditions": normalized_conditions,
         "logic": preset.condition_logic,
         "cooldown_minutes": preset.cooldown_minutes,
         "check_interval": preset.check_interval_minutes,
@@ -245,6 +246,15 @@ def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
         "budget_change_percent": preset.budget_change_percent,
         "budget_max_daily": preset.budget_max_daily,
     }
+    if has_legacy_cpa:
+        snapshot.update(
+            {
+                "enabled": False,
+                "needs_review": True,
+                "review_reason": "Замените старый общий CPA на CPL, CPReg или CPP.",
+            }
+        )
+    return snapshot
 
 
 def _preset_response(preset: RulePreset) -> RulePresetItem:
@@ -252,9 +262,10 @@ def _preset_response(preset: RulePreset) -> RulePresetItem:
         raw_conditions = json.loads(preset.conditions) if preset.conditions else []
     except (TypeError, ValueError):
         raw_conditions = []
+    normalized_conditions, _, _ = normalize_rule_conditions(raw_conditions)
     conditions = [
         ConditionItem(**condition)
-        for condition in raw_conditions
+        for condition in normalized_conditions
         if isinstance(condition, dict)
     ]
     return RulePresetItem(
@@ -270,6 +281,19 @@ def _preset_response(preset: RulePreset) -> RulePresetItem:
         budget_max_daily=preset.budget_max_daily or 0.0,
         created_at=preset.created_at.strftime("%Y-%m-%d %H:%M") if preset.created_at else "",
     )
+
+
+def _validated_condition_payloads(conditions: List[ConditionItem]) -> List[Dict[str, Any]]:
+    payloads = [condition.model_dump() for condition in conditions]
+    try:
+        validate_public_rule_conditions(payloads)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail="Используйте только актуальные метрики и операторы автоправил.",
+        ) from error
+    normalized, _, _ = normalize_rule_conditions(payloads)
+    return normalized
 
 
 def _unique_preset_ids(preset_ids: List[int]) -> List[int]:
@@ -491,32 +515,14 @@ async def list_presets(user: TelegramUser = Depends(get_current_user)):
         stmt = select(RulePreset).where(RulePreset.owner_id == user.telegram_id).order_by(RulePreset.id.desc())
         res = await session.execute(stmt)
         presets = res.scalars().all()
-        result = []
-        for p in presets:
-            try:
-                conds = json.loads(p.conditions) if p.conditions else []
-            except Exception:
-                conds = []
-            result.append(RulePresetItem(
-                id=p.id,
-                name=p.name,
-                action=p.action,
-                conditions=[ConditionItem(**c) for c in conds if isinstance(c, dict)],
-                condition_logic=p.condition_logic or "and",
-                cooldown_minutes=p.cooldown_minutes or 0,
-                check_interval_minutes=p.check_interval_minutes or 5,
-                notify_tg=p.notify_tg if p.notify_tg is not None else True,
-                budget_change_percent=p.budget_change_percent or 0.0,
-                budget_max_daily=p.budget_max_daily or 0.0,
-                created_at=p.created_at.strftime("%Y-%m-%d %H:%M") if p.created_at else ""
-            ))
-        return result
+        return [_preset_response(preset) for preset in presets]
 
 
 @router.post("/presets", response_model=RulePresetItem)
 async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
-        conds_json = json.dumps([c.model_dump() for c in payload.conditions])
+        condition_payloads = _validated_condition_payloads(payload.conditions)
+        conds_json = json.dumps(condition_payloads)
         preset = RulePreset(
             owner_id=user.telegram_id,
             name=payload.name.strip() or "Новое правило",
@@ -536,7 +542,7 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
             id=preset.id,
             name=preset.name,
             action=preset.action,
-            conditions=payload.conditions,
+            conditions=[ConditionItem(**condition) for condition in condition_payloads],
             condition_logic=preset.condition_logic,
             cooldown_minutes=preset.cooldown_minutes,
             check_interval_minutes=preset.check_interval_minutes,
@@ -550,6 +556,7 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
 @router.put("/presets/{preset_id}", response_model=RulePresetItem)
 async def update_preset(preset_id: int, payload: CreatePresetRequest, user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
+        condition_payloads = _validated_condition_payloads(payload.conditions)
         stmt = select(RulePreset).where(RulePreset.id == preset_id)
         if user.role != "admin":
             stmt = stmt.where(RulePreset.owner_id == user.telegram_id)
@@ -560,7 +567,7 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
         
         preset.name = payload.name.strip() or preset.name
         preset.action = payload.action or "turn_off"
-        preset.conditions = json.dumps([c.model_dump() for c in payload.conditions])
+        preset.conditions = json.dumps(condition_payloads)
         if payload.condition_logic is not None:
             preset.condition_logic = payload.condition_logic
         if payload.cooldown_minutes is not None:
@@ -592,7 +599,7 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
             id=preset.id,
             name=preset.name,
             action=preset.action,
-            conditions=payload.conditions,
+            conditions=[ConditionItem(**condition) for condition in condition_payloads],
             condition_logic=preset.condition_logic,
             cooldown_minutes=preset.cooldown_minutes,
             check_interval_minutes=preset.check_interval_minutes,
@@ -1047,12 +1054,8 @@ async def get_summary_report(
                 "total_leads": 0,
                 "total_regs": 0,
                 "total_purchases": 0,
-                "total_conversions": 0,
-                "avg_cpa": 0.0,
                 "avg_cpc": 0.0,
                 "avg_ctr": 0.0,
-                "total_results": 0,
-                "avg_cost_per_result": None,
                 "cost_per_lead": None,
                 "cost_per_registration": None,
                 "cost_per_purchase": None,
@@ -1101,10 +1104,6 @@ async def get_summary_report(
                     "leads": 0,
                     "registrations": 0,
                     "purchases": 0,
-                    "total_conversions": 0,
-                    "results": 0,
-                    "cpa": 0.0,
-                    "cost_per_result": None,
                     "cost_per_lead": None,
                     "cost_per_registration": None,
                     "cost_per_purchase": None,
@@ -1130,8 +1129,6 @@ async def get_summary_report(
                 acc_leads = sum(a.get("leads", 0) for a in adsets)
                 acc_regs = sum(a.get("registrations", 0) for a in adsets)
                 acc_purchases = sum(a.get("purchases", 0) for a in adsets)
-                acc_conv = acc_leads + acc_regs
-                acc_cpa = (acc_spend / acc_conv) if acc_conv > 0 else 0.0
                 acc_cpc = (acc_spend / acc_clicks) if acc_clicks > 0 else 0.0
                 acc_ctr = ((acc_clicks / acc_impressions) * 100) if acc_impressions > 0 else 0.0
 
@@ -1157,10 +1154,6 @@ async def get_summary_report(
                     "leads": acc_leads,
                     "registrations": acc_regs,
                     "purchases": acc_purchases,
-                    "total_conversions": acc_conv,
-                    "results": acc_conv,
-                    "cpa": round(acc_cpa, 2),
-                    "cost_per_result": _cost_or_none(acc_spend, acc_conv),
                     "cost_per_lead": _cost_or_none(acc_spend, acc_leads),
                     "cost_per_registration": _cost_or_none(acc_spend, acc_regs),
                     "cost_per_purchase": _cost_or_none(acc_spend, acc_purchases),
@@ -1189,10 +1182,6 @@ async def get_summary_report(
                     "leads": 0,
                     "registrations": 0,
                     "purchases": 0,
-                    "total_conversions": 0,
-                    "results": 0,
-                    "cpa": 0.0,
-                    "cost_per_result": None,
                     "cost_per_lead": None,
                     "cost_per_registration": None,
                     "cost_per_purchase": None,
@@ -1205,8 +1194,6 @@ async def get_summary_report(
                     "data_status_label": "Meta не вернула метрики",
                 })
 
-        total_conversions = total_leads + total_regs
-        avg_cpa = (total_spend / total_conversions) if total_conversions > 0 else 0.0
         avg_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0.0
         avg_ctr = ((total_clicks / total_impressions) * 100) if total_impressions > 0 else 0.0
         metrics_coverage = round((accounts_synced / len(accounts)) * 100, 1) if accounts else 0.0
@@ -1222,12 +1209,8 @@ async def get_summary_report(
             "total_leads": total_leads,
             "total_regs": total_regs,
             "total_purchases": total_purchases,
-            "total_conversions": total_conversions,
-            "avg_cpa": round(avg_cpa, 2),
             "avg_cpc": round(avg_cpc, 2),
             "avg_ctr": round(avg_ctr, 2),
-            "total_results": total_conversions,
-            "avg_cost_per_result": _cost_or_none(total_spend, total_conversions),
             "cost_per_lead": _cost_or_none(total_spend, total_leads),
             "cost_per_registration": _cost_or_none(total_spend, total_regs),
             "cost_per_purchase": _cost_or_none(total_spend, total_purchases),

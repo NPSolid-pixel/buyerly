@@ -117,18 +117,71 @@ class TestRuleEngine(unittest.TestCase):
         self.assertEqual(RuleEngine.evaluate(adset_no_match, self.account).action, RuleAction.NOOP)
 
     # --------------------------------------------------------
-    # Метрика: cpa (общая цена за конверсию)
+    # Удалённая метрика: общий CPA
     # --------------------------------------------------------
 
-    def test_cpa_metric(self):
-        """CPA > $10 → STOP."""
+    def test_legacy_cpa_never_triggers(self):
+        """Старый CPA не должен менять Meta без ручного выбора новой метрики."""
         self.set_rule(conditions=[{"metric": "cpa", "operator": "gte", "value": 10.0}])
-        
-        # Spend $22, 1 lead + 1 reg = 2 conversions, CPA = $11
+
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 22.0, "leads": 1, "registrations": 1}
         res = RuleEngine.evaluate(adset, self.account)
+        self.assertEqual(res.action, RuleAction.NOOP)
+
+    def test_cpp_metric(self):
+        """CPP > $10 → STOP."""
+        self.set_rule(conditions=[{"metric": "cpp", "operator": "gt", "value": 10.0}])
+        adset = {
+            "adset_id": "1",
+            "adset_name": "Test",
+            "status": "ACTIVE",
+            "spend": 22.0,
+            "leads": 1,
+            "registrations": 1,
+            "purchases": 2,
+        }
+        res = RuleEngine.evaluate(adset, self.account)
         self.assertEqual(res.action, RuleAction.STOP)
-        self.assertIn("CPA", res.reason)
+        self.assertIn("Цена покупки (CPP) ($11.00) > $10.00", res.reason)
+
+    def test_zero_event_cost_is_unavailable(self):
+        """Нулевые лиды не превращают Spend в CPL и не запускают масштабирование."""
+        self.set_rule(
+            action="increase_budget",
+            conditions=[{"metric": "cpl", "operator": "lt", "value": 10.0}],
+            budget_change_percent=20.0,
+        )
+        adset = {
+            "adset_id": "1",
+            "adset_name": "Test",
+            "status": "ACTIVE",
+            "spend": 5.0,
+            "leads": 0,
+            "registrations": 0,
+            "purchases": 0,
+        }
+        result = RuleEngine.evaluate(adset, self.account)
+        self.assertEqual(result.action, RuleAction.NOOP)
+        self.assertIsNone(result.cpl)
+
+    def test_zero_spend_with_event_has_zero_cost(self):
+        """Реальный нулевой CPL не смешивается с отсутствующим значением."""
+        self.set_rule(
+            action="notify_only",
+            conditions=[{"metric": "cpl", "operator": "eq", "value": 0.0}],
+        )
+        adset = {
+            "adset_id": "1",
+            "adset_name": "Test",
+            "status": "ACTIVE",
+            "spend": 0.0,
+            "leads": 1,
+            "registrations": 0,
+            "purchases": 0,
+        }
+        result = RuleEngine.evaluate(adset, self.account)
+        self.assertEqual(result.action, RuleAction.NOTIFY_ONLY)
+        self.assertEqual(result.cpl, 0.0)
 
     # --------------------------------------------------------
     # Метрика: ctr
@@ -141,7 +194,7 @@ class TestRuleEngine(unittest.TestCase):
             conditions=[{"metric": "ctr", "operator": "lt", "value": 1.0}],
         )
         
-        adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 10.0, "leads": 0, "registrations": 0, "ctr": 0.5}
+        adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 10.0, "leads": 0, "registrations": 0, "impressions": 200, "clicks": 1}
         res = RuleEngine.evaluate(adset, self.account)
         self.assertEqual(res.action, RuleAction.NOTIFY_ONLY)
         self.assertIn("CTR", res.reason)
@@ -151,12 +204,12 @@ class TestRuleEngine(unittest.TestCase):
     # --------------------------------------------------------
 
     def test_and_logic_all_match(self):
-        """AND: Спенд >= $10 И CPR >= $5 → STOP."""
+        """AND: Спенд >= $10 И CPReg >= $5 → STOP."""
         self.set_rule(
             logic="and",
             conditions=[
                 {"metric": "spend", "operator": "gte", "value": 10.0},
-                {"metric": "cpr", "operator": "gte", "value": 5.0},
+                {"metric": "cpreg", "operator": "gte", "value": 5.0},
             ],
         )
         
@@ -165,6 +218,21 @@ class TestRuleEngine(unittest.TestCase):
 
         adset_no_match = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 8.0, "leads": 0, "registrations": 1}
         self.assertEqual(RuleEngine.evaluate(adset_no_match, self.account).action, RuleAction.NOOP)
+
+    def test_strict_and_inclusive_operators_differ_at_boundary(self):
+        adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 10.0, "leads": 1, "registrations": 0}
+
+        self.set_rule(conditions=[{"metric": "spend", "operator": "gt", "value": 10.0}])
+        self.assertEqual(RuleEngine.evaluate(adset, self.account).action, RuleAction.NOOP)
+
+        self.set_rule(conditions=[{"metric": "spend", "operator": "gte", "value": 10.0}])
+        self.assertEqual(RuleEngine.evaluate(adset, self.account).action, RuleAction.STOP)
+
+        self.set_rule(conditions=[{"metric": "spend", "operator": "lt", "value": 10.0}])
+        self.assertEqual(RuleEngine.evaluate(adset, self.account).action, RuleAction.NOOP)
+
+        self.set_rule(conditions=[{"metric": "spend", "operator": "lte", "value": 10.0}])
+        self.assertEqual(RuleEngine.evaluate(adset, self.account).action, RuleAction.STOP)
 
     # --------------------------------------------------------
     # OR-логика (достаточно одного условия)

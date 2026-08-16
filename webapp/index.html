@@ -277,7 +277,7 @@
         </div>
 
         <!-- KPI Metrics Cards Grid -->
-        <div class="kpi-grid">
+        <div class="kpi-grid kpi-primary-grid">
           <div class="kpi-card spend-card">
             <div class="kpi-header">
               <span class="kpi-title">Spend</span>
@@ -291,26 +291,42 @@
 
           <div class="kpi-card">
             <div class="kpi-header">
-              <span class="kpi-title">Результаты <span class="metric-info" title="Результат = лид + регистрация. Покупки сюда не входят.">?</span></span>
+              <span class="kpi-title">Лиды</span>
               <span class="kpi-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
               </span>
             </div>
-            <div class="kpi-value" id="kpiResults">0</div>
-            <div class="kpi-subtext">
-              Лиды: <b id="kpiLeads">0</b> · Реги: <b id="kpiRegs">0</b>
-            </div>
+            <div class="kpi-value" id="kpiLeads">0</div>
+            <div class="kpi-subtext">Событие Meta: lead</div>
           </div>
 
           <div class="kpi-card">
             <div class="kpi-header">
-              <span class="kpi-title">Стоимость результата <span class="metric-info" title="Spend / (лиды + регистрации)">?</span></span>
+              <span class="kpi-title">CPL <span class="metric-info" title="Spend / лиды. При нуле лидов значение не рассчитывается.">?</span></span>
               <span class="kpi-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M18 9l-5 5-4-4-6 6"/></svg>
               </span>
             </div>
-            <div class="kpi-value" id="kpiCostPerResult">—</div>
-            <div class="kpi-subtext">CPL: <b id="kpiCpl">—</b> · за регу: <b id="kpiCpr">—</b></div>
+            <div class="kpi-value" id="kpiCpl">—</div>
+            <div class="kpi-subtext">Стоимость одного лида</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Регистрации</span>
+              <span class="kpi-icon">R</span>
+            </div>
+            <div class="kpi-value" id="kpiRegs">0</div>
+            <div class="kpi-subtext">Событие Meta: complete_registration</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">CPReg <span class="metric-info" title="Spend / регистрации. При нуле регистраций значение не рассчитывается.">?</span></span>
+              <span class="kpi-icon">$</span>
+            </div>
+            <div class="kpi-value" id="kpiCpreg">—</div>
+            <div class="kpi-subtext">Стоимость регистрации</div>
           </div>
 
           <div class="kpi-card">
@@ -321,12 +337,23 @@
               </span>
             </div>
             <div class="kpi-value" id="kpiPurchases">0</div>
-            <div class="kpi-subtext">Стоимость покупки: <b id="kpiCpp">—</b></div>
+            <div class="kpi-subtext">Событие Meta: purchase</div>
           </div>
 
           <div class="kpi-card">
             <div class="kpi-header">
-              <span class="kpi-title">Трафик</span>
+              <span class="kpi-title">CPP <span class="metric-info" title="Spend / покупки. При нуле покупок значение не рассчитывается.">?</span></span>
+              <span class="kpi-icon">$</span>
+            </div>
+            <div class="kpi-value" id="kpiCpp">—</div>
+            <div class="kpi-subtext">Стоимость покупки</div>
+          </div>
+        </div>
+
+        <div class="kpi-grid kpi-secondary-grid">
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Все клики <span class="metric-info" title="Поле clicks из Meta включает не только переходы по ссылке.">?</span></span>
               <span class="kpi-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M14 10l6.1-6.1M9 21H3v-6M10 14l-6.1 6.1"/></svg>
               </span>
@@ -339,7 +366,7 @@
 
           <div id="kpiCoverageCard" class="kpi-card kpi-coverage-card">
             <div class="kpi-header">
-              <span class="kpi-title">Покрытие данных <span class="metric-info" title="Доля кабинетов, от которых Meta успешно вернула метрики.">?</span></span>
+              <span class="kpi-title">Синхронизация <span class="metric-info" title="Доля кабинетов, от которых Meta успешно вернула метрики. Это не оценка настройки пикселя.">?</span></span>
               <span id="kpiCoverageStatus" class="summary-quality-dot"></span>
             </div>
             <div class="kpi-value" id="kpiCoverage">0%</div>
@@ -380,7 +407,9 @@
                   <th class="text-right">Лиды</th>
                   <th class="text-right">Реги</th>
                   <th class="text-right">Покупки</th>
-                  <th class="text-right">Стоимость результата</th>
+                  <th class="text-right">CPL</th>
+                  <th class="text-right">CPReg</th>
+                  <th class="text-right">CPP</th>
                 </tr>
               </thead>
               <tbody id="summaryTableBody">
@@ -637,7 +666,7 @@
             <div class="rules-explanation">
               <div class="rule-row">
                 <span class="step-badge">Условия</span>
-                <span><b>Метрики:</b> Спенд, CPL, CPR, CPA, Лиды, Реги, Покупки, CTR, CPC с AND/OR логикой</span>
+                <span><b>Метрики:</b> Spend, CPL, CPReg, CPP, Лиды, Регистрации, Покупки, CTR и CPC с точной AND/OR логикой</span>
               </div>
               <div class="rule-row">
                 <span class="step-badge">Окна</span>
@@ -730,7 +759,7 @@
             <!-- 1. Rule Name -->
             <div class="form-group" style="margin-bottom: 12px;">
               <label for="ruleNameInput">Название правила (пресета):</label>
-              <input type="text" id="ruleNameInput" class="form-input" placeholder="Например: Стоп CPA > $6">
+              <input type="text" id="ruleNameInput" class="form-input" placeholder="Например: Стоп CPL > $6">
             </div>
 
             <!-- 2. Action Selector -->

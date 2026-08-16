@@ -453,14 +453,16 @@
       
       const condsHtml = condList.map(c => {
         const metricLabels = {
-          'spend': 'Спенд', 'cpl': 'CPL', 'cpr': 'CPR', 'cpa': 'CPA',
+          'spend': 'Спенд', 'cpl': 'CPL', 'cpreg': 'CPReg', 'cpp': 'CPP',
+          'legacy_cpa': 'Старый общий CPA',
           'leads': 'Лиды', 'registrations': 'Реги', 'purchases': 'Покупки',
           'ctr': 'CTR', 'cpc': 'CPC'
         };
         const mLabel = metricLabels[c.metric] || c.metric;
-        const op = (c.operator === 'gte' || c.operator === 'gt') ? '≥' : ((c.operator === 'lte' || c.operator === 'lt') ? '≤' : '=');
+        const op = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' }[c.operator] || c.operator;
         const unit = (c.metric === 'leads' || c.metric === 'registrations' || c.metric === 'purchases') ? ' шт' : (c.metric === 'ctr' ? '%' : '$');
-        const valStr = unit === '$' ? `$${c.value.toFixed(1)}` : `${c.value}${unit}`;
+        const numericValue = Number(c.value || 0);
+        const valStr = unit === '$' ? `$${numericValue.toFixed(1)}` : `${numericValue}${unit}`;
         const windowLabels = { 'today': 'Сегодня', 'yesterday': 'Вчера', 'last_3d': '3 дня', 'last_7d': '7 дней' };
         const winStr = windowLabels[c.time_window || 'today'] || 'Сегодня';
 
@@ -472,6 +474,9 @@
           </div>
         `;
       }).join('');
+      const legacyWarningHtml = condList.some(c => c.metric === 'legacy_cpa' || c.metric === 'cpa')
+        ? '<div class="rule-migration-warning">Правило выключено: замените старый общий CPA на CPL, CPReg или CPP.</div>'
+        : '';
 
       let budgetInfoHtml = '';
       if (p.action === 'increase_budget' || p.action === 'decrease_budget') {
@@ -495,6 +500,7 @@
           </div>
 
           ${budgetInfoHtml}
+          ${legacyWarningHtml}
 
           <div class="rule-conditions-list">
             <div style="font-size:11px; font-weight:700; color:var(--tg-hint); text-transform:uppercase; margin-bottom:2px;">
@@ -1103,28 +1109,29 @@
     const container = document.getElementById('ruleConditionsContainer');
     if (!container) return;
 
-    const isGte = operator === 'gte' || operator === 'gt';
-    const isLte = operator === 'lte' || operator === 'lt';
-    const isEq = operator === 'eq';
+    const normalizedMetric = metric === 'cpr' ? 'cpreg' : (metric === 'cpa' ? 'legacy_cpa' : metric);
 
     const row = document.createElement('div');
     row.className = 'rule-condition-row';
     row.innerHTML = `
       <select class="cond-metric form-select">
         <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд ($)</option>
-        <option value="cpl" ${metric === 'cpl' ? 'selected' : ''}>Цена за лид ($)</option>
-        <option value="cpr" ${metric === 'cpr' ? 'selected' : ''}>Цена за регу ($)</option>
-        <option value="cpa" ${metric === 'cpa' ? 'selected' : ''}>CPA общий ($)</option>
-        <option value="leads" ${metric === 'leads' ? 'selected' : ''}>Лиды (шт)</option>
-        <option value="registrations" ${metric === 'registrations' ? 'selected' : ''}>Реги (шт)</option>
-        <option value="purchases" ${metric === 'purchases' ? 'selected' : ''}>Покупки (шт)</option>
-        <option value="ctr" ${metric === 'ctr' ? 'selected' : ''}>CTR (%)</option>
-        <option value="cpc" ${metric === 'cpc' ? 'selected' : ''}>CPC ($)</option>
+        <option value="cpl" ${normalizedMetric === 'cpl' ? 'selected' : ''}>Цена лида · CPL ($)</option>
+        <option value="cpreg" ${normalizedMetric === 'cpreg' ? 'selected' : ''}>Цена регистрации · CPReg ($)</option>
+        <option value="cpp" ${normalizedMetric === 'cpp' ? 'selected' : ''}>Цена покупки · CPP ($)</option>
+        <option value="leads" ${normalizedMetric === 'leads' ? 'selected' : ''}>Лиды (шт)</option>
+        <option value="registrations" ${normalizedMetric === 'registrations' ? 'selected' : ''}>Регистрации (шт)</option>
+        <option value="purchases" ${normalizedMetric === 'purchases' ? 'selected' : ''}>Покупки (шт)</option>
+        <option value="ctr" ${normalizedMetric === 'ctr' ? 'selected' : ''}>CTR всех кликов (%)</option>
+        <option value="cpc" ${normalizedMetric === 'cpc' ? 'selected' : ''}>CPC всех кликов ($)</option>
+        ${normalizedMetric === 'legacy_cpa' ? '<option value="legacy_cpa" selected disabled>Старый общий CPA — замените</option>' : ''}
       </select>
       <select class="cond-operator form-select">
-        <option value="gte" ${isGte ? 'selected' : ''}>&ge; (больше или равно)</option>
-        <option value="lte" ${isLte ? 'selected' : ''}>&le; (меньше или равно)</option>
-        <option value="eq" ${isEq ? 'selected' : ''}>= (равно)</option>
+        <option value="gt" ${operator === 'gt' ? 'selected' : ''}>&gt; (больше)</option>
+        <option value="gte" ${operator === 'gte' ? 'selected' : ''}>&ge; (больше или равно)</option>
+        <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt; (меньше)</option>
+        <option value="lte" ${operator === 'lte' ? 'selected' : ''}>&le; (меньше или равно)</option>
+        <option value="eq" ${operator === 'eq' ? 'selected' : ''}>= (равно)</option>
       </select>
       <input type="number" class="cond-value form-input text-center" placeholder="0.0" step="0.5" min="0" inputmode="decimal" value="${value}">
       <select class="cond-window form-select">
@@ -1430,9 +1437,10 @@
     const container = document.getElementById('summaryDefinitionsList');
     if (!container) return;
     const labels = {
-      spend: 'Spend', results: 'Результаты', cost_per_result: 'Стоимость результата',
-      cost_per_lead: 'CPL', cost_per_registration: 'Стоимость регистрации',
-      cost_per_purchase: 'Стоимость покупки', ctr: 'CTR', cpc: 'CPC'
+      spend: 'Spend', leads: 'Лиды', cost_per_lead: 'CPL',
+      registrations: 'Регистрации', cost_per_registration: 'CPReg',
+      purchases: 'Покупки', cost_per_purchase: 'CPP', clicks: 'Все клики',
+      ctr: 'CTR всех кликов', cpc: 'CPC всех кликов'
     };
     container.innerHTML = Object.entries(definitions).map(([key, definition]) => `
       <div class="metric-definition-item">
@@ -1460,7 +1468,7 @@
     const failed = quality.accounts_failed || 0;
     const blocked = quality.accounts_blocked || 0;
     banner.className = `summary-quality-banner${status === 'unavailable' ? ' error' : ''}`;
-    banner.innerHTML = `<b>Неполное покрытие:</b> синхронизировано ${quality.accounts_synced || 0} из ${quality.accounts_total || 0} кабинетов. Ошибок Meta: ${failed}, недоступных кабинетов: ${blocked}. Итоговые суммы рассчитаны только по успешно синхронизированным данным.`;
+    banner.innerHTML = `<b>Неполная синхронизация:</b> данные получены от ${quality.accounts_synced || 0} из ${quality.accounts_total || 0} кабинетов. Ошибок Meta: ${failed}, недоступных кабинетов: ${blocked}. Итоговые суммы рассчитаны только по успешно синхронизированным данным.`;
   }
 
   function summaryDataStatus(account) {
@@ -1472,12 +1480,10 @@
   function renderSummaryData(data) {
     // KPI Cards
     document.getElementById('kpiSpend').textContent = formatMoneyOrDash(Number(data.total_spend || 0));
-    document.getElementById('kpiResults').textContent = formatNumber(data.total_results ?? data.total_conversions);
     document.getElementById('kpiLeads').textContent = formatNumber(data.total_leads);
     document.getElementById('kpiRegs').textContent = formatNumber(data.total_regs);
-    document.getElementById('kpiCostPerResult').textContent = formatMoneyOrDash(data.avg_cost_per_result);
     document.getElementById('kpiCpl').textContent = formatMoneyOrDash(data.cost_per_lead);
-    document.getElementById('kpiCpr').textContent = formatMoneyOrDash(data.cost_per_registration);
+    document.getElementById('kpiCpreg').textContent = formatMoneyOrDash(data.cost_per_registration);
     document.getElementById('kpiPurchases').textContent = formatNumber(data.total_purchases);
     document.getElementById('kpiCpp').textContent = formatMoneyOrDash(data.cost_per_purchase);
     document.getElementById('kpiClicks').textContent = formatNumber(data.total_clicks);
@@ -1490,12 +1496,11 @@
     // Desktop Table
     const tableBody = document.getElementById('summaryTableBody');
     if (!data.accounts || data.accounts.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="10" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="12" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
     } else {
       tableBody.innerHTML = data.accounts.map(acc => {
         const hasMetrics = acc.data_status === 'synced' || (!acc.data_status && !acc.is_banned && !acc.has_error);
         const spendStr = hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0)) : '—';
-        const resultCost = hasMetrics ? formatMoneyOrDash(acc.cost_per_result ?? (acc.total_conversions > 0 ? acc.cpa : null)) : '—';
         const displayName = acc.short_name || acc.name;
         
         return `
@@ -1509,7 +1514,9 @@
             <td class="text-right mono" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
             <td class="text-right mono" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
             <td class="text-right mono">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
-            <td class="text-right mono"><b>${resultCost}</b></td>
+            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration) : '—'}</td>
+            <td class="text-right mono"><b>${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase) : '—'}</b></td>
           </tr>
         `;
       }).join('');
@@ -1538,28 +1545,28 @@
             </div>
             <div class="mob-card-stats">
               <div class="stat-box">
-                <span class="stat-box-label">Результаты</span>
-                <span class="stat-box-val">${hasMetrics ? formatNumber(acc.results ?? acc.total_conversions) : '—'}</span>
-              </div>
-              <div class="stat-box">
                 <span class="stat-box-label">Лиды</span>
                 <span class="stat-box-val" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</span>
               </div>
               <div class="stat-box">
-                <span class="stat-box-label">Реги</span>
+                <span class="stat-box-label">CPL</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">Регистрации</span>
                 <span class="stat-box-val" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</span>
               </div>
               <div class="stat-box">
-                <span class="stat-box-label">Цена результата</span>
-                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_result ?? (acc.total_conversions > 0 ? acc.cpa : null)) : '—'}</span>
+                <span class="stat-box-label">CPReg</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration) : '—'}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">Покупки</span>
                 <span class="stat-box-val">${hasMetrics ? formatNumber(acc.purchases) : '—'}</span>
               </div>
               <div class="stat-box">
-                <span class="stat-box-label">CTR</span>
-                <span class="stat-box-val">${hasMetrics && acc.impressions > 0 ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</span>
+                <span class="stat-box-label">CPP</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase) : '—'}</span>
               </div>
             </div>
           </div>

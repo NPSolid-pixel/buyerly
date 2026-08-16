@@ -83,24 +83,44 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('window.pickRuleGroupForAccount', self.script)
         self.assertIn('rule-groups-grid', self.styles)
 
-    def test_summary_explains_metric_semantics_and_data_coverage(self):
+    def test_summary_separates_funnel_metrics_and_data_sync(self):
         for contract in (
-            'id="kpiResults"',
-            'id="kpiCostPerResult"',
+            'id="kpiLeads"',
+            'id="kpiCpl"',
+            'id="kpiRegs"',
+            'id="kpiCpreg"',
             'id="kpiPurchases"',
+            'id="kpiCpp"',
             'id="kpiCoverage"',
             'id="summaryQualityBanner"',
             'id="summaryDefinitionsList"',
-            'Результат = лид + регистрация',
+            'Синхронизация',
         ):
             self.assertIn(contract, self.index)
 
-        self.assertIn('data.avg_cost_per_result', self.script)
         self.assertIn('data.data_quality', self.script)
         self.assertIn('data.metric_definitions', self.script)
         self.assertIn('data.cache?.is_cached', self.script)
-        self.assertNotIn('id="kpiCpa"', self.index)
-        self.assertNotIn('Средний CPA', self.index)
+        self.assertNotIn('id="kpiResults"', self.index)
+        self.assertNotIn('id="kpiCostPerResult"', self.index)
+        self.assertNotIn('Стоимость результата', self.index)
+        self.assertNotIn('data.avg_cost_per_result', self.script)
+
+    def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
+        for contract in (
+            'value="cpl"',
+            'value="cpreg"',
+            'value="cpp"',
+            'value="gt"',
+            'value="gte"',
+            'value="lt"',
+            'value="lte"',
+            'value="eq"',
+        ):
+            self.assertIn(contract, self.script)
+
+        self.assertNotIn('<option value="cpa"', self.script)
+        self.assertNotIn('<option value="cpr"', self.script)
 
     def test_account_cards_separate_meta_automation_and_rule_state(self):
         for contract in (

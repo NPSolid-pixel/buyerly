@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import declarative_base
 
 from core.config import settings
+from core.metrics import normalize_rule_conditions, normalize_runtime_rule
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,76 @@ async def migrate_legacy_account_rules(conn) -> int:
     return migrated_count
 
 
+async def migrate_rule_metric_contract(conn) -> dict[str, int]:
+    """Normalize CPR and safely disable rules that used the removed combined CPA."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    counts = {"presets_updated": 0, "account_rules_updated": 0, "rules_disabled": 0}
+
+    if "rule_presets" in table_names:
+        rows = (
+            await conn.execute(text("SELECT id, conditions FROM rule_presets"))
+        ).mappings().all()
+        for row in rows:
+            try:
+                raw_conditions = json.loads(row.get("conditions") or "[]")
+            except (TypeError, json.JSONDecodeError):
+                raw_conditions = []
+            conditions, changed, _ = normalize_rule_conditions(raw_conditions)
+            if changed:
+                await conn.execute(
+                    text("UPDATE rule_presets SET conditions = :conditions WHERE id = :id"),
+                    {
+                        "conditions": json.dumps(conditions, ensure_ascii=False),
+                        "id": row["id"],
+                    },
+                )
+                counts["presets_updated"] += 1
+
+    if "accounts" in table_names:
+        account_columns = await conn.run_sync(
+            lambda sync_conn: {
+                column["name"]
+                for column in inspect(sync_conn).get_columns("accounts")
+            }
+        )
+        if "active_rules" in account_columns:
+            rows = (
+                await conn.execute(text("SELECT id, active_rules FROM accounts"))
+            ).mappings().all()
+            for row in rows:
+                try:
+                    raw_rules = json.loads(row.get("active_rules") or "[]")
+                except (TypeError, json.JSONDecodeError):
+                    raw_rules = []
+                if not isinstance(raw_rules, list):
+                    raw_rules = []
+                normalized_rules = []
+                account_changed = False
+                for raw_rule in raw_rules:
+                    if not isinstance(raw_rule, dict):
+                        account_changed = True
+                        continue
+                    rule, changed, disabled = normalize_runtime_rule(raw_rule)
+                    normalized_rules.append(rule)
+                    account_changed = account_changed or changed
+                    if disabled and changed:
+                        counts["rules_disabled"] += 1
+                if account_changed:
+                    await conn.execute(
+                        text("UPDATE accounts SET active_rules = :rules WHERE id = :id"),
+                        {
+                            "rules": json.dumps(normalized_rules, ensure_ascii=False),
+                            "id": row["id"],
+                        },
+                    )
+                    counts["account_rules_updated"] += 1
+
+    return counts
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -212,6 +283,9 @@ async def init_schema():
                 "Migrated %s account(s) from legacy rule fields to active_rules.",
                 migrated_rules,
             )
+        metric_migration = await migrate_rule_metric_contract(conn)
+        if any(metric_migration.values()):
+            logger.info("Migrated rule metric contract: %s", metric_migration)
         # These statements support the historical SQLite schema. PostgreSQL is
         # initialized from current metadata and must not receive SQLite defaults.
         legacy_sqlite_columns = [

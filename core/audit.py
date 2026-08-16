@@ -46,8 +46,10 @@ def build_audit_event(
             "spend": evaluation.spend,
             "leads": evaluation.leads,
             "registrations": evaluation.registrations,
-            "total_conversions": evaluation.total_conversions,
-            "cpa": evaluation.cpa,
+            "purchases": evaluation.purchases,
+            "cpl": evaluation.cpl,
+            "cpreg": evaluation.cpreg,
+            "cpp": evaluation.cpp,
             "notify_tg": evaluation.notify_tg,
             "cooldown_minutes": evaluation.cooldown_minutes,
         }

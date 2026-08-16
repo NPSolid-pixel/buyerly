@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Dict, Any, List
 from database.models import Account
+from core.metrics import compare_metric, cost_per_event, rule_metric_reading
 
 class RuleAction(str, Enum):
     NOOP = "NOOP"                             # Всё в норме
@@ -21,8 +22,10 @@ class RuleEvaluationResult:
     spend: float
     leads: int
     registrations: int
-    total_conversions: int
-    cpa: float
+    purchases: int
+    cpl: Optional[float]
+    cpreg: Optional[float]
+    cpp: Optional[float]
     reason: str
     budget_change_percent: float = 0.0
     budget_max_daily: float = 0.0
@@ -34,49 +37,27 @@ class RuleEvaluationResult:
 
 class RuleEngine:
     """
-    Движок правил с поддержкой динамических условий (Спенд, CPL, CPR, CPA, Лиды, Реги, CTR, CPC),
+    Движок правил с поддержкой динамических условий (Spend, CPL, CPReg, CPP,
+    Leads, Registrations, Purchases, CTR, CPC),
     логики AND/OR, действий управления бюджетом и множественных временных окон.
     """
 
     @staticmethod
     def _eval_condition(metric_val: float, operator: str, target_val: float) -> bool:
-        if operator in ("gte", "gt"):
-            return metric_val >= (target_val - 0.001)
-        elif operator in ("lte", "lt"):
-            return metric_val <= (target_val + 0.001)
-        elif operator == "eq":
-            return abs(metric_val - target_val) < 0.01
-        return False
+        """Backward-compatible helper for callers outside the main evaluator."""
+        from core.metrics import MetricReading
+
+        return compare_metric(
+            MetricReading(key="value", label="Значение", unit="", value=metric_val),
+            operator,
+            target_val,
+        )
 
     @staticmethod
     def _get_metric_value(metric: str, adset_data: Dict[str, Any]) -> tuple:
         """Возвращает (значение метрики, читаемое название, единица измерения)."""
-        spend = float(adset_data.get("spend", 0.0))
-        leads = int(adset_data.get("leads", 0))
-        registrations = int(adset_data.get("registrations", 0))
-        purchases = int(adset_data.get("purchases", 0))
-        total_conversions = leads + registrations
-        clicks = int(adset_data.get("clicks", 0))
-
-        cpl = (spend / leads) if leads > 0 else spend
-        cpr = (spend / registrations) if registrations > 0 else spend
-        cpa = (spend / total_conversions) if total_conversions > 0 else 0.0
-        cpc = float(adset_data.get("cpc", 0.0))
-        ctr = float(adset_data.get("ctr", 0.0))
-
-        metric_map = {
-            "spend":         (spend, "Спенд", "$"),
-            "cpl":           (cpl, "Цена за лид (CPL)", "$"),
-            "cpr":           (cpr, "Цена за регу (CPR)", "$"),
-            "cpa":           (cpa, "Цена за конверсию (CPA)", "$"),
-            "leads":         (float(leads), "Лиды", ""),
-            "registrations": (float(registrations), "Регистрации", ""),
-            "purchases":     (float(purchases), "Покупки", ""),
-            "ctr":           (ctr, "CTR", "%"),
-            "cpc":           (cpc, "CPC", "$"),
-        }
-        val, name, unit = metric_map.get(metric, (0.0, metric, ""))
-        return val, name, unit
+        reading = rule_metric_reading(metric, adset_data)
+        return reading.value, reading.label, reading.unit
 
     @staticmethod
     def evaluate(
@@ -96,8 +77,10 @@ class RuleEngine:
         spend = float(adset.get("spend", 0.0))
         leads = int(adset.get("leads", 0))
         registrations = int(adset.get("registrations", 0))
-        total_conversions = leads + registrations
-        cpa = (spend / total_conversions) if total_conversions > 0 else 0.0
+        purchases = int(adset.get("purchases", 0))
+        cpl = cost_per_event(spend, leads)
+        cpreg = cost_per_event(spend, registrations)
+        cpp = cost_per_event(spend, purchases)
         is_active = status == "ACTIVE" and effective_status == "ACTIVE"
 
         def noop(reason="Метрики в пределах нормы."):
@@ -108,8 +91,10 @@ class RuleEngine:
                 spend=spend,
                 leads=leads,
                 registrations=registrations,
-                total_conversions=total_conversions,
-                cpa=cpa,
+                purchases=purchases,
+                cpl=cpl,
+                cpreg=cpreg,
+                cpp=cpp,
                 reason=reason,
                 cooldown_minutes=0,
                 notify_tg=False
@@ -153,6 +138,8 @@ class RuleEngine:
         triggered_actions = []
 
         for rule in active_rules:
+            if rule.get("enabled", True) is False or rule.get("needs_review", False) is True:
+                continue
             action_type = rule.get("action", "turn_off")
             if action_type == "turn_on":
                 if status != "PAUSED":
@@ -181,10 +168,20 @@ class RuleEngine:
                 else:
                     source_data = adset
 
-                metric_val, metric_name, unit = RuleEngine._get_metric_value(metric, source_data)
+                reading = rule_metric_reading(metric, source_data)
+                metric_val, metric_name, unit = reading.value, reading.label, reading.unit
 
-                op_symbol = "≥" if operator in ("gte", "gt") else ("≤" if operator in ("lte", "lt") else "=")
+                op_symbol = {
+                    "gt": ">",
+                    "gte": "≥",
+                    "lt": "<",
+                    "lte": "≤",
+                    "eq": "=",
+                }.get(operator, operator)
                 
+                if metric_val is None:
+                    all_match = False
+                    continue
                 if unit == "$":
                     val_fmt = f"${metric_val:.2f}"
                     tgt_fmt = f"${target_val:.2f}"
@@ -200,7 +197,7 @@ class RuleEngine:
                     window_labels = {"yesterday": "Вчера", "last_3d": "3 дня", "last_7d": "7 дней"}
                     window_label = f" [{window_labels.get(time_window, time_window)}]"
 
-                matches = RuleEngine._eval_condition(metric_val, operator, target_val)
+                matches = compare_metric(reading, operator, target_val)
 
                 if matches:
                     any_match = True
@@ -244,8 +241,10 @@ class RuleEngine:
             spend=spend,
             leads=leads,
             registrations=registrations,
-            total_conversions=total_conversions,
-            cpa=cpa,
+            purchases=purchases,
+            cpl=cpl,
+            cpreg=cpreg,
+            cpp=cpp,
             reason=combined_reason,
             budget_change_percent=highest_priority_action["budget_change"],
             budget_max_daily=highest_priority_action["budget_max"],

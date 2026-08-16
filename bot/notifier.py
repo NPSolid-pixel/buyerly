@@ -8,6 +8,10 @@ from database.models import EventLog
 
 logger = logging.getLogger(__name__)
 
+
+def _cost_text(value: Optional[float]) -> str:
+    return "—" if value is None else f"${value:.2f}"
+
 class TelegramNotifier:
     """
     Форматирует и отправляет алерты и отчеты в Telegram конкретному владельцу или админу
@@ -63,8 +67,8 @@ class TelegramNotifier:
                     f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
                     f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
                     f"💰 <b>Спенд:</b> ${eval_result.spend:.2f}\n"
-                    f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n"
-                    f"📊 <b>CPA:</b> ${eval_result.cpa:.2f}\n\n"
+                    f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations} | <b>Покупок:</b> {eval_result.purchases}\n"
+                    f"📊 <b>CPL:</b> {_cost_text(eval_result.cpl)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg)} | <b>CPP:</b> {_cost_text(eval_result.cpp)}\n\n"
                     f"⚠️ <i>Причина: {eval_result.reason}</i>"
                 )
 
@@ -75,8 +79,8 @@ class TelegramNotifier:
                     f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
                     f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
                     f"💰 <b>Итоговый спенд:</b> ${eval_result.spend:.2f}\n"
-                    f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n"
-                    f"🎯 <b>Итоговый CPA:</b> ${eval_result.cpa:.2f}\n\n"
+                    f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations} | <b>Покупок:</b> {eval_result.purchases}\n"
+                    f"🎯 <b>CPL:</b> {_cost_text(eval_result.cpl)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg)} | <b>CPP:</b> {_cost_text(eval_result.cpp)}\n\n"
                     f"❓ <i>Результат вошел в допустимую норму. Включить адсет обратно?</i>"
                 )
                 keyboard = get_reactivate_keyboard(
@@ -90,7 +94,8 @@ class TelegramNotifier:
                     f"⚡ <b>Авто-возобновление AdSet (Долетел результат)</b>\n\n"
                     f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
                     f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code>\n"
-                    f"💰 <b>Спенд:</b> ${eval_result.spend:.2f} | <b>Лиды:</b> {eval_result.leads} | <b>Реги:</b> {eval_result.registrations} | <b>CPA:</b> ${eval_result.cpa:.2f}\n"
+                    f"💰 <b>Спенд:</b> ${eval_result.spend:.2f} | <b>Лиды:</b> {eval_result.leads} | <b>Реги:</b> {eval_result.registrations} | <b>Покупки:</b> {eval_result.purchases}\n"
+                    f"📊 <b>CPL:</b> {_cost_text(eval_result.cpl)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg)} | <b>CPP:</b> {_cost_text(eval_result.cpp)}\n"
                     f"✅ <i>Адсет автоматически переведен в статус ACTIVE.</i>"
                 )
 
@@ -101,8 +106,8 @@ class TelegramNotifier:
                     f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
                     f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
                     f"💰 <b>Спенд:</b> ${eval_result.spend:.2f}\n"
-                    f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n"
-                    f"📊 <b>CPA:</b> ${eval_result.cpa:.2f}\n\n"
+                    f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations} | <b>Покупок:</b> {eval_result.purchases}\n"
+                    f"📊 <b>CPL:</b> {_cost_text(eval_result.cpl)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg)} | <b>CPP:</b> {_cost_text(eval_result.cpp)}\n\n"
                     f"⚠️ <i>{eval_result.reason}</i>"
                 )
                 from bot.keyboards import get_pause_adset_keyboard

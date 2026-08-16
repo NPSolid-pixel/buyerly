@@ -192,7 +192,7 @@ class MetaClient:
     ) -> List[Dict[str, Any]]:
         """
         Получает сводную информацию по всем адсетам кабинета за указанный период (today, yesterday, last_3d, last_7d):
-        текущий статус + спенд + лиды + регистрации + CPA.
+        текущий статус + независимые метрики Spend, Leads, Registrations и Purchases.
         """
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
 
@@ -251,9 +251,6 @@ class MetaClient:
             registrations = actions_dict.get("complete_registration", actions_dict.get("offsite_conversion.fb_pixel_complete_registration", actions_dict.get("omni_complete_registration", 0)))
             purchases = actions_dict.get("purchase", actions_dict.get("offsite_conversion.fb_pixel_purchase", actions_dict.get("omni_purchase", 0)))
 
-            total_conversions = leads + registrations
-            cpa = (spend / total_conversions) if total_conversions > 0 else 0.0
-
             unified_adsets.append({
                 "adset_id": a_id,
                 "adset_name": a_name,
@@ -264,8 +261,6 @@ class MetaClient:
                 "leads": leads,
                 "registrations": registrations,
                 "purchases": purchases,
-                "total_conversions": total_conversions,
-                "cpa": round(cpa, 2),
                 "impressions": impressions,
                 "cpc": round(cpc, 2),
                 "ctr": round(ctr, 2),
@@ -331,4 +326,3 @@ class MetaClient:
             error_msg = error_data.get("message", resp.text)
             logger.error(f"Failed to update adset {adset_id} budget: {error_msg}")
             raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
-

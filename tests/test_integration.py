@@ -23,8 +23,6 @@ class MockMetaClient(MetaClient):
                 "spend": 15.50,
                 "leads": 0,
                 "registrations": 0,
-                "total_conversions": 0,
-                "cpa": 0.0,
                 "impressions": 100,
                 "clicks": 5,
                 "cpc": 0.5,
@@ -40,8 +38,6 @@ class MockMetaClient(MetaClient):
                 "spend": 1.00,
                 "leads": 0,
                 "registrations": 0,
-                "total_conversions": 0,
-                "cpa": 0.0,
                 "impressions": 50,
                 "clicks": 2,
                 "cpc": 0.5,
@@ -374,7 +370,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             await session.commit()
 
         mock_meta = MockMetaClient()
-        # adset_1: spend=$15.50, leads=0, CPL=$15.50 → no match (leads < 2)
+        # adset_1: spend=$15.50, leads=0, CPL unavailable → no match.
         # Set adset_2 to match: spend=$8, leads=3 → CPL=$2.67 < $5, leads=3 >= 2 → match
         mock_meta.adsets_state["adset_2"]["spend"] = 8.0
         mock_meta.adsets_state["adset_2"]["leads"] = 3
