@@ -526,102 +526,90 @@ code, .mono {
 }
 
 
-/* Card Metrics Strip */
-.card-metrics-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  background: var(--tg-sec-bg);
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-}
-
-.card-metric-col {
-  display: flex;
-  flex-direction: column;
-}
-
-.card-metric-label {
-  font-size: 10px;
-  color: var(--tg-hint);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.card-metric-val {
-  font-size: 14px;
-  font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* Rules Toggle Section */
-.card-rules-section {
+/* Card Subtitle Row (ID + Timezone) */
+.card-subtitle-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-}
-
-.rules-label-wrap {
-  display: flex;
-  flex-direction: column;
-}
-
-.rules-main-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tg-text);
-}
-
-.rules-sub-label {
-  font-size: 11px;
-  color: var(--tg-hint);
-}
-
-/* Limits Chip in Card */
-.card-limits-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-}
-
-.limits-pill {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: #1f2335;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: var(--color-info);
-  border: 1px solid var(--border-subtle);
-}
-
-.card-actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.card-sub-dot {
+  color: var(--tg-hint);
+  opacity: 0.5;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.card-tz {
+  font-size: 11px;
+  color: var(--tg-hint);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Card Control Row (Unified Interactive Limits + Switch) */
+.card-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
   padding-top: 10px;
   border-top: 1px solid var(--border-subtle);
 }
 
-.card-tz-info {
-  font-size: 11px;
-  color: var(--tg-hint);
-  display: flex;
+.card-limits-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  background: var(--tg-sec-bg);
+  border: 1px solid var(--border-subtle);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex: 1;
+  max-width: fit-content;
 }
 
-.card-btns {
-  display: flex;
-  gap: 6px;
+.card-limits-btn:hover {
+  background: rgba(122, 162, 247, 0.12);
+  border-color: var(--tg-link);
+}
+
+.card-limits-btn .limits-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--tg-hint);
+  flex-shrink: 0;
+}
+
+.card-limits-btn.active .limits-icon {
+  color: var(--color-success);
+}
+
+.card-limits-btn .limits-label {
+  font-size: 12px;
+  color: var(--tg-hint);
+  font-weight: 500;
+}
+
+.card-limits-btn .limits-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-info);
+  letter-spacing: -0.02em;
+}
+
+.card-limits-btn .limits-edit-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--tg-hint);
+  opacity: 0.7;
+  flex-shrink: 0;
+  margin-left: 2px;
 }
 
 /* ==========================================================

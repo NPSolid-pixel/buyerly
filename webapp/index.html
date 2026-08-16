@@ -492,8 +492,12 @@
             <span class="check-label">Автоматически включать адсет при долете лида (без кнопки подтверждения)</span>
           </div>
 
-          <div class="sheet-actions">
+          <div class="sheet-actions" style="flex-direction: column; gap: 8px;">
             <button id="btnSaveLimits" class="btn btn-primary btn-block btn-lg">Сохранить лимиты</button>
+            <button type="button" id="btnOpenDeleteFromModal" class="btn btn-secondary btn-block" style="color: var(--color-danger); border-color: rgba(247, 118, 142, 0.3);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Удалить кабинет из мониторинга
+            </button>
           </div>
         </div>
       </div>

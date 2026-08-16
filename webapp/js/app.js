@@ -232,52 +232,34 @@
           <div class="card-header-row">
             <div class="card-title-area">
               <span class="card-title">${escapeHtml(acc.name)}</span>
-              <span class="card-id-copy mono" onclick="window.copyToClipboard('${acc.account_id}', this)">
-                ${acc.account_id}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              </span>
+              <div class="card-subtitle-row">
+                <span class="card-id-copy mono" onclick="window.copyToClipboard('${acc.account_id}', this)" title="Скопировать ID">
+                  ${acc.account_id}
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </span>
+                <span class="card-sub-dot">·</span>
+                <span class="card-tz mono" title="Часовой пояс сброса статистики 00:00">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:2px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  ${acc.timezone_name}
+                </span>
+              </div>
             </div>
             <span class="status-badge ${statusClass}">${statusText}</span>
           </div>
 
-          <!-- Master Auto-Rules Switch -->
-          <div class="card-rules-section">
-            <div class="rules-label-wrap">
-              <span class="rules-main-label">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                Авто-правила стопов
-              </span>
-              <span class="rules-sub-label">${acc.rules_enabled ? '<span class="status-dot dot-success"></span>Включены (контроль $' + acc.max_spend_0_leads.toFixed(0) + '/$' + acc.max_spend_1_lead.toFixed(0) + '/$' + acc.max_cpa_multiple_leads.toFixed(0) + ')' : '<span class="status-dot dot-muted"></span>Выключены (только статистика)'}</span>
+          <!-- Bottom Row: Unified Interactive Limits + Master Rules Toggle -->
+          <div class="card-control-row">
+            <div class="card-limits-btn ${acc.rules_enabled ? 'active' : ''}" onclick="window.openEditLimitsModal('${acc.account_id}')" title="Нажмите, чтобы настроить лимиты">
+              <svg class="limits-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span class="limits-label">Автостоп:</span>
+              <span class="limits-value mono">$${acc.max_spend_0_leads.toFixed(1)} / $${acc.max_spend_1_lead.toFixed(1)} / $${acc.max_cpa_multiple_leads.toFixed(1)}</span>
+              <svg class="limits-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             </div>
-            <label class="switch">
+
+            <label class="switch" title="Включить/выключить авто-правила">
               <input type="checkbox" ${acc.rules_enabled ? 'checked' : ''} onchange="window.toggleRules('${acc.account_id}', this.checked)">
               <span class="slider round"></span>
             </label>
-          </div>
-
-          <!-- Stepped Limits Pill -->
-          <div class="card-limits-row">
-            <span style="color: var(--tg-hint);">Лимиты правил:</span>
-            <div class="limits-pill mono">
-              <span>$${acc.max_spend_0_leads.toFixed(1)} / $${acc.max_spend_1_lead.toFixed(1)} / $${acc.max_cpa_multiple_leads.toFixed(1)}</span>
-            </div>
-          </div>
-
-          <!-- Actions Footer -->
-          <div class="card-actions-row">
-            <div class="card-tz-info">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:3px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <code>${acc.timezone_name}</code>
-            </div>
-            <div class="card-btns">
-              <button class="btn btn-secondary btn-sm" onclick="window.openEditLimitsModal('${acc.account_id}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                Лимиты
-              </button>
-              <button class="btn btn-secondary btn-sm" style="color: var(--color-danger);" onclick="window.openDeleteConfirmModal('${acc.account_id}', '${escapeHtml(acc.name)}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              </button>
-            </div>
           </div>
         </div>
       `;
@@ -378,6 +360,15 @@
       }
     } catch (err) {
       showToast(`Ошибка сохранения: ${err.message}`, 'error');
+    }
+  });
+
+  document.getElementById('btnOpenDeleteFromModal')?.addEventListener('click', () => {
+    const accountId = document.getElementById('editLimitsAccountId').value;
+    const acc = state.accounts.find(a => a.account_id === accountId);
+    if (acc) {
+      window.closeModal('modalEditLimits');
+      window.openDeleteConfirmModal(acc.account_id, acc.name);
     }
   });
 
