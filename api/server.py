@@ -46,6 +46,9 @@ def create_app() -> FastAPI:
         app.mount("/static", StaticFiles(directory=webapp_dir), name="static")
 
         @app.get("/")
+        @app.get("/sign-in")
+        @app.get("/login")
+        @app.get("/dashboard")
         async def serve_index():
             index_path = os.path.join(webapp_dir, "index.html")
             if os.path.exists(index_path):

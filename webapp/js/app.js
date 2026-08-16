@@ -1779,6 +1779,10 @@
         if (uAvatar) uAvatar.textContent = (user.full_name || user.username || 'B').charAt(0).toUpperCase();
       }
 
+      if (window.location.pathname === '/sign-in' || window.location.pathname === '/login') {
+        try { window.history.replaceState({}, '', '/'); } catch (e) {}
+      }
+
       // Load initial tab (Accounts)
       window.switchTab('accounts');
     } catch (e) {
@@ -1792,6 +1796,7 @@
       if (loginScreen) {
         loginScreen.style.display = 'flex';
         loginScreen.classList.remove('hidden');
+        try { window.history.replaceState({}, '', '/sign-in'); } catch (e) {}
       }
     }
   }
