@@ -539,6 +539,14 @@
     document.getElementById('builderModeTag').textContent = `Пресет: ${preset.name}`;
     document.getElementById('btnDeletePreset')?.classList.remove('hidden');
 
+    const accId = document.getElementById('editLimitsAccountId')?.value;
+    const currentAcc = state.accounts.find(a => a.account_id === accId);
+    if (currentAcc && (currentAcc.preset_id || (currentAcc.rule_conditions && currentAcc.rule_conditions.length > 0))) {
+      document.getElementById('btnDetachRule')?.classList.remove('hidden');
+    } else {
+      document.getElementById('btnDetachRule')?.classList.add('hidden');
+    }
+
     setCooldownUI(preset.cooldown_minutes || 0);
     setIntervalUI(preset.check_interval_minutes || 5);
     const tgToggle = document.getElementById('ruleNotifyTgToggle');
@@ -562,6 +570,14 @@
 
     document.getElementById('builderModeTag').textContent = 'Новое правило';
     document.getElementById('btnDeletePreset')?.classList.add('hidden');
+
+    const accId = document.getElementById('editLimitsAccountId')?.value;
+    const currentAcc = state.accounts.find(a => a.account_id === accId);
+    if (currentAcc && (currentAcc.preset_id || (currentAcc.rule_conditions && currentAcc.rule_conditions.length > 0))) {
+      document.getElementById('btnDetachRule')?.classList.remove('hidden');
+    } else {
+      document.getElementById('btnDetachRule')?.classList.add('hidden');
+    }
 
     setCooldownUI(0);
     setIntervalUI(5);
@@ -677,6 +693,7 @@
 
       document.getElementById('builderModeTag').textContent = 'Кастомное правило кабинета';
       document.getElementById('btnDeletePreset')?.classList.add('hidden');
+      document.getElementById('btnDetachRule')?.classList.remove('hidden');
       renderConditions(acc.rule_conditions);
       renderPresetsList(null);
     } else if (state.presets.length > 0) {
@@ -685,7 +702,27 @@
       window.newPresetMode();
     }
 
+    const hasActiveRule = (acc.preset_id || (acc.rule_conditions && acc.rule_conditions.length > 0));
+    if (!hasActiveRule) {
+      document.getElementById('btnDetachRule')?.classList.add('hidden');
+    }
+
     window.openModal('modalEditLimits');
+  };
+
+  window.detachRuleFromAccount = async function () {
+    const accountId = document.getElementById('editLimitsAccountId').value;
+    if (!accountId) return;
+
+    haptic('impact', 'medium');
+    try {
+      await apiRequest(`/api/accounts/${accountId}/detach-rule`, { method: 'POST' });
+      showToast('Правило сброшено с кабинета', 'success');
+      window.closeModal('modalEditLimits');
+      await loadAccounts();
+    } catch (e) {
+      showToast(`Ошибка сброса: ${e.message}`, 'error');
+    }
   };
 
   window.deleteActivePreset = async function () {

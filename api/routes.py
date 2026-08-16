@@ -436,6 +436,37 @@ async def apply_preset_to_account(
         }
 
 
+@router.post("/accounts/{account_id}/detach-rule")
+async def detach_rule_from_account(
+    account_id: str,
+    user: TelegramUser = Depends(get_current_user)
+):
+    """Сбрасывает привязанное правило/пресет с кабинета (очищает условия)."""
+    async with async_session_maker() as session:
+        acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        stmt = select(Account).where(Account.account_id == acc_id)
+        if user.role != "admin":
+            stmt = stmt.where(Account.owner_id == user.telegram_id)
+
+        res = await session.execute(stmt)
+        acc = res.scalar_one_or_none()
+        if not acc:
+            raise HTTPException(status_code=404, detail="Кабинет не найден.")
+
+        acc.preset_id = None
+        acc.preset_name = ""
+        acc.rule_conditions = "[]"
+        acc.rule_action = "turn_off"
+        acc.rules_enabled = False
+        await session.commit()
+        return {
+            "account_id": acc.account_id,
+            "rules_enabled": False,
+            "message": "Правило успешно сброшено с кабинета"
+        }
+
+
+
 @router.post("/accounts/{account_id}/toggle-rules")
 async def toggle_rules(account_id: str, user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
