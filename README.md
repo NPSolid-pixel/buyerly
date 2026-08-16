@@ -75,3 +75,7 @@ tests/               unit, integration и contract tests
 ```
 
 Подробности: [архитектура](docs/ARCHITECTURE.md), [развёртывание](docs/DEPLOYMENT.md), [архитектурные решения](docs/DECISIONS.md), [работа с Meta-токеном](docs/TOKEN_GUIDE.md).
+
+## Продуктовая разработка
+
+Все согласованные изменения, критерии приёмки и очерёдность отдельных production-релизов ведутся в [product backlog](docs/PRODUCT_BACKLOG.md). Задача закрывается только после тестов, отдельного push, production-проверки и обновления документации.
