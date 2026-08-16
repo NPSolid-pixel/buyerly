@@ -50,6 +50,8 @@ class MockMetaClient(MetaClient):
                 "purchases": 0
             }
         }
+        self.insights_by_window = {}
+        self.requested_windows = []
         self.status_changes = []
         self.budget_changes = []
 
@@ -57,7 +59,9 @@ class MockMetaClient(MetaClient):
         return {"id": account_id, "name": "Underdog 3286", "timezone_name": "HST", "currency": "USD", "account_status": 1, "status_label": "🟢 Активен (ACTIVE)"}
 
     async def get_adsets_insights(self, account_id: str, access_token: str, date_preset: str = "today"):
-        return list(self.adsets_state.values())
+        self.requested_windows.append(date_preset)
+        source = self.insights_by_window.get(date_preset, self.adsets_state)
+        return [dict(adset) for adset in source.values()]
 
     async def set_adset_status(self, adset_id: str, access_token: str, status: str) -> bool:
         self.adsets_state[adset_id]["status"] = status
@@ -158,6 +162,46 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         event_types = [a["event_type"] for a in sent_alerts]
         self.assertIn("DAY_START", event_types)
         self.assertIn("STOP", event_types)
+
+    async def test_historical_window_uses_current_adset_metrics(self):
+        """Yesterday metrics are matched by ad set instead of as one account-wide map."""
+        async with self.test_session_maker() as session:
+            res = await session.execute(select(Account).where(Account.account_id == self.account_id))
+            acc = res.scalar_one()
+            acc.active_rules = json.dumps([
+                {
+                    "preset_id": 3,
+                    "name": "Stop yesterday spend",
+                    "action": "turn_off",
+                    "conditions": [
+                        {
+                            "metric": "spend",
+                            "operator": "gte",
+                            "value": 20.0,
+                            "time_window": "yesterday",
+                        }
+                    ],
+                    "logic": "and",
+                    "cooldown_minutes": 0,
+                    "notify_tg": False,
+                }
+            ])
+            await session.commit()
+
+        mock_meta = MockMetaClient()
+        mock_meta.adsets_state["adset_1"]["spend"] = 1.0
+        mock_meta.adsets_state["adset_2"]["spend"] = 1.0
+        mock_meta.insights_by_window["yesterday"] = {
+            "adset_1": {**mock_meta.adsets_state["adset_1"], "spend": 25.0},
+            "adset_2": {**mock_meta.adsets_state["adset_2"], "spend": 2.0},
+        }
+
+        worker = MonitoringWorker(meta_client=mock_meta)
+        stats = await worker.run_cycle()
+
+        self.assertIn("yesterday", mock_meta.requested_windows)
+        self.assertEqual(stats["adsets_stopped"], 1)
+        self.assertEqual(mock_meta.status_changes, [("adset_1", "PAUSED")])
 
     async def test_budget_increase_action(self):
         """Правило: CPL < $5 И Лиды >= 2 → увеличить бюджет на 20%, потолок $100."""

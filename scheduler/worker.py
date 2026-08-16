@@ -155,11 +155,15 @@ class MonitoringWorker:
 
                     for adset in adsets:
                         a_id = str(adset["adset_id"])
+                        current_adset_windows = {
+                            window: rows_by_adset.get(a_id, {})
+                            for window, rows_by_adset in insights_by_window.items()
+                        }
 
                         eval_res = RuleEngine.evaluate(
                             adset=adset,
                             account=acc,
-                            insights_by_window=insights_by_window
+                            insights_by_window=current_adset_windows
                         )
                         
                         should_notify_tg = eval_res.notify_tg
