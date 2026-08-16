@@ -433,6 +433,34 @@ async def cmd_add_account(message: Message):
 
 
 # ----------------------------------------------------
+# 5.1 ИНСТРУКЦИЯ ПО ПОЛУЧЕНИЮ ТОКЕНА
+# ----------------------------------------------------
+@router.message(F.text == "🔑 Инструкция по токену")
+@router.message(Command("token_help"))
+async def cmd_token_help(message: Message):
+    text = (
+        "🔑 <b>Инструкция: Как получить Access Token в Meta Business Manager</b>\n\n"
+        "<b>1️⃣ Шаг 1: Создать системного юзера в БМ</b>\n"
+        "• Перейдите в <i>Business Settings → Users → System Users</i>\n"
+        "• Нажмите <b>Add</b>, задайте имя (например <code>Buyerly Bot</code>) и выберите роль <b>Admin</b>.\n\n"
+        "<b>2️⃣ Шаг 2: Добавить владельца App в этот же БМ</b>\n"
+        "• Перейдите в <i>Users → People</i> и пригласите аккаунт, на котором создано приложение (Владельца App).\n\n"
+        "<b>3️⃣ Шаг 3: Добавить App в БМ и расшарить доступ к РК</b>\n"
+        "• В <i>Accounts → Apps</i> добавьте приложение.\n"
+        "• В <i>Accounts → Ad Accounts</i> выберите нужные рекламные кабинеты и выдайте полный доступ (<b>Full Control</b>).\n\n"
+        "<b>4️⃣ Шаг 4: Выдать доступ к App системному юзеру и создать токен</b>\n"
+        "• В <i>Accounts → Apps</i> выберите приложение → <i>Assign System Users</i> → добавьте созданного юзера с правами <b>Full Control</b>.\n"
+        "• Вернитесь в <i>Users → System Users</i> → нажмите <b>Generate New Token</b>:\n"
+        "   — Выберите приложение;\n"
+        "   — Срок действия: <b>Never</b> (или 60 days);\n"
+        "   — Отметьте 2 галочки: <code>ads_management</code> и <code>ads_read</code>.\n\n"
+        "📋 <i>Скопируйте полученный токен (начинается на EAAM...) и добавьте кабинет командой:</i>\n"
+        "<code>/add act_ID НАЗВАНИЕ ТОКЕН</code>"
+    )
+    await message.answer(text, parse_mode="HTML")
+
+
+# ----------------------------------------------------
 # 6. РЕАКТИВАЦИЯ И ОТКЛОНЕНИЕ (ИНЛАЙН КНОПКИ)
 # ----------------------------------------------------
 @router.callback_query(F.data.startswith("reactivate:"))

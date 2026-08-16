@@ -12,7 +12,8 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton(text="⚙️ Настройки")
         ],
         [
-            KeyboardButton(text="➕ Добавить кабинет")
+            KeyboardButton(text="➕ Добавить кабинет"),
+            KeyboardButton(text="🔑 Инструкция по токену")
         ]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
