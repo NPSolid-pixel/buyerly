@@ -1437,8 +1437,11 @@
       const data = await apiRequest('/api/settings');
       state.settings = data;
 
+      const canManageInterval = data.user_role === 'admin';
       document.querySelectorAll('.btn-interval').forEach(btn => {
         btn.classList.toggle('active', parseInt(btn.dataset.interval) === data.poll_interval_minutes);
+        btn.disabled = !canManageInterval;
+        btn.title = canManageInterval ? '' : 'Изменение доступно администратору';
       });
 
       if (state.user) {

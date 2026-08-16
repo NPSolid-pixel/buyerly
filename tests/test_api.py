@@ -14,7 +14,7 @@ from api.auth import validate_telegram_init_data
 from api.server import create_app
 from core.config import settings
 from database.db import Base
-from database.models import Account, AppSettings, StoppedAdSet, TelegramUser
+from database.models import Account, AppSettings, RulePreset, StoppedAdSet, TelegramUser
 
 
 def generate_valid_telegram_init_data(bot_token: str, user_dict: dict) -> str:
@@ -293,6 +293,33 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(forbidden.status_code, 403)
         self.assertEqual(allowed.status_code, 200)
+
+    async def test_account_cannot_attach_another_owners_preset(self):
+        async with self.test_session_maker() as session:
+            foreign_preset = RulePreset(
+                owner_id="8634201356",
+                name="Admin-only preset",
+                action="turn_off",
+                conditions="[]",
+            )
+            session.add(foreign_preset)
+            await session.commit()
+            await session.refresh(foreign_preset)
+            preset_id = foreign_preset.id
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/accounts/act_1018756607700064/assign-rule",
+                headers={"Authorization": f"tma {buyer_data}"},
+                json={"preset_id": preset_id},
+            )
+
+        self.assertEqual(response.status_code, 404)
 
     async def test_delete_account(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}

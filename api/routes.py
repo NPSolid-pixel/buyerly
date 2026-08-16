@@ -490,7 +490,10 @@ async def assign_rule_to_account(
 
         # If preset_id provided, load preset
         if payload.preset_id:
-            p_stmt = select(RulePreset).where(RulePreset.id == payload.preset_id)
+            p_stmt = select(RulePreset).where(
+                RulePreset.id == payload.preset_id,
+                RulePreset.owner_id == acc.owner_id,
+            )
             p_res = await session.execute(p_stmt)
             preset = p_res.scalar_one_or_none()
             if not preset:

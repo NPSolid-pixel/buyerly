@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from typing import List
@@ -359,6 +360,28 @@ async def get_user_accounts(session, user_id: str) -> List[Account]:
     return res.scalars().all()
 
 
+async def _is_admin_user(session, user_id: str) -> bool:
+    if user_id == str(settings.ADMIN_CHAT_ID):
+        return True
+    result = await session.execute(
+        select(TelegramUser).where(TelegramUser.telegram_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    return bool(user and user.is_approved and user.role == "admin")
+
+
+async def _can_manage_account(session, user_id: str, account: Account) -> bool:
+    if user_id == str(settings.ADMIN_CHAT_ID):
+        return True
+    result = await session.execute(
+        select(TelegramUser).where(TelegramUser.telegram_id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    if not user or not user.is_approved:
+        return False
+    return account.owner_id == user_id or user.role == "admin"
+
+
 @router.callback_query(F.data.startswith("report_period:"))
 async def cb_report_period(callback: CallbackQuery):
     period = callback.data.split(":")[1]
@@ -561,25 +584,43 @@ async def cmd_accounts(message: Message, bot: Bot, state: FSMContext):
 @router.callback_query(F.data.startswith("toggle_rules:"))
 async def cb_toggle_rules(callback: CallbackQuery):
     account_id = callback.data.split(":")[1]
+    user_id = str(callback.from_user.id)
     async with async_session_maker() as session:
         res = await session.execute(select(Account).where(Account.account_id == account_id))
         acc = res.scalar_one_or_none()
-        if acc:
-            acc.rules_enabled = not acc.rules_enabled
-            await session.commit()
-            status_str = "🟢 ВКЛЮЧЕНЫ" if acc.rules_enabled else "🔴 ВЫКЛЮЧЕНЫ (Только статистика)"
-            await callback.answer(f"Авто-правила {status_str}!")
-            await callback.message.edit_text(
-                format_account_card(acc),
-                reply_markup=get_account_manage_keyboard(acc.account_id, acc.rules_enabled),
-                parse_mode="HTML"
-            )
+        if not acc or not await _can_manage_account(session, user_id, acc):
+            await callback.answer("⛔️ Нет доступа к этому кабинету.", show_alert=True)
+            return
+
+        try:
+            active_rules = json.loads(acc.active_rules or "[]")
+        except (TypeError, ValueError):
+            active_rules = []
+        if not acc.rules_enabled and not active_rules:
+            await callback.answer("Сначала привяжите правило в веб-интерфейсе.", show_alert=True)
+            return
+
+        acc.rules_enabled = not acc.rules_enabled
+        await session.commit()
+        status_str = "🟢 ВКЛЮЧЕНЫ" if acc.rules_enabled else "🔴 ВЫКЛЮЧЕНЫ (Только статистика)"
+        await callback.answer(f"Авто-правила {status_str}!")
+        await callback.message.edit_text(
+            format_account_card(acc),
+            reply_markup=get_account_manage_keyboard(acc.account_id, acc.rules_enabled),
+            parse_mode="HTML"
+        )
 
 
 @router.callback_query(F.data.startswith("delete_acc:"))
 async def cb_delete_acc(callback: CallbackQuery):
     account_id = callback.data.split(":")[1]
+    user_id = str(callback.from_user.id)
     async with async_session_maker() as session:
+        result = await session.execute(select(Account).where(Account.account_id == account_id))
+        account = result.scalar_one_or_none()
+        if not account or not await _can_manage_account(session, user_id, account):
+            await callback.answer("⛔️ Нет доступа к этому кабинету.", show_alert=True)
+            return
         await session.execute(delete(Account).where(Account.account_id == account_id))
         await session.commit()
     await callback.answer("Кабинет удален из базы.")
@@ -592,15 +633,18 @@ async def cb_delete_acc(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("back_to_acc:"))
 async def cb_back_to_acc(callback: CallbackQuery):
     account_id = callback.data.split(":")[1]
+    user_id = str(callback.from_user.id)
     async with async_session_maker() as session:
         res = await session.execute(select(Account).where(Account.account_id == account_id))
         acc = res.scalar_one_or_none()
-        if acc:
-            await callback.message.edit_text(
-                format_account_card(acc),
-                reply_markup=get_account_manage_keyboard(acc.account_id, acc.rules_enabled),
-                parse_mode="HTML"
-            )
+        if not acc or not await _can_manage_account(session, user_id, acc):
+            await callback.answer("⛔️ Нет доступа к этому кабинету.", show_alert=True)
+            return
+        await callback.message.edit_text(
+            format_account_card(acc),
+            reply_markup=get_account_manage_keyboard(acc.account_id, acc.rules_enabled),
+            parse_mode="HTML"
+        )
     await callback.answer()
 
 
@@ -632,8 +676,12 @@ async def cmd_settings(message: Message, bot: Bot, state: FSMContext):
 @router.callback_query(F.data.startswith("set_interval:"))
 async def cb_set_interval(callback: CallbackQuery):
     minutes = int(callback.data.split(":")[1])
+    user_id = str(callback.from_user.id)
 
     async with async_session_maker() as session:
+        if not await _is_admin_user(session, user_id):
+            await callback.answer("⛔️ Только администратор может менять этот интервал.", show_alert=True)
+            return
         res = await session.execute(select(AppSettings).limit(1))
         app_settings = res.scalar_one_or_none()
         if not app_settings:
@@ -747,8 +795,12 @@ async def cmd_view_events(message: Message, bot: Bot, state: FSMContext):
 @router.callback_query(F.data.startswith("approve_user:"))
 async def cb_approve_user(callback: CallbackQuery, bot: Bot):
     target_tg_id = callback.data.split(":")[1]
+    actor_id = str(callback.from_user.id)
 
     async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            await callback.answer("⛔️ Недостаточно прав.", show_alert=True)
+            return
         res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == target_tg_id))
         user = res.scalar_one_or_none()
 
@@ -777,8 +829,12 @@ async def cb_approve_user(callback: CallbackQuery, bot: Bot):
 @router.callback_query(F.data.startswith("reject_user:"))
 async def cb_reject_user(callback: CallbackQuery):
     target_tg_id = callback.data.split(":")[1]
+    actor_id = str(callback.from_user.id)
 
     async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            await callback.answer("⛔️ Недостаточно прав.", show_alert=True)
+            return
         await session.execute(delete(TelegramUser).where(TelegramUser.telegram_id == target_tg_id))
         await session.commit()
 
@@ -792,13 +848,22 @@ async def cb_reject_user(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("reactivate:"))
 async def cb_reactivate(callback: CallbackQuery):
     _, account_id, adset_id = callback.data.split(":")
+    user_id = str(callback.from_user.id)
 
     async with async_session_maker() as session:
         acc_res = await session.execute(select(Account).where(Account.account_id == account_id))
         account = acc_res.scalar_one_or_none()
 
-        if not account:
-            await callback.answer("❌ Кабинет не найден в базе данных.", show_alert=True)
+        if not account or not await _can_manage_account(session, user_id, account):
+            await callback.answer("⛔️ Нет доступа к этому кабинету.", show_alert=True)
+            return
+
+        stopped_res = await session.execute(
+            select(StoppedAdSet).where(StoppedAdSet.adset_id == adset_id)
+        )
+        stopped_entry = stopped_res.scalar_one_or_none()
+        if not stopped_entry or stopped_entry.account_id != account_id:
+            await callback.answer("❌ Запись об остановке не найдена.", show_alert=True)
             return
 
         try:
@@ -808,13 +873,8 @@ async def cb_reactivate(callback: CallbackQuery):
                 status="ACTIVE"
             )
 
-            stopped_res = await session.execute(
-                select(StoppedAdSet).where(StoppedAdSet.adset_id == adset_id)
-            )
-            stopped_entry = stopped_res.scalar_one_or_none()
-            if stopped_entry:
-                stopped_entry.is_resolved = True
-                await session.commit()
+            stopped_entry.is_resolved = True
+            await session.commit()
 
             await callback.answer("✅ Адсет успешно включен!")
             new_text = callback.message.text + "\n\n🟢 <b>СТАТУС: Включен пользователем через Telegram ✅</b>"
@@ -828,15 +888,27 @@ async def cb_reactivate(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("dismiss:"))
 async def cb_dismiss(callback: CallbackQuery):
     _, account_id, adset_id = callback.data.split(":")
+    user_id = str(callback.from_user.id)
 
     async with async_session_maker() as session:
         stopped_res = await session.execute(
             select(StoppedAdSet).where(StoppedAdSet.adset_id == adset_id)
         )
         stopped_entry = stopped_res.scalar_one_or_none()
-        if stopped_entry:
-            stopped_entry.is_resolved = True
-            await session.commit()
+        account_res = await session.execute(
+            select(Account).where(Account.account_id == account_id)
+        )
+        account = account_res.scalar_one_or_none()
+        if (
+            not stopped_entry
+            or stopped_entry.account_id != account_id
+            or not account
+            or not await _can_manage_account(session, user_id, account)
+        ):
+            await callback.answer("⛔️ Нет доступа к этой записи.", show_alert=True)
+            return
+        stopped_entry.is_resolved = True
+        await session.commit()
 
     await callback.answer("Оставлен выключенным.")
     new_text = callback.message.text + "\n\n⚪ <b>СТАТУС: Оставлен выключенным пользователем ❌</b>"
@@ -846,13 +918,14 @@ async def cb_dismiss(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("pause_adset:"))
 async def cb_pause_adset(callback: CallbackQuery):
     _, account_id, adset_id = callback.data.split(":")
+    user_id = str(callback.from_user.id)
 
     async with async_session_maker() as session:
         acc_res = await session.execute(select(Account).where(Account.account_id == account_id))
         account = acc_res.scalar_one_or_none()
 
-        if not account:
-            await callback.answer("❌ Кабинет не найден в базе данных.", show_alert=True)
+        if not account or not await _can_manage_account(session, user_id, account):
+            await callback.answer("⛔️ Нет доступа к этому кабинету.", show_alert=True)
             return
 
         try:
