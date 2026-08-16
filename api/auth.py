@@ -112,7 +112,14 @@ async def get_current_user(
 
             return user
 
-        # Dev / Local preview fallback (when opened directly in browser outside Telegram)
+        # Strict Authentication Requirement (Production)
+        if not settings.ENABLE_DEV_AUTH:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Требуется авторизация через Telegram Web App (@buyerly_bot)"
+            )
+
+        # Dev / Local preview fallback (ONLY active when ENABLE_DEV_AUTH=True)
         target_tg_id = dev_user_id or str(settings.ADMIN_CHAT_ID)
         if target_tg_id:
             res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == target_tg_id))
@@ -120,13 +127,13 @@ async def get_current_user(
             if user and user.is_approved:
                 return user
 
-        # If no users exist yet or dev mode, check for any approved admin or create default
+        # If no users exist yet in dev mode, check for any approved admin or create default
         res = await session.execute(select(TelegramUser).where(TelegramUser.is_approved == True).limit(1))
         any_user = res.scalar_one_or_none()
         if any_user:
             return any_user
 
-        # Create fallback superadmin if DB is empty
+        # Create fallback superadmin if DB is empty in dev mode
         fallback_id = str(settings.ADMIN_CHAT_ID) or "123456789"
         fallback_user = TelegramUser(
             telegram_id=fallback_id,
@@ -139,3 +146,4 @@ async def get_current_user(
         await session.commit()
         await session.refresh(fallback_user)
         return fallback_user
+

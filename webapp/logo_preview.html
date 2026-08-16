@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buyerly — Концепты Логотипов (SVG Showcase)</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #0B111E;
+      --sec-bg: #131B2C;
+      --card-bg: rgba(24, 34, 53, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #38BDF8;
+      --accent-glow: rgba(56, 189, 248, 0.35);
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+      --success: #22C55E;
+      --radius: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 50% 0%, #172554 0%, var(--bg) 60%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 40px 20px 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 999px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #FFFFFF 40%, #94A3B8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 620px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* Grid Layout */
+    .concepts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 28px;
+      margin-bottom: 56px;
+    }
+
+    .concept-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .concept-card:hover {
+      border-color: rgba(56, 189, 248, 0.3);
+      transform: translateY(-4px);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4), 0 0 24px var(--accent-glow);
+    }
+
+    .concept-tag {
+      position: absolute;
+      top: 20px;
+      left: 24px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.12);
+      padding: 4px 10px;
+      border-radius: 6px;
+    }
+
+    .preview-box {
+      width: 100%;
+      height: 220px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 24px 0 20px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .preview-svg {
+      width: 140px;
+      height: 140px;
+      transition: transform 0.3s ease;
+      filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5));
+    }
+
+    .concept-card:hover .preview-svg {
+      transform: scale(1.05);
+    }
+
+    .sizes-preview {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 20px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 8px;
+    }
+
+    .size-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .size-item svg {
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+    }
+
+    .concept-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .concept-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-bottom: 20px;
+      flex-grow: 1;
+    }
+
+    .concept-features {
+      list-style: none;
+      margin-bottom: 24px;
+      font-size: 12px;
+      color: #CBD5E1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .concept-features li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .concept-features li::before {
+      content: "✓";
+      color: var(--success);
+      font-weight: bold;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: #2563EB;
+      color: #FFF;
+    }
+
+    .btn-primary:hover {
+      background: #1D4ED8;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.12);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--accent);
+    }
+
+    /* Live Header Simulation */
+    .simulation-section {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 28px;
+      width: 100%;
+    }
+
+    .sim-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sim-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sim-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: #0F172A;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+    }
+
+    .sim-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .sim-brand-title {
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .sim-brand-subtitle {
+      font-size: 11px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #10B981;
+      color: #FFFFFF;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s ease;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <header class="header">
+      <div class="badge">Branding & Identity</div>
+      <h1>Buyerly — Концепты Логотипов</h1>
+      <p class="subtitle">3 варианта минималистичных векторных SVG логотипов для сервиса автопилота и контроля рисков в медиабаинге (Meta Ads).</p>
+    </header>
+
+    <!-- 3 Concepts Grid -->
+    <div class="concepts-grid">
+
+      <!-- Concept 1 -->
+      <div class="concept-card">
+        <span class="concept-tag">Вариант 01</span>
+        
+        <div class="preview-box">
+          <div class="preview-svg">
+            <img src="/icons/logo_concept_1_app.svg" alt="Concept 1" width="100%" height="100%">
+          </div>
+        </div>
+
+        <div class="sizes-preview">
+          <div class="size-item">
+            <img src="/icons/logo_concept_1_app.svg" width="48" height="48" alt="48px">
+            <span>48px</span>
+          </div>
+          <div class="size-item">
+            <img src="/icons/logo_concept_1_app.svg" width="32" height="32" alt="32px">
+            <span>32px</span>
+          </div>
+          <div class="size-item">
+            <img src="/icons/logo_concept_1_icon.svg" width="24" height="24" alt="24px">
+            <span>24px (Icon)</span>
+          </div>
+        </div>
+
+        <h2 class="concept-title">Neural B & Growth</h2>
+        <p class="concept-desc">
+          Монограмма «B» из двух технологичных слоев (AdSets) с интегрированным вектором восходящего роста (ROI) и центральным нейро-узлом принятия решений.
+        </p>
+
+        <ul class="concept-features">
+          <li>Идеальная узнаваемость буквы «B»</li>
+          <li>Акцент на рост конверсий и масштаб</li>
+          <li>Премиальный FinTech/AdTech стиль</li>
+        </ul>
+
+        <div class="actions">
+          <button class="btn btn-secondary" onclick="copySvg(1)">Скопировать SVG</button>
+          <a href="/icons/logo_concept_1_app.svg" download="buyerly_logo_neural_b.svg" class="btn btn-primary">Скачать</a>
+        </div>
+      </div>
+
+      <!-- Concept 2 -->
+      <div class="concept-card">
+        <span class="concept-tag">Вариант 02</span>
+        
+        <div class="preview-box">
+          <div class="preview-svg">
+            <img src="/icons/logo_concept_2_app.svg" alt="Concept 2" width="100%" height="100%">
+          </div>
+        </div>
+
+        <div class="sizes-preview">
+          <div class="size-item">
+            <img src="/icons/logo_concept_2_app.svg" width="48" height="48" alt="48px">
+            <span>48px</span>
+          </div>
+          <div class="size-item">
+            <img src="/icons/logo_concept_2_app.svg" width="32" height="32" alt="32px">
+            <span>32px</span>
+          </div>
+          <div class="size-item">
+            <img src="/icons/logo_concept_2_icon.svg" width="24" height="24" alt="24px">
+            <span>24px (Icon)</span>
+          </div>
+        </div>
+
+        <h2 class="concept-title">Target Nexus & Radar</h2>
+        <p class="concept-desc">
+          Минималистичный радар точного таргетинга с центральным кристаллом-лидом и визирами фокуса. Символизирует круглосуточный поиск связок и зацеп лидов.
+        </p>
+
+        <ul class="concept-features">
+          <li>Упор на точность таргета и алгоритмы</li>
+          <li>24/7 сканирование метрик (CPA, Spend)</li>
+          <li>Хай-тек кибернетическая эстетика</li>
+        </ul>
+
+        <div class="actions">
+          <button class="btn btn-secondary" onclick="copySvg(2)">Скопировать SVG</button>
+          <a href="/icons/logo_concept_2_app.svg" download="buyerly_logo_target_nexus.svg" class="btn btn-primary">Скачать</a>
+        </div>
+      </div>
+
+      <!-- Concept 3 -->
+      <div class="concept-card">
+        <span class="concept-tag">Вариант 03</span>
+        
+        <div class="preview-box">
+          <div class="preview-svg">
+            <img src="/icons/logo_concept_3_app.svg" alt="Concept 3" width="100%" height="100%">
+          </div>
+        </div>
+
+        <div class="sizes-preview">
+          <div class="size-item">
+            <img src="/icons/logo_concept_3_app.svg" width="48" height="48" alt="48px">
+            <span>48px</span>
+          </div>
+          <div class="size-item">
+            <img src="/icons/logo_concept_3_app.svg" width="32" height="32" alt="32px">
+            <span>32px</span>
+          </div>
+          <div class="size-item">
+            <img src="/icons/logo_concept_3_icon.svg" width="24" height="24" alt="24px">
+            <span>24px (Icon)</span>
+          </div>
+        </div>
+
+        <h2 class="concept-title">Safe Scale & Shield Loop</h2>
+        <p class="concept-desc">
+          Симбиоз защитного щита (Risk Control & Stop-Loss) и бесконечного цикла автоправил (Loop), сплетающихся в органичную форму буквы «B».
+        </p>
+
+        <ul class="concept-features">
+          <li>Защита бюджета от сливов на 100%</li>
+          <li>Непрерывный автопилот и правила</li>
+          <li>Плавный, элегантный силуэт</li>
+        </ul>
+
+        <div class="actions">
+          <button class="btn btn-secondary" onclick="copySvg(3)">Скопировать SVG</button>
+          <a href="/icons/logo_concept_3_app.svg" download="buyerly_logo_safe_shield.svg" class="btn btn-primary">Скачать</a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Live Header Navigation Simulation -->
+    <div class="simulation-section">
+      <div class="sim-title">
+        <span>⚡ Как иконки смотрятся в шапке сервиса Buyerly</span>
+      </div>
+
+      <div class="sim-bars">
+        
+        <!-- Bar 1 -->
+        <div class="sim-bar">
+          <div class="sim-brand">
+            <img src="/icons/logo_concept_1_icon.svg" width="26" height="26" alt="Icon 1">
+            <div>
+              <div class="sim-brand-title">Buyerly</div>
+              <div class="sim-brand-subtitle">AI Media Buyer (Вариант 1)</div>
+            </div>
+          </div>
+          <span style="font-size: 12px; color: var(--text-muted);">Активных кабинетов: 12</span>
+        </div>
+
+        <!-- Bar 2 -->
+        <div class="sim-bar">
+          <div class="sim-brand">
+            <img src="/icons/logo_concept_2_icon.svg" width="26" height="26" alt="Icon 2">
+            <div>
+              <div class="sim-brand-title">Buyerly</div>
+              <div class="sim-brand-subtitle">AI Media Buyer (Вариант 2)</div>
+            </div>
+          </div>
+          <span style="font-size: 12px; color: var(--text-muted);">Спенд сегодня: $1,420</span>
+        </div>
+
+        <!-- Bar 3 -->
+        <div class="sim-bar">
+          <div class="sim-brand">
+            <img src="/icons/logo_concept_3_icon.svg" width="26" height="26" alt="Icon 3">
+            <div>
+              <div class="sim-brand-title">Buyerly</div>
+              <div class="sim-brand-subtitle">AI Media Buyer (Вариант 3)</div>
+            </div>
+          </div>
+          <span style="font-size: 12px; color: var(--text-muted);">Остановлено сливов: 4</span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast" class="toast">SVG код скопирован в буфер обмена!</div>
+
+  <script>
+    async function copySvg(num) {
+      try {
+        const res = await fetch(`/icons/logo_concept_${num}_app.svg`);
+        const text = await res.text();
+        await navigator.clipboard.writeText(text);
+        
+        const toast = document.getElementById('toast');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2500);
+      } catch (err) {
+        console.error('Ошибка копирования:', err);
+      }
+    }
+  </script>
+</body>
+</html>

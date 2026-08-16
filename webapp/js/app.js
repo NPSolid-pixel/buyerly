@@ -866,13 +866,23 @@
       state.user = user;
       document.getElementById('userName').textContent = user.full_name || user.username || 'Медиабайер';
       document.getElementById('userAvatar').textContent = (user.full_name || user.username || 'B').charAt(0).toUpperCase();
+      
+      // Load initial tab (Accounts)
+      window.switchTab('accounts');
     } catch (e) {
-      console.warn("Could not load user profile:", e);
+      console.warn("Unauthorized / access locked:", e);
+      const lockScreen = document.getElementById('authLockScreen');
+      const lockMsg = document.getElementById('authLockMessage');
+      if (lockScreen) {
+        lockScreen.classList.remove('hidden');
+        if (e.message && e.message.includes('одобрения')) {
+          lockMsg.textContent = 'Ваш аккаунт зарегистрирован, но ожидает подтверждения администратором.';
+        }
+      }
     }
-
-    // Load initial tab (Accounts)
-    window.switchTab('accounts');
   }
+
+
 
   // Run on DOM ready
   if (document.readyState === 'loading') {

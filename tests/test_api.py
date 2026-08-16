@@ -154,6 +154,8 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(l_data["auto_reactivate"], True)
 
     async def test_parse_raw_endpoint(self):
+        user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
+        init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)
         raw_fb_text = """
         Ad account ID: 1083480094013618
         Швеция 1083
@@ -161,12 +163,14 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         """
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post("/api/accounts/parse-raw", json={"raw_text": raw_fb_text})
+            headers = {"Authorization": f"tma {init_data}"}
+            resp = await client.post("/api/accounts/parse-raw", headers=headers, json={"raw_text": raw_fb_text})
             self.assertEqual(resp.status_code, 200)
             items = resp.json()
             self.assertEqual(len(items), 2)
             self.assertEqual(items[0]["account_id"], "act_1083480094013618")
             self.assertEqual(items[1]["account_id"], "act_1070862758952340")
+
 
     async def test_settings_endpoint(self):
         admin_info = {"id": 8634201356, "first_name": "Admin", "username": "admin_user"}
@@ -200,3 +204,11 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             # Verify it's gone
             acc_resp = await client.get("/api/accounts", headers=headers)
             self.assertEqual(len(acc_resp.json()), 0)
+
+    async def test_unauthorized_direct_access_blocked(self):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # Request without Telegram initData header
+            resp = await client.get("/api/me")
+            self.assertEqual(resp.status_code, 401)
+

@@ -10,10 +10,12 @@ class Settings(BaseSettings):
     WEBAPP_URL: str = Field(default="", description="Public HTTPS URL for Telegram Web App")
     API_PORT: int = Field(default=8080, description="Web API and static files port")
     API_HOST: str = Field(default="0.0.0.0", description="Web API host")
+    ENABLE_DEV_AUTH: bool = Field(default=False, description="Enable dev auth fallback for local tests")
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+
 
 settings = Settings()
 

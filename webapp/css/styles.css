@@ -1648,6 +1648,59 @@ input:checked + .slider:before {
   gap: 12px;
 }
 
+/* Auth Lock Screen Overlay */
+.auth-lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--tg-bg);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-lock-card {
+  background: var(--tg-card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 32px 24px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lock-icon-badge {
+  width: 64px;
+  height: 64px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin-bottom: 16px;
+}
+
+.auth-lock-card h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--tg-text);
+}
+
+.auth-lock-card p {
+  font-size: 14px;
+  color: var(--tg-hint);
+  line-height: 1.5;
+}
+
+
 .spinner {
   width: 28px;
   height: 28px;
