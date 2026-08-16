@@ -1,8 +1,16 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from typing import Optional
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from core.config import settings
+
 
 def get_main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
-    """Главное меню команд бота"""
-    kb = [
+    """Главное меню команд бота с кнопкой запуска Web App"""
+    kb = []
+    
+    if settings.WEBAPP_URL:
+        kb.append([KeyboardButton(text="🚀 Открыть Buyerly App", web_app=WebAppInfo(url=settings.WEBAPP_URL))])
+        
+    kb.extend([
         [
             KeyboardButton(text="📊 Сводка"),
             KeyboardButton(text="💵 Расходы")
@@ -15,10 +23,19 @@ def get_main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
             KeyboardButton(text="➕ Добавить кабинеты"),
             KeyboardButton(text="🔑 Инструкция по токену")
         ]
-    ]
+    ])
     if is_admin:
         kb.append([KeyboardButton(text="👑 Админ-панель")])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_webapp_inline_keyboard() -> Optional[InlineKeyboardMarkup]:
+    """Инлайн кнопка для мгновенного перехода в Web App"""
+    if settings.WEBAPP_URL:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Открыть веб-панель", web_app=WebAppInfo(url=settings.WEBAPP_URL))]
+        ])
+    return None
+
 
 def get_cancel_keyboard() -> ReplyKeyboardMarkup:
     """Клавиатура отмены пошагового мастера"""

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Buyerly — AI Media Buyer</title>
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app-container">
+    
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <span class="brand-title">Buyerly</span>
+          <span class="brand-subtitle">AI Media Buyer</span>
+        </div>
+      </div>
+
+      <!-- Desktop Nav Tabs -->
+      <nav class="desktop-nav">
+        <button class="nav-tab active" data-tab="accounts">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Мои кабинеты</span>
+        </button>
+        <button class="nav-tab" data-tab="summary">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>Сводка</span>
+        </button>
+        <button class="nav-tab" data-tab="add">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          <span>Добавить кабинеты</span>
+        </button>
+        <button class="nav-tab" data-tab="settings">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Настройки</span>
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <button id="btnSync" class="btn-icon" title="Синхронизировать данные">
+          <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+        <div id="userBadge" class="user-badge" title="Профиль">
+          <span class="user-avatar" id="userAvatar">B</span>
+          <span class="user-name" id="userName">Медиабайер</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+
+      <!-- ============================================== -->
+      <!-- TAB 1: МОИ КАБИНЕТЫ (ACCOUNTS) -->
+      <!-- ============================================== -->
+      <section id="tab-accounts" class="tab-content active">
+        <!-- Filter & Search Toolbar -->
+        <div class="toolbar">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="accountSearchInput" placeholder="Поиск по названию или act_ID..." autocomplete="off">
+            <button id="searchClearBtn" class="search-clear hidden">&times;</button>
+          </div>
+          
+          <div class="filter-chips">
+            <button class="chip active" data-filter="all">Все <span class="chip-count" id="countAll">0</span></button>
+            <button class="chip" data-filter="active">🟢 Активные <span class="chip-count" id="countActive">0</span></button>
+            <button class="chip" data-filter="rules">🛡 С правилами <span class="chip-count" id="countRules">0</span></button>
+            <button class="chip" data-filter="issue">🔴 Проблемные <span class="chip-count" id="countIssue">0</span></button>
+          </div>
+        </div>
+
+        <!-- Quick Summary Strip -->
+        <div class="accounts-summary-strip">
+          <div class="strip-item">
+            <span class="strip-label">Всего кабинетов</span>
+            <span class="strip-value" id="stripTotal">0</span>
+          </div>
+          <div class="strip-item">
+            <span class="strip-label">Авто-правила активны</span>
+            <span class="strip-value highlight" id="stripRulesActive">0</span>
+          </div>
+          <div class="strip-item">
+            <span class="strip-label">Активных в Meta</span>
+            <span class="strip-value success" id="stripMetaActive">0</span>
+          </div>
+        </div>
+
+        <!-- Accounts Grid / List -->
+        <div id="accountsList" class="accounts-grid">
+          <!-- Dynamic Account Cards rendered here -->
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Загрузка рекламных кабинетов...</p>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="accountsEmptyState" class="empty-state hidden">
+          <div class="empty-icon">🏢</div>
+          <h3>Кабинеты не найдены</h3>
+          <p>Добавьте свои рекламные кабинеты из Facebook Business Manager для автоматического мониторинга.</p>
+          <button class="btn btn-primary" onclick="window.switchTab('add')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            Добавить кабинеты
+          </button>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- TAB 2: СВОДКА (SUMMARY) -->
+      <!-- ============================================== -->
+      <section id="tab-summary" class="tab-content">
+        <!-- Period Switcher -->
+        <div class="period-switcher">
+          <button class="period-btn active" data-period="today">Сегодня</button>
+          <button class="period-btn" data-period="yesterday">Вчера</button>
+          <button class="period-btn" data-period="last_3d">3 дня</button>
+          <button class="period-btn" data-period="last_7d">7 дней</button>
+        </div>
+
+        <!-- KPI Metrics Cards Grid -->
+        <div class="kpi-grid">
+          <div class="kpi-card spend-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Суммарный расход</span>
+              <span class="kpi-icon">💵</span>
+            </div>
+            <div class="kpi-value" id="kpiSpend">$0.00</div>
+            <div class="kpi-subtext" id="kpiPeriodLabel">за сегодня</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Лиды & Реги</span>
+              <span class="kpi-icon">🎯</span>
+            </div>
+            <div class="kpi-value" id="kpiConversions">0</div>
+            <div class="kpi-subtext">
+              Лиды: <b id="kpiLeads">0</b> · Реги: <b id="kpiRegs">0</b>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Средний CPA</span>
+              <span class="kpi-icon">📊</span>
+            </div>
+            <div class="kpi-value" id="kpiCpa">$0.00</div>
+            <div class="kpi-subtext">цена за целевое действие</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Клики & CTR</span>
+              <span class="kpi-icon">👆</span>
+            </div>
+            <div class="kpi-value" id="kpiClicks">0</div>
+            <div class="kpi-subtext">
+              CTR: <b id="kpiCtr">0.00%</b> · CPC: <b id="kpiCpc">$0.00</b>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stopped Adsets Banner (If any) -->
+        <div id="stoppedAdsetsSection" class="stopped-section hidden">
+          <div class="section-header">
+            <span class="section-title">🛑 Остановленные сегодня адсеты</span>
+            <span class="badge badge-warning" id="stoppedCountBadge">0</span>
+          </div>
+          <div id="stoppedAdsetsList" class="stopped-list"></div>
+        </div>
+
+        <!-- Breakdown Table / Cards -->
+        <div class="summary-breakdown-card">
+          <div class="breakdown-header">
+            <h3>Разбивка по кабинетам</h3>
+            <span class="last-sync-time" id="lastSyncLabel">Синхронизировано только что</span>
+          </div>
+
+          <!-- Desktop Table View -->
+          <div class="table-responsive desktop-view">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Кабинет</th>
+                  <th>Статус</th>
+                  <th class="text-right">Спенд</th>
+                  <th class="text-right">Клики</th>
+                  <th class="text-right">Лиды</th>
+                  <th class="text-right">Реги</th>
+                  <th class="text-right">Покупки</th>
+                  <th class="text-right">CPA</th>
+                </tr>
+              </thead>
+              <tbody id="summaryTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Mobile Cards View -->
+          <div id="summaryMobileCards" class="mobile-view summary-cards-list">
+            <!-- Dynamically populated for small screens -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- TAB 3: ДОБАВИТЬ КАБИНЕТЫ (BATCH IMPORT) -->
+      <!-- ============================================== -->
+      <section id="tab-add" class="tab-content">
+        <div class="form-card">
+          <div class="form-header">
+            <h2>➕ Добавление рекламных кабинетов</h2>
+            <p class="form-desc">
+              Вставьте скопированный текст из <b>Facebook Business Manager</b> или список ID кабинетов. Умный парсер автоматически извлечет все <code>act_...</code> и сопоставит названия.
+            </p>
+          </div>
+
+          <!-- Step 1: Raw Text Input -->
+          <div class="form-group">
+            <div class="form-label-group">
+              <label for="rawAccountsInput">1. Текст из Facebook BM или ID кабинетов</label>
+              <span class="label-badge" id="parsedCountBadge">Найдено: 0</span>
+            </div>
+            <textarea 
+              id="rawAccountsInput" 
+              class="form-textarea" 
+              rows="5" 
+              placeholder="Вставьте сюда любой скопированный блок из Facebook Business Manager, например:&#10;Ad account ID: 1018756607700064&#10;Швеция 1&#10;act_1009347965254238..."
+            ></textarea>
+          </div>
+
+          <!-- Live Preview of Parsed Accounts -->
+          <div id="parsedPreviewBox" class="parsed-preview-box hidden">
+            <span class="preview-title">Распознанные кабинеты для добавления:</span>
+            <div id="parsedChipsList" class="parsed-chips-list"></div>
+          </div>
+
+          <!-- Step 2: Batch Naming Prefix -->
+          <div class="form-group">
+            <label for="batchNameInput">2. Общее название для пачки (опционально)</label>
+            <input 
+              type="text" 
+              id="batchNameInput" 
+              class="form-input" 
+              placeholder="например: Швеция или Германия (бот пронумерует их: Швеция 1, Швеция 2...)"
+            >
+            <span class="input-hint">Оставьте пустым (или <code>-</code>), чтобы использовать названия из Facebook.</span>
+          </div>
+
+          <!-- Step 3: Meta Access Token -->
+          <div class="form-group">
+            <div class="form-label-group">
+              <label for="accessTokenInput">3. Meta System User Access Token</label>
+              <button type="button" class="btn-link" id="btnOpenTokenGuide">🔑 Как получить токен?</button>
+            </div>
+            <div class="input-password-wrapper">
+              <input 
+                type="password" 
+                id="accessTokenInput" 
+                class="form-input" 
+                placeholder="EAA..." 
+                autocomplete="off"
+              >
+              <button type="button" id="btnToggleTokenVisibility" class="btn-eye" title="Показать/скрыть токен">👁</button>
+            </div>
+            <span class="input-hint">Бессрочный токен системного пользователя с правами <code>ads_management</code> и <code>ads_read</code>.</span>
+          </div>
+
+          <!-- Step 4: Initial Rules & Limits Preset -->
+          <div class="form-group">
+            <label>4. Начальные лимиты автоправил стопов</label>
+            <div class="preset-buttons">
+              <button type="button" class="btn-preset active" data-l0="2.0" data-l1="6.0" data-lcpa="6.0">
+                <b>Стандарт</b> ($2.0 / $6.0 / $6.0)
+              </button>
+              <button type="button" class="btn-preset" data-l0="3.0" data-l1="8.0" data-lcpa="8.0">
+                <b>Средний</b> ($3.0 / $8.0 / $8.0)
+              </button>
+              <button type="button" class="btn-preset" data-l0="5.0" data-l1="10.0" data-lcpa="10.0">
+                <b>Широкий</b> ($5.0 / $10.0 / $10.0)
+              </button>
+            </div>
+            
+            <div class="form-check" style="margin-top: 14px;">
+              <label class="switch">
+                <input type="checkbox" id="addEnableRulesSwitch">
+                <span class="slider round"></span>
+              </label>
+              <span class="check-label">Включить авто-правила сразу после подключения (по умолчанию выключены для безопасного сбора статистики)</span>
+            </div>
+          </div>
+
+          <!-- Action Button -->
+          <div class="form-actions">
+            <button id="btnSubmitBatchAdd" class="btn btn-primary btn-block btn-lg" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span>Подключить кабинеты</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- TAB 4: НАСТРОЙКИ (SETTINGS) -->
+      <!-- ============================================== -->
+      <section id="tab-settings" class="tab-content">
+        <div class="settings-card">
+          <div class="card-header">
+            <h2>⚙️ Настройки сервиса Buyerly</h2>
+          </div>
+
+          <!-- Monitoring Frequency -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-title">Частота фонового мониторинга</span>
+              <span class="setting-desc">Как часто сервис проверяет спенд и лимиты в Meta API</span>
+            </div>
+            <div class="interval-selector" id="intervalSelector">
+              <button class="btn-interval" data-interval="10">10 мин</button>
+              <button class="btn-interval" data-interval="15">15 мин</button>
+              <button class="btn-interval" data-interval="30">30 мин</button>
+              <button class="btn-interval" data-interval="60">60 мин</button>
+            </div>
+          </div>
+
+          <!-- User Info -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-title">Пользователь</span>
+              <span class="setting-desc" id="settingsUserDesc">@username (ID: ...)</span>
+            </div>
+            <span class="role-badge" id="settingsUserRole">buyer</span>
+          </div>
+
+          <!-- Rules Summary -->
+          <div class="setting-item column">
+            <span class="setting-title">Логика ступенчатых правил</span>
+            <div class="rules-explanation">
+              <div class="rule-row">
+                <span class="step-badge">Ступень 1</span>
+                <span><b>0 лидов/рег:</b> Остановка при достижении порога $2.00</span>
+              </div>
+              <div class="rule-row">
+                <span class="step-badge">Ступень 2</span>
+                <span><b>1 лид/рега:</b> Остановка при расходе $\ge \$6.00$ без второго результата</span>
+              </div>
+              <div class="rule-row">
+                <span class="step-badge">Ступень 3</span>
+                <span><b>2+ лида/реги:</b> Контроль допустимого CPA $\le \$6.00$</span>
+              </div>
+              <div class="rule-row">
+                <span class="step-badge highlight">Долет</span>
+                <span><b>Delayed Attribution:</b> Мгновенное предложение включить адсет при долете конверсии</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- App Version & Status -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-title">Системный статус</span>
+              <span class="setting-desc">Buyerly Engine v1.0 · Graph API v20.0</span>
+            </div>
+            <span class="badge badge-success">🟢 Онлайн 24/7</span>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="mobile-nav">
+      <button class="mobile-nav-item active" data-tab="accounts">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Кабинеты</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="summary">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Сводка</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="add">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Добавить</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="settings">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="3"/><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Настройки</span>
+      </button>
+    </nav>
+
+    <!-- ============================================== -->
+    <!-- MODALS & BOTTOM SHEETS -->
+    <!-- ============================================== -->
+
+    <!-- Modal 1: Edit Limits Bottom Sheet -->
+    <div id="modalEditLimits" class="modal-overlay hidden">
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-header">
+          <h3 id="modalLimitsTitle">Настройка лимитов кабинета</h3>
+          <button class="btn-close" onclick="window.closeModal('modalEditLimits')">&times;</button>
+        </div>
+        <div class="sheet-body">
+          <input type="hidden" id="editLimitsAccountId">
+          
+          <label class="section-label">Быстрые пресеты лимитов:</label>
+          <div class="preset-chips">
+            <button type="button" class="chip-btn" onclick="window.fillLimitsPreset(2.0, 6.0, 6.0)">$2.0 / $6.0 / $6.0 (Стандарт)</button>
+            <button type="button" class="chip-btn" onclick="window.fillLimitsPreset(3.0, 8.0, 8.0)">$3.0 / $8.0 / $8.0 (Средний)</button>
+            <button type="button" class="chip-btn" onclick="window.fillLimitsPreset(5.0, 10.0, 10.0)">$5.0 / $10.0 / $10.0 (Широкий)</button>
+          </div>
+
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label for="lim0Input">0 лидов ($)</label>
+              <input type="number" id="lim0Input" class="form-input text-center" step="0.5" min="0.5">
+            </div>
+            <div class="form-group">
+              <label for="lim1Input">1 лид ($)</label>
+              <input type="number" id="lim1Input" class="form-input text-center" step="0.5" min="0.5">
+            </div>
+            <div class="form-group">
+              <label for="limCpaInput">Макс CPA 2+ ($)</label>
+              <input type="number" id="limCpaInput" class="form-input text-center" step="0.5" min="0.5">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label for="convEventSelect">Учитывать целевые действия:</label>
+            <select id="convEventSelect" class="form-select">
+              <option value="all">Лиды + Регистрации (Все конверсии)</option>
+              <option value="leads">Только Лиды (FB Pixel Lead)</option>
+              <option value="registrations">Только Регистрации (Complete Registration)</option>
+            </select>
+          </div>
+
+          <div class="form-check" style="margin-top: 12px;">
+            <label class="switch">
+              <input type="checkbox" id="autoReactivateSwitch">
+              <span class="slider round"></span>
+            </label>
+            <span class="check-label">Автоматически включать адсет при долете лида (без кнопки подтверждения)</span>
+          </div>
+
+          <div class="sheet-actions">
+            <button id="btnSaveLimits" class="btn btn-primary btn-block btn-lg">Сохранить лимиты</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 2: Token Guide -->
+    <div id="modalTokenGuide" class="modal-overlay hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>🔑 Как получить Access Token в Meta BM</h3>
+          <button class="btn-close" onclick="window.closeModal('modalTokenGuide')">&times;</button>
+        </div>
+        <div class="modal-body token-guide-body">
+          <div class="guide-step">
+            <span class="guide-num">1</span>
+            <div>
+              <b>Создать System User</b>
+              <p>В <i>Business Settings → Users → System Users</i> нажмите <b>Add</b> (роль <b>Admin</b>).</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <span class="guide-num">2</span>
+            <div>
+              <b>Выдать доступ к приложению и кабинетам</b>
+              <p>В <i>Accounts → Apps</i> добавьте приложение, а в <i>Ad Accounts</i> выдайте полный доступ (Full Control).</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <span class="guide-num">3</span>
+            <div>
+              <b>Сгенерировать токен</b>
+              <p>В <i>System Users</i> нажмите <b>Generate New Token</b>. Выберите срок <b>Never</b> и отметьте 2 разрешения:</p>
+              <code>ads_management</code> и <code>ads_read</code>
+            </div>
+          </div>
+          <div class="guide-step">
+            <span class="guide-num">4</span>
+            <div>
+              <b>Вставить токен в Buyerly</b>
+              <p>Один и тот же токен подходит для всех кабинетов внутри данного Business Manager.</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary btn-block" onclick="window.closeModal('modalTokenGuide')">Понятно</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 3: Delete Account Confirmation -->
+    <div id="modalDeleteConfirm" class="modal-overlay hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>🗑 Удаление кабинета</h3>
+          <button class="btn-close" onclick="window.closeModal('modalDeleteConfirm')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>Вы действительно хотите удалить кабинет <b id="deleteAccountName"></b> (<code id="deleteAccountId"></code>) из мониторинга Buyerly?</p>
+          <p class="text-hint">Кабинет перестанет опрашиваться воркером. При необходимости его можно будет добавить повторно.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="window.closeModal('modalDeleteConfirm')">Отмена</button>
+          <button id="btnConfirmDelete" class="btn btn-danger">Удалить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 4: Batch Import Progress -->
+    <div id="modalBatchProgress" class="modal-overlay hidden">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>⏳ Подключение кабинетов...</h3>
+        </div>
+        <div class="modal-body">
+          <div class="progress-bar-container">
+            <div id="batchProgressBar" class="progress-bar-fill"></div>
+          </div>
+          <p id="batchProgressText" class="progress-status-text">Проверка токена и кабинетов в Meta API...</p>
+          <div id="batchResultsList" class="batch-results-list"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnBatchDone" class="btn btn-primary btn-block hidden" onclick="window.closeBatchProgress()">Готово</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+  </div>
+
+  <!-- App Script -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

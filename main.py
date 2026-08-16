@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 from logging.handlers import RotatingFileHandler
+import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram import Bot, Dispatcher
 from sqlalchemy import select
@@ -12,6 +13,7 @@ from database.models import AppSettings
 from scheduler.worker import MonitoringWorker
 from bot.notifier import TelegramNotifier
 from bot.handlers import router as bot_router, set_scheduler
+from api.server import app as fastapi_app
 
 # Настройка сквозного логирования (в консоль + в файл logs/buyerly.log)
 os.makedirs("logs", exist_ok=True)
@@ -46,15 +48,28 @@ async def main():
             session.add(AppSettings(poll_interval_minutes=interval))
             await session.commit()
 
-    # 2. Проверяем наличие токена бота
+    # 2. Настраиваем FastAPI/Uvicorn веб-сервер
+    uvicorn_config = uvicorn.Config(
+        app=fastapi_app,
+        host=settings.API_HOST,
+        port=settings.API_PORT,
+        log_level="warning",
+        loop="asyncio"
+    )
+    api_server = uvicorn.Server(uvicorn_config)
+    api_task = asyncio.create_task(api_server.serve())
+    logger.info(f"🚀 Web API & Mini App running on http://{settings.API_HOST}:{settings.API_PORT}")
+
+    # 3. Проверяем наличие токена бота
     if not settings.BOT_TOKEN:
-        logger.warning("⚠️ BOT_TOKEN is empty in .env! Running worker once.")
-        worker = MonitoringWorker()
-        stats = await worker.run_cycle()
-        logger.info(f"Initial monitoring cycle finished: {stats}")
+        logger.warning("⚠️ BOT_TOKEN is empty in .env! Web API is running, bot polling skipped.")
+        try:
+            await api_task
+        except asyncio.CancelledError:
+            pass
         return
 
-    # 3. Инициализируем Telegram-бота
+    # 4. Инициализируем Telegram-бота
     bot = Bot(token=settings.BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(bot_router)
@@ -62,7 +77,7 @@ async def main():
     notifier = TelegramNotifier(bot=bot, target_chat_id=settings.ADMIN_CHAT_ID)
     worker = MonitoringWorker(telegram_notifier=notifier.send_alert)
 
-    # 4. Настраиваем планировщик периодического мониторинга
+    # 5. Настраиваем планировщик периодического мониторинга
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         worker.run_cycle,
@@ -74,11 +89,13 @@ async def main():
     set_scheduler(scheduler)
     logger.info(f"Scheduler started: polling accounts every {interval} minutes.")
 
-    # 5. Запускаем polling бота
+    # 6. Запускаем polling бота
     logger.info("Starting Telegram Bot polling for Buyerly...")
     try:
         await dp.start_polling(bot)
     finally:
+        api_server.should_exit = True
+        await api_task
         scheduler.shutdown()
         await bot.session.close()
 
