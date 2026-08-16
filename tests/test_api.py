@@ -585,6 +585,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["cost_per_purchase"], 30.0)
         self.assertEqual(data["avg_ctr"], 5.0)
         self.assertEqual(data["avg_cpc"], 0.6)
+        self.assertEqual(data["total_impressions"], 1000)
         self.assertIn("Покупки показываются отдельно", data["metric_definitions"]["results"])
         self.assertEqual(
             data["data_quality"],

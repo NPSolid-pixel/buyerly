@@ -11,7 +11,6 @@
     accounts: [],
     summary: null,
     summaryCache: {},
-    summaryLastFetchedAt: {},
     presets: [],
     ruleGroups: [],
     activePresetId: null,
@@ -158,11 +157,7 @@
       updateFetchButtonLabel(state.currentPeriod);
       loadStoppedAdsets();
       if (state.summaryCache[state.currentPeriod]) {
-        renderSummaryData(state.summaryCache[state.currentPeriod]);
-        const statusEl = document.getElementById('summaryStatusLabel');
-        if (statusEl && state.summaryLastFetchedAt[state.currentPeriod]) {
-          statusEl.textContent = `Сводка сформирована в ${state.summaryLastFetchedAt[state.currentPeriod]}`;
-        }
+        renderLocalSummaryCache(state.summaryCache[state.currentPeriod]);
       }
     } else if (tabName === 'logs') {
       loadLogsTab(1);
@@ -1266,8 +1261,17 @@
     const label = periodTextMap[period] || 'за период';
     const textEl = document.getElementById('btnFetchSummaryText');
     if (textEl) {
-      textEl.textContent = `Сформировать сводку ${label}`;
+      textEl.textContent = `Обновить данные ${label}`;
     }
+  }
+
+  function renderLocalSummaryCache(data) {
+    const generatedAt = new Date(data.generated_at || 0).getTime();
+    const ageSeconds = generatedAt ? Math.max(0, (Date.now() - generatedAt) / 1000) : 0;
+    renderSummaryData({
+      ...data,
+      cache: { ...(data.cache || {}), is_cached: true, age_seconds: ageSeconds }
+    });
   }
 
   // ==========================================================
@@ -1301,19 +1305,13 @@
       state.summary = data;
       state.summaryCache[period] = data;
 
-      const now = new Date();
-      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      state.summaryLastFetchedAt[period] = timeStr;
-
       renderSummaryData(data);
       loadStoppedAdsets();
 
-      if (statusLabel) {
-        statusLabel.textContent = `Сводка успешно сформирована в ${timeStr}`;
-      }
+      renderSummaryProvenance(data);
       showToast('Сводка успешно сформирована', 'success');
     } catch (err) {
-      tableBody.innerHTML = `<tr><td colspan="8" class="text-danger text-center">${err.message}</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="10" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
       mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
       if (statusLabel) {
         statusLabel.textContent = `Ошибка: ${err.message}`;
@@ -1327,42 +1325,123 @@
     }
   }
 
+  function formatMoneyOrDash(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(2)}` : '—';
+  }
+
+  function formatNumber(value) {
+    return Number(value || 0).toLocaleString('ru-RU');
+  }
+
+  function formatSummaryTime(value) {
+    if (!value) return 'время неизвестно';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'время неизвестно';
+    return new Intl.DateTimeFormat('ru-RU', {
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+    }).format(date);
+  }
+
+  function renderSummaryProvenance(data) {
+    const status = document.getElementById('summaryStatusLabel');
+    const freshness = document.getElementById('summaryFreshnessBadge');
+    const generatedLabel = formatSummaryTime(data.generated_at);
+    const isCached = data.cache?.is_cached === true;
+    if (status) status.textContent = `${data.source || 'Meta Marketing API'} · получено ${generatedLabel}`;
+    if (freshness) {
+      freshness.className = `summary-freshness-badge ${isCached ? 'cached' : 'fresh'}`;
+      freshness.textContent = isCached
+        ? `Кеш · ${Math.round(data.cache?.age_seconds || 0)} сек`
+        : 'Свежие данные';
+    }
+    const lastSync = document.getElementById('lastSyncLabel');
+    if (lastSync) lastSync.textContent = `${isCached ? 'Кешировано' : 'Синхронизировано'} · ${generatedLabel}`;
+  }
+
+  function renderMetricDefinitions(definitions = {}) {
+    const container = document.getElementById('summaryDefinitionsList');
+    if (!container) return;
+    const labels = {
+      spend: 'Spend', results: 'Результаты', cost_per_result: 'Стоимость результата',
+      cost_per_lead: 'CPL', cost_per_registration: 'Стоимость регистрации',
+      cost_per_purchase: 'Стоимость покупки', ctr: 'CTR', cpc: 'CPC'
+    };
+    container.innerHTML = Object.entries(definitions).map(([key, definition]) => `
+      <div class="metric-definition-item">
+        <b>${escapeHtml(labels[key] || key)}</b>
+        <p>${escapeHtml(definition)}</p>
+      </div>`).join('');
+  }
+
+  function renderSummaryQuality(quality = {}) {
+    const status = quality.status || 'unavailable';
+    const coverageCard = document.getElementById('kpiCoverageCard');
+    const banner = document.getElementById('summaryQualityBanner');
+    coverageCard.classList.remove('complete', 'partial', 'unavailable');
+    coverageCard.classList.add(status);
+    document.getElementById('kpiCoverage').textContent = `${Number(quality.metrics_coverage_percent || 0).toFixed(1)}%`;
+    document.getElementById('kpiSyncedAccounts').textContent = quality.accounts_synced || 0;
+    document.getElementById('kpiTotalAccounts').textContent = quality.accounts_total || 0;
+    document.getElementById('kpiFailedAccounts').textContent = quality.accounts_failed || 0;
+
+    if (status === 'complete') {
+      banner.className = 'summary-quality-banner hidden';
+      banner.textContent = '';
+      return;
+    }
+    const failed = quality.accounts_failed || 0;
+    const blocked = quality.accounts_blocked || 0;
+    banner.className = `summary-quality-banner${status === 'unavailable' ? ' error' : ''}`;
+    banner.innerHTML = `<b>Неполное покрытие:</b> синхронизировано ${quality.accounts_synced || 0} из ${quality.accounts_total || 0} кабинетов. Ошибок Meta: ${failed}, недоступных кабинетов: ${blocked}. Итоговые суммы рассчитаны только по успешно синхронизированным данным.`;
+  }
+
+  function summaryDataStatus(account) {
+    const status = account.data_status || (account.has_error ? 'error' : (account.is_banned ? 'blocked' : 'synced'));
+    const labels = { synced: 'Получены', blocked: 'Недоступны', error: 'Ошибка Meta' };
+    return `<span class="summary-data-status ${status}" title="${escapeHtml(account.data_status_label || '')}">${labels[status] || 'Нет данных'}</span>`;
+  }
+
   function renderSummaryData(data) {
     // KPI Cards
-    document.getElementById('kpiSpend').textContent = `$${data.total_spend.toFixed(2)}`;
-    document.getElementById('kpiConversions').textContent = data.total_conversions;
-    document.getElementById('kpiLeads').textContent = data.total_leads;
-    document.getElementById('kpiRegs').textContent = data.total_regs;
-    document.getElementById('kpiCpa').textContent = `$${data.avg_cpa.toFixed(2)}`;
-    document.getElementById('kpiClicks').textContent = data.total_clicks;
-    document.getElementById('kpiCtr').textContent = `${data.avg_ctr.toFixed(2)}%`;
-    document.getElementById('kpiCpc').textContent = `$${data.avg_cpc.toFixed(2)}`;
-
-    const now = new Date();
-    document.getElementById('lastSyncLabel').textContent = `Синхронизировано в ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    document.getElementById('kpiSpend').textContent = formatMoneyOrDash(Number(data.total_spend || 0));
+    document.getElementById('kpiResults').textContent = formatNumber(data.total_results ?? data.total_conversions);
+    document.getElementById('kpiLeads').textContent = formatNumber(data.total_leads);
+    document.getElementById('kpiRegs').textContent = formatNumber(data.total_regs);
+    document.getElementById('kpiCostPerResult').textContent = formatMoneyOrDash(data.avg_cost_per_result);
+    document.getElementById('kpiCpl').textContent = formatMoneyOrDash(data.cost_per_lead);
+    document.getElementById('kpiCpr').textContent = formatMoneyOrDash(data.cost_per_registration);
+    document.getElementById('kpiPurchases').textContent = formatNumber(data.total_purchases);
+    document.getElementById('kpiCpp').textContent = formatMoneyOrDash(data.cost_per_purchase);
+    document.getElementById('kpiClicks').textContent = formatNumber(data.total_clicks);
+    document.getElementById('kpiCtr').textContent = data.total_impressions > 0 ? `${Number(data.avg_ctr || 0).toFixed(2)}%` : '—';
+    document.getElementById('kpiCpc').textContent = data.total_clicks > 0 ? formatMoneyOrDash(Number(data.avg_cpc || 0)) : '—';
+    renderSummaryProvenance(data);
+    renderSummaryQuality(data.data_quality || {});
+    renderMetricDefinitions(data.metric_definitions || {});
 
     // Desktop Table
     const tableBody = document.getElementById('summaryTableBody');
     if (!data.accounts || data.accounts.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="8" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="10" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
     } else {
       tableBody.innerHTML = data.accounts.map(acc => {
-        const isBanned = acc.is_banned;
-        const statusLabel = isBanned ? '<span class="status-dot dot-danger"></span>Блок' : '<span class="status-dot dot-success"></span>Ок';
-        const spendStr = `$${acc.spend.toFixed(2)}`;
-        const cpaStr = acc.total_conversions > 0 ? `$${acc.cpa.toFixed(2)}` : '—';
+        const hasMetrics = acc.data_status === 'synced' || (!acc.data_status && !acc.is_banned && !acc.has_error);
+        const spendStr = hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0)) : '—';
+        const resultCost = hasMetrics ? formatMoneyOrDash(acc.cost_per_result ?? (acc.total_conversions > 0 ? acc.cpa : null)) : '—';
         const displayName = acc.short_name || acc.name;
         
         return `
           <tr>
             <td><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
-            <td>${statusLabel}</td>
+            <td>${summaryDataStatus(acc)}</td>
             <td class="text-right mono"><b>${spendStr}</b></td>
-            <td class="text-right mono">${acc.clicks}</td>
-            <td class="text-right mono" style="color: var(--tg-link);">${acc.leads}</td>
-            <td class="text-right mono" style="color: var(--color-success);">${acc.registrations}</td>
-            <td class="text-right mono">${acc.purchases}</td>
-            <td class="text-right mono"><b>${cpaStr}</b></td>
+            <td class="text-right mono">${hasMetrics ? formatNumber(acc.impressions) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatNumber(acc.clicks) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</td>
+            <td class="text-right mono" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
+            <td class="text-right mono" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
+            <td class="text-right mono"><b>${resultCost}</b></td>
           </tr>
         `;
       }).join('');
@@ -1376,10 +1455,8 @@
       mobileCards.innerHTML = data.accounts.map(acc => {
         const displayName = acc.short_name || acc.name;
         const subLabel = acc.name !== displayName ? `${escapeHtml(acc.name)} · ${acc.account_id}` : acc.account_id;
-        const isBanned = acc.is_banned;
-        const statusPillHtml = isBanned
-          ? `<span class="mob-status-pill status-disabled"><span class="status-dot dot-danger"></span>Заблокирован</span>`
-          : `<span class="mob-status-pill status-active"><span class="status-dot dot-success"></span>Активен</span>`;
+        const hasMetrics = acc.data_status === 'synced' || (!acc.data_status && !acc.is_banned && !acc.has_error);
+        const statusPillHtml = summaryDataStatus(acc);
 
         return `
           <div class="mob-summary-card">
@@ -1389,24 +1466,32 @@
                 <span class="mono text-hint" style="font-size:11px; color:var(--tg-hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subLabel}</span>
                 ${statusPillHtml}
               </div>
-              <span class="mono" style="font-size: 16px; font-weight:700; color: var(--tg-link); white-space:nowrap; flex-shrink:0;">$${acc.spend.toFixed(2)}</span>
+              <span class="mono" style="font-size:16px;font-weight:700;color:var(--tg-link);white-space:nowrap;flex-shrink:0;">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0)) : '—'}</span>
             </div>
             <div class="mob-card-stats">
               <div class="stat-box">
-                <span class="stat-box-label">Клики</span>
-                <span class="stat-box-val">${acc.clicks}</span>
+                <span class="stat-box-label">Результаты</span>
+                <span class="stat-box-val">${hasMetrics ? formatNumber(acc.results ?? acc.total_conversions) : '—'}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">Лиды</span>
-                <span class="stat-box-val" style="color:var(--tg-link);">${acc.leads}</span>
+                <span class="stat-box-val" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">Реги</span>
-                <span class="stat-box-val" style="color:var(--color-success);">${acc.registrations}</span>
+                <span class="stat-box-val" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</span>
               </div>
               <div class="stat-box">
-                <span class="stat-box-label">CPA</span>
-                <span class="stat-box-val">${acc.total_conversions > 0 ? '$' + acc.cpa.toFixed(2) : '—'}</span>
+                <span class="stat-box-label">Цена результата</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_result ?? (acc.total_conversions > 0 ? acc.cpa : null)) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">Покупки</span>
+                <span class="stat-box-val">${hasMetrics ? formatNumber(acc.purchases) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">CTR</span>
+                <span class="stat-box-val">${hasMetrics && acc.impressions > 0 ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</span>
               </div>
             </div>
           </div>
@@ -1991,15 +2076,16 @@
       document.getElementById('kpiPeriodLabel').textContent = periodTextMap[period] || '';
 
       if (state.summaryCache[period]) {
-        renderSummaryData(state.summaryCache[period]);
-        const statusEl = document.getElementById('summaryStatusLabel');
-        if (statusEl && state.summaryLastFetchedAt[period]) {
-          statusEl.textContent = `Сводка сформирована в ${state.summaryLastFetchedAt[period]}`;
-        }
+        renderLocalSummaryCache(state.summaryCache[period]);
       } else {
         const statusEl = document.getElementById('summaryStatusLabel');
         if (statusEl) {
           statusEl.textContent = 'Нажмите кнопку для расчета статистики из Meta';
+        }
+        const freshness = document.getElementById('summaryFreshnessBadge');
+        if (freshness) {
+          freshness.className = 'summary-freshness-badge';
+          freshness.textContent = 'Нет данных';
         }
       }
     });

@@ -82,3 +82,22 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('/assign-rule-group/${groupId}', self.script)
         self.assertIn('window.pickRuleGroupForAccount', self.script)
         self.assertIn('rule-groups-grid', self.styles)
+
+    def test_summary_explains_metric_semantics_and_data_coverage(self):
+        for contract in (
+            'id="kpiResults"',
+            'id="kpiCostPerResult"',
+            'id="kpiPurchases"',
+            'id="kpiCoverage"',
+            'id="summaryQualityBanner"',
+            'id="summaryDefinitionsList"',
+            'Результат = лид + регистрация',
+        ):
+            self.assertIn(contract, self.index)
+
+        self.assertIn('data.avg_cost_per_result', self.script)
+        self.assertIn('data.data_quality', self.script)
+        self.assertIn('data.metric_definitions', self.script)
+        self.assertIn('data.cache?.is_cached', self.script)
+        self.assertNotIn('id="kpiCpa"', self.index)
+        self.assertNotIn('Средний CPA', self.index)

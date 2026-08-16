@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.1.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.2.0">
 </head>
 
 <body>
@@ -232,22 +232,28 @@
       <!-- TAB 2: СВОДКА (SUMMARY) -->
       <!-- ============================================== -->
       <section id="tab-summary" class="tab-content">
-        <!-- Period Switcher -->
-        <div class="period-switcher">
-          <button class="period-btn active" data-period="today">Сегодня</button>
-          <button class="period-btn" data-period="yesterday">Вчера</button>
-          <button class="period-btn" data-period="last_3d">3 дня</button>
-          <button class="period-btn" data-period="last_7d">7 дней</button>
+        <div class="summary-page-header">
+          <div>
+            <span class="eyebrow">Meta Marketing API</span>
+            <h2>Сводка эффективности</h2>
+            <div class="summary-source-line">
+              <span id="summaryStatusLabel">Данные ещё не запрошены</span>
+              <span id="summaryFreshnessBadge" class="summary-freshness-badge">Нет данных</span>
+            </div>
+          </div>
+          <button id="btnFetchSummary" class="btn btn-primary btn-fetch-summary">
+            <svg class="fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span id="btnFetchSummaryText">Обновить данные</span>
+          </button>
         </div>
 
-        <!-- Summary Action Button -->
-        <div class="summary-action-wrap">
-          <button id="btnFetchSummary" class="btn btn-primary btn-block btn-fetch-summary">
-            <svg class="fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            <span id="btnFetchSummaryText">Сформировать сводку за сегодня</span>
-          </button>
-          <div class="summary-status-line">
-            <span id="summaryStatusLabel">Нажмите кнопку для расчета статистики из Meta</span>
+        <div class="summary-toolbar">
+          <span>Период отчёта</span>
+          <div class="period-switcher">
+            <button class="period-btn active" data-period="today">Сегодня</button>
+            <button class="period-btn" data-period="yesterday">Вчера</button>
+            <button class="period-btn" data-period="last_3d">3 дня</button>
+            <button class="period-btn" data-period="last_7d">7 дней</button>
           </div>
         </div>
 
@@ -255,23 +261,23 @@
         <div class="kpi-grid">
           <div class="kpi-card spend-card">
             <div class="kpi-header">
-              <span class="kpi-title">Суммарный расход</span>
+              <span class="kpi-title">Spend</span>
               <span class="kpi-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               </span>
             </div>
             <div class="kpi-value" id="kpiSpend">$0.00</div>
-            <div class="kpi-subtext" id="kpiPeriodLabel">за сегодня</div>
+            <div class="kpi-subtext"><span id="kpiPeriodLabel">за сегодня</span> · из синхронизированных кабинетов</div>
           </div>
 
           <div class="kpi-card">
             <div class="kpi-header">
-              <span class="kpi-title">Лиды & Реги</span>
+              <span class="kpi-title">Результаты <span class="metric-info" title="Результат = лид + регистрация. Покупки сюда не входят.">?</span></span>
               <span class="kpi-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
               </span>
             </div>
-            <div class="kpi-value" id="kpiConversions">0</div>
+            <div class="kpi-value" id="kpiResults">0</div>
             <div class="kpi-subtext">
               Лиды: <b id="kpiLeads">0</b> · Реги: <b id="kpiRegs">0</b>
             </div>
@@ -279,18 +285,29 @@
 
           <div class="kpi-card">
             <div class="kpi-header">
-              <span class="kpi-title">Средний CPA</span>
+              <span class="kpi-title">Стоимость результата <span class="metric-info" title="Spend / (лиды + регистрации)">?</span></span>
               <span class="kpi-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M18 9l-5 5-4-4-6 6"/></svg>
               </span>
             </div>
-            <div class="kpi-value" id="kpiCpa">$0.00</div>
-            <div class="kpi-subtext">цена за целевое действие</div>
+            <div class="kpi-value" id="kpiCostPerResult">—</div>
+            <div class="kpi-subtext">CPL: <b id="kpiCpl">—</b> · за регу: <b id="kpiCpr">—</b></div>
           </div>
 
           <div class="kpi-card">
             <div class="kpi-header">
-              <span class="kpi-title">Клики & CTR</span>
+              <span class="kpi-title">Покупки</span>
+              <span class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h2l2 12h10l2-8H6"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/></svg>
+              </span>
+            </div>
+            <div class="kpi-value" id="kpiPurchases">0</div>
+            <div class="kpi-subtext">Стоимость покупки: <b id="kpiCpp">—</b></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Трафик</span>
               <span class="kpi-icon">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M14 10l6.1-6.1M9 21H3v-6M10 14l-6.1 6.1"/></svg>
               </span>
@@ -300,7 +317,23 @@
               CTR: <b id="kpiCtr">0.00%</b> · CPC: <b id="kpiCpc">$0.00</b>
             </div>
           </div>
+
+          <div id="kpiCoverageCard" class="kpi-card kpi-coverage-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Покрытие данных <span class="metric-info" title="Доля кабинетов, от которых Meta успешно вернула метрики.">?</span></span>
+              <span id="kpiCoverageStatus" class="summary-quality-dot"></span>
+            </div>
+            <div class="kpi-value" id="kpiCoverage">0%</div>
+            <div class="kpi-subtext"><b id="kpiSyncedAccounts">0</b> из <b id="kpiTotalAccounts">0</b> кабинетов · ошибок: <b id="kpiFailedAccounts">0</b></div>
+          </div>
         </div>
+
+        <div id="summaryQualityBanner" class="summary-quality-banner hidden"></div>
+
+        <details class="metric-definitions">
+          <summary>Как считаются показатели</summary>
+          <div id="summaryDefinitionsList" class="metric-definitions-grid"></div>
+        </details>
 
         <button id="logsAttentionBanner" class="logs-attention-banner hidden" type="button" onclick="window.switchTab('logs')">
           <span><span class="status-dot dot-warning"></span><b id="logsAttentionCount">0</b> остановленных ad set требуют решения</span>
@@ -320,13 +353,15 @@
               <thead>
                 <tr>
                   <th>Кабинет</th>
-                  <th>Статус</th>
-                  <th class="text-right">Спенд</th>
+                  <th>Данные</th>
+                  <th class="text-right">Spend</th>
+                  <th class="text-right">Показы</th>
                   <th class="text-right">Клики</th>
+                  <th class="text-right">CTR</th>
                   <th class="text-right">Лиды</th>
                   <th class="text-right">Реги</th>
                   <th class="text-right">Покупки</th>
-                  <th class="text-right">CPA</th>
+                  <th class="text-right">Стоимость результата</th>
                 </tr>
               </thead>
               <tbody id="summaryTableBody">
@@ -986,6 +1021,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.1.0"></script>
+  <script src="/static/js/app.js?v=9.2.0"></script>
 </body>
 </html>
