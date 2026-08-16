@@ -1,6 +1,9 @@
+import base64
 import hashlib
+import hmac
 import json
 import logging
+import secrets
 
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -27,8 +30,69 @@ async def get_db():
     async with async_session_maker() as session:
         yield session
 
+PASSWORD_SCHEME = "pbkdf2_sha256"
+PASSWORD_ITERATIONS = 600_000
+
+
+def _encode_password_part(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _decode_password_part(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        PASSWORD_ITERATIONS,
+    )
+    return "$".join(
+        (
+            PASSWORD_SCHEME,
+            str(PASSWORD_ITERATIONS),
+            _encode_password_part(salt),
+            _encode_password_part(digest),
+        )
+    )
+
+
+def verify_password(password: str, encoded_password: str) -> bool:
+    if not encoded_password:
+        return False
+
+    if encoded_password.startswith(f"{PASSWORD_SCHEME}$"):
+        try:
+            _, iterations_raw, salt_raw, expected_raw = encoded_password.split("$", 3)
+            iterations = int(iterations_raw)
+            if iterations < 1 or iterations > 2_000_000:
+                return False
+            actual = hashlib.pbkdf2_hmac(
+                "sha256",
+                password.encode("utf-8"),
+                _decode_password_part(salt_raw),
+                iterations,
+            )
+            return hmac.compare_digest(actual, _decode_password_part(expected_raw))
+        except (TypeError, ValueError):
+            return False
+
+    if len(encoded_password) == 64:
+        legacy = hashlib.sha256(password.encode("utf-8")).hexdigest()
+        return hmac.compare_digest(legacy, encoded_password)
+    return False
+
+
+def password_needs_rehash(encoded_password: str) -> bool:
+    if not encoded_password.startswith(f"{PASSWORD_SCHEME}$"):
+        return True
+    try:
+        return int(encoded_password.split("$", 2)[1]) < PASSWORD_ITERATIONS
+    except (IndexError, ValueError):
+        return True
 
 
 async def migrate_legacy_account_rules(conn) -> int:
@@ -173,48 +237,27 @@ async def init_db():
             except Exception:
                 pass
 
-    # Seed default users Artem and Nikolai with correct Telegram IDs
-    from sqlalchemy import select
+    if settings.BOOTSTRAP_ADMIN_USERNAME and settings.BOOTSTRAP_ADMIN_PASSWORD:
+        from sqlalchemy import select
+        from database.models import TelegramUser
 
-    from database.models import TelegramUser
-
-    async with async_session_maker() as session:
-        default_users = [
-            {"username": "Artem", "full_name": "Artem", "telegram_id": "8634201356", "password": "artem_buyer_2026", "role": "admin", "token": "artem-token-2026-auth"},
-            {"username": "Nikolai", "full_name": "Nikolai", "telegram_id": "8948797431", "password": "nikolai_buyer_2026", "role": "admin", "token": "nikolai-token-2026-auth"}
-        ]
-        for u in default_users:
-            stmt = select(TelegramUser).where(
-                (TelegramUser.username.ilike(u["username"])) |
-                (TelegramUser.telegram_id == u["telegram_id"])
-            )
-            res = await session.execute(stmt)
-            matches = res.scalars().all()
-            if not matches:
-                new_u = TelegramUser(
-                    telegram_id=u["telegram_id"],
-                    username=u["username"],
-                    full_name=u["full_name"],
-                    password_hash=hash_password(u["password"]),
-                    auth_token=u["token"],
-                    role=u["role"],
-                    is_approved=True
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(TelegramUser).where(
+                    TelegramUser.username.ilike(settings.BOOTSTRAP_ADMIN_USERNAME)
                 )
-                session.add(new_u)
-            else:
-                primary = next((m for m in matches if m.telegram_id == u["telegram_id"]), matches[0])
-                primary.username = u["username"]
-                primary.full_name = u["full_name"]
-                primary.telegram_id = u["telegram_id"]
-                if not primary.password_hash:
-                    primary.password_hash = hash_password(u["password"])
-                if not primary.auth_token:
-                    primary.auth_token = u["token"]
-                primary.role = u["role"]
-                primary.is_approved = True
-
-                for other in matches:
-                    if other.id != primary.id:
-                        await session.delete(other)
-        await session.commit()
-
+            )
+            if not result.scalar_one_or_none():
+                session.add(
+                    TelegramUser(
+                        telegram_id=settings.ADMIN_CHAT_ID or None,
+                        username=settings.BOOTSTRAP_ADMIN_USERNAME,
+                        full_name=settings.BOOTSTRAP_ADMIN_USERNAME,
+                        password_hash=hash_password(settings.BOOTSTRAP_ADMIN_PASSWORD),
+                        auth_token=secrets.token_urlsafe(32),
+                        role="admin",
+                        is_approved=True,
+                    )
+                )
+                await session.commit()
+                logger.info("Created bootstrap admin from environment configuration.")

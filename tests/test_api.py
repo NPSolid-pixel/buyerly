@@ -5,6 +5,7 @@ import unittest
 import urllib.parse
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import api.auth as api_auth_module
@@ -13,7 +14,7 @@ import api.server as api_server_module
 from api.auth import validate_telegram_init_data
 from api.server import create_app
 from core.config import settings
-from database.db import Base
+from database.db import Base, verify_password
 from database.models import Account, AppSettings, RulePreset, StoppedAdSet, TelegramUser
 
 
@@ -114,6 +115,86 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ready_response.status_code, 200)
         self.assertEqual(ready_response.json()["status"], "ready")
         self.assertIn("version", ready_response.json())
+
+    async def test_password_login_upgrades_legacy_hash(self):
+        legacy_password = "legacy-password"
+        async with self.test_session_maker() as session:
+            result = await session.execute(
+                select(TelegramUser).where(TelegramUser.username == "buyer_nick")
+            )
+            buyer = result.scalar_one()
+            buyer.password_hash = hashlib.sha256(legacy_password.encode()).hexdigest()
+            await session.commit()
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            missing_password = await client.post(
+                "/api/auth/login",
+                json={"username": "admin_user", "password": "anything"},
+            )
+            wrong_password = await client.post(
+                "/api/auth/login",
+                json={"username": "buyer_nick", "password": "wrong-password"},
+            )
+            login = await client.post(
+                "/api/auth/login",
+                json={"username": "buyer_nick", "password": legacy_password},
+            )
+
+        self.assertEqual(missing_password.status_code, 401)
+        self.assertEqual(wrong_password.status_code, 401)
+        self.assertEqual(login.status_code, 200)
+        self.assertTrue(login.json()["token"])
+
+        async with self.test_session_maker() as session:
+            result = await session.execute(
+                select(TelegramUser).where(TelegramUser.username == "buyer_nick")
+            )
+            upgraded_buyer = result.scalar_one()
+            self.assertTrue(upgraded_buyer.password_hash.startswith("pbkdf2_sha256$"))
+            self.assertTrue(verify_password(legacy_password, upgraded_buyer.password_hash))
+
+    async def test_change_password_requires_current_password(self):
+        old_password = "old-password"
+        new_password = "new-password"
+        async with self.test_session_maker() as session:
+            result = await session.execute(
+                select(TelegramUser).where(TelegramUser.username == "buyer_nick")
+            )
+            buyer = result.scalar_one()
+            buyer.password_hash = hashlib.sha256(old_password.encode()).hexdigest()
+            buyer.auth_token = "test-web-token"
+            await session.commit()
+
+        headers = {"Authorization": "Bearer test-web-token"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            missing_current = await client.post(
+                "/api/auth/change-password",
+                headers=headers,
+                json={"new_password": new_password},
+            )
+            wrong_current = await client.post(
+                "/api/auth/change-password",
+                headers=headers,
+                json={"old_password": "wrong-password", "new_password": new_password},
+            )
+            changed = await client.post(
+                "/api/auth/change-password",
+                headers=headers,
+                json={"old_password": old_password, "new_password": new_password},
+            )
+
+        self.assertEqual(missing_current.status_code, 400)
+        self.assertEqual(wrong_current.status_code, 400)
+        self.assertEqual(changed.status_code, 200)
+
+        async with self.test_session_maker() as session:
+            result = await session.execute(
+                select(TelegramUser).where(TelegramUser.username == "buyer_nick")
+            )
+            changed_buyer = result.scalar_one()
+            self.assertTrue(verify_password(new_password, changed_buyer.password_hash))
 
     async def test_get_accounts_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}

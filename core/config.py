@@ -12,6 +12,14 @@ class Settings(BaseSettings):
     API_PORT: int = Field(default=8080, description="Web API and static files port")
     API_HOST: str = Field(default="0.0.0.0", description="Web API host")
     ENABLE_DEV_AUTH: bool = Field(default=False, description="Enable dev auth fallback for local tests")
+    BOOTSTRAP_ADMIN_USERNAME: str = Field(
+        default="",
+        description="Optional first admin username for an empty installation",
+    )
+    BOOTSTRAP_ADMIN_PASSWORD: str = Field(
+        default="",
+        description="Optional first admin password for an empty installation",
+    )
     
     class Config:
         env_file = ".env"

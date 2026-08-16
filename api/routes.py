@@ -3,7 +3,7 @@ import time
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 from core.config import settings
 from database.db import async_session_maker
@@ -46,7 +46,7 @@ class LoginResponse(BaseModel):
     message: str = "Успешный вход"
 
 class ChangePasswordRequest(BaseModel):
-    old_password: Optional[str] = ""
+    old_password: str = ""
     new_password: str
 
 class UpdateProfileRequest(BaseModel):
@@ -180,44 +180,47 @@ def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
 # ----------------------------------------------------
 
 import uuid
-from database.db import hash_password
+from database.db import hash_password, password_needs_rehash, verify_password
 
 @router.post("/auth/login", response_model=LoginResponse)
 async def login_user(req: LoginRequest):
     async with async_session_maker() as session:
         uname = req.username.strip()
         
-        # Look up user by username, full_name, or telegram_id (case-insensitive)
+        # Prefer stable identifiers. A display name is accepted only when unique.
         stmt = select(TelegramUser).where(
-            (TelegramUser.username.ilike(uname)) |
-            (TelegramUser.full_name.ilike(uname)) |
+            (func.lower(TelegramUser.username) == uname.lower()) |
             (TelegramUser.telegram_id == uname)
         )
         res = await session.execute(stmt)
         user = res.scalar_one_or_none()
 
-        # Support alias mappings if typed
-        if not user:
-            lower_u = uname.lower()
-            if lower_u in ["xxq322", "artem"]:
-                res = await session.execute(select(TelegramUser).where((TelegramUser.username.ilike("Artem")) | (TelegramUser.telegram_id == "8634201356")))
-                user = res.scalar_one_or_none()
-            elif lower_u in ["nikolai_underdog", "nikolai"]:
-                res = await session.execute(select(TelegramUser).where((TelegramUser.username.ilike("Nikolai")) | (TelegramUser.telegram_id == "8948797431")))
-                user = res.scalar_one_or_none()
+        if not user and uname:
+            display_name_result = await session.execute(
+                select(TelegramUser)
+                .where(func.lower(TelegramUser.full_name) == uname.lower())
+                .limit(2)
+            )
+            display_name_matches = display_name_result.scalars().all()
+            if len(display_name_matches) == 1:
+                user = display_name_matches[0]
 
-        if not user:
-            raise HTTPException(status_code=400, detail="Пользователь не найден")
-
-        pw_hash = hash_password(req.password.strip())
-        if user.password_hash and user.password_hash != pw_hash:
-            raise HTTPException(status_code=400, detail="Неверный пароль")
+        if not user or not verify_password(req.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
         if not user.is_approved:
             raise HTTPException(status_code=403, detail="Ваш аккаунт ожидает одобрения администратора.")
 
+        credentials_changed = False
+        if password_needs_rehash(user.password_hash):
+            user.password_hash = hash_password(req.password)
+            credentials_changed = True
+
         if not user.auth_token:
             user.auth_token = str(uuid.uuid4())
+            credentials_changed = True
+
+        if credentials_changed:
             await session.commit()
 
         return LoginResponse(
@@ -231,9 +234,9 @@ async def login_user(req: LoginRequest):
 
 @router.post("/auth/change-password")
 async def change_password(req: ChangePasswordRequest, user: TelegramUser = Depends(get_current_user)):
-    new_pw = req.new_password.strip()
-    if not new_pw or len(new_pw) < 4:
-        raise HTTPException(status_code=400, detail="Пароль должен содержать минимум 4 символа")
+    new_pw = req.new_password
+    if len(new_pw) < 8:
+        raise HTTPException(status_code=400, detail="Пароль должен содержать минимум 8 символов")
 
     async with async_session_maker() as session:
         res = await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
@@ -241,9 +244,8 @@ async def change_password(req: ChangePasswordRequest, user: TelegramUser = Depen
         if not db_user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-        if db_user.password_hash and req.old_password:
-            old_hash = hash_password(req.old_password.strip())
-            if db_user.password_hash != old_hash:
+        if db_user.password_hash:
+            if not req.old_password or not verify_password(req.old_password, db_user.password_hash):
                 raise HTTPException(status_code=400, detail="Старый пароль указан неверно")
 
         db_user.password_hash = hash_password(new_pw)

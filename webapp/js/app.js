@@ -1482,20 +1482,29 @@
   };
 
   window.changeUserPassword = async function () {
-    const input = document.getElementById('settingsNewPasswordInput');
-    const newPw = input?.value.trim();
-    if (!newPw || newPw.length < 4) {
-      showToast('Пароль должен быть не менее 4 символов', 'error');
+    const oldInput = document.getElementById('settingsOldPasswordInput');
+    const newInput = document.getElementById('settingsNewPasswordInput');
+    const oldPw = oldInput?.value || '';
+    const newPw = newInput?.value || '';
+    if (!oldPw) {
+      showToast('Введите текущий пароль', 'error');
+      oldInput?.focus();
+      return;
+    }
+    if (newPw.length < 8) {
+      showToast('Пароль должен быть не менее 8 символов', 'error');
+      newInput?.focus();
       return;
     }
     haptic('impact', 'medium');
     try {
       const res = await apiRequest('/api/auth/change-password', {
         method: 'POST',
-        body: JSON.stringify({ new_password: newPw })
+        body: JSON.stringify({ old_password: oldPw, new_password: newPw })
       });
       showToast(res.message || 'Пароль успешно обновлен', 'success');
-      if (input) input.value = '';
+      if (oldInput) oldInput.value = '';
+      if (newInput) newInput.value = '';
     } catch (e) {
       showToast(`Ошибка: ${e.message}`, 'error');
     }

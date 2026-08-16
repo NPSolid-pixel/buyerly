@@ -12,7 +12,7 @@ class TelegramUser(Base):
     telegram_id = Column(String, unique=True, nullable=True, index=True, doc="Telegram User ID (для пушей)")
     username = Column(String, unique=True, nullable=False, index=True, doc="Логин пользователя (e.g. Artem)")
     full_name = Column(String, default="", nullable=False)
-    password_hash = Column(String, default="", nullable=False, doc="Хэш пароля sha256")
+    password_hash = Column(String, default="", nullable=False, doc="Версионированный защищённый хэш пароля")
     auth_token = Column(String, unique=True, nullable=True, index=True, doc="Постоянный токен авторизации веб-интерфейса")
     role = Column(String, default="admin", nullable=False, doc="'admin' или 'buyer'")
     is_approved = Column(Boolean, default=True, nullable=False, doc="Одобрен ли доступ")

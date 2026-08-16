@@ -18,7 +18,7 @@
 ---
 
 ## 🔑 Учетные записи и роли
-* **Telegram Bot:** `@buyerly_bot` (`7970458217:AAFamlyDuekEdtCOxBAwOgS-ojOwbqh2mhk`)
+* **Telegram Bot:** @buyerly_bot (токен задаётся только через переменную окружения `BOT_TOKEN`)
 * **Главный администратор (Super Admin):** `@Xxq322` (`8634201356`)
 * **Байер / Заказчик:** `@Nikolai_underdog` (`8948797431`)
 * **Подключенные кабинеты (10 шт):**
@@ -97,7 +97,6 @@
 
 ## 🧪 Тестирование
 * 28 из 28 тестов проходят успешно (`python -m unittest discover tests`).
-
 
 
 

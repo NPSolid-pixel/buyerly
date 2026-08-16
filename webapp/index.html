@@ -469,9 +469,14 @@
             </div>
 
             <div class="settings-form-group">
+              <label class="form-label" for="settingsOldPasswordInput">Текущий пароль</label>
+              <input type="password" id="settingsOldPasswordInput" class="form-input" placeholder="Введите текущий пароль" autocomplete="current-password">
+            </div>
+
+            <div class="settings-form-group">
               <label class="form-label" for="settingsNewPasswordInput">Новый пароль</label>
               <div class="settings-input-action-row">
-                <input type="password" id="settingsNewPasswordInput" class="form-input" placeholder="Введите новый пароль (мин. 4 симв.)">
+                <input type="password" id="settingsNewPasswordInput" class="form-input" placeholder="Введите новый пароль (мин. 8 симв.)" autocomplete="new-password">
                 <button type="button" id="btnChangePassword" class="btn btn-primary btn-sm" onclick="window.changeUserPassword()">
                   Сменить пароль
                 </button>
@@ -852,6 +857,6 @@
   </div>
 
   <!-- App Script -->
-  <script src="/static/js/app.js?v=8.7.2"></script>
+  <script src="/static/js/app.js?v=8.8.0"></script>
 </body>
 </html>
