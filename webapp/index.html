@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.4.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.5.0">
 </head>
 
 <body>
@@ -352,7 +352,59 @@
           </div>
         </div>
 
-        <div class="kpi-grid kpi-secondary-grid">
+        <div class="metric-category-header">
+          <div>
+            <span>Доставка</span>
+            <p>Сколько и с какой частотой Meta показала рекламу</p>
+          </div>
+        </div>
+
+        <div class="kpi-grid kpi-analytics-grid kpi-delivery-grid">
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Показы <span class="metric-info" title="Количество показов объявлений на экране. Один человек может создать несколько показов.">?</span></span>
+              <span class="kpi-icon">I</span>
+            </div>
+            <div class="kpi-value" id="kpiImpressions">0</div>
+            <div class="kpi-subtext">Meta: impressions</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Охват <span class="metric-info" title="Сумма уникального охвата внутри кабинетов. Между кабинетами аудитория может пересекаться.">?</span></span>
+              <span class="kpi-icon">R</span>
+            </div>
+            <div class="kpi-value" id="kpiReach">0</div>
+            <div class="kpi-subtext">Meta: reach · возможны пересечения</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Частота <span class="metric-info" title="Показы / суммарный охват кабинетов.">?</span></span>
+              <span class="kpi-icon">F</span>
+            </div>
+            <div class="kpi-value" id="kpiFrequency">—</div>
+            <div class="kpi-subtext">Среднее число показов на человека</div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">CPM <span class="metric-info" title="Spend / показы × 1 000.">?</span></span>
+              <span class="kpi-icon">$</span>
+            </div>
+            <div class="kpi-value" id="kpiCpm">—</div>
+            <div class="kpi-subtext">Стоимость 1 000 показов</div>
+          </div>
+        </div>
+
+        <div class="metric-category-header">
+          <div>
+            <span>Трафик</span>
+            <p>Все клики, переходы по ссылке и реальные загрузки страницы считаются отдельно</p>
+          </div>
+        </div>
+
+        <div class="kpi-grid kpi-analytics-grid kpi-traffic-grid">
           <div class="kpi-card">
             <div class="kpi-header">
               <span class="kpi-title">Все клики <span class="metric-info" title="Поле clicks из Meta включает не только переходы по ссылке.">?</span></span>
@@ -366,6 +418,44 @@
             </div>
           </div>
 
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Link Clicks <span class="metric-info" title="Клики по ссылкам внутри объявления. Не гарантируют загрузку сайта.">?</span></span>
+              <span class="kpi-icon">L</span>
+            </div>
+            <div class="kpi-value" id="kpiLinkClicks">0</div>
+            <div class="kpi-subtext">CTR Link: <b id="kpiLinkCtr">—</b> · CPC Link: <b id="kpiCpcLink">—</b></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Outbound Clicks <span class="metric-info" title="Клики, которые ведут за пределы приложений и сервисов Meta.">?</span></span>
+              <span class="kpi-icon">O</span>
+            </div>
+            <div class="kpi-value" id="kpiOutboundClicks">0</div>
+            <div class="kpi-subtext">CTR Outbound: <b id="kpiOutboundCtr">—</b></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">LP Views <span class="metric-info" title="Загрузки целевой страницы после клика, доступные Meta.">?</span></span>
+              <span class="kpi-icon">V</span>
+            </div>
+            <div class="kpi-value" id="kpiLandingPageViews">0</div>
+            <div class="kpi-subtext">Цена загрузки: <b id="kpiCostPerLandingPageView">—</b></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-header">
+              <span class="kpi-title">Unique Clicks <span class="metric-info" title="Люди, совершившие хотя бы один клик на выбранном уровне отчёта.">?</span></span>
+              <span class="kpi-icon">U</span>
+            </div>
+            <div class="kpi-value" id="kpiUniqueClicks">0</div>
+            <div class="kpi-subtext">Дедупликация внутри кабинета</div>
+          </div>
+        </div>
+
+        <div class="kpi-grid kpi-quality-grid">
           <div id="kpiCoverageCard" class="kpi-card kpi-coverage-card">
             <div class="kpi-header">
               <span class="kpi-title">Синхронизация <span class="metric-info" title="Доля кабинетов, от которых Meta успешно вернула метрики. Это не оценка настройки пикселя.">?</span></span>
@@ -397,15 +487,30 @@
 
           <!-- Desktop Table View -->
           <div class="table-responsive desktop-view">
-            <table class="data-table">
+            <table class="data-table summary-metrics-table">
               <thead>
+                <tr class="table-group-header">
+                  <th rowspan="2">Кабинет</th>
+                  <th rowspan="2">Данные</th>
+                  <th rowspan="2" class="text-right">Spend</th>
+                  <th colspan="4" class="text-center">Доставка</th>
+                  <th colspan="9" class="text-center">Трафик</th>
+                  <th colspan="6" class="text-center">Воронка</th>
+                </tr>
                 <tr>
-                  <th>Кабинет</th>
-                  <th>Данные</th>
-                  <th class="text-right">Spend</th>
                   <th class="text-right">Показы</th>
-                  <th class="text-right">Клики</th>
-                  <th class="text-right">CTR</th>
+                  <th class="text-right">Охват</th>
+                  <th class="text-right">Частота</th>
+                  <th class="text-right">CPM</th>
+                  <th class="text-right">Все клики</th>
+                  <th class="text-right">Link</th>
+                  <th class="text-right">Unique</th>
+                  <th class="text-right">Outbound</th>
+                  <th class="text-right">LP Views</th>
+                  <th class="text-right">CTR All</th>
+                  <th class="text-right">CTR Link</th>
+                  <th class="text-right">CPC All</th>
+                  <th class="text-right">CPC Link</th>
                   <th class="text-right">Лиды</th>
                   <th class="text-right">Реги</th>
                   <th class="text-right">Покупки</th>
@@ -1083,6 +1188,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.4.0"></script>
+  <script src="/static/js/app.js?v=9.5.0"></script>
 </body>
 </html>

@@ -17,6 +17,11 @@ ACCOUNT_STATUS_MAP = {
     101: "⚪ Кабинет закрыт (CLOSED)"
 }
 
+ACCOUNT_SUMMARY_FIELDS = (
+    "spend,impressions,reach,frequency,cpm,clicks,unique_clicks,"
+    "inline_link_clicks,outbound_clicks,actions"
+)
+
 class MetaClient:
     """
     Асинхронный клиент для работы с Meta Marketing API (Graph API v20.0)
@@ -46,13 +51,31 @@ class MetaClient:
             return 0.0
 
     @classmethod
+    def _action_values(cls, rows: Any) -> Dict[str, int]:
+        values: Dict[str, int] = {}
+        for row in rows or []:
+            if not isinstance(row, dict):
+                continue
+            action_type = str(row.get("action_type", ""))
+            if action_type:
+                values[action_type] = cls._safe_int(row.get("value", 0))
+        return values
+
+    @classmethod
+    def _first_action_value(cls, rows: Any, *aliases: str) -> int:
+        values = cls._action_values(rows)
+        for alias in aliases:
+            if alias in values:
+                return values[alias]
+        if len(values) == 1:
+            return next(iter(values.values()))
+        return 0
+
+    @classmethod
     def _conversion_counts(cls, insight: Dict[str, Any]) -> Dict[str, int]:
         """Extract independent funnel actions without summing synonymous rows."""
 
-        actions: Dict[str, int] = {}
-        for action in insight.get("actions", []) or []:
-            action_type = str(action.get("action_type", ""))
-            actions[action_type] = cls._safe_int(action.get("value", 0))
+        actions = cls._action_values(insight.get("actions"))
 
         def first_value(*aliases: str) -> int:
             for alias in aliases:
@@ -81,10 +104,34 @@ class MetaClient:
     @classmethod
     def _normalize_basic_insight(cls, insight: Dict[str, Any]) -> Dict[str, Any]:
         counts = cls._conversion_counts(insight)
+        spend = cls._safe_float(insight.get("spend", 0.0))
+        impressions = cls._safe_int(insight.get("impressions", 0))
+        reach = cls._safe_int(insight.get("reach", 0))
+        frequency = cls._safe_float(insight.get("frequency", 0.0))
+        cpm = cls._safe_float(insight.get("cpm", 0.0))
+        if frequency <= 0 and reach > 0:
+            frequency = impressions / reach
+        if cpm <= 0 and impressions > 0:
+            cpm = spend / impressions * 1000
+
         return {
-            "spend": cls._safe_float(insight.get("spend", 0.0)),
-            "impressions": cls._safe_int(insight.get("impressions", 0)),
+            "spend": spend,
+            "impressions": impressions,
+            "reach": reach,
+            "frequency": frequency,
+            "cpm": cpm,
             "clicks": cls._safe_int(insight.get("clicks", 0)),
+            "unique_clicks": cls._safe_int(insight.get("unique_clicks", 0)),
+            "link_clicks": cls._safe_int(insight.get("inline_link_clicks", 0)),
+            "outbound_clicks": cls._first_action_value(
+                insight.get("outbound_clicks"),
+                "outbound_click",
+            ),
+            "landing_page_views": cls._first_action_value(
+                insight.get("actions"),
+                "landing_page_view",
+                "offsite_conversion.fb_pixel_landing_page_view",
+            ),
             **counts,
         }
 
@@ -299,7 +346,7 @@ class MetaClient:
             insights_url,
             {
                 "level": "account",
-                "fields": "spend,impressions,clicks,actions",
+                "fields": ACCOUNT_SUMMARY_FIELDS,
                 "date_preset": date_preset,
                 "limit": 100,
                 "access_token": access_token,

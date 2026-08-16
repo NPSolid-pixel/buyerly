@@ -1080,10 +1080,14 @@ input:checked + .slider:before {
     grid-template-columns: repeat(4, 1fr);
   }
   .kpi-secondary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi-delivery-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .kpi-traffic-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kpi-quality-grid { grid-template-columns: minmax(260px, 1fr); }
 }
 
 @media (min-width: 1280px) {
   .kpi-primary-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .kpi-traffic-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 
 .kpi-card {
@@ -1139,6 +1143,36 @@ input:checked + .slider:before {
 
 .kpi-comparison.has-previous {
   color: var(--tg-text);
+}
+
+.metric-category-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 8px;
+}
+
+.metric-category-header span {
+  display: block;
+  color: var(--tg-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.metric-category-header p {
+  margin: 2px 0 0;
+  color: var(--tg-hint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.kpi-analytics-grid .kpi-card {
+  min-width: 0;
+}
+
+.kpi-quality-grid {
+  margin-top: 2px;
 }
 
 .summary-page-header {
@@ -1345,7 +1379,21 @@ input:checked + .slider:before {
 
 @media (min-width: 768px) {
   .kpi-card { min-height: 100px; }
-  .summary-breakdown-card .data-table { min-width: 1220px; }
+  .summary-breakdown-card .data-table { min-width: 2060px; }
+}
+
+.summary-metrics-table .table-group-header th {
+  color: var(--tg-hint);
+  background: var(--tg-sec-bg);
+  border-bottom-color: var(--border-strong);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.summary-metrics-table thead tr:nth-child(2) th {
+  white-space: nowrap;
 }
 
 .rule-migration-warning {
@@ -1374,7 +1422,21 @@ input:checked + .slider:before {
     scroll-snap-type: inline proximity;
     padding-bottom: 4px;
   }
-  .kpi-primary-grid .kpi-card { scroll-snap-align: start; }
+  .kpi-analytics-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(155px, 46vw);
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline proximity;
+    padding-bottom: 4px;
+  }
+  .kpi-primary-grid .kpi-card,
+  .kpi-analytics-grid .kpi-card { scroll-snap-align: start; }
+  .kpi-quality-grid {
+    display: block;
+  }
+  .metric-category-header p { max-width: 88vw; }
   .kpi-title { font-size: 11px; }
   .kpi-subtext { font-size: 10px; }
   .metric-definitions-grid { grid-template-columns: 1fr; }
@@ -1854,6 +1916,15 @@ input:checked + .slider:before {
   background: rgba(0, 0, 0, 0.15);
   padding: 8px;
   border-radius: var(--radius-sm);
+}
+
+.mob-card-section-label {
+  margin: 2px 2px -3px;
+  color: var(--tg-hint);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .stat-box {

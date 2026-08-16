@@ -72,9 +72,9 @@
 
 ### BL-011. Прозрачные метрики доставки и трафика
 
-- [ ] Добавить Impressions, Reach, Frequency и CPM.
-- [ ] Разделить All Clicks, Link Clicks, Unique Clicks, Outbound Clicks и Landing Page Views.
-- [ ] Разделить CTR All, Link CTR, Outbound CTR, CPC All и CPC Link.
+- [x] Добавить Impressions, Reach, Frequency и CPM.
+- [x] Разделить All Clicks, Link Clicks, Unique Clicks, Outbound Clicks и Landing Page Views.
+- [x] Разделить CTR All, Link CTR, Outbound CTR, CPC All и CPC Link.
 - [x] Убрать неоднозначную карточку «Трафик».
 - [x] Для каждой метрики показывать формулу и понятное описание.
 

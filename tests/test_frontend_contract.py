@@ -123,6 +123,35 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertIn(contract, self.script)
 
+    def test_summary_separates_delivery_and_traffic_metrics(self):
+        for contract in (
+            'id="kpiImpressions"',
+            'id="kpiReach"',
+            'id="kpiFrequency"',
+            'id="kpiCpm"',
+            'id="kpiLinkClicks"',
+            'id="kpiOutboundClicks"',
+            'id="kpiLandingPageViews"',
+            'id="kpiUniqueClicks"',
+            'class="data-table summary-metrics-table"',
+            'CTR All',
+            'CTR Link',
+        ):
+            self.assertIn(contract, self.index)
+
+        for contract in (
+            'data.total_reach',
+            'data.avg_frequency',
+            'data.avg_cpm',
+            'data.total_link_clicks',
+            'data.total_outbound_clicks',
+            'data.total_landing_page_views',
+        ):
+            self.assertIn(contract, self.script)
+
+        self.assertIn('.metric-category-header', self.styles)
+        self.assertIn('.summary-metrics-table', self.styles)
+
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (
             'value="cpl"',

@@ -567,6 +567,11 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 "spend": 30.0,
                 "clicks": 50,
                 "impressions": 1000,
+                "reach": 600,
+                "unique_clicks": 40,
+                "link_clicks": 30,
+                "outbound_clicks": 25,
+                "landing_page_views": 20,
                 "leads": 2,
                 "registrations": 1,
                 "purchases": 1,
@@ -598,6 +603,17 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["avg_ctr"], 5.0)
         self.assertEqual(data["avg_cpc"], 0.6)
         self.assertEqual(data["total_impressions"], 2000)
+        self.assertEqual(data["total_reach"], 1200)
+        self.assertEqual(data["avg_frequency"], 1.67)
+        self.assertEqual(data["avg_cpm"], 30.0)
+        self.assertEqual(data["total_unique_clicks"], 80)
+        self.assertEqual(data["total_link_clicks"], 60)
+        self.assertEqual(data["total_outbound_clicks"], 50)
+        self.assertEqual(data["total_landing_page_views"], 40)
+        self.assertEqual(data["avg_ctr_link"], 3.0)
+        self.assertEqual(data["avg_ctr_outbound"], 2.5)
+        self.assertEqual(data["avg_cpc_link"], 1.0)
+        self.assertEqual(data["cost_per_landing_page_view"], 1.5)
         self.assertIn("Не складываются", data["metric_definitions"]["leads"])
         self.assertIn("Считаются отдельно", data["metric_definitions"]["registrations"])
         self.assertIn("Считаются отдельно", data["metric_definitions"]["purchases"])

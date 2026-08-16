@@ -1441,7 +1441,7 @@
           renderSummaryProvenance(existingData, { refreshError: err.message });
         }
       } else if (state.currentPeriod === period) {
-        tableBody.innerHTML = `<tr><td colspan="12" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="22" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
         mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
         if (statusLabel) statusLabel.textContent = `Не удалось загрузить данные: ${err.message}`;
       }
@@ -1473,6 +1473,16 @@
 
   function formatNumber(value) {
     return Number(value || 0).toLocaleString('ru-RU');
+  }
+
+  function formatOptionalNumber(value) {
+    return value === null || value === undefined ? '—' : formatNumber(value);
+  }
+
+  function formatDecimalOrDash(value, digits = 2, suffix = '') {
+    return typeof value === 'number' && Number.isFinite(value)
+      ? `${value.toFixed(digits)}${suffix}`
+      : '—';
   }
 
   function formatSummaryTime(value) {
@@ -1541,10 +1551,15 @@
     const container = document.getElementById('summaryDefinitionsList');
     if (!container) return;
     const labels = {
-      spend: 'Spend', leads: 'Лиды', cost_per_lead: 'CPL',
+      spend: 'Spend', impressions: 'Показы', reach: 'Охват',
+      frequency: 'Частота', cpm: 'CPM', leads: 'Лиды', cost_per_lead: 'CPL',
       registrations: 'Регистрации', cost_per_registration: 'CPReg',
       purchases: 'Покупки', cost_per_purchase: 'CPP', clicks: 'Все клики',
-      ctr: 'CTR всех кликов', cpc: 'CPC всех кликов'
+      unique_clicks: 'Unique Clicks', link_clicks: 'Link Clicks',
+      outbound_clicks: 'Outbound Clicks', landing_page_views: 'LP Views',
+      ctr: 'CTR All', link_ctr: 'CTR Link', outbound_ctr: 'CTR Outbound',
+      cpc: 'CPC All', cpc_link: 'CPC Link',
+      cost_per_landing_page_view: 'Цена LP View'
     };
     container.innerHTML = Object.entries(definitions).map(([key, definition]) => `
       <div class="metric-definition-item">
@@ -1590,9 +1605,21 @@
     document.getElementById('kpiCpreg').textContent = formatMoneyOrDash(data.cost_per_registration);
     document.getElementById('kpiPurchases').textContent = formatNumber(data.total_purchases);
     document.getElementById('kpiCpp').textContent = formatMoneyOrDash(data.cost_per_purchase);
+    document.getElementById('kpiImpressions').textContent = formatOptionalNumber(data.total_impressions);
+    document.getElementById('kpiReach').textContent = formatOptionalNumber(data.total_reach);
+    document.getElementById('kpiFrequency').textContent = formatDecimalOrDash(data.avg_frequency);
+    document.getElementById('kpiCpm').textContent = formatMoneyOrDash(data.avg_cpm);
     document.getElementById('kpiClicks').textContent = formatNumber(data.total_clicks);
     document.getElementById('kpiCtr').textContent = data.total_impressions > 0 ? `${Number(data.avg_ctr || 0).toFixed(2)}%` : '—';
     document.getElementById('kpiCpc').textContent = data.total_clicks > 0 ? formatMoneyOrDash(Number(data.avg_cpc || 0)) : '—';
+    document.getElementById('kpiLinkClicks').textContent = formatOptionalNumber(data.total_link_clicks);
+    document.getElementById('kpiLinkCtr').textContent = formatDecimalOrDash(data.avg_ctr_link, 2, '%');
+    document.getElementById('kpiCpcLink').textContent = formatMoneyOrDash(data.avg_cpc_link);
+    document.getElementById('kpiOutboundClicks').textContent = formatOptionalNumber(data.total_outbound_clicks);
+    document.getElementById('kpiOutboundCtr').textContent = formatDecimalOrDash(data.avg_ctr_outbound, 2, '%');
+    document.getElementById('kpiLandingPageViews').textContent = formatOptionalNumber(data.total_landing_page_views);
+    document.getElementById('kpiCostPerLandingPageView').textContent = formatMoneyOrDash(data.cost_per_landing_page_view);
+    document.getElementById('kpiUniqueClicks').textContent = formatOptionalNumber(data.total_unique_clicks);
     renderSpendComparison(data);
     renderSummaryProvenance(data);
     renderSummaryQuality(data.data_quality || {});
@@ -1601,7 +1628,7 @@
     // Desktop Table
     const tableBody = document.getElementById('summaryTableBody');
     if (!data.accounts || data.accounts.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="12" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="22" class="text-center" style="color: var(--tg-hint);">Нет подключенных кабинетов</td></tr>`;
     } else {
       tableBody.innerHTML = data.accounts.map(acc => {
         const hasMetrics = acc.data_status === 'synced' || (!acc.data_status && !acc.is_banned && !acc.has_error);
@@ -1614,8 +1641,18 @@
             <td>${summaryDataStatus(acc)}</td>
             <td class="text-right mono"><b>${spendStr}</b></td>
             <td class="text-right mono">${hasMetrics ? formatNumber(acc.impressions) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.reach) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatDecimalOrDash(acc.frequency) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cpm) : '—'}</td>
             <td class="text-right mono">${hasMetrics ? formatNumber(acc.clicks) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.link_clicks) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.unique_clicks) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.outbound_clicks) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatOptionalNumber(acc.landing_page_views) : '—'}</td>
             <td class="text-right mono">${hasMetrics ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatDecimalOrDash(acc.ctr_link, 2, '%') : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cpc) : '—'}</td>
+            <td class="text-right mono">${hasMetrics ? formatMoneyOrDash(acc.cpc_link) : '—'}</td>
             <td class="text-right mono" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
             <td class="text-right mono" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
             <td class="text-right mono">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
@@ -1648,6 +1685,45 @@
               </div>
               <span class="mono" style="font-size:16px;font-weight:700;color:var(--tg-link);white-space:nowrap;flex-shrink:0;">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0)) : '—'}</span>
             </div>
+            <span class="mob-card-section-label">Доставка</span>
+            <div class="mob-card-stats">
+              <div class="stat-box">
+                <span class="stat-box-label">Показы</span>
+                <span class="stat-box-val">${hasMetrics ? formatNumber(acc.impressions) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">Охват</span>
+                <span class="stat-box-val">${hasMetrics ? formatOptionalNumber(acc.reach) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">Частота</span>
+                <span class="stat-box-val">${hasMetrics ? formatDecimalOrDash(acc.frequency) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">CPM</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cpm) : '—'}</span>
+              </div>
+            </div>
+            <span class="mob-card-section-label">Трафик</span>
+            <div class="mob-card-stats">
+              <div class="stat-box">
+                <span class="stat-box-label">Все клики</span>
+                <span class="stat-box-val">${hasMetrics ? formatNumber(acc.clicks) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">Link</span>
+                <span class="stat-box-val">${hasMetrics ? formatOptionalNumber(acc.link_clicks) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">Outbound</span>
+                <span class="stat-box-val">${hasMetrics ? formatOptionalNumber(acc.outbound_clicks) : '—'}</span>
+              </div>
+              <div class="stat-box">
+                <span class="stat-box-label">LP Views</span>
+                <span class="stat-box-val">${hasMetrics ? formatOptionalNumber(acc.landing_page_views) : '—'}</span>
+              </div>
+            </div>
+            <span class="mob-card-section-label">Воронка</span>
             <div class="mob-card-stats">
               <div class="stat-box">
                 <span class="stat-box-label">Лиды</span>

@@ -246,7 +246,11 @@ def _summary_snapshot_reference(
         "saved_at": _utc_iso(row.created_at),
         "total_spend": payload.get("total_spend", 0.0),
         "total_impressions": payload.get("total_impressions", 0),
+        "total_reach": payload.get("total_reach", 0),
         "total_clicks": payload.get("total_clicks", 0),
+        "total_link_clicks": payload.get("total_link_clicks", 0),
+        "total_outbound_clicks": payload.get("total_outbound_clicks", 0),
+        "total_landing_page_views": payload.get("total_landing_page_views", 0),
         "total_leads": payload.get("total_leads", 0),
         "total_regs": payload.get("total_regs", 0),
         "total_purchases": payload.get("total_purchases", 0),
@@ -1220,11 +1224,22 @@ async def get_summary_report(
                 "total_spend": 0.0,
                 "total_clicks": 0,
                 "total_impressions": 0,
+                "total_reach": 0,
+                "total_unique_clicks": 0,
+                "total_link_clicks": 0,
+                "total_outbound_clicks": 0,
+                "total_landing_page_views": 0,
+                "avg_frequency": None,
+                "avg_cpm": None,
                 "total_leads": 0,
                 "total_regs": 0,
                 "total_purchases": 0,
                 "avg_cpc": 0.0,
                 "avg_ctr": 0.0,
+                "avg_cpc_link": None,
+                "avg_ctr_link": None,
+                "avg_ctr_outbound": None,
+                "cost_per_landing_page_view": None,
                 "cost_per_lead": None,
                 "cost_per_registration": None,
                 "cost_per_purchase": None,
@@ -1257,6 +1272,11 @@ async def get_summary_report(
         total_spend = 0.0
         total_clicks = 0
         total_impressions = 0
+        total_reach = 0
+        total_unique_clicks = 0
+        total_link_clicks = 0
+        total_outbound_clicks = 0
+        total_landing_page_views = 0
         total_leads = 0
         total_regs = 0
         total_purchases = 0
@@ -1277,15 +1297,41 @@ async def get_summary_report(
                 acc_spend = account_insights.get("spend", 0.0)
                 acc_clicks = account_insights.get("clicks", 0)
                 acc_impressions = account_insights.get("impressions", 0)
+                acc_reach = account_insights.get("reach", 0)
+                acc_unique_clicks = account_insights.get("unique_clicks", 0)
+                acc_link_clicks = account_insights.get("link_clicks", 0)
+                acc_outbound_clicks = account_insights.get("outbound_clicks", 0)
+                acc_landing_page_views = account_insights.get("landing_page_views", 0)
                 acc_leads = account_insights.get("leads", 0)
                 acc_regs = account_insights.get("registrations", 0)
                 acc_purchases = account_insights.get("purchases", 0)
                 acc_cpc = (acc_spend / acc_clicks) if acc_clicks > 0 else 0.0
                 acc_ctr = ((acc_clicks / acc_impressions) * 100) if acc_impressions > 0 else 0.0
+                acc_frequency = (
+                    account_insights.get("frequency")
+                    or ((acc_impressions / acc_reach) if acc_reach > 0 else 0.0)
+                )
+                acc_cpm = (
+                    account_insights.get("cpm")
+                    or ((acc_spend / acc_impressions) * 1000 if acc_impressions > 0 else 0.0)
+                )
+                acc_ctr_link = (
+                    (acc_link_clicks / acc_impressions) * 100
+                    if acc_impressions > 0 else 0.0
+                )
+                acc_ctr_outbound = (
+                    (acc_outbound_clicks / acc_impressions) * 100
+                    if acc_impressions > 0 else 0.0
+                )
 
                 total_spend += acc_spend
                 total_clicks += acc_clicks
                 total_impressions += acc_impressions
+                total_reach += acc_reach
+                total_unique_clicks += acc_unique_clicks
+                total_link_clicks += acc_link_clicks
+                total_outbound_clicks += acc_outbound_clicks
+                total_landing_page_views += acc_landing_page_views
                 total_leads += acc_leads
                 total_regs += acc_regs
                 total_purchases += acc_purchases
@@ -1302,6 +1348,13 @@ async def get_summary_report(
                     "spend": round(acc_spend, 2),
                     "clicks": acc_clicks,
                     "impressions": acc_impressions,
+                    "reach": acc_reach,
+                    "frequency": round(acc_frequency, 2),
+                    "cpm": round(acc_cpm, 2),
+                    "unique_clicks": acc_unique_clicks,
+                    "link_clicks": acc_link_clicks,
+                    "outbound_clicks": acc_outbound_clicks,
+                    "landing_page_views": acc_landing_page_views,
                     "leads": acc_leads,
                     "registrations": acc_regs,
                     "purchases": acc_purchases,
@@ -1310,6 +1363,13 @@ async def get_summary_report(
                     "cost_per_purchase": _cost_or_none(acc_spend, acc_purchases),
                     "cpc": round(acc_cpc, 2),
                     "ctr": round(acc_ctr, 2),
+                    "cpc_link": _cost_or_none(acc_spend, acc_link_clicks),
+                    "ctr_link": round(acc_ctr_link, 2),
+                    "ctr_outbound": round(acc_ctr_outbound, 2),
+                    "cost_per_landing_page_view": _cost_or_none(
+                        acc_spend,
+                        acc_landing_page_views,
+                    ),
                     "adsets": [],
                     "has_error": False,
                     "is_banned": not acc.is_active or acc.account_status in [2, 101],
@@ -1334,6 +1394,13 @@ async def get_summary_report(
                     "spend": 0.0,
                     "clicks": 0,
                     "impressions": 0,
+                    "reach": 0,
+                    "frequency": None,
+                    "cpm": None,
+                    "unique_clicks": 0,
+                    "link_clicks": 0,
+                    "outbound_clicks": 0,
+                    "landing_page_views": 0,
                     "leads": 0,
                     "registrations": 0,
                     "purchases": 0,
@@ -1342,6 +1409,10 @@ async def get_summary_report(
                     "cost_per_purchase": None,
                     "cpc": 0.0,
                     "ctr": 0.0,
+                    "cpc_link": None,
+                    "ctr_link": None,
+                    "ctr_outbound": None,
+                    "cost_per_landing_page_view": None,
                     "adsets": [],
                     "has_error": not is_blocked,
                     "is_banned": is_blocked,
@@ -1355,6 +1426,17 @@ async def get_summary_report(
 
         avg_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0.0
         avg_ctr = ((total_clicks / total_impressions) * 100) if total_impressions > 0 else 0.0
+        avg_frequency = (total_impressions / total_reach) if total_reach > 0 else None
+        avg_cpm = ((total_spend / total_impressions) * 1000) if total_impressions > 0 else None
+        avg_cpc_link = _cost_or_none(total_spend, total_link_clicks)
+        avg_ctr_link = (
+            (total_link_clicks / total_impressions) * 100
+            if total_impressions > 0 else None
+        )
+        avg_ctr_outbound = (
+            (total_outbound_clicks / total_impressions) * 100
+            if total_impressions > 0 else None
+        )
         metrics_coverage = round((accounts_synced / len(accounts)) * 100, 1) if accounts else 0.0
         quality_status = "complete" if accounts_synced == len(accounts) else ("partial" if accounts_synced else "unavailable")
 
@@ -1374,11 +1456,25 @@ async def get_summary_report(
             "total_spend": round(total_spend, 2),
             "total_clicks": total_clicks,
             "total_impressions": total_impressions,
+            "total_reach": total_reach,
+            "total_unique_clicks": total_unique_clicks,
+            "total_link_clicks": total_link_clicks,
+            "total_outbound_clicks": total_outbound_clicks,
+            "total_landing_page_views": total_landing_page_views,
+            "avg_frequency": round(avg_frequency, 2) if avg_frequency is not None else None,
+            "avg_cpm": round(avg_cpm, 2) if avg_cpm is not None else None,
             "total_leads": total_leads,
             "total_regs": total_regs,
             "total_purchases": total_purchases,
             "avg_cpc": round(avg_cpc, 2),
             "avg_ctr": round(avg_ctr, 2),
+            "avg_cpc_link": avg_cpc_link,
+            "avg_ctr_link": round(avg_ctr_link, 2) if avg_ctr_link is not None else None,
+            "avg_ctr_outbound": round(avg_ctr_outbound, 2) if avg_ctr_outbound is not None else None,
+            "cost_per_landing_page_view": _cost_or_none(
+                total_spend,
+                total_landing_page_views,
+            ),
             "cost_per_lead": _cost_or_none(total_spend, total_leads),
             "cost_per_registration": _cost_or_none(total_spend, total_regs),
             "cost_per_purchase": _cost_or_none(total_spend, total_purchases),

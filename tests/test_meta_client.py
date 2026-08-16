@@ -22,7 +22,15 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
                         {
                             "spend": "742.35",
                             "impressions": "12000",
+                            "reach": "8000",
+                            "frequency": "1.5",
+                            "cpm": "61.8625",
                             "clicks": "410",
+                            "unique_clicks": "360",
+                            "inline_link_clicks": "280",
+                            "outbound_clicks": [
+                                {"action_type": "outbound_click", "value": "250"},
+                            ],
                             "actions": [
                                 {"action_type": "lead", "value": "52"},
                                 {
@@ -31,6 +39,7 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
                                 },
                                 {"action_type": "complete_registration", "value": "18"},
                                 {"action_type": "purchase", "value": "4"},
+                                {"action_type": "landing_page_view", "value": "230"},
                             ],
                         }
                     ]
@@ -48,12 +57,45 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["leads"], 52)
         self.assertEqual(result["registrations"], 18)
         self.assertEqual(result["purchases"], 4)
+        self.assertEqual(result["reach"], 8000)
+        self.assertEqual(result["frequency"], 1.5)
+        self.assertEqual(result["cpm"], 61.8625)
+        self.assertEqual(result["clicks"], 410)
+        self.assertEqual(result["unique_clicks"], 360)
+        self.assertEqual(result["link_clicks"], 280)
+        self.assertEqual(result["outbound_clicks"], 250)
+        self.assertEqual(result["landing_page_views"], 230)
 
         call = client._request_with_retry.await_args
         self.assertTrue(call.args[1].endswith("/act_123/insights"))
         self.assertEqual(call.kwargs["params"]["level"], "account")
         self.assertNotIn("filtering", call.kwargs["params"])
         self.assertNotIn("effective_status", call.kwargs["params"])
+        for field in (
+            "reach",
+            "frequency",
+            "cpm",
+            "unique_clicks",
+            "inline_link_clicks",
+            "outbound_clicks",
+        ):
+            self.assertIn(field, call.kwargs["params"]["fields"])
+
+    async def test_delivery_metrics_are_derived_when_meta_omits_ratios(self):
+        normalized = MetaClient._normalize_basic_insight(
+            {
+                "spend": "25",
+                "impressions": "5000",
+                "reach": "2500",
+                "clicks": "0",
+                "actions": [],
+            }
+        )
+
+        self.assertEqual(normalized["frequency"], 2.0)
+        self.assertEqual(normalized["cpm"], 5.0)
+        self.assertEqual(normalized["link_clicks"], 0)
+        self.assertEqual(normalized["landing_page_views"], 0)
 
     async def test_cursor_pagination_collects_every_page_without_following_next_url(self):
         client = MetaClient()
