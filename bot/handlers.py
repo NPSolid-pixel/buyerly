@@ -412,10 +412,10 @@ async def cb_report_period(callback: CallbackQuery):
         no_spend_list = []
 
         for acc in accounts:
+            if not acc.is_active or acc.account_status in [2, 101]:
+                continue
             tz_name = acc.timezone_name or tz_name
             short_name = get_short_account_label(acc.name, acc.account_id)
-            is_banned = (acc.account_status in [2, 101] or not acc.is_active)
-            disp_name = f"{short_name} 🔴" if is_banned else short_name
             try:
                 adsets = await meta_client.get_adsets_insights(
                     account_id=acc.account_id,
@@ -436,7 +436,7 @@ async def cb_report_period(callback: CallbackQuery):
                 total_purchases += acc_purchases
 
                 table_rows.append({
-                    "name": disp_name,
+                    "name": short_name,
                     "spend": acc_spend,
                     "clicks": acc_clicks,
                     "leads": acc_leads,
@@ -447,7 +447,7 @@ async def cb_report_period(callback: CallbackQuery):
             except Exception as e:
                 logger.error(f"Error fetching report for {acc.account_id}: {e}")
                 table_rows.append({
-                    "name": f"{short_name} 🔴",
+                    "name": short_name,
                     "spend": 0.0,
                     "clicks": 0,
                     "leads": 0,
@@ -456,21 +456,21 @@ async def cb_report_period(callback: CallbackQuery):
                 })
 
         # Формируем аккуратную таблицу в блоке <pre>
-        header = f"{'Кабинет':<9}{'Спенд':>8}{'Клики':>6}{'Лиды':>5}{'Реги':>5}{'Пок':>4}"
+        header = f"{'Кабинет':<10}{'Спенд':>9}{'Клики':>6}{'Лиды':>5}{'Реги':>5}{'Пок':>4}"
         lines = [header]
         for r in table_rows:
             spend_str = f"${r['spend']:.2f}"
-            lines.append(f"{r['name']:<9}{spend_str:>8}{r['clicks']:>6}{r['leads']:>5}{r['regs']:>5}{r['purchases']:>4}")
+            lines.append(f"{r['name']:<10}{spend_str:>9}{r['clicks']:>6}{r['leads']:>5}{r['regs']:>5}{r['purchases']:>4}")
 
-        table_block = "<pre>" + "\n".join(lines) + "</pre>"
+        table_block = "<pre>\n" + "\n".join(lines) + "\n</pre>"
 
-        report_lines = [
-            f"📊 <b>Отчёт за {period_title}</b>\n",
-            f"💵 <code>${total_spend:.2f}</code>  ·  👆 <b>{total_clicks}</b>  ·  🎯 <b>{total_leads}</b>  ·  📝 <b>{total_regs}</b>  ·  💳 <b>{total_purchases}</b>\n",
-            table_block
-        ]
+        report_text = (
+            f"📊 <b>Отчёт за {period_title}</b>\n\n"
+            f"💵 <code>${total_spend:.2f}</code>\n\n"
+            f"👆 <b>{total_clicks}</b>  ·  🎯 <b>{total_leads}</b>  ·  📝 <b>{total_regs}</b>  ·  💳 <b>{total_purchases}</b>\n\n"
+            f"{table_block}"
+        )
 
-        report_text = "\n".join(report_lines)
         await callback.message.edit_text(report_text, reply_markup=get_period_keyboard(), parse_mode="HTML")
 
 
