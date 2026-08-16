@@ -1042,26 +1042,26 @@ input:checked + .slider:before {
 
 .preset-buttons {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-}
-
-@media (min-width: 500px) {
-  .preset-buttons {
-    grid-template-columns: repeat(3, 1fr);
-  }
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 100%;
 }
 
 .btn-preset {
-  padding: 10px;
+  padding: 8px 6px;
   background: var(--tg-sec-bg);
   border: 1px solid var(--border-subtle);
   color: var(--tg-hint);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
   transition: all var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-preset.active {
@@ -1073,14 +1073,23 @@ input:checked + .slider:before {
 
 .form-check {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.form-check .switch {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .check-label {
   font-size: 12px;
   color: var(--tg-text);
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
 /* ==========================================================
@@ -1185,7 +1194,7 @@ input:checked + .slider:before {
 .setting-item.column {
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
 }
 
 .setting-info {
@@ -1205,12 +1214,14 @@ input:checked + .slider:before {
 }
 
 .interval-selector {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
+  width: 100%;
 }
 
 .btn-interval {
-  padding: 6px 12px;
+  padding: 8px 4px;
   background: var(--tg-sec-bg);
   border: 1px solid var(--border-subtle);
   color: var(--tg-hint);
@@ -1218,8 +1229,17 @@ input:checked + .slider:before {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  text-align: center;
   transition: all var(--transition-fast);
 }
+
+.btn-interval.active {
+  background: var(--tg-btn);
+  color: var(--tg-btn-text);
+  border-color: var(--tg-btn);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
 
 .btn-interval.active {
   background: var(--tg-btn);

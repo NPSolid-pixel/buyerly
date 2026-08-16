@@ -375,7 +375,7 @@
   // ==========================================================
   // TAB 2: SUMMARY (СВОДКА И АНАЛИТИКА)
   // ==========================================================
-  async function loadSummary(period = 'today') {
+  async function loadSummary(period = 'today', force = false) {
     state.currentPeriod = period;
     const tableBody = document.getElementById('summaryTableBody');
     const mobileCards = document.getElementById('summaryMobileCards');
@@ -394,7 +394,7 @@
     document.getElementById('kpiPeriodLabel').textContent = periodLabels[period] || '';
 
     try {
-      const data = await apiRequest(`/api/summary?period=${period}`);
+      const data = await apiRequest(`/api/summary?period=${period}${force ? '&force=true' : ''}`);
       state.summary = data;
       renderSummaryData(data);
       loadStoppedAdsets();
@@ -428,10 +428,11 @@
         const statusLabel = isBanned ? '🔴 Блок' : '🟢 Ок';
         const spendStr = `$${acc.spend.toFixed(2)}`;
         const cpaStr = acc.total_conversions > 0 ? `$${acc.cpa.toFixed(2)}` : '—';
+        const displayName = acc.short_name || acc.name;
         
         return `
           <tr>
-            <td><b>${escapeHtml(acc.name)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
+            <td><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
             <td>${statusLabel}</td>
             <td class="text-right mono"><b>${spendStr}</b></td>
             <td class="text-right mono">${acc.clicks}</td>
@@ -450,11 +451,16 @@
       mobileCards.innerHTML = `<div class="empty-state"><p>Нет данных для отображения</p></div>`;
     } else {
       mobileCards.innerHTML = data.accounts.map(acc => {
+        const displayName = acc.short_name || acc.name;
+        const subLabel = acc.name !== displayName ? `${escapeHtml(acc.name)} · ${acc.account_id}` : acc.account_id;
         return `
           <div class="mob-summary-card">
             <div class="mob-card-head">
-              <b>${escapeHtml(acc.name)}</b>
-              <span class="mono" style="font-size: 15px; font-weight:700; color: #38bdf8;">$${acc.spend.toFixed(2)}</span>
+              <div style="display:flex; flex-direction:column; overflow:hidden; padding-right:8px; flex:1;">
+                <b class="mob-card-name" style="font-size:14px; font-weight:600; color:var(--tg-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(displayName)}</b>
+                <span class="mono text-hint" style="font-size:11px; color:var(--tg-hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subLabel}</span>
+              </div>
+              <span class="mono" style="font-size: 16px; font-weight:700; color: #38bdf8; white-space:nowrap; flex-shrink:0;">$${acc.spend.toFixed(2)}</span>
             </div>
             <div class="mob-card-stats">
               <div class="stat-box">
@@ -479,6 +485,7 @@
       }).join('');
     }
   }
+
 
   // Load Stopped Adsets for Reactivation
   async function loadStoppedAdsets() {
@@ -788,25 +795,40 @@
     });
   });
 
-  // Sync Button
+  // Sync Button with 30-sec Cooldown & In-Flight Protection
+  let isSyncing = false;
+  let syncCooldownUntil = 0;
+
   document.getElementById('btnSync')?.addEventListener('click', async () => {
+    const now = Date.now();
+    if (isSyncing) return;
+    if (now < syncCooldownUntil) {
+      const remainingSec = Math.ceil((syncCooldownUntil - now) / 1000);
+      showToast(`Пожалуйста, подождите ${remainingSec} сек перед повторным запросом к Meta`, 'info');
+      return;
+    }
+
     const btn = document.getElementById('btnSync');
     btn.classList.add('syncing');
     haptic('impact', 'medium');
+    isSyncing = true;
 
     try {
       if (state.activeTab === 'accounts') {
         await loadAccounts();
       } else if (state.activeTab === 'summary') {
-        await loadSummary(state.currentPeriod);
+        await loadSummary(state.currentPeriod, true); // force refresh
       }
       showToast('Данные успешно обновлены', 'success');
+      syncCooldownUntil = Date.now() + 30000; // 30s cooldown
     } catch (e) {
       showToast('Ошибка синхронизации', 'error');
     } finally {
+      isSyncing = false;
       setTimeout(() => btn.classList.remove('syncing'), 600);
     }
   });
+
 
   // Navigation Click Handlers
   document.querySelectorAll('.nav-tab, .mobile-nav-item').forEach(btn => {

@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, Field
@@ -8,13 +9,18 @@ from core.config import settings
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, AppSettings, TelegramUser, EventLog
 from meta_api.client import MetaClient
-from bot.handlers import parse_fb_raw_accounts, scheduler_ref
+from bot.handlers import parse_fb_raw_accounts, scheduler_ref, get_short_account_label
 from api.auth import get_current_user
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 meta_client = MetaClient()
+
+
+# In-memory summary cache: key -> (timestamp, data)
+_summary_cache: Dict[str, Any] = {}
+SUMMARY_CACHE_TTL = 120  # 2 minutes cache
 
 
 # ----------------------------------------------------
@@ -301,13 +307,22 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
 @router.get("/summary")
 async def get_summary_report(
     period: str = Query("today", pattern="^(today|yesterday|last_3d|last_7d)$"),
+    force: bool = Query(False),
     user: TelegramUser = Depends(get_current_user)
 ):
+    cache_key = f"{user.telegram_id}:{period}"
+    now_ts = time.time()
+
+    # Return cached data if valid and force is False
+    if not force and cache_key in _summary_cache:
+        cached_ts, cached_data = _summary_cache[cache_key]
+        if now_ts - cached_ts < SUMMARY_CACHE_TTL:
+            return cached_data
 
     async with async_session_maker() as session:
         accounts = await get_user_accounts(session, user)
         if not accounts:
-            return {
+            empty_res = {
                 "period": period,
                 "total_spend": 0.0,
                 "total_clicks": 0,
@@ -321,6 +336,8 @@ async def get_summary_report(
                 "accounts_count": 0,
                 "accounts": []
             }
+            _summary_cache[cache_key] = (now_ts, empty_res)
+            return empty_res
 
         total_spend = 0.0
         total_clicks = 0
@@ -332,10 +349,12 @@ async def get_summary_report(
         account_results = []
 
         for acc in accounts:
+            short_name = get_short_account_label(acc.name, acc.account_id)
             if not acc.is_active or acc.account_status in [2, 101]:
                 account_results.append({
                     "account_id": acc.account_id,
                     "name": acc.name,
+                    "short_name": short_name,
                     "timezone_name": acc.timezone_name,
                     "account_status": acc.account_status,
                     "status_label": acc.status_label,
@@ -383,6 +402,7 @@ async def get_summary_report(
                 account_results.append({
                     "account_id": acc.account_id,
                     "name": acc.name,
+                    "short_name": short_name,
                     "timezone_name": acc.timezone_name,
                     "account_status": acc.account_status,
                     "status_label": acc.status_label,
@@ -406,6 +426,7 @@ async def get_summary_report(
                 account_results.append({
                     "account_id": acc.account_id,
                     "name": acc.name,
+                    "short_name": short_name,
                     "timezone_name": acc.timezone_name,
                     "account_status": acc.account_status,
                     "status_label": "⚠️ Ошибка синхронизации",
@@ -430,7 +451,7 @@ async def get_summary_report(
         avg_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0.0
         avg_ctr = ((total_clicks / total_impressions) * 100) if total_impressions > 0 else 0.0
 
-        return {
+        res_data = {
             "period": period,
             "total_spend": round(total_spend, 2),
             "total_clicks": total_clicks,
@@ -444,6 +465,9 @@ async def get_summary_report(
             "accounts_count": len(accounts),
             "accounts": account_results
         }
+        _summary_cache[cache_key] = (now_ts, res_data)
+        return res_data
+
 
 
 @router.get("/settings")
