@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 import uvicorn
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -83,7 +84,8 @@ async def main():
         worker.run_cycle,
         "interval",
         minutes=interval,
-        id="monitoring_job"
+        id="monitoring_job",
+        next_run_time=datetime.now(timezone.utc)
     )
     scheduler.start()
     set_scheduler(scheduler)
