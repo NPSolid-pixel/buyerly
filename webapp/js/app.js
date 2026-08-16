@@ -897,14 +897,24 @@
     try {
       const user = await apiRequest('/api/me');
       state.user = user;
-      document.getElementById('userName').textContent = user.full_name || user.username || 'Медиабайер';
-      document.getElementById('userAvatar').textContent = (user.full_name || user.username || 'B').charAt(0).toUpperCase();
-      
       // Hide unauthorized screen & reveal app UI
       const unauthEl = document.getElementById('unauthorizedScreen');
       const appEl = document.getElementById('app');
-      if (unauthEl) unauthEl.style.display = 'none';
-      if (appEl) appEl.style.display = 'block';
+      if (unauthEl) {
+        unauthEl.style.display = 'none';
+        unauthEl.classList.add('hidden');
+      }
+      if (appEl) {
+        appEl.style.display = 'block';
+        appEl.classList.remove('hidden');
+      }
+
+      if (user) {
+        const uName = document.getElementById('userName');
+        const uAvatar = document.getElementById('userAvatar');
+        if (uName) uName.textContent = user.full_name || user.username || 'Медиабайер';
+        if (uAvatar) uAvatar.textContent = (user.full_name || user.username || 'B').charAt(0).toUpperCase();
+      }
 
       // Load initial tab (Accounts)
       window.switchTab('accounts');
@@ -912,9 +922,13 @@
       console.warn("Unauthorized / access locked:", e);
       const unauthEl = document.getElementById('unauthorizedScreen');
       const appEl = document.getElementById('app');
-      if (appEl) appEl.style.display = 'none';
+      if (appEl) {
+        appEl.style.display = 'none';
+        appEl.classList.add('hidden');
+      }
       if (unauthEl) {
         unauthEl.style.display = 'flex';
+        unauthEl.classList.remove('hidden');
         if (e.message && e.message.includes('одобрения')) {
           unauthEl.innerHTML = '<span>❌ Ваш аккаунт ожидает одобрения администратора (@buyerly_bot)</span>';
         } else {
@@ -923,6 +937,7 @@
       }
     }
   }
+
 
 
 

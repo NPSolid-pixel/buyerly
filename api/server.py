@@ -1,6 +1,6 @@
 import os
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -15,6 +15,16 @@ def create_app() -> FastAPI:
         version="1.0.0",
         description="FastAPI Backend & Telegram Mini App for Buyerly AI Media Buyer"
     )
+
+    # Disable caching for static assets in Telegram WebViews
+    @app.middleware("http")
+    async def add_no_cache_headers(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/") or request.url.path == "/":
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
 
     # CORS support
     app.add_middleware(
@@ -39,9 +49,14 @@ def create_app() -> FastAPI:
         async def serve_index():
             index_path = os.path.join(webapp_dir, "index.html")
             if os.path.exists(index_path):
-                return FileResponse(index_path)
+                return FileResponse(index_path, headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                })
             return {"status": "Buyerly API is running", "webapp": "index.html not found"}
 
     return app
 
 app = create_app()
+
