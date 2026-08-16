@@ -92,12 +92,19 @@ class MonitoringWorker:
 
                     # 4. Собираем данные за нужные time_windows, кроме 'today'
                     windows = set()
-                    if acc.rule_conditions and isinstance(acc.rule_conditions, list):
-                        for cond in acc.rule_conditions:
-                            if isinstance(cond, dict):
-                                w = cond.get("time_window", "today")
-                                if w != "today":
-                                    windows.add(w)
+                    import json
+                    if acc.active_rules:
+                        try:
+                            rules = json.loads(acc.active_rules) if isinstance(acc.active_rules, str) else acc.active_rules
+                            for rule in rules:
+                                conds = rule.get("conditions", [])
+                                for cond in conds:
+                                    if isinstance(cond, dict):
+                                        w = cond.get("time_window", "today")
+                                        if w != "today":
+                                            windows.add(w)
+                        except Exception:
+                            pass
                     
                     insights_by_window = {}
                     for w in windows:
@@ -146,9 +153,6 @@ class MonitoringWorker:
                         # Авто-правила выключены: кабинет только собирает статистику
                         continue
 
-                    should_notify_tg = acc.rule_notify_tg if acc.rule_notify_tg is not None else True
-                    cooldown_mins = acc.rule_cooldown_minutes or 0
-
                     for adset in adsets:
                         a_id = str(adset["adset_id"])
 
@@ -157,6 +161,9 @@ class MonitoringWorker:
                             account=acc,
                             insights_by_window=insights_by_window
                         )
+                        
+                        should_notify_tg = eval_res.notify_tg
+                        cooldown_mins = eval_res.cooldown_minutes
 
                         # Проверка паузы между срабатываниями (cooldown)
                         cooldown_key = f"{acc.account_id}_{a_id}_{eval_res.action}"

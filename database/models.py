@@ -71,17 +71,8 @@ class Account(Base):
     timezone_name = Column(String, default="UTC", nullable=False, doc="Часовой пояс рекламного кабинета")
     last_started_date = Column(String, default="", nullable=False, doc="Дата последнего зафиксированного старта открута")
     
-    # Привязанный пресет и правила
-    preset_id = Column(Integer, nullable=True, doc="ID привязанного пресета")
-    preset_name = Column(String, default="", nullable=False, doc="Название активного пресета")
-    rule_action = Column(String, default="turn_off", nullable=False, doc="turn_off, turn_on, notify_only, increase_budget, decrease_budget")
-    rule_conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
-    rule_condition_logic = Column(String, default="and", nullable=False, doc="'and' или 'or' — логика объединения условий")
-    rule_cooldown_minutes = Column(Integer, default=0, nullable=False, doc="Пауза между срабатываниями (мин)")
-    rule_check_interval = Column(Integer, default=5, nullable=False, doc="Интервал проверки (мин)")
-    rule_notify_tg = Column(Boolean, default=True, nullable=False, doc="Уведомление в Telegram")
-    rule_budget_change_percent = Column(Float, default=0.0, nullable=False, doc="На сколько % изменить бюджет")
-    rule_budget_max_daily = Column(Float, default=0.0, nullable=False, doc="Макс. потолок бюджета ($/день), 0 = без ограничения")
+    # Привязанные правила (JSON)
+    active_rules = Column(Text, default="[]", nullable=False, doc="JSON массив объектов привязанных правил")
     
     # Статус кабинета в Meta
     account_status = Column(Integer, default=1, nullable=False, doc="1: ACTIVE, 2: DISABLED, 3: UNSETTLED")

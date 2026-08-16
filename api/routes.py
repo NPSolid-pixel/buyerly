@@ -107,16 +107,7 @@ class AccountItem(BaseModel):
     status_label: str
     rules_enabled: bool
     is_active: bool
-    preset_id: Optional[int] = None
-    preset_name: Optional[str] = ""
-    rule_action: Optional[str] = "turn_off"
-    rule_conditions: Optional[List[ConditionItem]] = Field(default_factory=list)
-    rule_condition_logic: Optional[str] = "and"
-    rule_cooldown_minutes: Optional[int] = 0
-    rule_check_interval: Optional[int] = 5
-    rule_notify_tg: Optional[bool] = True
-    rule_budget_change_percent: Optional[float] = 0.0
-    rule_budget_max_daily: Optional[float] = 0.0
+    active_rules: List[Dict[str, Any]] = Field(default_factory=list)
     created_at: str
 
 class ParseRawRequest(BaseModel):
@@ -289,21 +280,12 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
             if a.rule_conditions:
                 try:
                     parsed = json.loads(a.rule_conditions) if isinstance(a.rule_conditions, str) else a.rule_conditions
-                    conds = [ConditionItem(**c) for c in parsed if isinstance(c, dict)]
-                except Exception:
-                    conds = []
-
-            # Если пресет был удален или условия пусты, очищаем старое название
-            preset_name = a.preset_name or ""
-            preset_id = a.preset_id
-            if (preset_id and preset_id not in valid_preset_ids) or (not conds and preset_name):
-                preset_name = ""
-                preset_id = None
-                a.preset_id = None
-                a.preset_name = ""
-                needs_commit = True
-
-            res_list.append(AccountItem(
+            try:
+                active_rules_list = json.loads(a.active_rules) if isinstance(a.active_rules, str) else []
+            except Exception:
+                active_rules_list = []
+            
+            items.append(AccountItem(
                 id=a.id,
                 account_id=a.account_id,
                 name=a.name,
@@ -314,21 +296,10 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 status_label=a.status_label or "🟢 Активен (ACTIVE)",
                 rules_enabled=a.rules_enabled,
                 is_active=a.is_active,
-                preset_id=preset_id,
-                preset_name=preset_name,
-                rule_action=a.rule_action or "turn_off",
-                rule_conditions=conds,
-                rule_condition_logic=a.rule_condition_logic or "and",
-                rule_cooldown_minutes=a.rule_cooldown_minutes or 0,
-                rule_check_interval=a.rule_check_interval or 5,
-                rule_notify_tg=a.rule_notify_tg if a.rule_notify_tg is not None else True,
-                rule_budget_change_percent=a.rule_budget_change_percent or 0.0,
-                rule_budget_max_daily=a.rule_budget_max_daily or 0.0,
+                active_rules=active_rules_list,
                 created_at=a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else ""
             ))
-        if needs_commit:
-            await session.commit()
-        return res_list
+        return items
 
 
 
@@ -454,28 +425,31 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
             raise HTTPException(status_code=404, detail="Пресет не найден")
 
         # Сбрасываем привязанные кабинеты
-        acc_stmt = select(Account).where(Account.preset_id == preset_id)
+        acc_stmt = select(Account).where(Account.active_rules.contains(str(preset_id)))
         if user.role != "admin":
             acc_stmt = acc_stmt.where(Account.owner_id == user.telegram_id)
         acc_res = await session.execute(acc_stmt)
         linked_accounts = acc_res.scalars().all()
         for acc in linked_accounts:
-            acc.preset_id = None
-            acc.preset_name = ""
-            acc.rule_conditions = "[]"
-            acc.rule_action = "turn_off"
+            try:
+                active_rules = json.loads(acc.active_rules) if acc.active_rules else []
+                active_rules = [r for r in active_rules if r.get("preset_id") != preset_id]
+                acc.active_rules = json.dumps(active_rules)
+            except:
+                pass
         
         await session.execute(delete(RulePreset).where(RulePreset.id == preset_id))
         await session.commit()
         return {"success": True, "message": "Пресет удален"}
 
 
-@router.post("/accounts/{account_id}/apply-preset")
-async def apply_preset_to_account(
+@router.post("/accounts/{account_id}/assign-rule")
+async def assign_rule_to_account(
     account_id: str,
     payload: ApplyPresetRequest,
     user: TelegramUser = Depends(get_current_user)
 ):
+    """Добавляет правило/пресет к списку правил кабинета."""
     async with async_session_maker() as session:
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
         stmt = select(Account).where(Account.account_id == acc_id)
@@ -490,83 +464,55 @@ async def apply_preset_to_account(
         # If preset_id provided, load preset
         if payload.preset_id:
             p_stmt = select(RulePreset).where(RulePreset.id == payload.preset_id)
-            if user.role != "admin":
-                p_stmt = p_stmt.where(RulePreset.owner_id == user.telegram_id)
             p_res = await session.execute(p_stmt)
             preset = p_res.scalar_one_or_none()
-            if preset:
-                acc.preset_id = preset.id
-                acc.preset_name = preset.name
-                acc.rule_action = preset.action
-                acc.rule_conditions = preset.conditions
-                acc.rule_condition_logic = preset.condition_logic or "and"
-                acc.rule_cooldown_minutes = preset.cooldown_minutes or 0
-                acc.rule_check_interval = preset.check_interval_minutes or 5
-                acc.rule_notify_tg = preset.notify_tg if preset.notify_tg is not None else True
-                acc.rule_budget_change_percent = preset.budget_change_percent or 0.0
-                acc.rule_budget_max_daily = preset.budget_max_daily or 0.0
-        else:
-            # Custom rule conditions from payload
-            conds_json = json.dumps([c.model_dump() for c in payload.conditions])
-            preset_name = payload.name.strip() or "Мое правило"
-            cond_logic = payload.condition_logic or "and"
-            cooldown = payload.cooldown_minutes or 0
-            check_interval = payload.check_interval_minutes or 5
-            notify_tg = payload.notify_tg if payload.notify_tg is not None else True
-            budget_change = payload.budget_change_percent or 0.0
-            budget_max = payload.budget_max_daily or 0.0
-
-            preset = RulePreset(
-                owner_id=user.telegram_id,
-                name=preset_name,
-                action=payload.action or "turn_off",
-                conditions=conds_json,
-                condition_logic=cond_logic,
-                cooldown_minutes=cooldown,
-                check_interval_minutes=check_interval,
-                notify_tg=notify_tg,
-                budget_change_percent=budget_change,
-                budget_max_daily=budget_max
-            )
-            session.add(preset)
-            await session.flush()
+            if not preset:
+                raise HTTPException(status_code=404, detail="Пресет не найден.")
             
-            acc.preset_id = preset.id
-            acc.preset_name = preset.name
-            acc.rule_action = preset.action
-            acc.rule_conditions = conds_json
-            acc.rule_condition_logic = cond_logic
-            acc.rule_cooldown_minutes = cooldown
-            acc.rule_check_interval = check_interval
-            acc.rule_notify_tg = notify_tg
-            acc.rule_budget_change_percent = budget_change
-            acc.rule_budget_max_daily = budget_max
+            new_rule = {
+                "preset_id": preset.id,
+                "name": preset.name,
+                "action": preset.action,
+                "conditions": json.loads(preset.conditions) if isinstance(preset.conditions, str) else preset.conditions,
+                "logic": preset.condition_logic,
+                "cooldown_minutes": preset.cooldown_minutes,
+                "check_interval": preset.check_interval_minutes,
+                "notify_tg": preset.notify_tg,
+                "budget_change_percent": preset.budget_change_percent,
+                "budget_max_daily": preset.budget_max_daily
+            }
+        else:
+            raise HTTPException(status_code=400, detail="Custom rules without preset are no longer supported.")
 
+        try:
+            active_rules = json.loads(acc.active_rules) if acc.active_rules else []
+        except Exception:
+            active_rules = []
+            
+        # Check if preset already attached
+        if any(r.get("preset_id") == new_rule["preset_id"] for r in active_rules):
+            raise HTTPException(status_code=400, detail="Это правило уже привязано к кабинету.")
+            
+        active_rules.append(new_rule)
+        acc.active_rules = json.dumps(active_rules)
         acc.rules_enabled = True
+        
         await session.commit()
         return {
             "account_id": acc.account_id,
-            "preset_id": acc.preset_id,
-            "preset_name": acc.preset_name,
-            "rule_action": acc.rule_action,
-            "rule_condition_logic": acc.rule_condition_logic,
-            "rule_cooldown_minutes": acc.rule_cooldown_minutes,
-            "rule_check_interval": acc.rule_check_interval,
-            "rule_notify_tg": acc.rule_notify_tg,
-            "rule_budget_change_percent": acc.rule_budget_change_percent,
-            "rule_budget_max_daily": acc.rule_budget_max_daily,
-            "rule_conditions": acc.rule_conditions,
+            "active_rules": active_rules,
             "rules_enabled": acc.rules_enabled,
-            "message": f"Правило '{acc.preset_name}' успешно применено к кабинету"
+            "message": f"Правило '{new_rule['name']}' успешно добавлено к кабинету"
         }
 
 
-@router.post("/accounts/{account_id}/detach-rule")
+@router.post("/accounts/{account_id}/detach-rule/{preset_id}")
 async def detach_rule_from_account(
     account_id: str,
+    preset_id: int,
     user: TelegramUser = Depends(get_current_user)
 ):
-    """Сбрасывает привязанное правило/пресет с кабинета (очищает условия)."""
+    """Удаляет конкретное правило из списка кабинета."""
     async with async_session_maker() as session:
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
         stmt = select(Account).where(Account.account_id == acc_id)
@@ -578,18 +524,23 @@ async def detach_rule_from_account(
         if not acc:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
 
-        acc.preset_id = None
-        acc.preset_name = ""
-        acc.rule_conditions = "[]"
-        acc.rule_action = "turn_off"
-        acc.rules_enabled = False
-        await session.commit()
-        return {
-            "account_id": acc.account_id,
-            "rules_enabled": False,
-            "message": "Правило успешно сброшено с кабинета"
-        }
+        try:
+            active_rules = json.loads(acc.active_rules) if acc.active_rules else []
+        except Exception:
+            active_rules = []
+            
+        initial_len = len(active_rules)
+        active_rules = [r for r in active_rules if r.get("preset_id") != preset_id]
+        
+        if len(active_rules) == initial_len:
+            raise HTTPException(status_code=404, detail="Правило не найдено в этом кабинете.")
 
+        acc.active_rules = json.dumps(active_rules)
+        if len(active_rules) == 0:
+            acc.rules_enabled = False
+            
+        await session.commit()
+        return {"status": "ok", "message": "Правило успешно отвязано от кабинета.", "active_rules": active_rules, "rules_enabled": acc.rules_enabled}
 
 
 @router.post("/accounts/{account_id}/toggle-rules")

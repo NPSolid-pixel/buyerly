@@ -352,7 +352,7 @@
     const totalPresets = state.presets.length;
     let linkedAccountsCount = 0;
     state.accounts.forEach(a => {
-      if (a.rules_enabled && (a.preset_id || (a.rule_conditions && a.rule_conditions.length > 0))) {
+      if (a.rules_enabled && a.active_rules && a.active_rules.length > 0) {
         linkedAccountsCount++;
       }
     });
@@ -493,10 +493,8 @@
     const listEl = document.getElementById('assignPresetsList');
     const detachBtn = document.getElementById('btnDetachFromAssignModal');
 
-    const hasActiveRule = (acc.preset_id || (acc.rule_conditions && acc.rule_conditions.length > 0));
-    if (detachBtn) {
-      detachBtn.classList.toggle('hidden', !hasActiveRule);
-    }
+    const hasActiveRule = (acc.active_rules && acc.active_rules.length > 0);
+
 
     if (!state.presets || state.presets.length === 0) {
       listEl.innerHTML = `
@@ -514,7 +512,7 @@
       };
 
       listEl.innerHTML = state.presets.map(p => {
-        const isCurrent = acc.preset_id === p.id;
+        const isCurrent = acc.active_rules && acc.active_rules.some(r => r.preset_id === p.id);
         const actLabel = actionBadgeMap[p.action] || p.action;
         const condCount = p.conditions ? p.conditions.length : 0;
         return `
@@ -538,7 +536,7 @@
     if (!currentAssignAccountId) return;
     haptic('impact', 'medium');
     try {
-      const res = await apiRequest(`/api/accounts/${currentAssignAccountId}/apply-preset`, {
+      const res = await apiRequest(`/api/accounts/${currentAssignAccountId}/assign-rule`, {
         method: 'POST',
         body: JSON.stringify({ preset_id: presetId })
       });
@@ -777,11 +775,7 @@
 
     const accId = document.getElementById('editLimitsAccountId')?.value;
     const currentAcc = state.accounts.find(a => a.account_id === accId);
-    if (currentAcc && (currentAcc.preset_id || (currentAcc.rule_conditions && currentAcc.rule_conditions.length > 0))) {
-      document.getElementById('btnDetachRule')?.classList.remove('hidden');
-    } else {
-      document.getElementById('btnDetachRule')?.classList.add('hidden');
-    }
+    
 
     setCooldownUI(preset.cooldown_minutes || 0);
     setIntervalUI(preset.check_interval_minutes || 5);
@@ -809,11 +803,7 @@
 
     const accId = document.getElementById('editLimitsAccountId')?.value;
     const currentAcc = state.accounts.find(a => a.account_id === accId);
-    if (currentAcc && (currentAcc.preset_id || (currentAcc.rule_conditions && currentAcc.rule_conditions.length > 0))) {
-      document.getElementById('btnDetachRule')?.classList.remove('hidden');
-    } else {
-      document.getElementById('btnDetachRule')?.classList.add('hidden');
-    }
+    
 
     setCooldownUI(0);
     setIntervalUI(5);
@@ -938,7 +928,7 @@
       window.newPresetMode();
     }
 
-    const hasActiveRule = (acc.preset_id || (acc.rule_conditions && acc.rule_conditions.length > 0));
+    const hasActiveRule = (acc.active_rules && acc.active_rules.length > 0);
     if (!hasActiveRule) {
       document.getElementById('btnDetachRule')?.classList.add('hidden');
     }
