@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Back Depth Loop (Royal Blue) -->
+    <path d="M 256 280 C 315 280, 370 240, 370 185 C 370 130, 315 95, 256 95 C 197 95, 142 140, 142 205" 
+          stroke="#2563EB" stroke-width="56" />
+
+    <!-- Foreground Loop & 'b' Stem (Electric Cyan) -->
+    <path d="M 142 95 L 142 320 C 142 375, 197 417, 256 417 C 315 417, 370 375, 370 320 C 370 265, 315 225, 256 225 C 197 225, 142 265, 142 320" 
+          stroke="#38BDF8" stroke-width="56" />
+  </g>
+</svg>

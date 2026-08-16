@@ -3,33 +3,33 @@
    ========================================================== */
 
 :root {
-  /* Telegram Theme Variables with Dark Modern Fallbacks */
-  --tg-bg: var(--tg-theme-bg-color, #0b111e);
-  --tg-sec-bg: var(--tg-theme-secondary-bg-color, #131b2c);
-  --tg-card-bg: rgba(24, 34, 53, 0.85);
-  --tg-card-hover: rgba(31, 44, 68, 0.95);
-  --tg-text: var(--tg-theme-text-color, #f1f5f9);
-  --tg-hint: var(--tg-theme-hint-color, #94a3b8);
-  --tg-link: var(--tg-theme-link-color, #38bdf8);
-  --tg-btn: var(--tg-theme-button-color, #2563eb);
-  --tg-btn-text: var(--tg-theme-button-text-color, #ffffff);
+  /* ColorDrop #41 «Midnight Sky» Palette */
+  --tg-bg: #1e222b;
+  --tg-sec-bg: #282c37;
+  --tg-card-bg: #282c37;
+  --tg-card-hover: #313744;
+  --tg-text: #d9e1e8;
+  --tg-hint: #9baec8;
+  --tg-link: #2b90d9;
+  --tg-btn: #2b90d9;
+  --tg-btn-text: #ffffff;
 
   /* Functional Palette */
-  --color-success: #22c55e;
-  --color-success-bg: rgba(34, 197, 94, 0.12);
-  --color-danger: #ef4444;
-  --color-danger-bg: rgba(239, 68, 68, 0.12);
-  --color-warning: #f59e0b;
-  --color-warning-bg: rgba(245, 158, 11, 0.12);
-  --color-info: #0284c7;
-  --color-info-bg: rgba(2, 132, 199, 0.12);
+  --color-success: #34d399;
+  --color-success-bg: rgba(52, 211, 153, 0.14);
+  --color-danger: #f87171;
+  --color-danger-bg: rgba(248, 113, 113, 0.14);
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.14);
+  --color-info: #2b90d9;
+  --color-info-bg: rgba(43, 144, 217, 0.14);
   
   /* Borders & Shadows */
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-active: rgba(56, 189, 248, 0.4);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --border-subtle: rgba(155, 174, 200, 0.15);
+  --border-active: rgba(43, 144, 217, 0.45);
+  --shadow-sm: 0 2px 6px rgba(15, 17, 23, 0.25);
+  --shadow-md: 0 6px 20px rgba(15, 17, 23, 0.35);
+  --shadow-lg: 0 14px 36px rgba(15, 17, 23, 0.5);
 
   /* Radii */
   --radius-sm: 8px;
@@ -41,6 +41,9 @@
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+
+
 
 /* Global Reset & Base */
 * {
@@ -107,13 +110,15 @@ code, .mono {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  background: #282c37;
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  box-shadow: var(--shadow-sm);
 }
+
 
 .brand-info {
   display: flex;
@@ -231,14 +236,15 @@ code, .mono {
   width: 26px;
   height: 26px;
   border-radius: var(--radius-full);
-  background: #38bdf8;
-  color: #0b111e;
+  background: var(--tg-btn);
+  color: #ffffff;
   font-weight: 700;
   font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 
 .user-name {
   font-size: 12px;
@@ -1117,12 +1123,13 @@ input:checked + .slider:before {
 .btn-primary {
   background: var(--tg-btn);
   color: var(--tg-btn-text);
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 4px 14px rgba(43, 144, 217, 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: #237bbd;
 }
+
 
 .btn-primary:disabled {
   opacity: 0.5;
@@ -1652,7 +1659,7 @@ input:checked + .slider:before {
 .unauth-screen {
   position: fixed;
   inset: 0;
-  background: #0f172a;
+  background: var(--tg-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1661,9 +1668,10 @@ input:checked + .slider:before {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;
   font-weight: 600;
-  color: #ef4444;
+  color: var(--color-danger);
   z-index: 99999;
 }
+
 
 
 
