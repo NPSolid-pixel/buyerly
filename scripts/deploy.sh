@@ -11,6 +11,8 @@ BRANCH="${BRANCH:-main}"
 CONTAINER_NAME="${CONTAINER_NAME:-buyerly-bot}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-120}"
 EXPECTED_SHA="${EXPECTED_SHA:-}"
+DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-/var/lock/buyerly-deploy.lock}"
+DEPLOY_LOCK_TIMEOUT_SECONDS="${DEPLOY_LOCK_TIMEOUT_SECONDS:-180}"
 
 wait_for_healthy() {
     local deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
@@ -39,6 +41,36 @@ echo "🚀 [$(date +'%Y-%m-%d %H:%M:%S')] Starting Buyerly Deployment"
 echo "========================================================"
 
 cd "${APP_DIR}"
+
+if ! command -v flock >/dev/null 2>&1; then
+    echo "❌ Deployment lock utility 'flock' is not available."
+    exit 1
+fi
+
+exec 9>"${DEPLOY_LOCK_FILE}"
+echo "🔒 Waiting for the Buyerly deployment lock..."
+if ! flock -w "${DEPLOY_LOCK_TIMEOUT_SECONDS}" 9; then
+    echo "❌ Another deployment did not finish within ${DEPLOY_LOCK_TIMEOUT_SECONDS}s."
+    exit 1
+fi
+
+# A manual deploy and GitHub Actions can target the same commit. Once the
+# first one has finished, the second invocation should validate and exit
+# instead of recreating a healthy production container.
+if [[ -n "${EXPECTED_SHA}" ]]; then
+    CURRENT_REPO_SHA=$(git rev-parse HEAD 2>/dev/null || true)
+    DEPLOYED_IMAGE=$(docker inspect --format '{{.Config.Image}}' "${CONTAINER_NAME}" 2>/dev/null || true)
+    DEPLOYED_HEALTH=$(docker inspect \
+        --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
+        "${CONTAINER_NAME}" 2>/dev/null || true)
+
+    if [[ "${CURRENT_REPO_SHA}" == "${EXPECTED_SHA}" \
+          && "${DEPLOYED_IMAGE}" == "buyerly-app:${EXPECTED_SHA}" \
+          && "${DEPLOYED_HEALTH}" == "healthy" ]]; then
+        echo "✅ Buyerly ${EXPECTED_SHA} is already deployed and healthy."
+        exit 0
+    fi
+fi
 
 # 1. Обязательное резервное копирование базы данных перед обновлением
 if [[ ! -f "${SCRIPT_DIR}/backup_db.sh" ]]; then
