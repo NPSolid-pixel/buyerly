@@ -138,10 +138,9 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             headers = {"Authorization": f"tma {init_data}"}
 
-            # Toggle rules -> ON
+            # An account cannot be enabled before at least one rule is attached.
             t_resp = await client.post("/api/accounts/act_1018756607700064/toggle-rules", headers=headers)
-            self.assertEqual(t_resp.status_code, 200)
-            self.assertTrue(t_resp.json()["rules_enabled"])
+            self.assertEqual(t_resp.status_code, 400)
 
             # Create Preset with OR logic, new metric, and budget scaling
             preset_payload = {
@@ -175,6 +174,34 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(assigned_rule["action"], "increase_budget")
             self.assertEqual(assigned_rule["logic"], "or")
             self.assertEqual(assigned_rule["budget_change_percent"], 25.0)
+
+            # Updating a preset immediately updates its runtime snapshot.
+            updated_payload = {
+                **preset_payload,
+                "name": "Тестовый пресет v2",
+                "action": "turn_off",
+                "condition_logic": "and",
+                "budget_change_percent": 0.0,
+            }
+            u_resp = await client.put(
+                f"/api/presets/{p_data['id']}", headers=headers, json=updated_payload
+            )
+            self.assertEqual(u_resp.status_code, 200)
+
+            accounts_resp = await client.get("/api/accounts", headers=headers)
+            runtime_rule = accounts_resp.json()[0]["active_rules"][0]
+            self.assertEqual(runtime_rule["name"], "Тестовый пресет v2")
+            self.assertEqual(runtime_rule["action"], "turn_off")
+            self.assertEqual(runtime_rule["logic"], "and")
+
+            # Detaching is targeted and disables the account when no rules remain.
+            d_resp = await client.post(
+                f"/api/accounts/act_1018756607700064/detach-rule/{p_data['id']}",
+                headers=headers,
+            )
+            self.assertEqual(d_resp.status_code, 200)
+            self.assertEqual(d_resp.json()["active_rules"], [])
+            self.assertFalse(d_resp.json()["rules_enabled"])
 
     async def test_parse_raw_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}

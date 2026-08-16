@@ -143,6 +143,38 @@ async def get_user_accounts(session, user: TelegramUser) -> List[Account]:
     return res.scalars().all()
 
 
+def _load_active_rules(raw_rules: Any) -> List[Dict[str, Any]]:
+    """Return only valid rule snapshots from an account JSON field."""
+    try:
+        rules = json.loads(raw_rules) if isinstance(raw_rules, str) else raw_rules
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(rules, list):
+        return []
+    return [rule for rule in rules if isinstance(rule, dict)]
+
+
+def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
+    """Build the runtime rule format consumed by RuleEngine."""
+    try:
+        conditions = json.loads(preset.conditions) if isinstance(preset.conditions, str) else preset.conditions
+    except (TypeError, ValueError):
+        conditions = []
+
+    return {
+        "preset_id": preset.id,
+        "name": preset.name,
+        "action": preset.action,
+        "conditions": conditions if isinstance(conditions, list) else [],
+        "logic": preset.condition_logic,
+        "cooldown_minutes": preset.cooldown_minutes,
+        "check_interval": preset.check_interval_minutes,
+        "notify_tg": preset.notify_tg,
+        "budget_change_percent": preset.budget_change_percent,
+        "budget_max_daily": preset.budget_max_daily,
+    }
+
+
 # ----------------------------------------------------
 # Endpoints
 # ----------------------------------------------------
@@ -268,17 +300,9 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
         accounts = await get_user_accounts(session, user)
         
-        # Загружаем существующие ID пресетов пользователя
-        p_stmt = select(RulePreset.id).where(RulePreset.owner_id == user.telegram_id)
-        p_res = await session.execute(p_stmt)
-        valid_preset_ids = set(p_res.scalars().all())
-
         items = []
         for a in accounts:
-            try:
-                active_rules_list = json.loads(a.active_rules) if isinstance(a.active_rules, str) else []
-            except Exception:
-                active_rules_list = []
+            active_rules_list = _load_active_rules(a.active_rules)
             
             items.append(AccountItem(
                 id=a.id,
@@ -391,6 +415,18 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
         if payload.budget_max_daily is not None:
             preset.budget_max_daily = payload.budget_max_daily
 
+        updated_snapshot = _preset_snapshot(preset)
+        account_res = await session.execute(select(Account))
+        for account in account_res.scalars().all():
+            active_rules = _load_active_rules(account.active_rules)
+            changed = False
+            for index, active_rule in enumerate(active_rules):
+                if active_rule.get("preset_id") == preset_id:
+                    active_rules[index] = updated_snapshot.copy()
+                    changed = True
+            if changed:
+                account.active_rules = json.dumps(active_rules)
+
         await session.commit()
         await session.refresh(preset)
         return RulePresetItem(
@@ -419,19 +455,15 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
         if not preset:
             raise HTTPException(status_code=404, detail="Пресет не найден")
 
-        # Сбрасываем привязанные кабинеты
-        acc_stmt = select(Account).where(Account.active_rules.contains(str(preset_id)))
-        if user.role != "admin":
-            acc_stmt = acc_stmt.where(Account.owner_id == user.telegram_id)
-        acc_res = await session.execute(acc_stmt)
-        linked_accounts = acc_res.scalars().all()
-        for acc in linked_accounts:
-            try:
-                active_rules = json.loads(acc.active_rules) if acc.active_rules else []
-                active_rules = [r for r in active_rules if r.get("preset_id") != preset_id]
-                acc.active_rules = json.dumps(active_rules)
-            except:
-                pass
+        # Remove the exact preset ID from every linked account snapshot.
+        acc_res = await session.execute(select(Account))
+        for acc in acc_res.scalars().all():
+            active_rules = _load_active_rules(acc.active_rules)
+            remaining_rules = [r for r in active_rules if r.get("preset_id") != preset_id]
+            if len(remaining_rules) != len(active_rules):
+                acc.active_rules = json.dumps(remaining_rules)
+                if not remaining_rules:
+                    acc.rules_enabled = False
         
         await session.execute(delete(RulePreset).where(RulePreset.id == preset_id))
         await session.commit()
@@ -464,25 +496,11 @@ async def assign_rule_to_account(
             if not preset:
                 raise HTTPException(status_code=404, detail="Пресет не найден.")
             
-            new_rule = {
-                "preset_id": preset.id,
-                "name": preset.name,
-                "action": preset.action,
-                "conditions": json.loads(preset.conditions) if isinstance(preset.conditions, str) else preset.conditions,
-                "logic": preset.condition_logic,
-                "cooldown_minutes": preset.cooldown_minutes,
-                "check_interval": preset.check_interval_minutes,
-                "notify_tg": preset.notify_tg,
-                "budget_change_percent": preset.budget_change_percent,
-                "budget_max_daily": preset.budget_max_daily
-            }
+            new_rule = _preset_snapshot(preset)
         else:
             raise HTTPException(status_code=400, detail="Custom rules without preset are no longer supported.")
 
-        try:
-            active_rules = json.loads(acc.active_rules) if acc.active_rules else []
-        except Exception:
-            active_rules = []
+        active_rules = _load_active_rules(acc.active_rules)
             
         # Check if preset already attached
         if any(r.get("preset_id") == new_rule["preset_id"] for r in active_rules):
@@ -519,10 +537,7 @@ async def detach_rule_from_account(
         if not acc:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
 
-        try:
-            active_rules = json.loads(acc.active_rules) if acc.active_rules else []
-        except Exception:
-            active_rules = []
+        active_rules = _load_active_rules(acc.active_rules)
             
         initial_len = len(active_rules)
         active_rules = [r for r in active_rules if r.get("preset_id") != preset_id]
@@ -550,6 +565,13 @@ async def toggle_rules(account_id: str, user: TelegramUser = Depends(get_current
         acc = res.scalar_one_or_none()
         if not acc:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
+
+        active_rules = _load_active_rules(acc.active_rules)
+        if not acc.rules_enabled and not active_rules:
+            raise HTTPException(
+                status_code=400,
+                detail="Сначала привяжите хотя бы одно правило к кабинету.",
+            )
 
         acc.rules_enabled = not acc.rules_enabled
         await session.commit()

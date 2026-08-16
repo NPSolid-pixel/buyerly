@@ -727,9 +727,6 @@
               <button type="button" id="btnDeletePreset" class="btn-sub-link hidden" style="color: var(--tg-hint);" onclick="window.deleteActivePreset()">
                 Удалить этот пресет
               </button>
-              <button type="button" id="btnDetachRule" class="btn-sub-link hidden" style="color: var(--color-warning);" onclick="window.detachRuleFromAccount()">
-                Сбросить правило кабинета
-              </button>
               <button type="button" id="btnOpenDeleteFromModal" class="btn-sub-link" style="color: var(--color-danger);" title="Удалить кабинет из мониторинга">
                 Удалить кабинет
               </button>
@@ -831,7 +828,7 @@
         </div>
         <div class="sheet-body">
           <input type="hidden" id="assignRuleAccountId">
-          <p class="text-hint" style="margin-bottom: 14px; font-size: 13px;">Выберите одно из созданных правил для привязки к этому кабинету, либо создайте новое.</p>
+          <p class="text-hint" style="margin-bottom: 14px; font-size: 13px;">Привязывайте несколько правил к кабинету. Нажмите на уже привязанное правило, чтобы отвязать его.</p>
           
           <div class="assign-presets-list" id="assignPresetsList">
             <!-- Dynamically populated list of rules to pick in 1 click -->
@@ -855,11 +852,9 @@
   </div>
 
   <!-- App Script -->
-  <script src="/static/js/app.js?v=8.6.0"></script>
+  <script src="/static/js/app.js?v=8.7.0"></script>
 </body>
 </html>
-
-
 
 
 

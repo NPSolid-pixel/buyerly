@@ -228,46 +228,34 @@
         acc.account_status !== 1 ? 'account-disabled' : ''
       ].filter(Boolean).join(' ');
 
-      const hasConditions = acc.rule_conditions && acc.rule_conditions.length > 0;
+      const activeRules = Array.isArray(acc.active_rules) ? acc.active_rules : [];
       let rulePillHtml = '';
 
-      if (hasConditions) {
-        let ruleBadgeText = acc.preset_name || '';
-        if (!ruleBadgeText && acc.rule_conditions.length > 0) {
-          const first = acc.rule_conditions[0];
-          const metricLabels = {
-            'spend': 'Спенд', 'cpl': 'CPL', 'cpr': 'CPR', 'cpa': 'CPA',
-            'leads': 'Лиды', 'registrations': 'Реги', 'purchases': 'Покупки',
-            'ctr': 'CTR', 'cpc': 'CPC'
-          };
-          const mLabel = metricLabels[first.metric] || first.metric;
-          const op = (first.operator === 'gte' || first.operator === 'gt') ? '≥' : ((first.operator === 'lte' || first.operator === 'lt') ? '≤' : '=');
-          const unit = (first.metric === 'leads' || first.metric === 'registrations' || first.metric === 'purchases') ? ' шт' : (first.metric === 'ctr' ? '%' : '$');
-          const valStr = unit === '$' ? `$${first.value.toFixed(1)}` : `${first.value}${unit}`;
-          ruleBadgeText = `${mLabel} ${op} ${valStr}`;
-        }
-
+      if (activeRules.length > 0) {
         const actionIcons = {
           'turn_off': '🔴', 'notify_only': '🔔', 'turn_on': '🟢',
           'increase_budget': '📈', 'decrease_budget': '📉'
         };
-        const actionIcon = actionIcons[acc.rule_action] || '⚙️';
-
         rulePillHtml = `
-          <div class="card-limits-btn ${acc.rules_enabled ? 'active' : ''}" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Нажмите, чтобы изменить правило">
-            <span style="font-size:13px; line-height:1;">${actionIcon}</span>
-            <span class="limits-label">Правило:</span>
-            <span class="limits-value">${escapeHtml(ruleBadgeText)}</span>
-            <svg class="limits-edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <div class="card-rules-list">
+            ${activeRules.map(rule => `
+              <button type="button" class="card-limits-btn ${acc.rules_enabled ? 'active' : ''}" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Управлять правилами кабинета">
+                <span style="font-size:13px; line-height:1;">${actionIcons[rule.action] || '⚙️'}</span>
+                <span class="limits-value">${escapeHtml(rule.name || `Правило #${rule.preset_id}`)}</span>
+              </button>
+            `).join('')}
+            <button type="button" class="card-limits-btn empty" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Добавить ещё одно правило">
+              <span class="plus-icon" style="font-size:14px; font-weight:700; color:#7aa2f7;">+</span>
+              <span class="limits-value" style="color:#7aa2f7; font-weight:600;">Добавить</span>
+            </button>
           </div>
         `;
       } else {
-        // Photo 3: "+ Добавить правило"
         rulePillHtml = `
-          <div class="card-limits-btn empty" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Привязать правило к кабинету">
+          <button type="button" class="card-limits-btn empty" onclick="window.openAssignRuleModal('${acc.account_id}')" title="Привязать правило к кабинету">
             <span class="plus-icon" style="font-size:14px; font-weight:700; color:#7aa2f7;">+</span>
             <span class="limits-value" style="color:#7aa2f7; font-weight:600;">Добавить правило</span>
-          </div>
+          </button>
         `;
       }
 
@@ -491,11 +479,6 @@
     document.getElementById('assignRuleModalTitle').textContent = `Правило для ${acc.name}`;
 
     const listEl = document.getElementById('assignPresetsList');
-    const detachBtn = document.getElementById('btnDetachFromAssignModal');
-
-    const hasActiveRule = (acc.active_rules && acc.active_rules.length > 0);
-
-
     if (!state.presets || state.presets.length === 0) {
       listEl.innerHTML = `
         <div style="text-align:center; padding: 24px 12px; color:var(--tg-hint);">
@@ -516,13 +499,13 @@
         const actLabel = actionBadgeMap[p.action] || p.action;
         const condCount = p.conditions ? p.conditions.length : 0;
         return `
-          <div class="assign-preset-item ${isCurrent ? 'active' : ''}" onclick="window.pickRuleForAccount(${p.id})">
+          <div class="assign-preset-item ${isCurrent ? 'active' : ''}" onclick="window.${isCurrent ? 'detachRuleFromCurrentAccount' : 'pickRuleForAccount'}(${p.id})">
             <div class="assign-preset-info">
               <div class="assign-preset-title">${isCurrent ? '✓ ' : ''}${escapeHtml(p.name)}</div>
               <div class="assign-preset-sub">${actLabel} · ${condCount} условий · каждые ${p.check_interval_minutes || 5}м</div>
             </div>
             <button class="btn btn-secondary btn-sm" style="pointer-events:none;">
-              ${isCurrent ? 'Выбрано' : 'Выбрать'}
+              ${isCurrent ? 'Отвязать' : 'Привязать'}
             </button>
           </div>
         `;
@@ -556,12 +539,14 @@
     }
   };
 
-  window.detachRuleFromCurrentAccount = async function () {
+  window.detachRuleFromCurrentAccount = async function (presetId) {
     if (!currentAssignAccountId) return;
+    const preset = state.presets.find(p => p.id === presetId);
+    if (!window.confirm(`Отвязать правило «${preset?.name || `#${presetId}`}» от кабинета?`)) return;
     haptic('impact', 'medium');
     try {
-      await apiRequest(`/api/accounts/${currentAssignAccountId}/detach-rule`, { method: 'POST' });
-      showToast('Правило сброшено с кабинета', 'success');
+      await apiRequest(`/api/accounts/${currentAssignAccountId}/detach-rule/${presetId}`, { method: 'POST' });
+      showToast('Правило отвязано от кабинета', 'success');
       window.closeModal('modalAssignRule');
       await loadAccounts();
       if (state.activeTab === 'rules') renderRulesTab();
@@ -754,6 +739,16 @@
     handleActionChange(e.target.value);
   });
 
+  function updateRuleSaveButtonLabel() {
+    const saveButton = document.getElementById('btnSaveLimits');
+    if (!saveButton) return;
+    const hasAccount = Boolean(document.getElementById('editLimitsAccountId')?.value);
+    const isEditing = Boolean(document.getElementById('editingPresetId')?.value);
+    saveButton.textContent = hasAccount
+      ? 'Сохранить и применить'
+      : (isEditing ? 'Сохранить изменения' : 'Создать правило');
+  }
+
   window.selectPreset = function (presetId) {
     haptic('selection');
     const preset = state.presets.find(p => p.id === presetId);
@@ -772,10 +767,7 @@
 
     document.getElementById('builderModeTag').textContent = `Пресет: ${preset.name}`;
     document.getElementById('btnDeletePreset')?.classList.remove('hidden');
-
-    const accId = document.getElementById('editLimitsAccountId')?.value;
-    const currentAcc = state.accounts.find(a => a.account_id === accId);
-    
+    updateRuleSaveButtonLabel();
 
     setCooldownUI(preset.cooldown_minutes || 0);
     setIntervalUI(preset.check_interval_minutes || 5);
@@ -800,10 +792,7 @@
 
     document.getElementById('builderModeTag').textContent = 'Новое правило';
     document.getElementById('btnDeletePreset')?.classList.add('hidden');
-
-    const accId = document.getElementById('editLimitsAccountId')?.value;
-    const currentAcc = state.accounts.find(a => a.account_id === accId);
-    
+    updateRuleSaveButtonLabel();
 
     setCooldownUI(0);
     setIntervalUI(5);
@@ -897,58 +886,9 @@
 
     document.getElementById('editLimitsAccountId').value = acc.account_id;
     document.getElementById('modalLimitsTitle').textContent = `Правило для ${acc.name}`;
-
-    setCooldownUI(acc.rule_cooldown_minutes || 0);
-    setIntervalUI(acc.rule_check_interval || 5);
-    const tgToggle = document.getElementById('ruleNotifyTgToggle');
-    if (tgToggle) tgToggle.checked = acc.rule_notify_tg !== false;
-
-    if (acc.preset_id && state.presets.some(p => p.id === acc.preset_id)) {
-      window.selectPreset(acc.preset_id);
-    } else if (acc.rule_conditions && acc.rule_conditions.length > 0) {
-      state.activePresetId = null;
-      document.getElementById('editingPresetId').value = '';
-      document.getElementById('ruleNameInput').value = acc.preset_name || 'Кастомное правило';
-      const action = acc.rule_action || 'turn_off';
-      document.getElementById('ruleActionSelect').value = action;
-      handleActionChange(action);
-
-      document.getElementById('budgetChangePercentInput').value = acc.rule_budget_change_percent || 20;
-      document.getElementById('budgetMaxDailyInput').value = acc.rule_budget_max_daily || 0;
-      setLogicUI(acc.rule_condition_logic || 'and');
-
-      document.getElementById('builderModeTag').textContent = 'Кастомное правило кабинета';
-      document.getElementById('btnDeletePreset')?.classList.add('hidden');
-      document.getElementById('btnDetachRule')?.classList.remove('hidden');
-      renderConditions(acc.rule_conditions);
-      renderPresetsList(null);
-    } else if (state.presets.length > 0) {
-      window.selectPreset(state.presets[0].id);
-    } else {
-      window.newPresetMode();
-    }
-
-    const hasActiveRule = (acc.active_rules && acc.active_rules.length > 0);
-    if (!hasActiveRule) {
-      document.getElementById('btnDetachRule')?.classList.add('hidden');
-    }
+    window.newPresetMode();
 
     window.openModal('modalEditLimits');
-  };
-
-  window.detachRuleFromAccount = async function () {
-    const accountId = document.getElementById('editLimitsAccountId').value;
-    if (!accountId) return;
-
-    haptic('impact', 'medium');
-    try {
-      await apiRequest(`/api/accounts/${accountId}/detach-rule`, { method: 'POST' });
-      showToast('Правило сброшено с кабинета', 'success');
-      window.closeModal('modalEditLimits');
-      await loadAccounts();
-    } catch (e) {
-      showToast(`Ошибка сброса: ${e.message}`, 'error');
-    }
   };
 
   window.deleteActivePreset = async function () {
@@ -988,7 +928,6 @@
 
     try {
       const payload = {
-        preset_id: editingPresetId ? parseInt(editingPresetId) : null,
         name: ruleName,
         action: action,
         conditions: conditions,
@@ -1001,12 +940,29 @@
       };
 
       if (accountId) {
-        const res = await apiRequest(`/api/accounts/${accountId}/apply-preset`, {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
+        let savedPreset;
+        if (editingPresetId) {
+          savedPreset = await apiRequest(`/api/presets/${editingPresetId}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+          });
+        } else {
+          savedPreset = await apiRequest('/api/presets', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+        }
+
+        const account = state.accounts.find(a => a.account_id === accountId);
+        const isAlreadyAttached = account?.active_rules?.some(rule => rule.preset_id === savedPreset.id);
+        if (!isAlreadyAttached) {
+          await apiRequest(`/api/accounts/${accountId}/assign-rule`, {
+            method: 'POST',
+            body: JSON.stringify({ preset_id: savedPreset.id })
+          });
+        }
         haptic('notification', 'success');
-        showToast(res.message || 'Правило успешно сохранено и применено!', 'success');
+        showToast('Правило сохранено и применено!', 'success');
       } else {
         if (editingPresetId) {
           await apiRequest(`/api/presets/${editingPresetId}`, {

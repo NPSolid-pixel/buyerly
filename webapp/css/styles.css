@@ -563,6 +563,14 @@ code, .mono {
   border-top: 1px solid var(--border-subtle);
 }
 
+.card-rules-list {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
 .card-limits-btn {
   display: inline-flex;
   align-items: center;
@@ -576,6 +584,8 @@ code, .mono {
   transition: all var(--transition-fast);
   flex: 1;
   max-width: fit-content;
+  font: inherit;
+  color: inherit;
 }
 
 .card-limits-btn:hover {
@@ -2613,5 +2623,4 @@ input[type=number] {
   padding-top: 14px;
   border-top: 1px solid var(--border-subtle);
 }
-
 
