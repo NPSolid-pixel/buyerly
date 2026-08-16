@@ -43,11 +43,9 @@ async def check_user_access(message: Message, bot: Bot) -> bool:
     username = message.from_user.username or ""
     full_name = message.from_user.full_name or ""
 
-    # Авто-назначение главного админа из .env
-    if not settings.ADMIN_CHAT_ID:
-        settings.ADMIN_CHAT_ID = tg_id
-
-    is_super_admin = (tg_id == str(settings.ADMIN_CHAT_ID))
+    is_configured_admin = bool(settings.ADMIN_CHAT_ID) and (
+        tg_id == str(settings.ADMIN_CHAT_ID)
+    )
 
     async with async_session_maker() as session:
         res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == tg_id))
@@ -56,31 +54,44 @@ async def check_user_access(message: Message, bot: Bot) -> bool:
         if not user:
             user = TelegramUser(
                 telegram_id=tg_id,
-                username=username,
+                username=username or f"user_{tg_id}",
                 full_name=full_name,
-                role="admin" if is_super_admin else "buyer",
-                is_approved=True if is_super_admin else False
+                role="admin" if is_configured_admin else "buyer",
+                is_approved=is_configured_admin,
             )
             session.add(user)
             await session.commit()
 
-            # Если новый пользователь (не админ) — шлем уведомление главному админу
-            if not is_super_admin and settings.ADMIN_CHAT_ID:
-                try:
+            # Notify every approved database admin about a pending request.
+            if not is_configured_admin:
+                admin_result = await session.execute(
+                    select(TelegramUser.telegram_id).where(
+                        TelegramUser.role == "admin",
+                        TelegramUser.is_approved == True,
+                        TelegramUser.telegram_id.is_not(None),
+                    )
+                )
+                admin_ids = list(dict.fromkeys(admin_result.scalars().all()))
+                for admin_id in admin_ids:
                     admin_text = (
                         f"🔔 <b>Новый запрос на доступ в Buyerly!</b>\n\n"
                         f"👤 <b>Пользователь:</b> {full_name} (@{username})\n"
                         f"🆔 <b>Telegram ID:</b> <code>{tg_id}</code>\n\n"
                         f"Предоставить доступ к системе?"
                     )
-                    await bot.send_message(
-                        chat_id=settings.ADMIN_CHAT_ID,
-                        text=admin_text,
-                        reply_markup=get_admin_approval_keyboard(tg_id),
-                        parse_mode="HTML"
-                    )
-                except Exception as e:
-                    logger.error(f"Error notifying admin about new user {tg_id}: {e}")
+                    try:
+                        await bot.send_message(
+                            chat_id=admin_id,
+                            text=admin_text,
+                            reply_markup=get_admin_approval_keyboard(tg_id),
+                            parse_mode="HTML",
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "Error notifying an admin about new user %s: %s",
+                            tg_id,
+                            e,
+                        )
 
         if not user.is_approved:
             await message.answer(
@@ -105,7 +116,8 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         return
 
     tg_id = str(message.from_user.id)
-    is_admin = (tg_id == str(settings.ADMIN_CHAT_ID))
+    async with async_session_maker() as session:
+        is_admin = await _is_admin_user(session, tg_id)
 
     text = (
         "👋 <b>Добро пожаловать в Buyerly!</b>\n\n"
@@ -178,7 +190,8 @@ async def start_add_wizard(message: Message, bot: Bot, state: FSMContext):
 async def cancel_add_wizard(message: Message, state: FSMContext):
     await state.clear()
     tg_id = str(message.from_user.id)
-    is_admin = (tg_id == str(settings.ADMIN_CHAT_ID))
+    async with async_session_maker() as session:
+        is_admin = await _is_admin_user(session, tg_id)
     await message.answer("❌ Добавление кабинетов отменено.", reply_markup=get_main_menu_keyboard(is_admin=is_admin))
 
 
@@ -190,7 +203,8 @@ async def process_account_ids(message: Message, state: FSMContext):
     if raw_text in ["❌ Отменить добавление", "❌ Отмена", "/cancel"]:
         await state.clear()
         tg_id = str(message.from_user.id)
-        is_admin = (tg_id == str(settings.ADMIN_CHAT_ID))
+        async with async_session_maker() as session:
+            is_admin = await _is_admin_user(session, tg_id)
         await message.answer("❌ Добавление кабинетов отменено.", reply_markup=get_main_menu_keyboard(is_admin=is_admin))
         return
 
@@ -298,9 +312,9 @@ async def process_token_and_save(message: Message, state: FSMContext):
                 error_results.append(f"• <code>{acc_id}</code>: {e}")
 
         await session.commit()
+        is_admin = await _is_admin_user(session, owner_id)
 
     await state.clear()
-    is_admin = (owner_id == str(settings.ADMIN_CHAT_ID))
 
     result_text = f"🎉 <b>Успешно подключено: {len(added_results)} из {len(parsed_accounts)} кабинетов!</b>\n\n"
     if added_results:
@@ -349,10 +363,7 @@ def get_short_account_label(name: str, account_id: str) -> str:
 
 
 async def get_user_accounts(session, user_id: str) -> List[Account]:
-    user_res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == user_id))
-    db_user = user_res.scalar_one_or_none()
-    is_admin = (user_id == str(settings.ADMIN_CHAT_ID)) or (db_user and db_user.role == "admin")
-    if is_admin:
+    if await _is_admin_user(session, user_id):
         stmt = select(Account)
     else:
         stmt = select(Account).where(Account.owner_id == user_id)
@@ -361,8 +372,6 @@ async def get_user_accounts(session, user_id: str) -> List[Account]:
 
 
 async def _is_admin_user(session, user_id: str) -> bool:
-    if user_id == str(settings.ADMIN_CHAT_ID):
-        return True
     result = await session.execute(
         select(TelegramUser).where(TelegramUser.telegram_id == user_id)
     )
@@ -371,8 +380,6 @@ async def _is_admin_user(session, user_id: str) -> bool:
 
 
 async def _can_manage_account(session, user_id: str, account: Account) -> bool:
-    if user_id == str(settings.ADMIN_CHAT_ID):
-        return True
     result = await session.execute(
         select(TelegramUser).where(TelegramUser.telegram_id == user_id)
     )
@@ -736,11 +743,12 @@ async def cmd_token_help(message: Message, bot: Bot, state: FSMContext):
 async def cmd_admin_panel(message: Message, bot: Bot, state: FSMContext):
     await state.clear()
     tg_id = str(message.from_user.id)
-    if tg_id != str(settings.ADMIN_CHAT_ID):
-        await message.answer("⛔️ Эта панель доступна только главному администратору.")
-        return
 
     async with async_session_maker() as session:
+        if not await _is_admin_user(session, tg_id):
+            await message.answer("⛔️ Эта панель доступна только администратору.")
+            return
+
         # Список пользователей
         u_res = await session.execute(select(TelegramUser))
         users = u_res.scalars().all()
@@ -770,11 +778,12 @@ async def cmd_admin_panel(message: Message, bot: Bot, state: FSMContext):
 async def cmd_view_events(message: Message, bot: Bot, state: FSMContext):
     await state.clear()
     tg_id = str(message.from_user.id)
-    if tg_id != str(settings.ADMIN_CHAT_ID):
-        return
 
     from database.models import EventLog
     async with async_session_maker() as session:
+        if not await _is_admin_user(session, tg_id):
+            return
+
         stmt = select(EventLog).order_by(EventLog.created_at.desc()).limit(15)
         res = await session.execute(stmt)
         logs = res.scalars().all()
