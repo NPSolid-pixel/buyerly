@@ -348,15 +348,29 @@ async def cmd_summary(message: Message, bot: Bot, state: FSMContext):
     await message.answer(text, reply_markup=get_period_keyboard(), parse_mode="HTML")
 
 
+def get_short_account_label(name: str, account_id: str) -> str:
+    parts = name.strip().split()
+    if parts:
+        last_part = parts[-1]
+        if last_part.isdigit():
+            if len(parts) > 1 and len(parts[-2]) <= 8 and not parts[-2].startswith("PrivateCore"):
+                return f"{parts[-2]} {last_part}"
+            return last_part
+    if len(name) <= 8:
+        return name
+    clean_id = account_id.replace("act_", "")
+    return clean_id[-5:]
+
+
 @router.callback_query(F.data.startswith("report_period:"))
 async def cb_report_period(callback: CallbackQuery):
     period = callback.data.split(":")[1]
     user_id = str(callback.from_user.id)
     period_names = {
-        "today": "Сегодня",
-        "yesterday": "Вчера",
-        "last_3d": "Последние 3 дня",
-        "last_7d": "Неделя (7 дней)"
+        "today": "сегодня",
+        "yesterday": "вчера",
+        "last_3d": "последние 3 дня",
+        "last_7d": "неделю (7 дней)"
     }
     period_title = period_names.get(period, period)
     
@@ -365,13 +379,13 @@ async def cb_report_period(callback: CallbackQuery):
 
     async with async_session_maker() as session:
         # Фильтруем строго по владельцу кабинетов
-        stmt = select(Account).where(Account.is_active == True, Account.owner_id == user_id)
+        stmt = select(Account).where(Account.owner_id == user_id)
         res = await session.execute(stmt)
         accounts = res.scalars().all()
 
         if not accounts:
             await callback.message.edit_text(
-                "ℹ️ У вас пока нет активных подключенных кабинетов.\n"
+                "ℹ️ У вас пока нет подключенных кабинетов.\n"
                 "Нажмите '➕ Добавить кабинеты' в меню.",
                 reply_markup=None
             )
@@ -382,11 +396,15 @@ async def cb_report_period(callback: CallbackQuery):
         total_leads = 0
         total_regs = 0
         total_purchases = 0
-        total_active_adsets = 0
-        total_paused_adsets = 0
-        account_summaries = []
+        tz_name = "UTC"
+
+        table_rows = []
+        purchases_list = []
+        no_spend_list = []
 
         for acc in accounts:
+            tz_name = acc.timezone_name or tz_name
+            short_name = get_short_account_label(acc.name, acc.account_id)
             try:
                 adsets = await meta_client.get_adsets_insights(
                     account_id=acc.account_id,
@@ -399,39 +417,61 @@ async def cb_report_period(callback: CallbackQuery):
                 acc_leads = sum(a.get("leads", 0) for a in adsets)
                 acc_regs = sum(a.get("registrations", 0) for a in adsets)
                 acc_purchases = sum(a.get("purchases", 0) for a in adsets)
-                acc_conversions = acc_leads + acc_regs + acc_purchases
-                acc_active = sum(1 for a in adsets if a["status"] == "ACTIVE")
-                acc_paused = sum(1 for a in adsets if a["status"] == "PAUSED")
 
                 total_spend += acc_spend
                 total_clicks += acc_clicks
                 total_leads += acc_leads
                 total_regs += acc_regs
                 total_purchases += acc_purchases
-                total_active_adsets += acc_active
-                total_paused_adsets += acc_paused
 
-                account_summaries.append(
-                    f"🏢 <b>{acc.name}</b> (<code>{acc.timezone_name}</code>):\n"
-                    f"   💰 Спенд: <b>${acc_spend:.2f}</b> | 👆 Клики: <b>{acc_clicks}</b>\n"
-                    f"   🎯 Лиды: <b>{acc_leads}</b> | 📝 Реги: <b>{acc_regs}</b> | 💳 Пурчейз: <b>{acc_purchases}</b>\n"
-                    f"   ⚡ Адсеты: {acc_active} акт. / {acc_paused} на паузе"
-                )
+                table_rows.append({
+                    "name": short_name,
+                    "spend": acc_spend,
+                    "clicks": acc_clicks,
+                    "leads": acc_leads,
+                    "regs": acc_regs,
+                    "purchases": acc_purchases
+                })
+
+                if acc_purchases > 0:
+                    purchases_list.append(short_name)
+                if acc_spend == 0.0:
+                    no_spend_list.append(short_name)
+
             except Exception as e:
                 logger.error(f"Error fetching report for {acc.account_id}: {e}")
-                account_summaries.append(f"⚠️ <b>{acc.name}</b>: <i>Ошибка API ({e})</i>")
+                table_rows.append({
+                    "name": short_name,
+                    "spend": 0.0,
+                    "clicks": 0,
+                    "leads": 0,
+                    "regs": 0,
+                    "purchases": 0
+                })
+                no_spend_list.append(short_name)
 
-        report_text = (
-            f"📊 <b>Ваш сводный отчет ({period_title}):</b>\n\n"
-            f"💵 <b>Общий спенд:</b> <code>${total_spend:.2f}</code>\n"
-            f"👆 <b>Клики:</b> {total_clicks}\n"
-            f"🎯 <b>Лиды:</b> {total_leads}\n"
-            f"📝 <b>Реги (Регистрации):</b> {total_regs}\n"
-            f"💳 <b>Пурчейз (Покупки):</b> {total_purchases}\n"
-            f"⚡ <b>Адсеты:</b> {total_active_adsets} активных / {total_paused_adsets} на паузе\n\n"
-            f"<b>По кабинетам:</b>\n\n" + "\n\n".join(account_summaries)
-        )
+        # Формируем аккуратную таблицу в блоке <pre>
+        header = f"{'Кабинет':<8}{'Спенд':>8}{'Клики':>6}{'Лиды':>5}{'Реги':>5}{'Пок':>4}"
+        lines = [header]
+        for r in table_rows:
+            spend_str = f"${r['spend']:.2f}"
+            lines.append(f"{r['name']:<8}{spend_str:>8}{r['clicks']:>6}{r['leads']:>5}{r['regs']:>5}{r['purchases']:>4}")
 
+        table_block = "<pre>" + "\n".join(lines) + "</pre>"
+
+        report_lines = [
+            f"📊 <b>Отчёт за {period_title} · <code>{tz_name}</code></b>\n",
+            f"💵 <code>${total_spend:.2f}</code>  ·  👆 <b>{total_clicks}</b>  ·  🎯 <b>{total_leads}</b>  ·  📝 <b>{total_regs}</b>  ·  💳 <b>{total_purchases}</b>\n",
+            table_block,
+            ""
+        ]
+
+        if purchases_list:
+            report_lines.append(f"🏆 <b>Покупка:</b> {', '.join(purchases_list)}")
+        if no_spend_list:
+            report_lines.append(f"⚠️ <b>Нет спенда:</b> {', '.join(no_spend_list)}")
+
+        report_text = "\n".join(report_lines)
         await callback.message.edit_text(report_text, reply_markup=get_period_keyboard(), parse_mode="HTML")
 
 
