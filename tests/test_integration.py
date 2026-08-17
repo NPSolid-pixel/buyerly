@@ -334,6 +334,36 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(due["rules_checked"], 1)
         self.assertGreater(len(mock_meta.requested_windows), initial_request_count)
 
+    async def test_unknown_currency_is_refreshed_before_next_scheduled_check(self):
+        now = [1_000.0]
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            account.currency = "UNKNOWN"
+            account.rules_enabled = False
+            session.add(
+                AutomationScheduleState(
+                    state_key=MonitoringWorker._schedule_key("account", account.account_id),
+                    owner_id=account.owner_id,
+                    account_id=account.account_id,
+                    last_checked_at=now[0],
+                )
+            )
+            await session.commit()
+
+        mock_meta = MockMetaClient()
+        worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+        stats = await worker.run_cycle()
+
+        self.assertEqual(stats["accounts_checked"], 1)
+        self.assertEqual(stats["accounts_skipped"], 0)
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            self.assertEqual(account.currency, "USD")
+
     async def test_only_rules_that_are_due_are_evaluated(self):
         async with self.test_session_maker() as session:
             res = await session.execute(select(Account).where(Account.account_id == self.account_id))

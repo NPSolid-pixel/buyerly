@@ -424,7 +424,8 @@ class MonitoringWorker:
                     account_state.last_checked_at <= 0
                     or now - account_state.last_checked_at >= default_interval * 60
                 )
-                if not account_monitor_due and not due_rule_entries:
+                currency_refresh_due = normalize_currency(acc.currency) == "UNKNOWN"
+                if not account_monitor_due and not due_rule_entries and not currency_refresh_due:
                     stats["accounts_skipped"] += 1
                     await session.commit()
                     continue
