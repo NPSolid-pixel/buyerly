@@ -33,6 +33,8 @@ class TestDocumentationContract(unittest.TestCase):
             "docs/DEPLOYMENT.md",
             "docs/DECISIONS.md",
             "docs/PRODUCT_BACKLOG.md",
+            "docs/FACEBOOK_AUTHORIZATION_PLAN.md",
+            "docs/REMAINING_PRODUCT_WORK.md",
         ):
             self.assertIn(path, readme)
 

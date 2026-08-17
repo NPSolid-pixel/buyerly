@@ -78,7 +78,7 @@ scripts/             backup и атомарный production deploy
 tests/               unit, integration и contract tests
 ```
 
-Подробности: [архитектура](docs/ARCHITECTURE.md), [справочник API](docs/API.md), [развёртывание](docs/DEPLOYMENT.md), [архитектурные решения](docs/DECISIONS.md), [сквозной аудит продукта](docs/PRODUCT_AUDIT_2026-08-17.md), [работа с Meta-токеном](docs/TOKEN_GUIDE.md).
+Подробности: [архитектура](docs/ARCHITECTURE.md), [справочник API](docs/API.md), [развёртывание](docs/DEPLOYMENT.md), [архитектурные решения](docs/DECISIONS.md), [сквозной аудит продукта](docs/PRODUCT_AUDIT_2026-08-17.md), [официальное подключение Facebook](docs/FACEBOOK_AUTHORIZATION_PLAN.md), [оставшиеся продуктовые работы](docs/REMAINING_PRODUCT_WORK.md), [legacy-настройка System User Token](docs/TOKEN_GUIDE.md).
 
 ## Продуктовая разработка
 
