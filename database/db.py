@@ -335,6 +335,33 @@ async def migrate_rule_safety_contract(conn) -> int:
     return updated_count
 
 
+async def migrate_audit_undo_contract(conn) -> bool:
+    """Add the immutable reversal link to historical audit tables."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "audit_events" not in table_names:
+        return False
+    columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"]
+            for column in inspect(sync_conn).get_columns("audit_events")
+        }
+    )
+    changed = False
+    if "reverts_event_id" not in columns:
+        await conn.execute(text("ALTER TABLE audit_events ADD COLUMN reverts_event_id INTEGER"))
+        changed = True
+    await conn.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "ix_audit_events_reverts_event_id ON audit_events (reverts_event_id)"
+        )
+    )
+    return changed
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -342,6 +369,9 @@ async def init_schema():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        audit_undo_migrated = await migrate_audit_undo_contract(conn)
+        if audit_undo_migrated:
+            logger.info("Added immutable audit reversal links.")
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:
             logger.info(

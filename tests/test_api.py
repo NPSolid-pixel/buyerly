@@ -1081,6 +1081,193 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertIn("access_token=[REDACTED]", event.message)
             self.assertFalse(stopped.is_resolved)
 
+    async def test_stop_undo_is_guarded_idempotent_and_append_only(self):
+        async with self.test_session_maker() as session:
+            source = AuditEvent(
+                owner_id="8948797431",
+                actor_type="system",
+                actor_id="monitoring_worker",
+                category="RULE_ACTION",
+                event_type="STOP",
+                status="SUCCESS",
+                account_id="act_1018756607700064",
+                account_name="Швеция 1",
+                adset_id="undo_stop_adset",
+                adset_name="Undo stop",
+                action="STOP",
+                before_state='{"status":"ACTIVE"}',
+                after_state='{"status":"PAUSED"}',
+                correlation_id="source-stop",
+            )
+            session.add(source)
+            session.add(
+                StoppedAdSet(
+                    account_id="act_1018756607700064",
+                    adset_id="undo_stop_adset",
+                    adset_name="Undo stop",
+                    stop_spend=12.0,
+                )
+            )
+            await session.commit()
+            await session.refresh(source)
+            source_id = source.id
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        current_state = {
+            "adset_id": "undo_stop_adset",
+            "adset_name": "Undo stop",
+            "status": "PAUSED",
+            "effective_status": "PAUSED",
+            "daily_budget": 50.0,
+        }
+        with (
+            patch.object(
+                api_routes_module.meta_client,
+                "get_adset_state",
+                new=AsyncMock(return_value=current_state),
+            ) as get_state,
+            patch.object(
+                api_routes_module.meta_client,
+                "set_adset_status",
+                new=AsyncMock(return_value=True),
+            ) as set_status,
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                first = await client.post(f"/api/audit-events/{source_id}/undo", headers=headers)
+                second = await client.post(f"/api/audit-events/{source_id}/undo", headers=headers)
+                history = await client.get("/api/audit-events?page_size=100", headers=headers)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertFalse(first.json()["already_reverted"])
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue(second.json()["already_reverted"])
+        get_state.assert_awaited_once()
+        set_status.assert_awaited_once_with("undo_stop_adset", "mock_token", "ACTIVE")
+        source_item = next(item for item in history.json()["items"] if item["id"] == source_id)
+        self.assertEqual(source_item["display_status"], "REVERTED")
+        self.assertFalse(source_item["can_undo"])
+        self.assertIsNotNone(source_item["reverted_by_event_id"])
+
+        async with self.test_session_maker() as session:
+            source_row = await session.get(AuditEvent, source_id)
+            reversal = (
+                await session.execute(
+                    select(AuditEvent).where(AuditEvent.reverts_event_id == source_id)
+                )
+            ).scalar_one()
+            stopped = (
+                await session.execute(
+                    select(StoppedAdSet).where(StoppedAdSet.adset_id == "undo_stop_adset")
+                )
+            ).scalar_one()
+            self.assertEqual(source_row.status, "SUCCESS")
+            self.assertEqual(reversal.event_type, "UNDO_ACTION")
+            self.assertEqual(json.loads(reversal.after_state)["status"], "ACTIVE")
+            self.assertTrue(stopped.is_resolved)
+
+    async def test_undo_rejects_a_stale_action_after_a_newer_mutation(self):
+        async with self.test_session_maker() as session:
+            source = AuditEvent(
+                owner_id="8948797431",
+                category="RULE_ACTION",
+                event_type="STOP",
+                status="SUCCESS",
+                account_id="act_1018756607700064",
+                adset_id="newer_action_adset",
+                action="STOP",
+                before_state='{"status":"ACTIVE"}',
+                after_state='{"status":"PAUSED"}',
+                correlation_id="old-action",
+            )
+            session.add(source)
+            await session.flush()
+            session.add(
+                AuditEvent(
+                    owner_id="8948797431",
+                    category="MANUAL_ACTION",
+                    event_type="MANUAL_REACTIVATE",
+                    status="SUCCESS",
+                    account_id="act_1018756607700064",
+                    adset_id="newer_action_adset",
+                    action="REACTIVATE_ADSET",
+                    before_state='{"status":"PAUSED"}',
+                    after_state='{"status":"ACTIVE"}',
+                    correlation_id="new-action",
+                )
+            )
+            await session.commit()
+            source_id = source.id
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_adset_state",
+            new=AsyncMock(),
+        ) as get_state:
+            transport = httpx.ASGITransport(app=self.app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/audit-events/{source_id}/undo",
+                    headers={"Authorization": f"tma {buyer_data}"},
+                )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("уже изменялся", response.json()["detail"])
+        get_state.assert_not_awaited()
+
+    async def test_budget_undo_restores_the_exact_previous_value(self):
+        async with self.test_session_maker() as session:
+            source = AuditEvent(
+                owner_id="8948797431",
+                category="RULE_ACTION",
+                event_type="INCREASE_BUDGET",
+                status="SUCCESS",
+                account_id="act_1018756607700064",
+                adset_id="undo_budget_adset",
+                action="INCREASE_BUDGET",
+                before_state='{"daily_budget":50.0}',
+                after_state='{"daily_budget":60.0}',
+                correlation_id="budget-action",
+            )
+            session.add(source)
+            await session.commit()
+            await session.refresh(source)
+            source_id = source.id
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        with (
+            patch.object(
+                api_routes_module.meta_client,
+                "get_adset_state",
+                new=AsyncMock(return_value={"status": "ACTIVE", "daily_budget": 60.0}),
+            ),
+            patch.object(
+                api_routes_module.meta_client,
+                "update_adset_budget",
+                new=AsyncMock(return_value=True),
+            ) as update_budget,
+        ):
+            transport = httpx.ASGITransport(app=self.app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/audit-events/{source_id}/undo",
+                    headers={"Authorization": f"tma {buyer_data}"},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        update_budget.assert_awaited_once_with("undo_budget_adset", "mock_token", 50.0)
+
     async def test_account_cannot_attach_another_owners_preset(self):
         async with self.test_session_maker() as session:
             foreign_preset = RulePreset(

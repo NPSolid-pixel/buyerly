@@ -107,6 +107,21 @@ def get_pause_adset_keyboard(account_id: str, adset_id: str) -> InlineKeyboardMa
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
+
+def get_undo_action_keyboard(event_id: int) -> InlineKeyboardMarkup:
+    """One shared reversal action for completed Meta mutations."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="↩️ Отменить действие",
+                    callback_data=f"undo_action:{int(event_id)}",
+                )
+            ]
+        ]
+    )
+
 def get_account_manage_keyboard(account_id: str, rules_enabled: bool) -> InlineKeyboardMarkup:
     """Управление конкретным кабинетом: тумблер авто-правил, настройка лимитов, удаление"""
     rules_btn_text = "🛑 Выключить авто-правила" if rules_enabled else "🛡 Включить авто-правила"

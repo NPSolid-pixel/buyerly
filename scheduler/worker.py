@@ -309,12 +309,11 @@ class MonitoringWorker:
         after_state: Any = None,
         details: Any = None,
         duration_ms: int = 0,
-    ) -> bool:
+    ) -> Optional[int]:
         """Persist audit independently from Telegram without breaking automation."""
 
         try:
-            session.add(
-                build_audit_event(
+            audit_event = build_audit_event(
                     account=account,
                     event_type=event_type,
                     status=status,
@@ -328,13 +327,15 @@ class MonitoringWorker:
                     details=details,
                     duration_ms=duration_ms,
                 )
-            )
+            session.add(audit_event)
+            await session.flush()
+            audit_event_id = audit_event.id
             await session.commit()
-            return True
+            return audit_event_id
         except Exception as audit_error:
             await session.rollback()
             logger.error("Failed to persist audit event %s: %s", event_type, audit_error)
-            return False
+            return None
 
     async def run_cycle(self) -> dict:
         self._current_cycle_id = uuid.uuid4().hex
@@ -666,7 +667,7 @@ class MonitoringWorker:
                                     status="SUCCESS",
                                     now=now,
                                 )
-                                await self._persist_audit_event(
+                                audit_event_id = await self._persist_audit_event(
                                     session,
                                     acc,
                                     event_type="STOP",
@@ -683,7 +684,8 @@ class MonitoringWorker:
                                         eval_result=eval_res,
                                         account_name=acc.name,
                                         account_id=acc.account_id,
-                                        target_chat_id=acc.owner_id
+                                        target_chat_id=acc.owner_id,
+                                        audit_event_id=audit_event_id,
                                     )
                             except Exception as e:
                                 logger.error(f"Error pausing adset {a_id}: {e}")
@@ -787,7 +789,7 @@ class MonitoringWorker:
                                     status="SUCCESS",
                                     now=now,
                                 )
-                                await self._persist_audit_event(
+                                audit_event_id = await self._persist_audit_event(
                                     session,
                                     acc,
                                     event_type="AUTO_REACTIVATE",
@@ -806,7 +808,8 @@ class MonitoringWorker:
                                         eval_result=eval_res,
                                         account_name=acc.name,
                                         account_id=acc.account_id,
-                                        target_chat_id=acc.owner_id
+                                        target_chat_id=acc.owner_id,
+                                        audit_event_id=audit_event_id,
                                     )
                             except Exception as e:
                                 logger.error(f"Error auto-reactivating adset {a_id}: {e}")
@@ -840,7 +843,7 @@ class MonitoringWorker:
                                 )
                                 stats["budgets_changed"] += 1
                                 self._finish_execution(execution_state, status="SUCCESS", now=now)
-                                await self._persist_audit_event(
+                                audit_event_id = await self._persist_audit_event(
                                     session,
                                     acc,
                                     event_type="INCREASE_BUDGET",
@@ -858,7 +861,8 @@ class MonitoringWorker:
                                         account_id=acc.account_id,
                                         target_chat_id=acc.owner_id,
                                         old_budget=current_budget,
-                                        new_budget=new_budget
+                                        new_budget=new_budget,
+                                        audit_event_id=audit_event_id,
                                     )
                             except Exception as e:
                                 logger.error(f"Error increasing budget for adset {a_id}: {e}")
@@ -892,7 +896,7 @@ class MonitoringWorker:
                                 )
                                 stats["budgets_changed"] += 1
                                 self._finish_execution(execution_state, status="SUCCESS", now=now)
-                                await self._persist_audit_event(
+                                audit_event_id = await self._persist_audit_event(
                                     session,
                                     acc,
                                     event_type="DECREASE_BUDGET",
@@ -910,7 +914,8 @@ class MonitoringWorker:
                                         account_id=acc.account_id,
                                         target_chat_id=acc.owner_id,
                                         old_budget=current_budget,
-                                        new_budget=new_budget
+                                        new_budget=new_budget,
+                                        audit_event_id=audit_event_id,
                                     )
                             except Exception as e:
                                 logger.error(f"Error decreasing budget for adset {a_id}: {e}")

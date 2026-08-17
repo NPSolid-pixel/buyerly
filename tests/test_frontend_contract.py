@@ -62,6 +62,9 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertNotIn('id="stoppedAdsetsSection"', self.index)
         self.assertIn('/api/audit-events?', self.script)
         self.assertIn('window.openLogDetails', self.script)
+        self.assertIn('window.undoAuditEvent', self.script)
+        self.assertIn('/api/audit-events/${eventId}/undo', self.script)
+        self.assertIn('event.can_undo', self.script)
         for contract in ('Выполнено', 'Пропущено', 'Отменено', 'Скрыть'):
             self.assertIn(contract, self.index + self.script)
         for obsolete in ('Ждут решения', 'Нужна проверка', 'Подтвердить остановку'):
@@ -233,7 +236,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.12.0', self.index)
+        self.assertIn('v=9.13.0', self.index)
 
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (

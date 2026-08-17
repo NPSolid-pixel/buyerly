@@ -13,6 +13,28 @@ class FakeResponse:
 
 
 class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
+    async def test_live_adset_state_normalizes_meta_budget_units(self):
+        client = MetaClient()
+        client._request_with_retry = AsyncMock(
+            return_value=FakeResponse(
+                {
+                    "id": "adset_1",
+                    "name": "Test ad set",
+                    "status": "PAUSED",
+                    "effective_status": "CAMPAIGN_PAUSED",
+                    "daily_budget": "12345",
+                }
+            )
+        )
+
+        state = await client.get_adset_state("adset_1", "test-token")
+
+        self.assertEqual(state["status"], "PAUSED")
+        self.assertEqual(state["effective_status"], "CAMPAIGN_PAUSED")
+        self.assertEqual(state["daily_budget"], 123.45)
+        call = client._request_with_retry.await_args
+        self.assertIn("daily_budget", call.kwargs["params"]["fields"])
+
     async def test_account_summary_uses_unfiltered_account_level_insights(self):
         client = MetaClient()
         client._request_with_retry = AsyncMock(

@@ -3,6 +3,7 @@ from typing import Optional
 from aiogram import Bot
 from rules.engine import RuleEvaluationResult
 from bot.keyboards import get_reactivate_keyboard
+from bot.keyboards import get_undo_action_keyboard
 from database.db import async_session_maker
 from database.models import EventLog
 
@@ -170,6 +171,15 @@ class TelegramNotifier:
                     f"⚠️ <i>Токен доступа стал недействительным или истек срок действия.</i>\n\n"
                     f"💡 <i>Обновите токен через бота (кнопка '➕ Добавить кабинеты').</i>"
                 )
+
+            audit_event_id = kwargs.get("audit_event_id")
+            if audit_event_id and event_type in {
+                "STOP",
+                "AUTO_REACTIVATE",
+                "INCREASE_BUDGET",
+                "DECREASE_BUDGET",
+            }:
+                keyboard = get_undo_action_keyboard(audit_event_id)
 
             if text:
                 logger.info(f"Sending Telegram alert [{event_type}] to chat_id={chat_id} (Account: {account_id})")

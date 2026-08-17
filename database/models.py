@@ -223,6 +223,7 @@ class AuditEvent(Base):
     after_state = Column(Text, default="{}", nullable=False)
     details = Column(Text, default="{}", nullable=False)
     correlation_id = Column(String, default="", nullable=False, index=True)
+    reverts_event_id = Column(Integer, ForeignKey("audit_events.id"), nullable=True, unique=True, index=True)
     duration_ms = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
 
@@ -266,5 +267,23 @@ class RuleExecutionState(Base):
     before_state = Column(Text, default="{}", nullable=False)
     after_state = Column(Text, default="{}", nullable=False)
     details = Column(Text, default="{}", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class ActionUndoState(Base):
+    """Durable one-at-a-time claim for an idempotent audit action reversal."""
+
+    __tablename__ = "action_undo_states"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    original_event_id = Column(Integer, ForeignKey("audit_events.id"), unique=True, nullable=False, index=True)
+    owner_id = Column(String, default="", nullable=False, index=True)
+    status = Column(String, default="PENDING", nullable=False, index=True)
+    correlation_id = Column(String, default="", nullable=False, index=True)
+    attempt_count = Column(Integer, default=1, nullable=False)
+    expected_state = Column(Text, default="{}", nullable=False)
+    desired_state = Column(Text, default="{}", nullable=False)
+    last_error = Column(Text, default="", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

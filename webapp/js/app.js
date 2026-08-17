@@ -2408,6 +2408,8 @@
     DAY_START: 'Начало дня',
     HIDE_STOPPED_NOTIFICATION: 'Карточка остановки скрыта',
     MANUAL_PAUSE: 'Ad set остановлен вручную',
+    UNDO_ACTION: 'Действие отменено',
+    UNDO_ACTION_FAILED: 'Ошибка отмены',
     RULE_ACTION_PENDING: 'Действие зафиксировано',
     RULE_ACTION_RECONCILED: 'Действие сверено с Meta',
     RULE_ACTION: 'Действие правила'
@@ -2525,7 +2527,7 @@
     tableBody.innerHTML = events.map(event => `
       <tr>
         <td class="mono text-hint">${formatAuditTime(event.created_at)}</td>
-        <td>${auditStatusBadge(event.status)}</td>
+        <td>${auditStatusBadge(event.display_status || event.status)}</td>
         <td class="log-event-cell">${escapeHtml(auditEventLabel(event))}</td>
         <td class="log-target">${escapeHtml(auditTarget(event))}<small>${escapeHtml(event.adset_name || event.adset_id || event.account_id || '')}</small></td>
         <td>${escapeHtml(event.rule_name || '—')}</td>
@@ -2535,7 +2537,7 @@
 
     mobileList.innerHTML = events.map(event => `
       <article class="log-mobile-card" onclick="window.openLogDetails(${event.id})" role="button" tabindex="0">
-        <div class="log-mobile-head">${auditStatusBadge(event.status)}<span class="log-mobile-time">${formatAuditTime(event.created_at, true)}</span></div>
+        <div class="log-mobile-head">${auditStatusBadge(event.display_status || event.status)}<span class="log-mobile-time">${formatAuditTime(event.created_at, true)}</span></div>
         <h4>${escapeHtml(auditEventLabel(event))}</h4>
         <p>${escapeHtml(event.message || 'Без дополнительного сообщения')}</p>
         <div class="log-mobile-target"><span>${escapeHtml(auditTarget(event))}</span><span>${escapeHtml(event.rule_name || '')}</span></div>
@@ -2552,7 +2554,7 @@
       : 'Изменения состояния не зафиксированы';
     content.innerHTML = `
       <div class="log-details-grid">
-        <div class="log-detail-block"><span>Статус</span>${auditStatusBadge(event.status)}</div>
+        <div class="log-detail-block"><span>Статус</span>${auditStatusBadge(event.display_status || event.status)}</div>
         <div class="log-detail-block"><span>Время</span><b>${formatAuditTime(event.created_at)}</b></div>
         <div class="log-detail-block"><span>Событие</span><b>${escapeHtml(auditEventLabel(event))}</b></div>
         <div class="log-detail-block"><span>Инициатор</span><b>${escapeHtml(event.actor_type || 'system')}</b></div>
@@ -2564,8 +2566,33 @@
         <div class="log-detail-block wide"><span>Метрики и условия</span><pre class="log-json">${escapeHtml(detailsJson)}</pre></div>
         <div class="log-detail-block wide"><span>До / после</span><pre class="log-json">${escapeHtml(stateJson)}</pre></div>
         <div class="log-detail-block wide"><span>ID операции</span><p class="mono">${escapeHtml(event.correlation_id || '—')}</p></div>
+        ${event.reverts_event_id ? `<div class="log-detail-block wide"><span>Отменяет событие</span><p class="mono">#${event.reverts_event_id}</p></div>` : ''}
+        ${event.reverted_by_event_id ? `<div class="log-detail-block wide"><span>Событие отмены</span><p class="mono">#${event.reverted_by_event_id}</p></div>` : ''}
+        ${event.can_undo ? `<div class="log-detail-block wide"><button id="btnUndoAuditEvent" class="btn btn-secondary btn-block" type="button" onclick="window.undoAuditEvent(${event.id})">Отменить действие</button></div>` : ''}
+        ${!event.can_undo && event.undo_reason ? `<div class="log-detail-block wide"><span>Отмена недоступна</span><p>${escapeHtml(event.undo_reason)}</p></div>` : ''}
       </div>`;
     window.openModal('modalLogDetails');
+  };
+
+  window.undoAuditEvent = async function (eventId) {
+    const button = document.getElementById('btnUndoAuditEvent');
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Сверяем с Meta…';
+    }
+    haptic('impact', 'medium');
+    try {
+      const result = await apiRequest(`/api/audit-events/${eventId}/undo`, { method: 'POST' });
+      showToast(result.message || 'Действие отменено', 'success');
+      window.closeModal('modalLogDetails');
+      await loadLogsTab(state.auditPage);
+    } catch (error) {
+      showToast(error.message || 'Не удалось отменить действие', 'error');
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Отменить действие';
+      }
+    }
   };
 
   function renderStoppedAdsets() {

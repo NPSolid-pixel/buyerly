@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from database.db import (
+    migrate_audit_undo_contract,
     migrate_legacy_account_rules,
     migrate_rule_metric_contract,
     migrate_rule_safety_contract,
@@ -288,6 +289,43 @@ class TestRuleSafetyContractMigration(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(migrated[0]["enabled"])
         self.assertTrue(migrated[0]["needs_review"])
         self.assertIn("отключено", migrated[0]["review_reason"])
+
+
+class TestAuditUndoContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE audit_events ("
+                    "id INTEGER PRIMARY KEY, event_type VARCHAR NOT NULL)"
+                )
+            )
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+
+    async def test_adds_reversal_link_idempotently(self):
+        async with self.engine.begin() as conn:
+            first = await migrate_audit_undo_contract(conn)
+            second = await migrate_audit_undo_contract(conn)
+            columns = {
+                row[1]
+                for row in (
+                    await conn.execute(text("PRAGMA table_info(audit_events)"))
+                ).all()
+            }
+            indexes = {
+                row[1]
+                for row in (
+                    await conn.execute(text("PRAGMA index_list(audit_events)"))
+                ).all()
+            }
+
+        self.assertTrue(first)
+        self.assertFalse(second)
+        self.assertIn("reverts_event_id", columns)
+        self.assertIn("ix_audit_events_reverts_event_id", indexes)
 
 
 if __name__ == "__main__":

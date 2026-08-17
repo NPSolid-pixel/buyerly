@@ -13,6 +13,7 @@ from sqlalchemy import select, delete
 
 from core.config import settings
 from core.audit import build_audit_event
+from core.action_undo import UndoError, undo_audit_action
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, AppSettings, TelegramUser
 from meta_api.client import MetaClient
@@ -22,7 +23,8 @@ from bot.keyboards import (
     get_period_keyboard,
     get_interval_keyboard,
     get_account_manage_keyboard,
-    get_admin_approval_keyboard
+    get_admin_approval_keyboard,
+    get_undo_action_keyboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -863,6 +865,7 @@ async def cb_reactivate(callback: CallbackQuery):
     user_id = str(callback.from_user.id)
     action_started = time.perf_counter()
     correlation_id = uuid.uuid4().hex
+    audit_event_id = None
 
     async with async_session_maker() as session:
         acc_res = await session.execute(select(Account).where(Account.account_id == account_id))
@@ -915,8 +918,7 @@ async def cb_reactivate(callback: CallbackQuery):
             return
 
         stopped_entry.is_resolved = True
-        session.add(
-            build_audit_event(
+        audit_event = build_audit_event(
                 account=account,
                 event_type="MANUAL_REACTIVATE",
                 status="SUCCESS",
@@ -932,8 +934,10 @@ async def cb_reactivate(callback: CallbackQuery):
                 adset_id=adset_id,
                 adset_name=stopped_entry.adset_name,
             )
-        )
+        session.add(audit_event)
         try:
+            await session.flush()
+            audit_event_id = audit_event.id
             await session.commit()
         except Exception as e:
             await session.rollback()
@@ -943,7 +947,11 @@ async def cb_reactivate(callback: CallbackQuery):
 
     await callback.answer("✅ Ad set успешно включён!")
     new_text = callback.message.text + "\n\n🟢 <b>СТАТУС: Включён пользователем через Telegram ✅</b>"
-    await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")
+    await callback.message.edit_text(
+        new_text,
+        reply_markup=get_undo_action_keyboard(audit_event_id) if audit_event_id else None,
+        parse_mode="HTML",
+    )
 
 
 @router.callback_query(F.data.startswith("dismiss:"))
@@ -999,6 +1007,7 @@ async def cb_pause_adset(callback: CallbackQuery):
     user_id = str(callback.from_user.id)
     action_started = time.perf_counter()
     correlation_id = uuid.uuid4().hex
+    audit_event_id = None
 
     async with async_session_maker() as session:
         acc_res = await session.execute(select(Account).where(Account.account_id == account_id))
@@ -1041,8 +1050,7 @@ async def cb_pause_adset(callback: CallbackQuery):
             await callback.answer("❌ Meta не смогла остановить ad set. Подробности сохранены в логах.", show_alert=True)
             return
 
-        session.add(
-            build_audit_event(
+        audit_event = build_audit_event(
                 account=account,
                 event_type="MANUAL_PAUSE",
                 status="SUCCESS",
@@ -1057,8 +1065,10 @@ async def cb_pause_adset(callback: CallbackQuery):
                 actor_id=user_id,
                 adset_id=adset_id,
             )
-        )
+        session.add(audit_event)
         try:
+            await session.flush()
+            audit_event_id = audit_event.id
             await session.commit()
         except Exception as e:
             await session.rollback()
@@ -1068,4 +1078,45 @@ async def cb_pause_adset(callback: CallbackQuery):
 
     await callback.answer("🛑 Ad set успешно остановлен!")
     new_text = callback.message.text + "\n\n🔴 <b>СТАТУС: Остановлен вручную по алерту 🛑</b>"
+    await callback.message.edit_text(
+        new_text,
+        reply_markup=get_undo_action_keyboard(audit_event_id) if audit_event_id else None,
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data.startswith("undo_action:"))
+async def cb_undo_action(callback: CallbackQuery):
+    user_id = str(callback.from_user.id)
+    try:
+        event_id = int(callback.data.split(":", 1)[1])
+    except (IndexError, ValueError):
+        await callback.answer("❌ Неверная кнопка отмены.", show_alert=True)
+        return
+
+    async with async_session_maker() as session:
+        user = (
+            await session.execute(
+                select(TelegramUser).where(TelegramUser.telegram_id == user_id)
+            )
+        ).scalar_one_or_none()
+        if not user or not user.is_approved:
+            await callback.answer("⛔️ Доступ не подтверждён.", show_alert=True)
+            return
+        try:
+            result = await undo_audit_action(
+                session,
+                meta_client=meta_client,
+                event_id=event_id,
+                actor_type="telegram_user",
+                actor_id=user_id,
+                owner_id=user_id,
+                is_admin=user.role == "admin",
+            )
+        except UndoError as error:
+            await callback.answer(f"❌ {error.message}", show_alert=True)
+            return
+
+    await callback.answer("✅ Действие отменено.")
+    new_text = (callback.message.text or "") + f"\n\n↩️ <b>{result['message']}</b>"
     await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")

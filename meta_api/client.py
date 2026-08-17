@@ -468,6 +468,30 @@ class MetaClient:
             logger.error(f"Failed to set adset {adset_id} status: {error_msg}")
             raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
 
+    async def get_adset_state(self, adset_id: str, access_token: str) -> Dict[str, Any]:
+        """Read the live state used by guarded action reversal checks."""
+
+        url = f"{self.BASE_URL}/{adset_id}"
+        response = await self._request_with_retry(
+            "GET",
+            url,
+            params={
+                "fields": "id,name,status,effective_status,daily_budget",
+                "access_token": access_token,
+            },
+            account_id=adset_id,
+        )
+        payload = response.json()
+        return {
+            "adset_id": str(payload.get("id") or adset_id),
+            "adset_name": str(payload.get("name") or ""),
+            "status": str(payload.get("status") or "UNKNOWN").upper(),
+            "effective_status": str(
+                payload.get("effective_status") or payload.get("status") or "UNKNOWN"
+            ).upper(),
+            "daily_budget": self._safe_float(payload.get("daily_budget")) / 100.0,
+        }
+
     async def update_adset_budget(
         self, 
         adset_id: str, 
