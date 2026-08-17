@@ -493,29 +493,6 @@ code, .mono {
   font-size: 11px;
 }
 
-.accounts-health-strip {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.accounts-health-strip > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 9px;
-  color: var(--tg-hint);
-  background: var(--tg-sec-bg);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-full);
-  font-size: 10px;
-}
-
-.accounts-health-strip b { color: var(--tg-text); font: 600 11px 'JetBrains Mono', monospace; }
-.accounts-health-strip .health-good b { color: var(--color-success); }
-.accounts-health-strip .health-bad b { color: var(--color-danger); }
 
 .account-groups-panel {
   margin-bottom: 12px;

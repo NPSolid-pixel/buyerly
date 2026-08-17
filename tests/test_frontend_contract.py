@@ -364,9 +364,6 @@ class TestFrontendRuleContract(unittest.TestCase):
 
     def test_account_cards_separate_meta_automation_and_rule_state(self):
         for contract in (
-            'id="accountsHealthActive"',
-            'id="accountsHealthAutomation"',
-            'id="accountsHealthIssues"',
             'id="modalAccountDetails"',
             'Статус Meta',
             'Автоматика',
