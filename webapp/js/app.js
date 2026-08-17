@@ -326,6 +326,66 @@
     }
   }
 
+  function accountDisplayName(account) {
+    return String(account?.custom_name || '').trim() || account?.name || account?.account_id || 'Кабинет';
+  }
+
+  function getAccountConnectionState(account) {
+    return account?.connection_type === 'facebook_login'
+      ? {
+          key: 'oauth',
+          label: 'Facebook Login',
+          detail: 'Подключён через авторизацию Facebook'
+        }
+      : {
+          key: 'system',
+          label: 'System User',
+          detail: 'Подключён вручную токеном System User'
+        };
+  }
+
+  function getAccountActivityState(account) {
+    const metrics = account?.latest_metrics;
+    if (!metrics) {
+      return { key: 'missing', label: 'Нет снимка', detail: 'Откройте Сводку и обновите данные' };
+    }
+    if (metrics.data_status === 'error') {
+      return { key: 'error', label: 'Ошибка данных', detail: metrics.data_status_label || 'Meta не вернула метрики' };
+    }
+    if (metrics.data_status === 'blocked') {
+      return { key: 'blocked', label: 'Недоступен', detail: metrics.data_status_label || 'Метрики кабинета недоступны' };
+    }
+    if (typeof metrics.spend !== 'number' || !Number.isFinite(metrics.spend)) {
+      return { key: 'missing', label: 'Нет Spend', detail: 'В сохранённом снимке нет денежного показателя' };
+    }
+    return metrics.spend > 0
+      ? { key: 'spending', label: 'Есть расход', detail: 'В последнем снимке за сегодня Spend больше нуля' }
+      : { key: 'idle', label: 'Без расхода', detail: 'В последнем снимке за сегодня Spend равен нулю' };
+  }
+
+  function renderAccountLatestMetrics(account, context = 'card') {
+    const metrics = account?.latest_metrics;
+    const activity = getAccountActivityState(account);
+    const metricValue = (key) => metrics ? formatNumber(metrics[key]) : '—';
+    const spend = metrics && typeof metrics.spend === 'number'
+      ? formatMoneyOrDash(metrics.spend, account.currency)
+      : '—';
+    const updatedAt = metrics?.generated_at || metrics?.saved_at;
+    const updatedLabel = updatedAt ? formatSummaryTime(updatedAt) : 'обновлений ещё не было';
+
+    return `
+      <div class="account-metrics-grid ${context === 'details' ? 'details' : ''}">
+        <div class="account-metric account-metric-spend"><span>Spend сегодня</span><b>${escapeHtml(spend)}</b></div>
+        <div class="account-metric"><span>Лиды</span><b>${metricValue('leads')}</b></div>
+        <div class="account-metric"><span>Реги</span><b>${metricValue('registrations')}</b></div>
+        <div class="account-metric"><span>Покупки</span><b>${metricValue('purchases')}</b></div>
+      </div>
+      <div class="account-activity-line ${activity.key}" title="${escapeHtml(activity.detail)}">
+        <span><span class="status-dot"></span><b>${escapeHtml(activity.label)}</b></span>
+        <span>Снимок за сегодня · ${escapeHtml(updatedLabel)}</span>
+      </div>`;
+  }
+
   function renderAccounts() {
     const listEl = document.getElementById('accountsList');
     const emptyEl = document.getElementById('accountsEmptyState');
@@ -333,9 +393,12 @@
 
     // Filter by search and chips
     const filtered = state.accounts.filter(acc => {
+      const searchText = [acc.name, acc.custom_name, acc.note, acc.account_id]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
       const matchSearch = !query || 
-        acc.name.toLowerCase().includes(query) || 
-        acc.account_id.toLowerCase().includes(query);
+        searchText.includes(query);
 
       if (!matchSearch) return false;
 
@@ -379,12 +442,19 @@
       };
       const visibleRules = activeRules.slice(0, 2);
       const moreCount = Math.max(0, activeRules.length - visibleRules.length);
+      const displayName = accountDisplayName(acc);
+      const connectionState = getAccountConnectionState(acc);
+      const sourceName = String(acc.custom_name || '').trim() && acc.name !== displayName
+        ? `<span class="card-source-name">Meta: ${escapeHtml(acc.name)}</span>`
+        : '';
+      const noteText = String(acc.note || '').trim();
 
       return `
         <article class="account-card ${metaState.key !== 'active' ? 'account-disabled' : ''}" id="card-${escapeHtml(acc.account_id)}">
           <div class="card-header-row">
             <div class="card-title-area">
-              <span class="card-title">${escapeHtml(acc.name)}</span>
+              <span class="card-title">${escapeHtml(displayName)}</span>
+              ${sourceName}
               <div class="card-subtitle-row">
                 <button class="card-id-copy mono" type="button" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Скопировать ID">
                   ${escapeHtml(acc.account_id)}
@@ -394,8 +464,18 @@
                 <span class="card-tz mono">${escapeHtml(acc.currency || 'UNKNOWN')}</span>
               </div>
             </div>
-            <button class="account-more-button" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')">Подробнее</button>
+            <div class="account-card-head-actions">
+              <span class="account-connection-badge ${connectionState.key}" title="${escapeHtml(connectionState.detail)}">${escapeHtml(connectionState.label)}</span>
+              <button class="account-more-button" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')">Подробнее</button>
+            </div>
           </div>
+
+          <div class="account-note-preview ${noteText ? '' : 'empty'}">
+            <div><span>Внутренняя заметка</span><p>${escapeHtml(noteText || 'Добавьте гео, оффер или рабочий комментарий')}</p></div>
+            <button type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" aria-label="Изменить название и заметку">${noteText || acc.custom_name ? 'Изменить' : 'Добавить'}</button>
+          </div>
+
+          ${renderAccountLatestMetrics(acc)}
 
           <div class="account-state-grid">
             <div class="account-state-item">
@@ -491,12 +571,17 @@
     const ownerHtml = state.user?.role === 'admin'
       ? `<div class="account-detail-field"><span>Владелец</span><b class="mono">${escapeHtml(account.owner_id || '—')}</b></div>`
       : '';
+    const connectionState = getAccountConnectionState(account);
+    const displayName = accountDisplayName(account);
+    const hasCustomName = String(account.custom_name || '').trim();
+    const note = String(account.note || '').trim();
 
     content.innerHTML = `
       <div class="account-detail-hero">
         <div>
           <span class="eyebrow">Рекламный кабинет</span>
-          <h2>${escapeHtml(account.name)}</h2>
+          <h2>${escapeHtml(displayName)}</h2>
+          ${hasCustomName ? `<span class="account-detail-source-name">Название Meta: ${escapeHtml(account.name)}</span>` : ''}
           <button type="button" class="account-detail-copy mono" onclick="window.copyToClipboard('${escapeHtml(account.account_id)}', this)">${escapeHtml(account.account_id)} · копировать</button>
         </div>
         <span class="account-meta-state ${metaState.key}"><span class="status-dot dot-${metaState.dot}"></span>${metaState.label}</span>
@@ -506,11 +591,22 @@
         <div class="account-detail-field"><span>Статус Meta</span><b>${escapeHtml(account.status_label || metaState.label)}</b></div>
         <div class="account-detail-field"><span>Часовой пояс</span><b class="mono">${escapeHtml(account.timezone_name || 'UTC')}</b></div>
         <div class="account-detail-field"><span>Валюта Meta</span><b class="mono">${escapeHtml(account.currency || 'UNKNOWN')}</b></div>
+        <div class="account-detail-field"><span>Подключение</span><b>${escapeHtml(connectionState.label)}</b></div>
         <div class="account-detail-field"><span>Автоматика</span><b>${account.rules_enabled ? 'Включена' : 'Выключена'}</b></div>
         <div class="account-detail-field"><span>Назначено правил</span><b>${activeRules.length}</b></div>
         ${ownerHtml}
         <div class="account-detail-field"><span>Добавлен</span><b>${escapeHtml(account.created_at || '—')}</b></div>
       </div>
+
+      <section class="account-detail-profile">
+        <div class="account-detail-section-head"><h3>Внутренняя заметка</h3><button type="button" onclick="window.openAccountProfileEditor('${escapeHtml(account.account_id)}')">Изменить</button></div>
+        <p class="${note ? '' : 'empty'}">${escapeHtml(note || 'Заметка пока не заполнена. Здесь можно хранить гео, оффер или текущий статус работы.')}</p>
+      </section>
+
+      <section class="account-detail-performance">
+        <div class="account-detail-section-head"><h3>Последний сохранённый снимок</h3><span>Сегодня</span></div>
+        ${renderAccountLatestMetrics(account, 'details')}
+      </section>
 
       <section class="account-detail-rules">
         <div class="account-detail-section-head"><h3>Правила автоматики</h3><span>${activeRules.length}</span></div>
@@ -540,8 +636,50 @@
     const account = state.accounts.find(item => item.account_id === accountId);
     if (!account) return;
     window.closeModal('modalAccountDetails');
-    window.openDeleteConfirmModal(account.account_id, account.name);
+    window.openDeleteConfirmModal(account.account_id, accountDisplayName(account));
   };
+
+  window.openAccountProfileEditor = function (accountId) {
+    const account = state.accounts.find(item => item.account_id === accountId);
+    if (!account) return;
+    const connectionState = getAccountConnectionState(account);
+    document.getElementById('accountProfileId').value = account.account_id;
+    document.getElementById('accountCustomNameInput').value = account.custom_name || '';
+    document.getElementById('accountNoteInput').value = account.note || '';
+    document.getElementById('accountProfileMetaName').textContent = account.name || account.account_id;
+    document.getElementById('accountProfileMeta').textContent = `${account.account_id} · ${connectionState.label}`;
+    window.openModal('modalAccountProfile');
+    window.setTimeout(() => document.getElementById('accountCustomNameInput')?.focus(), 50);
+  };
+
+  document.getElementById('btnSaveAccountProfile')?.addEventListener('click', async () => {
+    const accountId = document.getElementById('accountProfileId')?.value;
+    const customName = document.getElementById('accountCustomNameInput')?.value || '';
+    const note = document.getElementById('accountNoteInput')?.value || '';
+    const button = document.getElementById('btnSaveAccountProfile');
+    if (!accountId || !button) return;
+    button.disabled = true;
+    try {
+      const saved = await apiRequest(`/api/accounts/${accountId}/profile`, {
+        method: 'PATCH',
+        body: JSON.stringify({ custom_name: customName, note })
+      });
+      const account = state.accounts.find(item => item.account_id === accountId);
+      if (account) {
+        account.custom_name = saved.custom_name || '';
+        account.note = saved.note || '';
+      }
+      const detailsWasOpen = !document.getElementById('modalAccountDetails')?.classList.contains('hidden');
+      window.closeModal('modalAccountProfile');
+      renderAccounts();
+      if (detailsWasOpen) window.openAccountDetails(accountId);
+      showToast(saved.message || 'Название и заметка сохранены', 'success');
+    } catch (err) {
+      showToast(`Ошибка сохранения: ${err.message}`, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   // ==========================================================
   // TAB: RULES & PRESETS MANAGEMENT (PHOTO 2 & TAB LOGIC)
@@ -1326,7 +1464,7 @@
     await loadPresets();
 
     document.getElementById('editLimitsAccountId').value = acc.account_id;
-    document.getElementById('modalLimitsTitle').textContent = `Правило для ${acc.name}`;
+    document.getElementById('modalLimitsTitle').textContent = `Правило для ${accountDisplayName(acc)}`;
     window.newPresetMode();
 
     window.openModal('modalEditLimits');
@@ -1457,7 +1595,7 @@
     const acc = state.accounts.find(a => a.account_id === accountId);
     if (acc) {
       window.closeModal('modalEditLimits');
-      window.openDeleteConfirmModal(acc.account_id, acc.name);
+      window.openDeleteConfirmModal(acc.account_id, accountDisplayName(acc));
     }
   });
 
@@ -2522,7 +2660,7 @@
     if (!select) return;
     const current = select.value;
     select.innerHTML = '<option value="">Все кабинеты</option>' + state.accounts.map(account =>
-      `<option value="${escapeHtml(account.account_id)}">${escapeHtml(account.name || account.account_id)}</option>`
+      `<option value="${escapeHtml(account.account_id)}">${escapeHtml(accountDisplayName(account))}</option>`
     ).join('');
     select.value = state.pendingLogsAccountId || current;
     state.pendingLogsAccountId = '';

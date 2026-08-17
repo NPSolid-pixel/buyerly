@@ -256,7 +256,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.16.0', self.index)
+        self.assertIn('v=9.17.0', self.index)
 
     def test_money_is_currency_aware_and_mixed_totals_are_separated(self):
         for contract in (
@@ -304,3 +304,37 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('state.pendingLogsAccountId', self.script)
         self.assertIn('account-state-grid', self.styles)
         self.assertIn('account-detail-grid', self.styles)
+
+    def test_account_cards_show_connection_annotations_and_saved_activity(self):
+        for contract in (
+            'id="modalAccountProfile"',
+            'id="accountCustomNameInput"',
+            'id="accountNoteInput"',
+            'id="btnSaveAccountProfile"',
+            'Facebook Login',
+            'System User',
+            'Spend сегодня',
+            'Снимок за сегодня',
+            'Внутренняя заметка',
+        ):
+            self.assertIn(contract, self.index + self.script)
+
+        for contract in (
+            'account?.connection_type',
+            'account?.latest_metrics',
+            'account.custom_name',
+            'account.note',
+            '/api/accounts/${accountId}/profile',
+            'method: \'PATCH\'',
+            'accountDisplayName',
+            'getAccountActivityState',
+        ):
+            self.assertIn(contract, self.script)
+
+        for contract in (
+            '.account-connection-badge',
+            '.account-note-preview',
+            '.account-metrics-grid',
+            '.account-activity-line',
+        ):
+            self.assertIn(contract, self.styles)
