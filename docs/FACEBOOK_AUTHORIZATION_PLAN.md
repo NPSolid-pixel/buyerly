@@ -1,6 +1,6 @@
 # META-AUTH-001 — официальное подключение Facebook-профилей
 
-Статус: `пилотный контур развёрнут; ожидаются Meta App Secret и Configuration ID`
+Статус: `пилотный контур развёрнут; ожидаются Meta App Secret и настройка Dashboard`
 
 Приоритет: `P0`
 
@@ -12,14 +12,13 @@
 
 Backend, база и интерфейс AUTH-01…AUTH-04 выпущены в production. Buyerly умеет начать официальный Facebook Login for Business, безопасно принять callback, зашифровать token, найти все доступные через `/me/adaccounts` кабинеты, сгруппировать их по Business Manager и импортировать выбранные без автоматического включения правил.
 
-В production уже заданы Graph API `v26.0`, App ID, callback `https://smattrades.com/api/meta/oauth/callback` и отдельный ключ шифрования. Кнопка входа намеренно неактивна, пока на сервере не появятся:
+В production уже заданы Graph API `v26.0`, App ID, Login Configuration ID, callback `https://smattrades.com/api/meta/oauth/callback` и отдельный ключ шифрования. Кнопка входа намеренно неактивна, пока на сервере не появится:
 
-- `META_APP_SECRET` — вводится только в production secrets, не в GitHub и не в чат;
-- `META_LOGIN_CONFIG_ID` — ID конфигурации Facebook Login for Business.
+- `META_APP_SECRET` — вводится только в production secrets, не в GitHub и не в чат.
 
 Точные действия в Meta Dashboard для первого теста:
 
-1. В `Facebook Login for Business → Configurations` создать или открыть конфигурацию User Access Token с `ads_read`, `ads_management` и `business_management`, затем сохранить её Configuration ID.
+1. В `Facebook Login for Business → Configurations` проверить, что созданная конфигурация использует User Access Token и permissions `ads_read`, `ads_management` и `business_management`. Configuration ID уже установлен в production.
 2. В `Facebook Login for Business → Settings` добавить в `Valid OAuth Redirect URIs` ровно `https://smattrades.com/api/meta/oauth/callback`; Web OAuth, HTTPS и Strict Mode оставить включёнными.
 3. В `App settings → Basic` добавить App Domain `smattrades.com`.
 4. Ввести App Secret напрямую в production `.env`, перезапустить API и проверить `/api/meta/oauth/config`.
@@ -82,7 +81,7 @@ System User Token не удаляется в первом релизе. Он о�
 - [x] Marketing API подключён: доступны use cases управления рекламой и получения статистики.
 - [x] Facebook Login for Business подключён.
 - [ ] Какие конфигурации созданы в `Facebook Login for Business → Configurations`.
-- [ ] Configuration ID предполагаемого production-входа.
+- [x] Configuration ID production-входа создан и установлен на сервере.
 - [ ] Какой тип token выдаёт конфигурация.
 - [ ] Какие разрешения выбраны внутри конфигурации.
 - [ ] Добавить exact Valid OAuth Redirect URI `https://smattrades.com/api/meta/oauth/callback`; на скриншоте список пустой.

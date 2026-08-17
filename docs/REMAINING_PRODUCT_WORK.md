@@ -6,7 +6,7 @@
 
 ## Очередь 1. Официальное подключение Meta — BL-007
 
-В production уже выпущены кнопка `Войти через Facebook`, защищённый OAuth backend, зашифрованное подключение, поиск доступных кабинетов, группировка по BM и выборочный импорт. До первого входа нужно дозаполнить Meta Dashboard и два production secrets; точный чек-лист хранится в [META-AUTH-001](FACEBOOK_AUTHORIZATION_PLAN.md).
+В production уже выпущены кнопка `Войти через Facebook`, защищённый OAuth backend, зашифрованное подключение, поиск доступных кабинетов, группировка по BM и выборочный импорт. Login Configuration ID уже установлен. До первого входа нужно дозаполнить Meta Dashboard и один production secret; точный чек-лист хранится в [META-AUTH-001](FACEBOOK_AUTHORIZATION_PLAN.md).
 
 Оставшиеся функции:
 
