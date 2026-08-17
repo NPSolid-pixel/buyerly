@@ -42,6 +42,8 @@ from database.models import (
     RulePreset,
     RuleGroup,
     RuleGroupItem,
+    AccountGroup,
+    AccountGroupMember,
     SummarySnapshot,
     AnalyticsViewPreference,
     AutomationScheduleState,
@@ -66,6 +68,8 @@ SUMMARY_SNAPSHOT_RETENTION = 100
 SUMMARY_VIEW_SCOPE = "summary"
 SUMMARY_TABLE_COLUMNS = (
     "account",
+    "custom_name",
+    "note",
     "data",
     "spend",
     "impressions",
@@ -91,12 +95,14 @@ SUMMARY_TABLE_COLUMNS = (
 SUMMARY_REQUIRED_COLUMNS = ("account", "data")
 SUMMARY_VIEW_MODES = {"all", "overview", "delivery", "traffic", "funnel", "custom"}
 SUMMARY_VIEW_PERIODS = {"today", "yesterday", "last_3d", "last_7d"}
-SUMMARY_FILTER_KEYS = {"query", "status"}
+SUMMARY_FILTER_KEYS = {"query", "status", "group_id"}
 SUMMARY_FILTER_STATUSES = {"all", "synced", "blocked", "error"}
 SUMMARY_COLUMN_MIN_WIDTH = 72
 SUMMARY_COLUMN_MAX_WIDTH = 420
 SUMMARY_DEFAULT_COLUMN_WIDTHS = {
     "account": 260,
+    "custom_name": 180,
+    "note": 280,
     "data": 120,
     "spend": 112,
     "impressions": 104,
@@ -249,6 +255,7 @@ class AccountItem(BaseModel):
     rules_enabled: bool
     is_active: bool
     active_rules: List[Dict[str, Any]] = Field(default_factory=list)
+    group_ids: List[int] = Field(default_factory=list)
     latest_metrics: Optional[AccountLatestMetrics] = None
     created_at: str
 
@@ -258,6 +265,24 @@ class AccountProfileUpdateRequest(BaseModel):
 
     custom_name: str = Field(default="", max_length=120)
     note: str = Field(default="", max_length=500)
+
+
+class AccountGroupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=300)
+    account_ids: List[str] = Field(default_factory=list, max_length=250)
+
+
+class AccountGroupItem(BaseModel):
+    id: int
+    name: str
+    description: str
+    account_ids: List[str] = Field(default_factory=list)
+    accounts_count: int = 0
+    created_at: str = ""
+    updated_at: str = ""
 
 
 class ParseRawRequest(BaseModel):
@@ -324,6 +349,85 @@ async def get_user_accounts(session, user: TelegramUser) -> List[Account]:
         stmt = select(Account).where(owned_by(Account, user)).order_by(Account.id.desc())
     res = await session.execute(stmt)
     return res.scalars().all()
+
+
+async def _account_group_ids_by_account(
+    session,
+    user: TelegramUser,
+) -> Dict[str, List[int]]:
+    """Return live owner-scoped group membership keyed by Meta account ID."""
+
+    rows = (
+        await session.execute(
+            select(Account.account_id, AccountGroupMember.group_id)
+            .join(AccountGroupMember, AccountGroupMember.account_id == Account.id)
+            .join(AccountGroup, AccountGroup.id == AccountGroupMember.group_id)
+            .where(owned_by(AccountGroup, user))
+            .order_by(AccountGroupMember.position, AccountGroupMember.id)
+        )
+    ).all()
+    result: Dict[str, List[int]] = {}
+    for account_id, group_id in rows:
+        result.setdefault(str(account_id), []).append(int(group_id))
+    return result
+
+
+async def _account_group_items(
+    session,
+    user: TelegramUser,
+) -> List[AccountGroupItem]:
+    groups = (
+        await session.execute(
+            select(AccountGroup)
+            .where(owned_by(AccountGroup, user))
+            .order_by(AccountGroup.name.asc(), AccountGroup.id.asc())
+        )
+    ).scalars().all()
+    if not groups:
+        return []
+
+    group_ids = [group.id for group in groups]
+    member_rows = (
+        await session.execute(
+            select(AccountGroupMember.group_id, Account.account_id)
+            .join(Account, Account.id == AccountGroupMember.account_id)
+            .where(AccountGroupMember.group_id.in_(group_ids))
+            .order_by(AccountGroupMember.group_id, AccountGroupMember.position, AccountGroupMember.id)
+        )
+    ).all()
+    members: Dict[int, List[str]] = {group_id: [] for group_id in group_ids}
+    for group_id, account_id in member_rows:
+        members.setdefault(int(group_id), []).append(str(account_id))
+
+    return [
+        AccountGroupItem(
+            id=group.id,
+            name=group.name,
+            description=group.description or "",
+            account_ids=members.get(group.id, []),
+            accounts_count=len(members.get(group.id, [])),
+            created_at=_utc_iso(group.created_at),
+            updated_at=_utc_iso(group.updated_at),
+        )
+        for group in groups
+    ]
+
+
+async def _validate_account_group_members(
+    session,
+    user: TelegramUser,
+    requested_account_ids: List[str],
+) -> List[Account]:
+    unique_ids = list(dict.fromkeys(str(value).strip() for value in requested_account_ids if str(value).strip()))
+    visible_accounts = await get_user_accounts(session, user)
+    visible_by_id = {account.account_id: account for account in visible_accounts}
+    invalid = [account_id for account_id in unique_ids if account_id not in visible_by_id]
+    if invalid:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Кабинеты недоступны текущему пользователю: {', '.join(invalid[:5])}",
+        )
+    return [visible_by_id[account_id] for account_id in unique_ids]
 
 
 def _load_active_rules(raw_rules: Any) -> List[Dict[str, Any]]:
@@ -504,6 +608,11 @@ def _normalize_summary_view_config(config: Any, *, strict: bool = True) -> Dict[
         if strict:
             raise HTTPException(status_code=422, detail=f"Неизвестный фильтр статуса: {status_filter}")
         status_filter = "all"
+    group_filter = str(raw_filters.get("group_id") or "all").strip()
+    if group_filter != "all" and (not group_filter.isdigit() or int(group_filter) <= 0):
+        if strict:
+            raise HTTPException(status_code=422, detail="Фильтр группы должен быть 'all' или положительным ID")
+        group_filter = "all"
 
     period = str(config.get("period") or "today")
     if period not in SUMMARY_VIEW_PERIODS:
@@ -516,7 +625,11 @@ def _normalize_summary_view_config(config: Any, *, strict: bool = True) -> Dict[
         "column_widths": column_widths,
         "sort_column": sort_column,
         "sort_direction": sort_direction,
-        "filters": {"query": query_filter, "status": status_filter},
+        "filters": {
+            "query": query_filter,
+            "status": status_filter,
+            "group_id": group_filter,
+        },
         "period": period,
     }
 
@@ -600,6 +713,37 @@ def _latest_account_metrics_by_id(summary: Optional[Dict[str, Any]]) -> Dict[str
             "purchases": safe_int("purchases"),
         }
     return result
+
+
+async def _enrich_summary_account_metadata(
+    session,
+    payload: Dict[str, Any],
+    user: TelegramUser,
+) -> Dict[str, Any]:
+    """Overlay live Buyerly labels and groups on cached Meta metric rows."""
+
+    accounts = await get_user_accounts(session, user)
+    accounts_by_id = {account.account_id: account for account in accounts}
+    group_ids_by_account = await _account_group_ids_by_account(session, user)
+    rows = payload.get("accounts") if isinstance(payload.get("accounts"), list) else []
+    enriched_rows = []
+    for raw_row in rows:
+        if not isinstance(raw_row, dict):
+            continue
+        row = dict(raw_row)
+        account_id = str(row.get("account_id") or "")
+        account = accounts_by_id.get(account_id)
+        if account is not None:
+            row["name"] = account.name
+            row["short_name"] = get_short_account_label(account.name, account.account_id)
+            row["custom_name"] = account.custom_name or ""
+            row["note"] = account.note or ""
+        else:
+            row.setdefault("custom_name", "")
+            row.setdefault("note", "")
+        row["group_ids"] = group_ids_by_account.get(account_id, [])
+        enriched_rows.append(row)
+    return {**payload, "accounts": enriched_rows}
 
 
 async def _load_persisted_summary(
@@ -1074,6 +1218,7 @@ async def get_me(user: TelegramUser = Depends(get_current_user)):
 async def list_accounts(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
         accounts = await get_user_accounts(session, user)
+        group_ids_by_account = await _account_group_ids_by_account(session, user)
         latest_summary = await _load_persisted_summary(
             session,
             owner_id=str(user.telegram_id or ""),
@@ -1104,10 +1249,119 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 rules_enabled=a.rules_enabled,
                 is_active=a.is_active,
                 active_rules=active_rules_list,
+                group_ids=group_ids_by_account.get(a.account_id, []),
                 latest_metrics=latest_metrics.get(a.account_id),
                 created_at=a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else ""
             ))
         return items
+
+
+@router.get("/account-groups", response_model=List[AccountGroupItem])
+async def list_account_groups(user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        return await _account_group_items(session, user)
+
+
+@router.post("/account-groups", response_model=AccountGroupItem, status_code=status.HTTP_201_CREATED)
+async def create_account_group(
+    payload: AccountGroupRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Название группы не может быть пустым")
+    async with async_session_maker() as session:
+        duplicate = (
+            await session.execute(
+                select(AccountGroup.id).where(
+                    owned_by(AccountGroup, user),
+                    func.lower(AccountGroup.name) == name.lower(),
+                )
+            )
+        ).scalar_one_or_none()
+        if duplicate is not None:
+            raise HTTPException(status_code=409, detail="Группа с таким названием уже существует")
+
+        accounts = await _validate_account_group_members(session, user, payload.account_ids)
+        group = AccountGroup(
+            owner_id=str(user.telegram_id or ""),
+            owner_user_id=user.id,
+            name=name,
+            description=payload.description.strip(),
+        )
+        session.add(group)
+        await session.flush()
+        for position, account in enumerate(accounts):
+            session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
+        await session.commit()
+        items = await _account_group_items(session, user)
+        return next(item for item in items if item.id == group.id)
+
+
+@router.put("/account-groups/{group_id}", response_model=AccountGroupItem)
+async def update_account_group(
+    group_id: int,
+    payload: AccountGroupRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Название группы не может быть пустым")
+    async with async_session_maker() as session:
+        group = (
+            await session.execute(
+                select(AccountGroup).where(
+                    AccountGroup.id == group_id,
+                    owned_by(AccountGroup, user),
+                )
+            )
+        ).scalar_one_or_none()
+        if group is None:
+            raise HTTPException(status_code=404, detail="Группа кабинетов не найдена")
+        duplicate = (
+            await session.execute(
+                select(AccountGroup.id).where(
+                    owned_by(AccountGroup, user),
+                    func.lower(AccountGroup.name) == name.lower(),
+                    AccountGroup.id != group_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if duplicate is not None:
+            raise HTTPException(status_code=409, detail="Группа с таким названием уже существует")
+
+        accounts = await _validate_account_group_members(session, user, payload.account_ids)
+        group.name = name
+        group.description = payload.description.strip()
+        group.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await session.execute(delete(AccountGroupMember).where(AccountGroupMember.group_id == group.id))
+        for position, account in enumerate(accounts):
+            session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
+        await session.commit()
+        items = await _account_group_items(session, user)
+        return next(item for item in items if item.id == group.id)
+
+
+@router.delete("/account-groups/{group_id}")
+async def delete_account_group(
+    group_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    async with async_session_maker() as session:
+        group = (
+            await session.execute(
+                select(AccountGroup).where(
+                    AccountGroup.id == group_id,
+                    owned_by(AccountGroup, user),
+                )
+            )
+        ).scalar_one_or_none()
+        if group is None:
+            raise HTTPException(status_code=404, detail="Группа кабинетов не найдена")
+        await session.execute(delete(AccountGroupMember).where(AccountGroupMember.group_id == group.id))
+        await session.delete(group)
+        await session.commit()
+    return {"message": "Группа кабинетов удалена", "group_id": group_id}
 
 
 
@@ -1588,6 +1842,7 @@ async def delete_account(account_id: str, user: TelegramUser = Depends(get_curre
         if not acc:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
 
+        await session.execute(delete(AccountGroupMember).where(AccountGroupMember.account_id == acc.id))
         await session.execute(delete(Account).where(Account.account_id == acc_id))
         await session.commit()
         return {"success": True, "message": f"Кабинет {acc_id} удален"}
@@ -1714,6 +1969,21 @@ async def get_analytics_view(user: TelegramUser = Depends(get_current_user)):
                 stored_config = json.loads(row.config or "{}")
             except (TypeError, json.JSONDecodeError):
                 stored_config = {}
+            stored_order = stored_config.get("column_order")
+            if (
+                isinstance(stored_order, list)
+                and "custom_name" not in stored_order
+                and "note" not in stored_order
+            ):
+                # Views saved before account annotations existed receive the
+                # two new columns once. The next normal save persists the new
+                # order, after which either column can be hidden normally.
+                insert_at = stored_order.index("account") + 1 if "account" in stored_order else 0
+                stored_order[insert_at:insert_at] = ["custom_name", "note"]
+                stored_visible = stored_config.get("visible_columns")
+                if isinstance(stored_visible, list):
+                    visible_at = stored_visible.index("account") + 1 if "account" in stored_visible else 0
+                    stored_visible[visible_at:visible_at] = ["custom_name", "note"]
             config = _normalize_summary_view_config(stored_config, strict=False)
         return _analytics_view_response(row, config)
 
@@ -1764,8 +2034,14 @@ async def get_summary_report(
     if not force and cache_key in _summary_cache:
         cached_ts, cached_data = _summary_cache[cache_key]
         if now_ts - cached_ts < SUMMARY_CACHE_TTL:
+            async with async_session_maker() as session:
+                enriched_cached_data = await _enrich_summary_account_metadata(
+                    session,
+                    cached_data,
+                    user,
+                )
             return _summary_with_cache_metadata(
-                cached_data,
+                enriched_cached_data,
                 is_cached=True,
                 age_seconds=now_ts - cached_ts,
                 origin="memory",
@@ -1781,6 +2057,7 @@ async def get_summary_report(
                 period=period,
             )
             if persisted:
+                persisted = await _enrich_summary_account_metadata(session, persisted, user)
                 cached_payload = {
                     key: value
                     for key, value in persisted.items()
@@ -1790,6 +2067,7 @@ async def get_summary_report(
                 return persisted
 
         accounts = await get_user_accounts(session, user)
+        group_ids_by_account = await _account_group_ids_by_account(session, user)
         if not accounts:
             empty_res = {
                 "period": period,
@@ -1956,6 +2234,9 @@ async def get_summary_report(
                     "account_id": acc.account_id,
                     "name": acc.name,
                     "short_name": short_name,
+                    "custom_name": acc.custom_name or "",
+                    "note": acc.note or "",
+                    "group_ids": group_ids_by_account.get(acc.account_id, []),
                     "timezone_name": acc.timezone_name,
                     "currency": account_currency,
                     "account_status": acc.account_status,
@@ -2003,6 +2284,9 @@ async def get_summary_report(
                     "account_id": acc.account_id,
                     "name": acc.name,
                     "short_name": short_name,
+                    "custom_name": acc.custom_name or "",
+                    "note": acc.note or "",
+                    "group_ids": group_ids_by_account.get(acc.account_id, []),
                     "timezone_name": acc.timezone_name,
                     "currency": account_currency,
                     "account_status": acc.account_status,

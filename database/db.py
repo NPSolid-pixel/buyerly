@@ -365,6 +365,7 @@ async def migrate_audit_undo_contract(conn) -> bool:
 STABLE_OWNER_TABLES = (
     "rule_presets",
     "rule_groups",
+    "account_groups",
     "accounts",
     "summary_snapshots",
     "analytics_view_preferences",

@@ -517,6 +517,60 @@ code, .mono {
 .accounts-health-strip .health-good b { color: var(--color-success); }
 .accounts-health-strip .health-bad b { color: var(--color-danger); }
 
+.account-groups-panel {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--tg-card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.account-groups-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.account-groups-panel-head h3 { margin: 1px 0 2px; font-size: 13px; }
+.account-groups-panel-head p { color: var(--tg-hint); font-size: 10px; line-height: 1.45; }
+.account-groups-bar { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+.account-groups-bar::-webkit-scrollbar { display: none; }
+
+.account-group-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  color: var(--tg-hint);
+  background: var(--tg-sec-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.account-group-filter b { color: var(--tg-text); font: 600 10px 'JetBrains Mono', monospace; }
+.account-group-filter.active { color: #c9c1ff; background: rgba(155, 140, 255, 0.1); border-color: rgba(155, 140, 255, 0.32); }
+.account-group-filter-wrap { display: inline-flex; align-items: stretch; flex: 0 0 auto; }
+.account-group-filter-wrap .account-group-filter { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.account-group-edit {
+  width: 29px;
+  padding: 0;
+  color: var(--tg-hint);
+  background: var(--tg-sec-bg);
+  border: 1px solid var(--border-subtle);
+  border-left: 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.account-group-edit:hover { color: var(--tg-text); background: var(--tg-card-hover); }
+
 @media (min-width: 680px) {
   .accounts-grid {
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
@@ -541,6 +595,20 @@ code, .mono {
   border-color: #3b3c44;
   background: var(--tg-card-hover);
 }
+
+.account-group-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.account-group-tag {
+  padding: 3px 7px;
+  color: #bdb4ff;
+  background: rgba(155, 140, 255, 0.08);
+  border: 1px solid rgba(155, 140, 255, 0.2);
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+.account-group-tag.empty { color: var(--tg-hint); background: rgba(255, 255, 255, 0.025); border-color: var(--border-subtle); cursor: default; }
+.account-group-tag.add { color: var(--tg-hint); background: transparent; border-style: dashed; }
 
 .account-card.rules-active {
   border-left: 2px solid var(--tg-link);
@@ -1490,6 +1558,30 @@ input:checked + .slider:before {
   font-size: 11px;
 }
 
+.summary-scope-control {
+  display: grid;
+  grid-template-columns: auto minmax(150px, 220px);
+  align-items: center;
+  gap: 3px 8px;
+  min-width: 0;
+}
+
+.summary-scope-control label { color: var(--tg-hint); font-size: 10px; font-weight: 600; }
+.summary-scope-control select {
+  min-height: 30px;
+  padding: 5px 28px 5px 8px;
+  color: var(--tg-text);
+  background: var(--tg-sec-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 11px;
+}
+.summary-scope-control > span { grid-column: 1 / -1; color: var(--tg-hint); font-size: 9px; }
+
+.summary-note-cell { max-width: 280px; color: var(--tg-hint); font-size: 10px; line-height: 1.4; white-space: normal; }
+.summary-custom-name-cell { color: var(--tg-text); font-weight: 600; }
+
 .metric-info {
   display: inline-flex;
   align-items: center;
@@ -2080,6 +2172,9 @@ input:checked + .slider:before {
   .summary-page-header h2 { font-size: 18px; }
   .summary-page-header .btn-fetch-summary span { display: none; }
   .summary-toolbar { align-items: flex-start; flex-direction: column; }
+  .summary-scope-control { width: 100%; grid-template-columns: 1fr; }
+  .summary-scope-control select { width: 100%; }
+  .summary-scope-control > span { grid-column: auto; }
   .summary-toolbar .period-switcher { width: 100%; }
   .summary-toolbar .period-btn { padding: 7px 4px; font-size: 10px; }
   .kpi-primary-grid {
@@ -2549,6 +2644,20 @@ input:checked + .slider:before {
   align-items: flex-start;
   gap: 8px;
 }
+
+.mob-summary-note {
+  margin: 0;
+  padding: 7px 8px;
+  color: var(--tg-hint);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.mob-summary-groups .account-group-tags { gap: 4px; }
+.mob-summary-groups .account-group-tag { padding: 2px 6px; font-size: 8px; }
 
 .mob-status-pill {
   display: inline-flex;
@@ -3374,6 +3483,35 @@ input[type=number] {
   padding: 20px;
   animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+.account-group-dialog { max-width: 720px; max-height: 88vh; overflow-y: auto; }
+.account-group-members-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.account-group-members-head label { color: var(--tg-text); font-size: 11px; font-weight: 600; }
+.account-group-members-head span { color: var(--tg-hint); font-size: 10px; }
+.account-group-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 6px;
+  max-height: 310px;
+  overflow-y: auto;
+}
+.account-group-member-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px;
+  background: var(--tg-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.account-group-member-option:has(input:checked) { background: rgba(155, 140, 255, 0.07); border-color: rgba(155, 140, 255, 0.28); }
+.account-group-member-option input { margin-top: 2px; accent-color: var(--tg-link); }
+.account-group-member-option span { display: grid; min-width: 0; gap: 2px; }
+.account-group-member-option b, .account-group-member-option small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-group-member-option b { color: var(--tg-text); font-size: 11px; }
+.account-group-member-option small { color: var(--tg-hint); font-size: 9px; }
+.modal-footer-spacer { flex: 1; }
 
 @keyframes slideUp {
   from { transform: translateY(100%); }
