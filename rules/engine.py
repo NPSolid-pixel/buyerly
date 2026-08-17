@@ -3,7 +3,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Dict, Any, List
 from database.models import Account
-from core.metrics import compare_metric, cost_per_event, rule_metric_reading
+from core.metrics import (
+    compare_metric,
+    cost_per_event,
+    rule_metric_reading,
+    validate_runtime_rule,
+)
 
 class RuleAction(str, Enum):
     NOOP = "NOOP"                             # Всё в норме
@@ -136,11 +141,17 @@ class RuleEngine:
         }
 
         triggered_actions = []
+        invalid_rule_seen = False
 
         for rule in active_rules:
             if rule.get("enabled", True) is False or rule.get("needs_review", False) is True:
                 continue
-            action_type = rule.get("action", "turn_off")
+            try:
+                validate_runtime_rule(rule)
+            except (TypeError, ValueError):
+                invalid_rule_seen = True
+                continue
+            action_type = rule.get("action")
             if action_type == "turn_on":
                 if status != "PAUSED":
                     continue
@@ -208,7 +219,10 @@ class RuleEngine:
             triggered = any_match if condition_logic == "or" else all_match
 
             if triggered:
-                rule_action = action_map.get(action_type, RuleAction.STOP)
+                rule_action = action_map.get(action_type)
+                if rule_action is None:
+                    invalid_rule_seen = True
+                    continue
                 rule_name = rule.get("name", "Unknown Rule")
                 reason_str = f"[{rule_name}] " + ", ".join(matched_reasons)
                 
@@ -226,7 +240,11 @@ class RuleEngine:
                 })
 
         if not triggered_actions:
-            return noop()
+            return noop(
+                "Правила не настроены или некорректны; действия в Meta пропущены."
+                if invalid_rule_seen
+                else "Метрики в пределах нормы."
+            )
 
         # Sort by priority descending
         triggered_actions.sort(key=lambda x: x["priority"], reverse=True)

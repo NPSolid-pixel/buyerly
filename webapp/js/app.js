@@ -1354,6 +1354,29 @@
       return;
     }
 
+    if (!Number.isInteger(cooldownMins) || cooldownMins < 0 || cooldownMins > 10080) {
+      showToast('Пауза должна быть от 0 до 10 080 минут', 'error');
+      return;
+    }
+    if (!Number.isInteger(checkIntervalMins) || checkIntervalMins < 1 || checkIntervalMins > 1440) {
+      showToast('Интервал проверки должен быть от 1 до 1 440 минут', 'error');
+      return;
+    }
+
+    const isBudgetAction = action === 'increase_budget' || action === 'decrease_budget';
+    if (isBudgetAction && (!Number.isFinite(budgetChangePercent) || budgetChangePercent <= 0 || budgetChangePercent > 100)) {
+      showToast('Изменение бюджета должно быть больше 0% и не больше 100%', 'error');
+      return;
+    }
+    if (action === 'increase_budget' && (!Number.isFinite(budgetMaxDaily) || budgetMaxDaily <= 0 || budgetMaxDaily > 10000000)) {
+      showToast('Для увеличения бюджета укажите безопасный дневной потолок', 'error');
+      return;
+    }
+    if (conditions.some(condition => !Number.isFinite(condition.value) || condition.value < 0 || condition.value > 1000000000)) {
+      showToast('Значение условия должно быть числом от 0 до 1 000 000 000', 'error');
+      return;
+    }
+
     try {
       const payload = {
         name: ruleName,
@@ -1363,8 +1386,8 @@
         cooldown_minutes: cooldownMins,
         check_interval_minutes: checkIntervalMins,
         notify_tg: notifyTg,
-        budget_change_percent: budgetChangePercent,
-        budget_max_daily: budgetMaxDaily
+        budget_change_percent: isBudgetAction ? budgetChangePercent : 0.0,
+        budget_max_daily: action === 'increase_budget' ? budgetMaxDaily : 0.0
       };
 
       if (accountId) {

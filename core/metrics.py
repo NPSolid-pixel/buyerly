@@ -29,6 +29,17 @@ PUBLIC_RULE_METRICS = frozenset(
 )
 
 RULE_OPERATORS = frozenset({"gt", "gte", "lt", "lte", "eq"})
+RULE_ACTIONS = frozenset(
+    {"turn_off", "notify_only", "turn_on", "increase_budget", "decrease_budget"}
+)
+RULE_LOGICS = frozenset({"and", "or"})
+RULE_TIME_WINDOWS = frozenset({"today", "yesterday", "last_3d", "last_7d"})
+RULE_MAX_CONDITIONS = 20
+RULE_MAX_VALUE = 1_000_000_000.0
+RULE_MAX_BUDGET = 10_000_000.0
+RULE_MAX_COOLDOWN_MINUTES = 10_080
+RULE_MAX_CHECK_INTERVAL_MINUTES = 1_440
+RULE_MAX_BUDGET_CHANGE_PERCENT = 100.0
 
 METRIC_LABELS = {
     "spend": "Спенд",
@@ -255,6 +266,66 @@ def validate_public_rule_conditions(conditions: Iterable[Mapping[str, Any]]) -> 
         operator = str(condition.get("operator", ""))
         if operator not in RULE_OPERATORS:
             raise ValueError(f"Unsupported rule operator: {operator}")
+        time_window = str(condition.get("time_window", "today"))
+        if time_window not in RULE_TIME_WINDOWS:
+            raise ValueError(f"Unsupported rule time window: {time_window}")
+        try:
+            value = float(condition.get("value"))
+        except (TypeError, ValueError) as error:
+            raise ValueError("Rule value must be numeric") from error
+        if not math.isfinite(value) or value < 0 or value > RULE_MAX_VALUE:
+            raise ValueError("Rule value is outside the safe range")
+
+
+def validate_runtime_rule(rule: Mapping[str, Any]) -> None:
+    """Fail closed for stored snapshots before RuleEngine can choose an action."""
+
+    if not isinstance(rule, Mapping):
+        raise ValueError("Rule must be an object")
+    action = str(rule.get("action", ""))
+    if action not in RULE_ACTIONS:
+        raise ValueError(f"Unsupported rule action: {action}")
+    logic = str(rule.get("logic", rule.get("condition_logic", "")))
+    if logic not in RULE_LOGICS:
+        raise ValueError(f"Unsupported rule logic: {logic}")
+    conditions = rule.get("conditions")
+    if not isinstance(conditions, list) or not 1 <= len(conditions) <= RULE_MAX_CONDITIONS:
+        raise ValueError("Rule must contain between 1 and 20 conditions")
+    validate_public_rule_conditions(conditions)
+
+    def safe_number(key: str, default: float = 0.0) -> float:
+        try:
+            value = float(rule.get(key, default))
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"Invalid numeric rule field: {key}") from error
+        if not math.isfinite(value):
+            raise ValueError(f"Non-finite numeric rule field: {key}")
+        return value
+
+    cooldown = safe_number("cooldown_minutes")
+    check_interval = safe_number(
+        "check_interval",
+        safe_number("check_interval_minutes", 5.0),
+    )
+    budget_percent = safe_number("budget_change_percent")
+    budget_max = safe_number("budget_max_daily")
+    if cooldown < 0 or cooldown > RULE_MAX_COOLDOWN_MINUTES or not cooldown.is_integer():
+        raise ValueError("Cooldown is outside the safe range")
+    if (
+        check_interval < 1
+        or check_interval > RULE_MAX_CHECK_INTERVAL_MINUTES
+        or not check_interval.is_integer()
+    ):
+        raise ValueError("Check interval is outside the safe range")
+    if budget_max < 0 or budget_max > RULE_MAX_BUDGET:
+        raise ValueError("Budget limit is outside the safe range")
+    if action in {"increase_budget", "decrease_budget"}:
+        if budget_percent <= 0 or budget_percent > RULE_MAX_BUDGET_CHANGE_PERCENT:
+            raise ValueError("Budget change percentage is outside the safe range")
+        if action == "increase_budget" and budget_max <= 0:
+            raise ValueError("Budget increase requires a positive daily ceiling")
+    elif budget_percent != 0 or budget_max != 0:
+        raise ValueError("Non-budget actions cannot contain budget parameters")
 
 
 def format_optional_cost(value: Optional[float]) -> str:

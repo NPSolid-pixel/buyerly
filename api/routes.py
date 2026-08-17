@@ -2,9 +2,9 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import select, delete, func, or_
 
 from core.audit import build_audit_event
@@ -15,6 +15,7 @@ from core.metrics import (
     normalize_rule_conditions,
     normalize_runtime_rule,
     validate_public_rule_conditions,
+    validate_runtime_rule,
 )
 from database.db import async_session_maker, hash_password, password_needs_rehash, verify_password
 import json
@@ -133,10 +134,12 @@ class UpdateProfileRequest(BaseModel):
 
 
 class ConditionItem(BaseModel):
-    metric: str = "spend"  # spend, cpl, cpreg, cpp, leads, registrations, purchases, ctr, cpc
-    operator: str = "gte"  # gte, gt, lte, lt, eq
-    value: float = 0.0
-    time_window: str = "today"  # today, yesterday, last_3d, last_7d
+    model_config = ConfigDict(extra="forbid")
+
+    metric: Literal["spend", "cpl", "cpreg", "cpp", "leads", "registrations", "purchases", "ctr", "cpc"] = "spend"
+    operator: Literal["gte", "gt", "lte", "lt", "eq"] = "gte"
+    value: float = Field(default=0.0, ge=0, le=1_000_000_000, allow_inf_nan=False)
+    time_window: Literal["today", "yesterday", "last_3d", "last_7d"] = "today"
 
 class RulePresetItem(BaseModel):
     id: int
@@ -152,15 +155,32 @@ class RulePresetItem(BaseModel):
     created_at: str
 
 class CreatePresetRequest(BaseModel):
-    name: str
-    action: Optional[str] = "turn_off"
-    conditions: List[ConditionItem] = Field(default_factory=list)
-    condition_logic: Optional[str] = "and"
-    cooldown_minutes: Optional[int] = 0
-    check_interval_minutes: Optional[int] = Field(default=5, ge=1, le=1440)
-    notify_tg: Optional[bool] = True
-    budget_change_percent: Optional[float] = 0.0
-    budget_max_daily: Optional[float] = 0.0
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    action: Literal["turn_off", "notify_only", "turn_on", "increase_budget", "decrease_budget"] = "turn_off"
+    conditions: List[ConditionItem] = Field(min_length=1, max_length=20)
+    condition_logic: Literal["and", "or"] = "and"
+    cooldown_minutes: int = Field(default=0, ge=0, le=10_080)
+    check_interval_minutes: int = Field(default=5, ge=1, le=1_440)
+    notify_tg: bool = True
+    budget_change_percent: float = Field(default=0.0, ge=0, le=100, allow_inf_nan=False)
+    budget_max_daily: float = Field(default=0.0, ge=0, le=10_000_000, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def validate_safe_action_parameters(self):
+        validate_runtime_rule(
+            {
+                "action": self.action,
+                "conditions": [condition.model_dump() for condition in self.conditions],
+                "logic": self.condition_logic,
+                "cooldown_minutes": self.cooldown_minutes,
+                "check_interval": self.check_interval_minutes,
+                "budget_change_percent": self.budget_change_percent,
+                "budget_max_daily": self.budget_max_daily,
+            }
+        )
+        return self
 
 class RuleGroupWriteRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
@@ -176,16 +196,9 @@ class RuleGroupResponse(BaseModel):
     created_at: str
 
 class ApplyPresetRequest(BaseModel):
-    preset_id: Optional[int] = None
-    name: Optional[str] = ""
-    action: Optional[str] = "turn_off"
-    conditions: List[ConditionItem] = Field(default_factory=list)
-    condition_logic: Optional[str] = "and"
-    cooldown_minutes: Optional[int] = 0
-    check_interval_minutes: Optional[int] = 5
-    notify_tg: Optional[bool] = True
-    budget_change_percent: Optional[float] = 0.0
-    budget_max_daily: Optional[float] = 0.0
+    model_config = ConfigDict(extra="forbid")
+
+    preset_id: int = Field(gt=0)
 
 class AccountItem(BaseModel):
     id: int
@@ -585,12 +598,21 @@ def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
         "budget_change_percent": preset.budget_change_percent,
         "budget_max_daily": preset.budget_max_daily,
     }
-    if has_legacy_cpa:
+    validation_error = ""
+    try:
+        validate_runtime_rule(snapshot)
+    except (TypeError, ValueError) as error:
+        validation_error = str(error)
+    if has_legacy_cpa or validation_error:
         snapshot.update(
             {
                 "enabled": False,
                 "needs_review": True,
-                "review_reason": "Замените старый общий CPA на CPL, CPReg или CPP.",
+                "review_reason": (
+                    "Замените старый общий CPA на CPL, CPReg или CPP."
+                    if has_legacy_cpa
+                    else "Правило сохранено в старом или небезопасном формате и требует пересохранения."
+                ),
             }
         )
     return snapshot
@@ -602,11 +624,14 @@ def _preset_response(preset: RulePreset) -> RulePresetItem:
     except (TypeError, ValueError):
         raw_conditions = []
     normalized_conditions, _, _ = normalize_rule_conditions(raw_conditions)
-    conditions = [
-        ConditionItem(**condition)
-        for condition in normalized_conditions
-        if isinstance(condition, dict)
-    ]
+    conditions = []
+    for condition in normalized_conditions:
+        if not isinstance(condition, dict):
+            continue
+        try:
+            conditions.append(ConditionItem(**condition))
+        except ValidationError:
+            continue
     return RulePresetItem(
         id=preset.id,
         name=preset.name,
@@ -1099,6 +1124,11 @@ async def assign_rule_to_account(
                 raise HTTPException(status_code=404, detail="Пресет не найден.")
             
             new_rule = _preset_snapshot(preset)
+            if new_rule.get("needs_review"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Правило имеет небезопасные или устаревшие параметры. Откройте и пересохраните его.",
+                )
         else:
             raise HTTPException(status_code=400, detail="Custom rules without preset are no longer supported.")
 
@@ -1167,7 +1197,13 @@ async def assign_rule_group_to_account(
         active_rules = _load_active_rules(account.active_rules)
         attached_ids = {rule.get("preset_id") for rule in active_rules}
         added_presets = [preset for preset in presets if preset.id not in attached_ids]
-        active_rules.extend(_preset_snapshot(preset) for preset in added_presets)
+        new_snapshots = [_preset_snapshot(preset) for preset in added_presets]
+        if any(snapshot.get("needs_review") for snapshot in new_snapshots):
+            raise HTTPException(
+                status_code=400,
+                detail="В группе есть небезопасное или устаревшее правило. Пересохраните его перед назначением.",
+            )
+        active_rules.extend(new_snapshots)
         account.active_rules = json.dumps(active_rules)
         account.rules_enabled = bool(active_rules)
         await session.commit()

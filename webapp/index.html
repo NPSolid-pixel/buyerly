@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.10.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.11.0">
 </head>
 
 <body>
@@ -885,11 +885,11 @@
               <div style="display: flex; gap: 10px;">
                 <div style="flex: 1;">
                   <label for="budgetChangePercentInput" style="font-size: 12px;">Изменение (%)</label>
-                  <input type="number" id="budgetChangePercentInput" class="form-input" placeholder="20" min="1" max="500" step="5" value="20">
+                  <input type="number" id="budgetChangePercentInput" class="form-input" placeholder="20" min="1" max="100" step="5" value="20">
                 </div>
                 <div style="flex: 1;">
                   <label for="budgetMaxDailyInput" style="font-size: 12px;">Потолок ($/день)</label>
-                  <input type="number" id="budgetMaxDailyInput" class="form-input" placeholder="0 (без лимита)" min="0" step="10" value="0">
+                  <input type="number" id="budgetMaxDailyInput" class="form-input" placeholder="Обязателен для увеличения" min="0" max="10000000" step="10" value="0">
                 </div>
               </div>
               <span class="input-hint" style="font-size: 11px; margin-top: 4px;">Потолок бюджета предотвратит чрезмерное увеличение при частых срабатываниях.</span>
@@ -945,7 +945,7 @@
                 <button type="button" class="chip-btn" data-val="1440">24 ч</button>
                 <button type="button" class="chip-btn" data-val="custom">Другое</button>
               </div>
-              <input type="number" id="customCooldownInput" class="form-input custom-time-input hidden" placeholder="Минут (напр. 45)" min="1">
+              <input type="number" id="customCooldownInput" class="form-input custom-time-input hidden" placeholder="Минут (напр. 45)" min="1" max="10080">
               <p class="settings-field-hint">Время, в течение которого правило не сработает повторно для того же объявления/кампании/адсета. Например: 10 мин = если правило изменило статус X, следующие 10 минут оно не будет пытаться триггерить X снова, даже если условие всё ещё выполняется.</p>
             </div>
 
@@ -966,7 +966,7 @@
                 <button type="button" class="chip-btn" data-val="360">6 ч</button>
                 <button type="button" class="chip-btn" data-val="custom">Другое</button>
               </div>
-              <input type="number" id="customIntervalInput" class="form-input custom-time-input hidden" placeholder="Минут (напр. 20)" min="1">
+              <input type="number" id="customIntervalInput" class="form-input custom-time-input hidden" placeholder="Минут (напр. 20)" min="1" max="1440">
               <p class="settings-field-hint">Как часто проверяется это правило</p>
             </div>
 
@@ -1205,6 +1205,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.10.0"></script>
+  <script src="/static/js/app.js?v=9.11.0"></script>
 </body>
 </html>

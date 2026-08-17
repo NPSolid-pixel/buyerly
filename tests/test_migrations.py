@@ -6,7 +6,11 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from database.db import migrate_legacy_account_rules, migrate_rule_metric_contract
+from database.db import (
+    migrate_legacy_account_rules,
+    migrate_rule_metric_contract,
+    migrate_rule_safety_contract,
+)
 from database.migrate_sqlite import _source_rows
 from database.models import Account
 
@@ -234,6 +238,56 @@ class TestRuleMetricContractMigration(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(account_rules[1]["enabled"])
         self.assertTrue(account_rules[1]["needs_review"])
         self.assertEqual(second, {"presets_updated": 0, "account_rules_updated": 0, "rules_disabled": 0})
+
+
+class TestRuleSafetyContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text("CREATE TABLE accounts (id INTEGER PRIMARY KEY, active_rules TEXT NOT NULL)")
+            )
+            await conn.execute(
+                text("INSERT INTO accounts (id, active_rules) VALUES (1, :rules)"),
+                {
+                    "rules": json.dumps(
+                        [
+                            {
+                                "preset_id": 10,
+                                "name": "Unsafe legacy action",
+                                "action": "destroy",
+                                "conditions": [
+                                    {"metric": "spend", "operator": "gte", "value": 10, "time_window": "today"}
+                                ],
+                                "logic": "and",
+                                "cooldown_minutes": 0,
+                                "check_interval": 5,
+                                "budget_change_percent": 0,
+                                "budget_max_daily": 0,
+                            }
+                        ]
+                    )
+                },
+            )
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+
+    async def test_invalid_runtime_rules_are_disabled_idempotently(self):
+        async with self.engine.begin() as conn:
+            first = await migrate_rule_safety_contract(conn)
+            migrated = json.loads(
+                (
+                    await conn.execute(text("SELECT active_rules FROM accounts WHERE id = 1"))
+                ).scalar_one()
+            )
+            second = await migrate_rule_safety_contract(conn)
+
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)
+        self.assertFalse(migrated[0]["enabled"])
+        self.assertTrue(migrated[0]["needs_review"])
+        self.assertIn("отключено", migrated[0]["review_reason"])
 
 
 if __name__ == "__main__":

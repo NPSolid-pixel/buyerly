@@ -229,7 +229,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.10.0', self.index)
+        self.assertIn('v=9.11.0', self.index)
 
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (

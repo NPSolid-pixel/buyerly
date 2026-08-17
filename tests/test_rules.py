@@ -53,6 +53,57 @@ class TestRuleEngine(unittest.TestCase):
         self.assertEqual(res.action, RuleAction.NOOP)
         self.assertIn("Правила не настроены", res.reason)
 
+    def test_unknown_action_fails_closed_instead_of_stopping(self):
+        self.set_rule(
+            action="delete_account",
+            conditions=[{"metric": "spend", "operator": "gte", "value": 1.0}],
+        )
+        adset = {
+            "adset_id": "1",
+            "adset_name": "Test",
+            "status": "ACTIVE",
+            "effective_status": "ACTIVE",
+            "spend": 100.0,
+            "leads": 0,
+            "registrations": 0,
+        }
+        result = RuleEngine.evaluate(adset, self.account)
+        self.assertEqual(result.action, RuleAction.NOOP)
+        self.assertIn("некорректны", result.reason)
+
+    def test_invalid_logic_window_and_non_finite_value_fail_closed(self):
+        adset = {
+            "adset_id": "1",
+            "adset_name": "Test",
+            "status": "ACTIVE",
+            "effective_status": "ACTIVE",
+            "spend": 100.0,
+            "leads": 0,
+            "registrations": 0,
+        }
+        invalid_rules = [
+            {
+                "action": "turn_off",
+                "logic": "xor",
+                "conditions": [{"metric": "spend", "operator": "gte", "value": 1.0}],
+            },
+            {
+                "action": "turn_off",
+                "logic": "and",
+                "conditions": [
+                    {"metric": "spend", "operator": "gte", "value": 1.0, "time_window": "lifetime"}
+                ],
+            },
+            {
+                "action": "turn_off",
+                "logic": "and",
+                "conditions": [{"metric": "spend", "operator": "gte", "value": float("nan")}],
+            },
+        ]
+        for invalid_rule in invalid_rules:
+            self.account.active_rules = json.dumps([{**invalid_rule, "preset_id": 99, "name": "Invalid"}])
+            self.assertEqual(RuleEngine.evaluate(adset, self.account).action, RuleAction.NOOP)
+
     def test_inactive_adset_is_ignored_by_turn_off(self):
         """A paused ad set must not receive actions intended for active delivery."""
         self.set_rule(conditions=[{"metric": "spend", "operator": "gte", "value": 1.0}])

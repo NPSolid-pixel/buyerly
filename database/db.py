@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import declarative_base
 
 from core.config import settings
-from core.metrics import normalize_rule_conditions, normalize_runtime_rule
+from core.metrics import (
+    normalize_rule_conditions,
+    normalize_runtime_rule,
+    validate_runtime_rule,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +274,67 @@ async def migrate_rule_metric_contract(conn) -> dict[str, int]:
     return counts
 
 
+async def migrate_rule_safety_contract(conn) -> int:
+    """Disable invalid runtime snapshots so legacy data always fails closed."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "accounts" not in table_names:
+        return 0
+    account_columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"]
+            for column in inspect(sync_conn).get_columns("accounts")
+        }
+    )
+    if "active_rules" not in account_columns:
+        return 0
+
+    rows = (
+        await conn.execute(text("SELECT id, active_rules FROM accounts"))
+    ).mappings().all()
+    updated_count = 0
+    for row in rows:
+        try:
+            rules = json.loads(row.get("active_rules") or "[]")
+        except (TypeError, json.JSONDecodeError):
+            rules = []
+        if not isinstance(rules, list):
+            rules = []
+        changed = False
+        safe_rules = []
+        for raw_rule in rules:
+            if not isinstance(raw_rule, dict):
+                changed = True
+                continue
+            rule = dict(raw_rule)
+            try:
+                validate_runtime_rule(rule)
+            except (TypeError, ValueError):
+                review_reason = "Правило отключено: небезопасные или устаревшие параметры. Пересохраните его."
+                if (
+                    rule.get("enabled") is not False
+                    or rule.get("needs_review") is not True
+                    or rule.get("review_reason") != review_reason
+                ):
+                    rule["enabled"] = False
+                    rule["needs_review"] = True
+                    rule["review_reason"] = review_reason
+                    changed = True
+            safe_rules.append(rule)
+        if changed:
+            await conn.execute(
+                text("UPDATE accounts SET active_rules = :rules WHERE id = :id"),
+                {
+                    "rules": json.dumps(safe_rules, ensure_ascii=False),
+                    "id": row["id"],
+                },
+            )
+            updated_count += 1
+    return updated_count
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -286,6 +351,12 @@ async def init_schema():
         metric_migration = await migrate_rule_metric_contract(conn)
         if any(metric_migration.values()):
             logger.info("Migrated rule metric contract: %s", metric_migration)
+        safety_migration = await migrate_rule_safety_contract(conn)
+        if safety_migration:
+            logger.warning(
+                "Disabled unsafe runtime rules for %s account(s).",
+                safety_migration,
+            )
         # These statements support the historical SQLite schema. PostgreSQL is
         # initialized from current metadata and must not receive SQLite defaults.
         legacy_sqlite_columns = [

@@ -293,7 +293,41 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     ],
                 },
             )
-            self.assertEqual(removed_cpa.status_code, 400)
+            self.assertEqual(removed_cpa.status_code, 422)
+
+            base_condition = [
+                {"metric": "spend", "operator": "gte", "value": 10.0, "time_window": "today"}
+            ]
+            invalid_payloads = [
+                {"name": "Unknown action", "action": "delete_account", "conditions": base_condition},
+                {"name": "Unknown logic", "condition_logic": "xor", "conditions": base_condition},
+                {
+                    "name": "Unknown window",
+                    "conditions": [{**base_condition[0], "time_window": "lifetime"}],
+                },
+                {
+                    "name": "Unsafe percent",
+                    "action": "increase_budget",
+                    "conditions": base_condition,
+                    "budget_change_percent": 500,
+                    "budget_max_daily": 100,
+                },
+                {
+                    "name": "Missing ceiling",
+                    "action": "increase_budget",
+                    "conditions": base_condition,
+                    "budget_change_percent": 20,
+                    "budget_max_daily": 0,
+                },
+                {"name": "Negative threshold", "conditions": [{**base_condition[0], "value": -1}]},
+            ]
+            for invalid_payload in invalid_payloads:
+                invalid_response = await client.post(
+                    "/api/presets",
+                    headers=headers,
+                    json=invalid_payload,
+                )
+                self.assertEqual(invalid_response.status_code, 422, invalid_payload["name"])
 
             # An account cannot be enabled before at least one rule is attached.
             t_resp = await client.post("/api/accounts/act_1018756607700064/toggle-rules", headers=headers)
@@ -339,6 +373,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 "action": "turn_off",
                 "condition_logic": "and",
                 "budget_change_percent": 0.0,
+                "budget_max_daily": 0.0,
             }
             u_resp = await client.put(
                 f"/api/presets/{p_data['id']}", headers=headers, json=updated_payload
