@@ -100,6 +100,8 @@
     presets: [],
     ruleGroups: [],
     activePresetId: null,
+    templatePresetId: null,
+    ruleBuilderMode: 'create',
     currentPeriod: 'today',
     activeTab: 'accounts',
     filter: 'all',
@@ -982,6 +984,7 @@
     haptic('selection');
     document.getElementById('editLimitsAccountId').value = '';
     document.getElementById('modalLimitsTitle').textContent = 'Редактирование правила';
+    state.ruleBuilderMode = 'edit';
     window.selectPreset(presetId);
     window.openModal('modalEditLimits');
   };
@@ -1137,7 +1140,7 @@
     try {
       const data = await apiRequest('/api/presets');
       state.presets = data || [];
-      renderPresetsList(state.activePresetId);
+      renderPresetsList(state.activePresetId || state.templatePresetId);
     } catch (e) {
       console.error('Failed to load presets:', e);
     }
@@ -1156,7 +1159,7 @@
       const isSelected = selectedId === p.id;
       const actionBadge = p.action === 'turn_off' ? '🔴 Стоп' : (p.action === 'notify_only' ? '🔔 Пуш' : '🟢 Старт');
       return `
-        <div class="preset-chip-item ${isSelected ? 'active' : ''}" onclick="window.selectPreset(${p.id})">
+        <div class="preset-chip-item ${isSelected ? 'active' : ''}" onclick="window.selectPreset(${p.id})" title="${state.ruleBuilderMode === 'edit' ? 'Перейти к редактированию правила' : 'Использовать параметры как шаблон нового правила'}">
           <span class="preset-chip-badge">${actionBadge}</span>
           <span>${escapeHtml(p.name)}</span>
         </div>
@@ -1332,8 +1335,10 @@
     const preset = state.presets.find(p => p.id === presetId);
     if (!preset) return;
 
-    state.activePresetId = preset.id;
-    document.getElementById('editingPresetId').value = preset.id;
+    const isEditing = state.ruleBuilderMode === 'edit';
+    state.activePresetId = isEditing ? preset.id : null;
+    state.templatePresetId = isEditing ? null : preset.id;
+    document.getElementById('editingPresetId').value = isEditing ? preset.id : '';
     document.getElementById('ruleNameInput').value = preset.name;
     const action = preset.action || 'turn_off';
     document.getElementById('ruleActionSelect').value = action;
@@ -1343,8 +1348,10 @@
     document.getElementById('budgetMaxDailyInput').value = preset.budget_max_daily || 0;
     setLogicUI(preset.condition_logic || 'and');
 
-    document.getElementById('builderModeTag').textContent = `Пресет: ${preset.name}`;
-    document.getElementById('btnDeletePreset')?.classList.remove('hidden');
+    document.getElementById('builderModeTag').textContent = isEditing
+      ? `Редактирование: ${preset.name}`
+      : `Шаблон: ${preset.name} · будет создано новое правило`;
+    document.getElementById('btnDeletePreset')?.classList.toggle('hidden', !isEditing);
     updateRuleSaveButtonLabel();
 
     setCooldownUI(preset.cooldown_minutes || 0);
@@ -1358,7 +1365,9 @@
 
   window.newPresetMode = function () {
     haptic('selection');
+    state.ruleBuilderMode = 'create';
     state.activePresetId = null;
+    state.templatePresetId = null;
     document.getElementById('editingPresetId').value = '';
     document.getElementById('ruleNameInput').value = '';
     document.getElementById('ruleActionSelect').value = 'turn_off';

@@ -256,7 +256,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.17.0', self.index)
+        self.assertIn('v=9.18.0', self.index)
 
     def test_money_is_currency_aware_and_mixed_totals_are_separated(self):
         for contract in (
@@ -338,3 +338,16 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.account-activity-line',
         ):
             self.assertIn(contract, self.styles)
+
+    def test_new_rule_uses_saved_rule_as_a_copy_not_an_edit(self):
+        select_start = self.script.index('window.selectPreset = function (presetId)')
+        select_end = self.script.index('window.newPresetMode = function ()', select_start)
+        select_contract = self.script[select_start:select_end]
+
+        self.assertIn("ruleBuilderMode: 'create'", self.script)
+        self.assertIn('templatePresetId: null', self.script)
+        self.assertIn("const isEditing = state.ruleBuilderMode === 'edit'", select_contract)
+        self.assertIn("value = isEditing ? preset.id : ''", select_contract)
+        self.assertIn('будет создано новое правило', select_contract)
+        self.assertIn("state.ruleBuilderMode = 'create'", self.script)
+        self.assertIn("state.ruleBuilderMode = 'edit'", self.script)
