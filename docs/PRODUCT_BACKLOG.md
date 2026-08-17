@@ -4,7 +4,7 @@
 
 ## Последняя сквозная сверка
 
-Backlog перепроверен 17 августа 2026 года по production-цепочке до `5d2bac2` и документации до `719c481`: шесть пользовательских разделов, web/API/bot/worker, 31 API endpoint, 15 моделей данных, независимые фоновые задания, 118 тестов и эксплуатационная документация. Детальные наблюдения и связь каждого риска с задачей сохранены в [аудите продукта](PRODUCT_AUDIT_2026-08-17.md). Отдельный план официального подключения Meta находится в [META-AUTH-001](FACEBOOK_AUTHORIZATION_PLAN.md), а удобный список только незавершённых пользовательских функций — в [оставшихся работах](REMAINING_PRODUCT_WORK.md).
+Backlog обновлён 17 августа 2026 года по production-цепочке до `610c086`: внутренний OAuth-пилот Meta развёрнут, 130 тестов проходят. Детальные наблюдения и связь каждого риска с задачей сохранены в [аудите продукта](PRODUCT_AUDIT_2026-08-17.md). Текущие блокеры и точный чек-лист Meta Dashboard находятся в [META-AUTH-001](FACEBOOK_AUTHORIZATION_PLAN.md), а удобный список только незавершённых функций — в [оставшихся работах](REMAINING_PRODUCT_WORK.md).
 
 Чекбокс отмечается только для уже выпущенной и проверенной возможности. Частично готовая функция остаётся незакрытой, а выполненная часть указывается отдельной строкой. Так backlog не создаёт ложного впечатления готовности.
 
@@ -27,6 +27,10 @@ Backlog перепроверен 17 августа 2026 года по production
 
 | Дата | Backlog | Результат | Commit |
 |---|---|---|---|
+| 2026-08-17 | BL-007 / AUTH-04 | поиск, группировка, выбор и безопасный импорт кабинетов | `610c086` |
+| 2026-08-17 | BL-007 / AUTH-03 | OAuth start/callback, `debug_token`, App Secret Proof | `fcb991a` |
+| 2026-08-17 | BL-007 / AUTH-02 | отдельные Meta-подключения и шифрование token | `e9d5cca` |
+| 2026-08-17 | BL-007 / AUTH-01 | настраиваемая Graph API `v26.0` | `1b5eab7` |
 | 2026-08-17 | BL-053 | точные новые сутки по Meta timezone без Spend-эвристики | `5d2bac2` |
 | 2026-08-17 | BL-090 | PostgreSQL-safe время аудита и worker | `89eb7fc` |
 | 2026-08-17 | BL-015 | ближайший фоновый цикл уточняет валюту старых кабинетов | `fd2c3be` |
@@ -131,16 +135,19 @@ Production: `a3631fe`, 17.08.2026. Расписание и состояния в
 
 ### BL-007. Официальное подключение Meta через Facebook Login
 
-- [ ] Провести аудит Meta App Dashboard: app type/use case, режим, владелец, verification, продукты, redirect URI и review.
-- [ ] Перевести Meta-клиент с жёсткого Graph API `v20.0` на настраиваемую и проверенную текущую версию.
-- [ ] Добавить отдельное подключение на Facebook-профиль и не дублировать token по кабинетам.
-- [ ] Шифровать token в PostgreSQL ключом с поддержкой ротации.
-- [ ] Реализовать OAuth start/callback, одноразовый state, server-side exchange, `debug_token` и App Secret Proof.
-- [ ] Автоматически получать personal, owned и client ad accounts с полной pagination.
-- [ ] Показывать BM/кабинеты и позволять выбрать все или отдельные активы.
+- [x] Зафиксировать по скриншотам режим, владельца, продукты и OAuth switches Meta App Dashboard.
+- [ ] Дозаполнить App Domain, exact redirect URI, собственные legal URL, Configuration ID и статусы permissions/review.
+- [x] Перевести Meta-клиент с жёсткого Graph API `v20.0` на настраиваемую `v26.0`.
+- [x] Добавить отдельное подключение на Facebook-профиль и не дублировать token по кабинетам.
+- [x] Шифровать token в PostgreSQL ключом с поддержкой ротации.
+- [x] Реализовать OAuth start/callback, одноразовый state, server-side exchange, `debug_token` и App Secret Proof.
+- [x] Получать все доступные профилю ad accounts через `/me/adaccounts` с cursor pagination и дедупликацией.
+- [ ] Добавить явное обогащение через `/me/businesses`, `owned_ad_accounts` и `client_ad_accounts`, если пилот покажет неполную выдачу `/me/adaccounts`.
+- [x] Показывать BM/кабинеты и позволять выбрать все или отдельные активы.
 - [ ] Добавить одноразовые invite-ссылки, которые можно открыть в нужном антидетект-профиле или отправить владельцу.
-- [ ] Показывать состояние доступа, scopes, срок, последнюю проверку, reconnect, refresh и disconnect без показа token.
-- [ ] Сохранить System User Token как временный сценарий `Расширенное подключение`.
+- [x] Показывать без token базовое состояние доступа, scopes, срок и последнюю проверку.
+- [ ] Добавить reconnect, refresh/revalidation, revoke detection и disconnect с очисткой секрета.
+- [x] Сохранить System User Token как временный сценарий `Расширенное подключение`.
 - [ ] Получить требуемый Meta Advanced Access/App Review для согласованной production-модели пользователей.
 - [ ] Покрыть app-role, обычный профиль, personal/owned/client accounts, pagination, revoke, expiry, partial consent, reconnect и изоляцию browser-тестами.
 

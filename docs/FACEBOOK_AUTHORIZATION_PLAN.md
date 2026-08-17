@@ -1,12 +1,29 @@
 # META-AUTH-001 — официальное подключение Facebook-профилей
 
-Статус: `запланировано`
+Статус: `пилотный контур развёрнут; ожидаются Meta App Secret и Configuration ID`
 
 Приоритет: `P0`
 
 Связанный backlog: [BL-007](PRODUCT_BACKLOG.md#bl-007-официальное-подключение-meta-через-facebook-login)
 
 Рабочая сессия по настройкам Meta: 18 августа 2026 года
+
+## Текущее состояние пилота
+
+Backend, база и интерфейс AUTH-01…AUTH-04 выпущены в production. Buyerly умеет начать официальный Facebook Login for Business, безопасно принять callback, зашифровать token, найти все доступные через `/me/adaccounts` кабинеты, сгруппировать их по Business Manager и импортировать выбранные без автоматического включения правил.
+
+В production уже заданы Graph API `v26.0`, App ID, callback `https://smattrades.com/api/meta/oauth/callback` и отдельный ключ шифрования. Кнопка входа намеренно неактивна, пока на сервере не появятся:
+
+- `META_APP_SECRET` — вводится только в production secrets, не в GitHub и не в чат;
+- `META_LOGIN_CONFIG_ID` — ID конфигурации Facebook Login for Business.
+
+Точные действия в Meta Dashboard для первого теста:
+
+1. В `Facebook Login for Business → Configurations` создать или открыть конфигурацию User Access Token с `ads_read`, `ads_management` и `business_management`, затем сохранить её Configuration ID.
+2. В `Facebook Login for Business → Settings` добавить в `Valid OAuth Redirect URIs` ровно `https://smattrades.com/api/meta/oauth/callback`; Web OAuth, HTTPS и Strict Mode оставить включёнными.
+3. В `App settings → Basic` добавить App Domain `smattrades.com`.
+4. Ввести App Secret напрямую в production `.env`, перезапустить API и проверить `/api/meta/oauth/config`.
+5. Первый пилот провести на Facebook-профиле с ролью в приложении. Обычные внешние профили проверять после Advanced Access/Access Verification, если этого потребует Dashboard.
 
 ## Результат задачи
 
@@ -47,30 +64,30 @@ System User Token не удаляется в первом релизе. Он о�
 
 ### 1. Идентичность и владелец приложения
 
-- [ ] App ID приложения Buyerly. App Secret в документы и чат не переносить.
+- [x] App ID зафиксирован и добавлен в production. App Secret в документы и чат не переносить.
 - [ ] Тип приложения и выбранный Meta use case.
-- [ ] Режим приложения: Development или Live.
-- [ ] Какой Business Portfolio владеет приложением.
+- [x] Приложение опубликовано (`Published`).
+- [x] Владелец приложения — Business Portfolio `Hollow Grace`.
 - [ ] Состояние Business Verification.
 - [ ] Состояние проверки домена Buyerly.
-- [ ] Название, иконка, contact email и категория приложения.
-- [ ] App Domains и основной production URL.
-- [ ] Privacy Policy URL.
-- [ ] Terms of Service URL, если поле требуется текущим Dashboard.
-- [ ] Data Deletion Instructions URL или callback.
+- [ ] Заменить рабочее название `API COTROL`, добавить иконку и категорию; contact email заполнен.
+- [ ] Добавить App Domain `smattrades.com`; на скриншоте поле пустое.
+- [ ] Заменить ссылку на общую Facebook Privacy Policy на собственную Privacy Policy Buyerly.
+- [ ] Заменить общую ссылку Facebook на Terms of Service Buyerly.
+- [ ] Заменить общую ссылку Facebook на Data Deletion Instructions Buyerly или callback.
 - [ ] Deauthorize callback, если он доступен в выбранном use case.
 
 ### 2. Продукты и конфигурация входа
 
-- [ ] Подключён ли Marketing API.
-- [ ] Подключён ли Facebook Login for Business.
+- [x] Marketing API подключён: доступны use cases управления рекламой и получения статистики.
+- [x] Facebook Login for Business подключён.
 - [ ] Какие конфигурации созданы в `Facebook Login for Business → Configurations`.
 - [ ] Configuration ID предполагаемого production-входа.
 - [ ] Какой тип token выдаёт конфигурация.
 - [ ] Какие разрешения выбраны внутри конфигурации.
-- [ ] Exact Valid OAuth Redirect URI для production.
+- [ ] Добавить exact Valid OAuth Redirect URI `https://smattrades.com/api/meta/oauth/callback`; на скриншоте список пустой.
 - [ ] Отдельный redirect URI для локального или staging-теста.
-- [ ] Включены ли Web OAuth Login и требование точного redirect URI.
+- [x] Client OAuth Login, Web OAuth Login, Enforce HTTPS и Strict Mode включены.
 - [ ] Как Meta показывает повторное согласие и частично выданные разрешения.
 
 ### 3. Permissions and Features
@@ -210,19 +227,19 @@ System User Token не удаляется в первом релизе. Он о�
 ## Обязательная безопасность
 
 - [ ] App Secret существует только в production secrets и никогда не отдаётся frontend.
-- [ ] OAuth authorization code обменивается только backend-сервисом.
-- [ ] `state` криптографически случайный, короткоживущий, одноразовый и привязан к владельцу/приглашению.
-- [ ] Callback проверяет точное соответствие redirect URI и отклоняет повторное использование.
-- [ ] Token проверяется через `debug_token`: `app_id`, тип, `is_valid`, user ID, scopes, granular scopes и сроки.
-- [ ] Для серверных Graph-запросов включается и используется App Secret Proof.
-- [ ] Token шифруется в PostgreSQL ключом с поддержкой ротации.
-- [ ] Token не попадает в URL, browser storage, ответы API, AuditEvent, snapshot или обычные логи.
-- [ ] Все чувствительные сообщения об ошибках проходят существующую redaction.
-- [ ] Доступ к подключению проверяется по стабильному `owner_user_id`.
+- [x] OAuth authorization code обменивается только backend-сервисом.
+- [x] `state` криптографически случайный, живёт 10 минут, одноразовый и привязан к владельцу.
+- [x] Callback использует заданный production redirect URI и отклоняет неверный, истёкший или повторный `state`.
+- [x] Token проверяется через `debug_token`: `app_id`, `is_valid`, user ID, scopes и сроки.
+- [x] Для серверных Graph-запросов используется App Secret Proof.
+- [x] Token шифруется в PostgreSQL ключом с поддержкой ротации.
+- [x] Token не попадает в URL, browser storage, ответы API, AuditEvent, snapshot или обычные логи.
+- [x] Чувствительные сообщения об ошибках проходят redaction.
+- [x] Доступ к подключению проверяется по стабильному `owner_user_id`.
 - [ ] Disconnect прекращает новые обращения, очищает секрет и сохраняет несекретную запись аудита.
 - [ ] Отзыв доступа в Facebook переводит подключение в `reconnect_required`, а не удаляет историю молча.
 - [ ] Privacy Policy, Data Deletion и deauthorization-сценарий соответствуют реальному поведению продукта.
-- [ ] Никаких cookies, `c_user`, `xs`, паролей, скрытого браузерного парсинга и обхода checkpoint.
+- [x] Buyerly не читает cookies, `c_user`, `xs`, пароли, browser storage и не обходит checkpoint.
 
 ## Отдельные релизы
 
@@ -240,6 +257,8 @@ System User Token не удаляется в первом релизе. Он о�
 
 ### AUTH-01. Совместимость Graph API
 
+Статус: `выпущено` — commit `1b5eab7`.
+
 - заменить жёсткую версию Meta API на настройку окружения;
 - проверить текущую поддерживаемую версию, начиная с `v26.0`;
 - прогнать account info, account Insights, ad set Insights, status и budget actions;
@@ -248,6 +267,8 @@ System User Token не удаляется в первом релизе. Он о�
 Результат: существующие функции Buyerly работают на согласованной текущей версии Graph API.
 
 ### AUTH-02. Подключения и защита token
+
+Статус: `выпущено` — commit `e9d5cca`.
 
 - добавить `meta_connections`, business/assets и безопасную миграцию;
 - внедрить шифрование token с версией ключа;
@@ -258,6 +279,8 @@ System User Token не удаляется в первом релизе. Он о�
 
 ### AUTH-03. OAuth backend
 
+Статус: `код выпущен, реальный callback ожидает два параметра Meta` — commit `fcb991a`.
+
 - start/callback, одноразовый state и server-side code exchange;
 - `debug_token`, scopes, сроки и App Secret Proof;
 - состояния ошибки, частичного согласия и повторного callback;
@@ -266,6 +289,8 @@ System User Token не удаляется в первом релизе. Он о�
 Результат: один тестовый Facebook-профиль официально подключается без ручной вставки token.
 
 ### AUTH-04. Поиск и выбор кабинетов
+
+Статус: `код и интерфейс выпущены, ждут пилота на реальном профиле` — commit `610c086`.
 
 - `/me/adaccounts`, `/me/businesses`, owned/client accounts и pagination;
 - дедупликация кабинетов и группировка Personal/BM;
