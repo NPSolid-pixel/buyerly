@@ -65,6 +65,18 @@ Production: `https://smattrades.com`.
 
 Импорт кабинета никогда не включает автоматику и не назначает правила автоматически. Валюта и часовой пояс берутся из Meta. Если Meta не вернула валюту, сохраняется `UNKNOWN`, а денежные действия блокируются до успешного уточнения.
 
+## Подключение Meta через Facebook Login for Business
+
+| Метод и путь | Параметры | Назначение |
+|---|---|---|
+| `GET /api/meta/oauth/config` | — | показывает готовность серверной OAuth-конфигурации без возврата секретов |
+| `POST /api/meta/oauth/start` | `return_path?` | создаёт одноразовый state на 10 минут и возвращает URL входа Facebook |
+| `GET /api/meta/connections` | — | список Meta-профилей текущего владельца без access token |
+
+Meta возвращает браузер на служебный callback `/api/meta/oauth/callback`. Callback не требует Buyerly-заголовка, потому что пользователь приходит напрямую от Facebook, но принимает только неистёкший одноразовый `state`, привязанный к Buyerly-пользователю. Полученный токен проверяется через Meta, сверяется с `META_APP_ID`, шифруется и только после этого сохраняется. OAuth `code`, app secret и access token не возвращаются в интерфейс.
+
+Для запуска нужны серверные параметры `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID`, `META_OAUTH_REDIRECT_URI`, `META_GRAPH_VERSION` и `META_TOKEN_ENCRYPTION_KEY`. Точный callback должен совпадать со значением Valid OAuth Redirect URI в Meta.
+
 ## Одиночные правила
 
 | Метод и путь | Тело | Назначение |

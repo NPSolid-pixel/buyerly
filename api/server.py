@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from api.routes import router as api_router
+from api.meta_oauth import router as meta_oauth_router
 from core.config import settings
 from database.db import async_session_maker
 
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
 
     # API routes
     app.include_router(api_router)
+    app.include_router(meta_oauth_router)
 
     @app.get("/health/live", include_in_schema=False)
     async def health_live():
