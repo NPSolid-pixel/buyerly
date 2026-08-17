@@ -12,7 +12,7 @@
 
 - одноразовые invite-ссылки для открытия в нужном антидетект-профиле или отправки владельцу;
 - переподключение, повторная проверка token, revoke detection и безопасное отключение;
-- собственные Privacy Policy, Terms of Service и Data Deletion;
+- внесение готовых Privacy Policy, Terms of Service и Data Deletion URL в Meta Dashboard;
 - реальный пилот app-role профиля, затем Advanced Access/Access Verification для внешних профилей;
 - дополнительное owned/client-обогащение, если `/me/adaccounts` не покажет все ожидаемые активы.
 

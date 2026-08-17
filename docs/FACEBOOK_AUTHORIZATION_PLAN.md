@@ -69,9 +69,10 @@ System User Token не удаляется в первом релизе. Он о�
 - [ ] Состояние проверки домена Buyerly.
 - [ ] Заменить рабочее название `API COTROL`, добавить иконку и категорию; contact email заполнен.
 - [x] App Domain `smattrades.com` добавлен.
-- [ ] Заменить ссылку на общую Facebook Privacy Policy на собственную Privacy Policy Buyerly.
-- [ ] Заменить общую ссылку Facebook на Terms of Service Buyerly.
-- [ ] Заменить общую ссылку Facebook на Data Deletion Instructions Buyerly или callback.
+- [x] Выпустить собственную Privacy Policy Buyerly: `https://smattrades.com/privacy`.
+- [x] Выпустить собственные Terms of Service Buyerly: `https://smattrades.com/terms`.
+- [x] Выпустить Data Deletion Instructions Buyerly: `https://smattrades.com/data-deletion`.
+- [ ] Указать три собственные ссылки в `App settings → Basic` вместо временных ссылок Facebook.
 - [ ] Deauthorize callback, если он доступен в выбранном use case.
 
 ### 2. Продукты и конфигурация входа
@@ -235,7 +236,8 @@ System User Token не удаляется в первом релизе. Он о�
 - [x] Доступ к подключению проверяется по стабильному `owner_user_id`.
 - [ ] Disconnect прекращает новые обращения, очищает секрет и сохраняет несекретную запись аудита.
 - [ ] Отзыв доступа в Facebook переводит подключение в `reconnect_required`, а не удаляет историю молча.
-- [ ] Privacy Policy, Data Deletion и deauthorization-сценарий соответствуют реальному поведению продукта.
+- [x] Privacy Policy, Terms и ручная Data Deletion Instructions соответствуют текущему поведению продукта.
+- [ ] Deauthorization callback и автоматический disconnect соответствуют реальному поведению продукта.
 - [x] Buyerly не читает cookies, `c_user`, `xs`, пароли, browser storage и не обходит checkpoint.
 
 ## Отдельные релизы
@@ -301,7 +303,8 @@ System User Token не удаляется в первом релизе. Он о�
 
 - подготовить точные объяснения permissions;
 - записать review-видео и воспроизводимые шаги на тестовых активах;
-- заполнить Privacy Policy/Data Deletion/deauthorization;
+- `[выполнено]` выпустить Privacy Policy, Terms of Service и Data Deletion Instructions;
+- указать legal URL в Meta Dashboard и добавить deauthorization callback;
 - получить требуемый Advanced Access и включить Live только после проверки;
 - проверить обычный профиль, не являющийся ролью приложения.
 

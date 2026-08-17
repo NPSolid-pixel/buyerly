@@ -71,6 +71,24 @@ def create_app() -> FastAPI:
     if os.path.exists(webapp_dir):
         app.mount("/static", StaticFiles(directory=webapp_dir), name="static")
 
+        public_documents = {
+            "/privacy": "privacy.html",
+            "/terms": "terms.html",
+            "/data-deletion": "data-deletion.html",
+        }
+
+        @app.get("/privacy", include_in_schema=False)
+        @app.get("/terms", include_in_schema=False)
+        @app.get("/data-deletion", include_in_schema=False)
+        async def serve_public_document(request: Request):
+            document_path = os.path.join(webapp_dir, public_documents[request.url.path])
+            if os.path.exists(document_path):
+                return FileResponse(
+                    document_path,
+                    headers={"Cache-Control": "public, max-age=300"},
+                )
+            return JSONResponse(status_code=404, content={"detail": "Document not found"})
+
         @app.get("/")
         @app.get("/sign-in")
         @app.get("/login")

@@ -22,6 +22,7 @@
 - отдельные метрики доставки и трафика: Reach, Frequency, CPM, All/Link/Unique/Outbound Clicks и Landing Page Views;
 - пользовательские представления таблицы с готовыми видами, ручным выбором, порядком, изменением ширины мышью, сортировкой, поиском, фильтрами и сохранённым периодом;
 - отдельные URL основных разделов с восстановлением страницы после обновления и поддержкой истории браузера;
+- публичные Privacy Policy, Terms of Service и Data Deletion Instructions в стиле Buyerly;
 - безопасная математика автоправил при нулевых событиях и точные операторы сравнения;
 - долговечные расписание, cooldown, блокировка и reconciliation автоправил после restart/deploy;
 - строгая fail-closed валидация правил в web, API, миграции и worker;
@@ -37,7 +38,7 @@
 
 ## Контроль качества
 
-Автоматическая серия включает 135 unit-, API-, integration-, migration-, PostgreSQL-contract, documentation- и frontend-contract тестов. Production считается готовым только после успешной проверки базы через API, публичного веб-шлюза и точного commit всех контейнеров.
+Автоматическая серия включает 146 unit-, API-, integration-, migration-, PostgreSQL-contract, documentation- и frontend-contract тестов. Production считается готовым только после успешной проверки базы через API, публичного веб-шлюза и точного commit всех контейнеров.
 
 ## Следующие продуктовые направления
 
