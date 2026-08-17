@@ -61,7 +61,13 @@ class MockMetaClient(MetaClient):
     async def get_account_info(self, account_id: str, access_token: str):
         return {"id": account_id, "name": "Underdog 3286", "timezone_name": "HST", "currency": "USD", "account_status": 1, "status_label": "🟢 Активен (ACTIVE)"}
 
-    async def get_adsets_insights(self, account_id: str, access_token: str, date_preset: str = "today"):
+    async def get_adsets_insights(
+        self,
+        account_id: str,
+        access_token: str,
+        date_preset: str = "today",
+        currency: str = "UNKNOWN",
+    ):
         self.requested_windows.append(date_preset)
         source = self.insights_by_window.get(date_preset, self.adsets_state)
         return [dict(adset) for adset in source.values()]
@@ -72,7 +78,13 @@ class MockMetaClient(MetaClient):
         self.status_changes.append((adset_id, status))
         return True
 
-    async def update_adset_budget(self, adset_id: str, access_token: str, new_daily_budget_dollars: float) -> bool:
+    async def update_adset_budget(
+        self,
+        adset_id: str,
+        access_token: str,
+        new_daily_budget_dollars: float,
+        currency: str = "UNKNOWN",
+    ) -> bool:
         self.adsets_state[adset_id]["daily_budget"] = new_daily_budget_dollars
         self.budget_changes.append((adset_id, new_daily_budget_dollars))
         return True
@@ -97,6 +109,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                 access_token="mock_token_123",
                 owner_id="123456789",
                 timezone_name="HST",
+                currency="USD",
                 active_rules=json.dumps([
                     {
                         "preset_id": 1,

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from database.db import (
+    migrate_account_currency_contract,
     migrate_audit_undo_contract,
     migrate_legacy_account_rules,
     migrate_rule_metric_contract,
@@ -368,6 +369,29 @@ class TestStableOwnerContractMigration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row, ("tg-old", 7))
         self.assertEqual(first["accounts"], 1)
         self.assertEqual(second["accounts"], 0)
+
+
+class TestAccountCurrencyContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def test_adds_unknown_currency_without_guessing_usd(self):
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("CREATE TABLE accounts (id INTEGER PRIMARY KEY, name VARCHAR)")
+                )
+                await conn.execute(
+                    text("INSERT INTO accounts (id, name) VALUES (1, 'Legacy')")
+                )
+                first = await migrate_account_currency_contract(conn)
+                second = await migrate_account_currency_contract(conn)
+                currency = (
+                    await conn.execute(text("SELECT currency FROM accounts WHERE id = 1"))
+                ).scalar_one()
+            self.assertTrue(first)
+            self.assertFalse(second)
+            self.assertEqual(currency, "UNKNOWN")
+        finally:
+            await engine.dispose()
 
 
 if __name__ == "__main__":

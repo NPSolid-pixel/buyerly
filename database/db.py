@@ -414,6 +414,30 @@ async def migrate_stable_owner_contract(conn) -> dict[str, int]:
     return counts
 
 
+async def migrate_account_currency_contract(conn) -> bool:
+    """Persist account currency without silently treating legacy rows as USD."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "accounts" not in table_names:
+        return False
+    columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"] for column in inspect(sync_conn).get_columns("accounts")
+        }
+    )
+    if "currency" in columns:
+        return False
+    await conn.execute(
+        text(
+            "ALTER TABLE accounts ADD COLUMN currency VARCHAR "
+            "NOT NULL DEFAULT 'UNKNOWN'"
+        )
+    )
+    return True
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -427,6 +451,8 @@ async def init_schema():
         owner_migration = await migrate_stable_owner_contract(conn)
         if any(owner_migration.values()):
             logger.info("Backfilled stable ownership: %s", owner_migration)
+        if await migrate_account_currency_contract(conn):
+            logger.info("Added the persisted account currency contract.")
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:
             logger.info(
@@ -450,6 +476,7 @@ async def init_schema():
             "ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;",
             "ALTER TABLE accounts ADD COLUMN account_status INTEGER DEFAULT 1;",
             "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT '🟢 Активен (ACTIVE)';",
+            "ALTER TABLE accounts ADD COLUMN currency VARCHAR DEFAULT 'UNKNOWN';",
             "ALTER TABLE accounts ADD COLUMN preset_id INTEGER;",
             "ALTER TABLE accounts ADD COLUMN preset_name VARCHAR DEFAULT '';",
             "ALTER TABLE accounts ADD COLUMN rule_action VARCHAR DEFAULT 'turn_off';",

@@ -16,6 +16,7 @@ from core.action_undo import (
     undo_audit_action,
 )
 from core.config import settings
+from core.currency import UNKNOWN_CURRENCY, normalize_currency
 from core.metrics import (
     SUMMARY_METRIC_DEFINITIONS,
     cost_per_event,
@@ -163,6 +164,7 @@ class RulePresetItem(BaseModel):
     notify_tg: bool = True
     budget_change_percent: float = 0.0
     budget_max_daily: float = 0.0
+    currency_mode: Literal["account"] = "account"
     created_at: str
 
 class CreatePresetRequest(BaseModel):
@@ -218,6 +220,7 @@ class AccountItem(BaseModel):
     owner_id: str
     batch_name: str
     timezone_name: str
+    currency: str
     account_status: int
     status_label: str
     rules_enabled: bool
@@ -302,6 +305,36 @@ def _utc_iso(value: Optional[datetime]) -> str:
 
 def _cost_or_none(spend: float, count: int) -> Optional[float]:
     return cost_per_event(spend, count, digits=2)
+
+
+def _currency_total_payload(currency: str, values: Dict[str, Any]) -> Dict[str, Any]:
+    spend = float(values.get("spend", 0.0))
+    impressions = int(values.get("impressions", 0))
+    clicks = int(values.get("clicks", 0))
+    link_clicks = int(values.get("link_clicks", 0))
+    landing_page_views = int(values.get("landing_page_views", 0))
+    leads = int(values.get("leads", 0))
+    registrations = int(values.get("registrations", 0))
+    purchases = int(values.get("purchases", 0))
+    return {
+        "currency": currency,
+        "accounts_count": int(values.get("accounts_count", 0)),
+        "spend": round(spend, 2),
+        "impressions": impressions,
+        "clicks": clicks,
+        "link_clicks": link_clicks,
+        "landing_page_views": landing_page_views,
+        "leads": leads,
+        "registrations": registrations,
+        "purchases": purchases,
+        "cpm": _cost_or_none(spend * 1000, impressions),
+        "cpc": _cost_or_none(spend, clicks),
+        "cpc_link": _cost_or_none(spend, link_clicks),
+        "cost_per_landing_page_view": _cost_or_none(spend, landing_page_views),
+        "cost_per_lead": _cost_or_none(spend, leads),
+        "cost_per_registration": _cost_or_none(spend, registrations),
+        "cost_per_purchase": _cost_or_none(spend, purchases),
+    }
 
 
 def _summary_with_cache_metadata(
@@ -453,6 +486,9 @@ def _summary_snapshot_reference(
         "generated_at": payload.get("generated_at") or _utc_iso(row.generated_at),
         "saved_at": _utc_iso(row.created_at),
         "total_spend": payload.get("total_spend", 0.0),
+        "display_currency": payload.get("display_currency", ""),
+        "mixed_currencies": bool(payload.get("mixed_currencies", False)),
+        "currency_totals": payload.get("currency_totals", []),
         "total_impressions": payload.get("total_impressions", 0),
         "total_reach": payload.get("total_reach", 0),
         "total_clicks": payload.get("total_clicks", 0),
@@ -611,6 +647,7 @@ def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
         "notify_tg": preset.notify_tg,
         "budget_change_percent": preset.budget_change_percent,
         "budget_max_daily": preset.budget_max_daily,
+        "currency_mode": "account",
     }
     validation_error = ""
     try:
@@ -931,6 +968,7 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 owner_id=a.owner_id,
                 batch_name=a.batch_name or "",
                 timezone_name=a.timezone_name or "UTC",
+                currency=normalize_currency(a.currency),
                 account_status=a.account_status,
                 status_label=a.status_label or "🟢 Активен (ACTIVE)",
                 rules_enabled=a.rules_enabled,
@@ -1418,6 +1456,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                 fb_name = acc_info.get("name", acc_id)
                 status_code = acc_info.get("account_status", 1)
                 status_label = acc_info.get("status_label", "🟢 Активен (ACTIVE)")
+                currency = normalize_currency(acc_info.get("currency"))
 
                 if batch_name != "-" and len(batch_name) > 0:
                     display_name = f"{batch_name} {idx}" if len(payload.accounts) > 1 else batch_name
@@ -1433,6 +1472,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                     existing.name = display_name
                     existing.access_token = token
                     existing.timezone_name = timezone_name
+                    existing.currency = currency
                     existing.owner_id = owner_id
                     existing.owner_user_id = user.id
                     existing.batch_name = batch_name if batch_name != "-" else ""
@@ -1448,6 +1488,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                         owner_user_id=user.id,
                         batch_name=batch_name if batch_name != "-" else "",
                         timezone_name=timezone_name,
+                        currency=currency,
                         account_status=status_code,
                         status_label=status_label,
                         # Account import never enables automation. Rules are
@@ -1461,6 +1502,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                     "account_id": acc_id,
                     "name": display_name,
                     "timezone_name": timezone_name,
+                    "currency": currency,
                     "status_label": status_label
                 })
 
@@ -1579,6 +1621,9 @@ async def get_summary_report(
                 "generated_at": _utc_iso(datetime.now(timezone.utc)),
                 "source": "Meta Marketing API",
                 "total_spend": 0.0,
+                "display_currency": "",
+                "mixed_currencies": False,
+                "currency_totals": [],
                 "total_clicks": 0,
                 "total_impressions": 0,
                 "total_reach": 0,
@@ -1641,12 +1686,24 @@ async def get_summary_report(
         accounts_synced = 0
         accounts_failed = 0
         accounts_blocked = 0
+        currency_buckets: Dict[str, Dict[str, Any]] = {}
 
         account_results = []
 
         for acc in accounts:
             short_name = get_short_account_label(acc.name, acc.account_id)
+            account_currency = normalize_currency(acc.currency)
             try:
+                if account_currency == UNKNOWN_CURRENCY:
+                    account_info = await meta_client.get_account_info(
+                        acc.account_id,
+                        acc.access_token,
+                    )
+                    account_currency = normalize_currency(account_info.get("currency"))
+                    if account_currency == UNKNOWN_CURRENCY:
+                        raise RuntimeError("Meta не вернула валюту рекламного кабинета")
+                    acc.currency = account_currency
+                    await session.commit()
                 account_insights = await meta_client.get_account_insights_summary(
                     account_id=acc.account_id,
                     access_token=acc.access_token,
@@ -1695,11 +1752,36 @@ async def get_summary_report(
                 total_purchases += acc_purchases
                 accounts_synced += 1
 
+                bucket = currency_buckets.setdefault(
+                    account_currency,
+                    {
+                        "accounts_count": 0,
+                        "spend": 0.0,
+                        "impressions": 0,
+                        "clicks": 0,
+                        "link_clicks": 0,
+                        "landing_page_views": 0,
+                        "leads": 0,
+                        "registrations": 0,
+                        "purchases": 0,
+                    },
+                )
+                bucket["accounts_count"] += 1
+                bucket["spend"] += acc_spend
+                bucket["impressions"] += acc_impressions
+                bucket["clicks"] += acc_clicks
+                bucket["link_clicks"] += acc_link_clicks
+                bucket["landing_page_views"] += acc_landing_page_views
+                bucket["leads"] += acc_leads
+                bucket["registrations"] += acc_regs
+                bucket["purchases"] += acc_purchases
+
                 account_results.append({
                     "account_id": acc.account_id,
                     "name": acc.name,
                     "short_name": short_name,
                     "timezone_name": acc.timezone_name,
+                    "currency": account_currency,
                     "account_status": acc.account_status,
                     "status_label": acc.status_label,
                     "rules_enabled": acc.rules_enabled,
@@ -1746,6 +1828,7 @@ async def get_summary_report(
                     "name": acc.name,
                     "short_name": short_name,
                     "timezone_name": acc.timezone_name,
+                    "currency": account_currency,
                     "account_status": acc.account_status,
                     "status_label": "⚠️ Ошибка синхронизации",
                     "rules_enabled": acc.rules_enabled,
@@ -1782,11 +1865,31 @@ async def get_summary_report(
                     ),
                 })
 
-        avg_cpc = (total_spend / total_clicks) if total_clicks > 0 else 0.0
+        currency_totals = [
+            _currency_total_payload(currency, currency_buckets[currency])
+            for currency in sorted(currency_buckets)
+        ]
+        mixed_currencies = len(currency_totals) > 1
+        display_currency = (
+            currency_totals[0]["currency"]
+            if len(currency_totals) == 1
+            and currency_totals[0]["currency"] != UNKNOWN_CURRENCY
+            else ""
+        )
+        monetary_totals_available = bool(display_currency)
+        avg_cpc = (
+            (total_spend / total_clicks) if total_clicks > 0 else 0.0
+        ) if monetary_totals_available else None
         avg_ctr = ((total_clicks / total_impressions) * 100) if total_impressions > 0 else 0.0
         avg_frequency = (total_impressions / total_reach) if total_reach > 0 else None
-        avg_cpm = ((total_spend / total_impressions) * 1000) if total_impressions > 0 else None
-        avg_cpc_link = _cost_or_none(total_spend, total_link_clicks)
+        avg_cpm = (
+            ((total_spend / total_impressions) * 1000)
+            if total_impressions > 0 else None
+        ) if monetary_totals_available else None
+        avg_cpc_link = (
+            _cost_or_none(total_spend, total_link_clicks)
+            if monetary_totals_available else None
+        )
         avg_ctr_link = (
             (total_link_clicks / total_impressions) * 100
             if total_impressions > 0 else None
@@ -1811,7 +1914,10 @@ async def get_summary_report(
             "period": period,
             "generated_at": _utc_iso(datetime.now(timezone.utc)),
             "source": "Meta Marketing API",
-            "total_spend": round(total_spend, 2),
+            "total_spend": round(total_spend, 2) if monetary_totals_available else None,
+            "display_currency": display_currency,
+            "mixed_currencies": mixed_currencies,
+            "currency_totals": currency_totals,
             "total_clicks": total_clicks,
             "total_impressions": total_impressions,
             "total_reach": total_reach,
@@ -1824,18 +1930,27 @@ async def get_summary_report(
             "total_leads": total_leads,
             "total_regs": total_regs,
             "total_purchases": total_purchases,
-            "avg_cpc": round(avg_cpc, 2),
+            "avg_cpc": round(avg_cpc, 2) if avg_cpc is not None else None,
             "avg_ctr": round(avg_ctr, 2),
             "avg_cpc_link": avg_cpc_link,
             "avg_ctr_link": round(avg_ctr_link, 2) if avg_ctr_link is not None else None,
             "avg_ctr_outbound": round(avg_ctr_outbound, 2) if avg_ctr_outbound is not None else None,
-            "cost_per_landing_page_view": _cost_or_none(
-                total_spend,
-                total_landing_page_views,
+            "cost_per_landing_page_view": (
+                _cost_or_none(total_spend, total_landing_page_views)
+                if monetary_totals_available else None
             ),
-            "cost_per_lead": _cost_or_none(total_spend, total_leads),
-            "cost_per_registration": _cost_or_none(total_spend, total_regs),
-            "cost_per_purchase": _cost_or_none(total_spend, total_purchases),
+            "cost_per_lead": (
+                _cost_or_none(total_spend, total_leads)
+                if monetary_totals_available else None
+            ),
+            "cost_per_registration": (
+                _cost_or_none(total_spend, total_regs)
+                if monetary_totals_available else None
+            ),
+            "cost_per_purchase": (
+                _cost_or_none(total_spend, total_purchases)
+                if monetary_totals_available else None
+            ),
             "accounts_count": len(accounts),
             "accounts": account_results,
             "data_quality": {
@@ -1845,6 +1960,14 @@ async def get_summary_report(
                 "accounts_failed": accounts_failed,
                 "accounts_blocked": accounts_blocked,
                 "metrics_coverage_percent": metrics_coverage,
+                "monetary_totals_available": monetary_totals_available,
+                "currency_issue": (
+                    "mixed"
+                    if mixed_currencies
+                    else "unknown"
+                    if not monetary_totals_available
+                    else ""
+                ),
             },
             "metric_definitions": SUMMARY_METRIC_DEFINITIONS,
         }
@@ -2135,6 +2258,10 @@ async def list_stopped_adsets(user: TelegramUser = Depends(get_current_user)):
         ).order_by(StoppedAdSet.stopped_at.desc())
         res = await session.execute(stmt)
         records = res.scalars().all()
+        currencies = {
+            account.account_id: normalize_currency(account.currency)
+            for account in user_accounts
+        }
 
         return [
             {
@@ -2143,6 +2270,7 @@ async def list_stopped_adsets(user: TelegramUser = Depends(get_current_user)):
                 "adset_id": r.adset_id,
                 "adset_name": r.adset_name,
                 "stop_spend": r.stop_spend,
+                "currency": currencies.get(r.account_id, UNKNOWN_CURRENCY),
                 "stop_leads": r.stop_leads,
                 "stop_registrations": r.stop_registrations,
                 "stopped_at": r.stopped_at.strftime("%Y-%m-%d %H:%M") if r.stopped_at else ""

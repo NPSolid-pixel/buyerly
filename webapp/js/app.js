@@ -381,6 +381,7 @@
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 </button>
                 <span class="card-tz mono">${escapeHtml(acc.timezone_name || 'UTC')}</span>
+                <span class="card-tz mono">${escapeHtml(acc.currency || 'UNKNOWN')}</span>
               </div>
             </div>
             <button class="account-more-button" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')">Подробнее</button>
@@ -494,6 +495,7 @@
       <div class="account-detail-grid">
         <div class="account-detail-field"><span>Статус Meta</span><b>${escapeHtml(account.status_label || metaState.label)}</b></div>
         <div class="account-detail-field"><span>Часовой пояс</span><b class="mono">${escapeHtml(account.timezone_name || 'UTC')}</b></div>
+        <div class="account-detail-field"><span>Валюта Meta</span><b class="mono">${escapeHtml(account.currency || 'UNKNOWN')}</b></div>
         <div class="account-detail-field"><span>Автоматика</span><b>${account.rules_enabled ? 'Включена' : 'Выключена'}</b></div>
         <div class="account-detail-field"><span>Назначено правил</span><b>${activeRules.length}</b></div>
         ${ownerHtml}
@@ -590,9 +592,9 @@
         };
         const mLabel = metricLabels[c.metric] || c.metric;
         const op = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' }[c.operator] || c.operator;
-        const unit = (c.metric === 'leads' || c.metric === 'registrations' || c.metric === 'purchases') ? ' шт' : (c.metric === 'ctr' ? '%' : '$');
+        const unit = (c.metric === 'leads' || c.metric === 'registrations' || c.metric === 'purchases') ? ' шт' : (c.metric === 'ctr' ? '%' : ' вал. кабинета');
         const numericValue = Number(c.value || 0);
-        const valStr = unit === '$' ? `$${numericValue.toFixed(1)}` : `${numericValue}${unit}`;
+        const valStr = `${numericValue}${unit}`;
         const windowLabels = { 'today': 'Сегодня', 'yesterday': 'Вчера', 'last_3d': '3 дня', 'last_7d': '7 дней' };
         const winStr = windowLabels[c.time_window || 'today'] || 'Сегодня';
 
@@ -611,7 +613,7 @@
       let budgetInfoHtml = '';
       if (p.action === 'increase_budget' || p.action === 'decrease_budget') {
         const sign = p.action === 'increase_budget' ? '+' : '-';
-        const cap = p.budget_max_daily > 0 ? ` · Макс: $${p.budget_max_daily}/день` : '';
+        const cap = p.budget_max_daily > 0 ? ` · Макс: ${p.budget_max_daily} в валюте кабинета/день` : '';
         budgetInfoHtml = `<div style="font-size:11.5px; color:var(--tg-link); font-weight:600;">💰 Шаг: ${sign}${p.budget_change_percent || 20}%${cap}</div>`;
       }
 
@@ -1245,15 +1247,15 @@
     row.className = 'rule-condition-row';
     row.innerHTML = `
       <select class="cond-metric form-select">
-        <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд ($)</option>
-        <option value="cpl" ${normalizedMetric === 'cpl' ? 'selected' : ''}>Цена лида · CPL ($)</option>
-        <option value="cpreg" ${normalizedMetric === 'cpreg' ? 'selected' : ''}>Цена регистрации · CPReg ($)</option>
-        <option value="cpp" ${normalizedMetric === 'cpp' ? 'selected' : ''}>Цена покупки · CPP ($)</option>
+        <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд (валюта кабинета)</option>
+        <option value="cpl" ${normalizedMetric === 'cpl' ? 'selected' : ''}>Цена лида · CPL (валюта кабинета)</option>
+        <option value="cpreg" ${normalizedMetric === 'cpreg' ? 'selected' : ''}>Цена регистрации · CPReg (валюта кабинета)</option>
+        <option value="cpp" ${normalizedMetric === 'cpp' ? 'selected' : ''}>Цена покупки · CPP (валюта кабинета)</option>
         <option value="leads" ${normalizedMetric === 'leads' ? 'selected' : ''}>Лиды (шт)</option>
         <option value="registrations" ${normalizedMetric === 'registrations' ? 'selected' : ''}>Регистрации (шт)</option>
         <option value="purchases" ${normalizedMetric === 'purchases' ? 'selected' : ''}>Покупки (шт)</option>
         <option value="ctr" ${normalizedMetric === 'ctr' ? 'selected' : ''}>CTR всех кликов (%)</option>
-        <option value="cpc" ${normalizedMetric === 'cpc' ? 'selected' : ''}>CPC всех кликов ($)</option>
+        <option value="cpc" ${normalizedMetric === 'cpc' ? 'selected' : ''}>CPC всех кликов (валюта кабинета)</option>
         ${normalizedMetric === 'legacy_cpa' ? '<option value="legacy_cpa" selected disabled>Старый общий CPA — замените</option>' : ''}
       </select>
       <select class="cond-operator form-select">
@@ -2027,8 +2029,25 @@
     }
   }
 
-  function formatMoneyOrDash(value) {
-    return typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(2)}` : '—';
+  function normalizeCurrencyCode(value) {
+    const code = String(value || '').trim().toUpperCase();
+    return /^[A-Z]{3}$/.test(code) ? code : '';
+  }
+
+  function formatMoneyOrDash(value, currency) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+    const code = normalizeCurrencyCode(currency);
+    if (!code) return `${value.toFixed(2)} · валюта неизвестна`;
+    try {
+      return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: code,
+        currencyDisplay: 'code',
+        maximumFractionDigits: ['CLP', 'ISK', 'JPY', 'KRW', 'PYG', 'VND'].includes(code) ? 0 : 2
+      }).format(value);
+    } catch (_) {
+      return `${value.toFixed(2)} ${code}`;
+    }
   }
 
   function formatNumber(value) {
@@ -2099,12 +2118,45 @@
       return;
     }
 
-    const currentSpend = Number(data.total_spend || 0);
-    const previousSpend = Number(previous.total_spend || 0);
+    const currency = normalizeCurrencyCode(data.display_currency);
+    const previousCurrency = normalizeCurrencyCode(previous.display_currency);
+    if (!currency || currency !== previousCurrency || data.mixed_currencies || previous.mixed_currencies) {
+      comparison.className = 'kpi-comparison';
+      comparison.textContent = 'Сравнение общего Spend недоступно: валюты разделены';
+      return;
+    }
+
+    const currentSpend = Number(data.total_spend);
+    const previousSpend = Number(previous.total_spend);
     const delta = currentSpend - previousSpend;
-    const deltaLabel = `${delta > 0 ? '+' : delta < 0 ? '−' : '±'}$${Math.abs(delta).toFixed(2)}`;
+    const deltaLabel = `${delta > 0 ? '+' : delta < 0 ? '−' : '±'}${formatMoneyOrDash(Math.abs(delta), currency)}`;
     comparison.className = 'kpi-comparison has-previous';
-    comparison.textContent = `До обновления ${formatSummaryTime(previous.generated_at)} · ${formatMoneyOrDash(previousSpend)} · изменение ${deltaLabel}`;
+    comparison.textContent = `До обновления ${formatSummaryTime(previous.generated_at)} · ${formatMoneyOrDash(previousSpend, currency)} · изменение ${deltaLabel}`;
+  }
+
+  function renderCurrencyBreakdown(data) {
+    const container = document.getElementById('summaryCurrencyBreakdown');
+    if (!container) return;
+    const totals = Array.isArray(data.currency_totals) ? data.currency_totals : [];
+    if (!totals.length) {
+      container.className = 'summary-currency-breakdown hidden';
+      container.innerHTML = '';
+      return;
+    }
+    const needsExplanation = data.mixed_currencies || !normalizeCurrencyCode(data.display_currency);
+    container.className = 'summary-currency-breakdown';
+    container.innerHTML = `
+      <div class="summary-currency-head">
+        <div><b>Денежные итоги по валютам</b><span>${needsExplanation ? 'Разные валюты не складываются в общий Spend и CPA' : 'Валюта подтверждена Meta для кабинетов'}</span></div>
+      </div>
+      <div class="summary-currency-grid">
+        ${totals.map(item => `
+          <div class="summary-currency-item">
+            <div><b>${escapeHtml(item.currency || 'UNKNOWN')}</b><span>${formatNumber(item.accounts_count)} каб.</span></div>
+            <strong>${formatMoneyOrDash(Number(item.spend || 0), item.currency)}</strong>
+            <small>CPL ${formatMoneyOrDash(item.cost_per_lead, item.currency)} · CPReg ${formatMoneyOrDash(item.cost_per_registration, item.currency)} · CPP ${formatMoneyOrDash(item.cost_per_purchase, item.currency)}</small>
+          </div>`).join('')}
+      </div>`;
   }
 
   function renderMetricDefinitions(definitions = {}) {
@@ -2233,7 +2285,7 @@
     } else {
       tableBody.innerHTML = accounts.map(acc => {
         const hasMetrics = summaryAccountHasMetrics(acc);
-        const spendStr = hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0)) : '—';
+        const spendStr = hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0), acc.currency) : '—';
         const displayName = acc.short_name || acc.name;
 
         return `
@@ -2244,7 +2296,7 @@
             <td class="text-right mono" data-summary-column="impressions">${hasMetrics ? formatNumber(acc.impressions) : '—'}</td>
             <td class="text-right mono" data-summary-column="reach">${hasMetrics ? formatOptionalNumber(acc.reach) : '—'}</td>
             <td class="text-right mono" data-summary-column="frequency">${hasMetrics ? formatDecimalOrDash(acc.frequency) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpm">${hasMetrics ? formatMoneyOrDash(acc.cpm) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpm">${hasMetrics ? formatMoneyOrDash(acc.cpm, acc.currency) : '—'}</td>
             <td class="text-right mono" data-summary-column="clicks">${hasMetrics ? formatNumber(acc.clicks) : '—'}</td>
             <td class="text-right mono" data-summary-column="link_clicks">${hasMetrics ? formatOptionalNumber(acc.link_clicks) : '—'}</td>
             <td class="text-right mono" data-summary-column="unique_clicks">${hasMetrics ? formatOptionalNumber(acc.unique_clicks) : '—'}</td>
@@ -2252,14 +2304,14 @@
             <td class="text-right mono" data-summary-column="landing_page_views">${hasMetrics ? formatOptionalNumber(acc.landing_page_views) : '—'}</td>
             <td class="text-right mono" data-summary-column="ctr">${hasMetrics ? Number(acc.ctr || 0).toFixed(2) + '%' : '—'}</td>
             <td class="text-right mono" data-summary-column="ctr_link">${hasMetrics ? formatDecimalOrDash(acc.ctr_link, 2, '%') : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpc">${hasMetrics ? formatMoneyOrDash(acc.cpc) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpc_link">${hasMetrics ? formatMoneyOrDash(acc.cpc_link) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpc">${hasMetrics ? formatMoneyOrDash(acc.cpc, acc.currency) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpc_link">${hasMetrics ? formatMoneyOrDash(acc.cpc_link, acc.currency) : '—'}</td>
             <td class="text-right mono" data-summary-column="leads" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
             <td class="text-right mono" data-summary-column="registrations" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
             <td class="text-right mono" data-summary-column="purchases">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpl">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpreg">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration) : '—'}</td>
-            <td class="text-right mono" data-summary-column="cpp"><b>${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase) : '—'}</b></td>
+            <td class="text-right mono" data-summary-column="cpl">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead, acc.currency) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpreg">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration, acc.currency) : '—'}</td>
+            <td class="text-right mono" data-summary-column="cpp"><b>${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase, acc.currency) : '—'}</b></td>
           </tr>`;
       }).join('');
     }
@@ -2269,31 +2321,35 @@
 
   function renderSummaryData(data) {
     // KPI Cards
-    document.getElementById('kpiSpend').textContent = formatMoneyOrDash(Number(data.total_spend || 0));
+    const displayCurrency = normalizeCurrencyCode(data.display_currency);
+    document.getElementById('kpiSpend').textContent = displayCurrency
+      ? formatMoneyOrDash(Number(data.total_spend), displayCurrency)
+      : (data.mixed_currencies ? 'По валютам' : '—');
     document.getElementById('kpiLeads').textContent = formatNumber(data.total_leads);
     document.getElementById('kpiRegs').textContent = formatNumber(data.total_regs);
-    document.getElementById('kpiCpl').textContent = formatMoneyOrDash(data.cost_per_lead);
-    document.getElementById('kpiCpreg').textContent = formatMoneyOrDash(data.cost_per_registration);
+    document.getElementById('kpiCpl').textContent = formatMoneyOrDash(data.cost_per_lead, displayCurrency);
+    document.getElementById('kpiCpreg').textContent = formatMoneyOrDash(data.cost_per_registration, displayCurrency);
     document.getElementById('kpiPurchases').textContent = formatNumber(data.total_purchases);
-    document.getElementById('kpiCpp').textContent = formatMoneyOrDash(data.cost_per_purchase);
+    document.getElementById('kpiCpp').textContent = formatMoneyOrDash(data.cost_per_purchase, displayCurrency);
     document.getElementById('kpiImpressions').textContent = formatOptionalNumber(data.total_impressions);
     document.getElementById('kpiReach').textContent = formatOptionalNumber(data.total_reach);
     document.getElementById('kpiFrequency').textContent = formatDecimalOrDash(data.avg_frequency);
-    document.getElementById('kpiCpm').textContent = formatMoneyOrDash(data.avg_cpm);
+    document.getElementById('kpiCpm').textContent = formatMoneyOrDash(data.avg_cpm, displayCurrency);
     document.getElementById('kpiClicks').textContent = formatNumber(data.total_clicks);
     document.getElementById('kpiCtr').textContent = data.total_impressions > 0 ? `${Number(data.avg_ctr || 0).toFixed(2)}%` : '—';
-    document.getElementById('kpiCpc').textContent = data.total_clicks > 0 ? formatMoneyOrDash(Number(data.avg_cpc || 0)) : '—';
+    document.getElementById('kpiCpc').textContent = data.total_clicks > 0 ? formatMoneyOrDash(data.avg_cpc, displayCurrency) : '—';
     document.getElementById('kpiLinkClicks').textContent = formatOptionalNumber(data.total_link_clicks);
     document.getElementById('kpiLinkCtr').textContent = formatDecimalOrDash(data.avg_ctr_link, 2, '%');
-    document.getElementById('kpiCpcLink').textContent = formatMoneyOrDash(data.avg_cpc_link);
+    document.getElementById('kpiCpcLink').textContent = formatMoneyOrDash(data.avg_cpc_link, displayCurrency);
     document.getElementById('kpiOutboundClicks').textContent = formatOptionalNumber(data.total_outbound_clicks);
     document.getElementById('kpiOutboundCtr').textContent = formatDecimalOrDash(data.avg_ctr_outbound, 2, '%');
     document.getElementById('kpiLandingPageViews').textContent = formatOptionalNumber(data.total_landing_page_views);
-    document.getElementById('kpiCostPerLandingPageView').textContent = formatMoneyOrDash(data.cost_per_landing_page_view);
+    document.getElementById('kpiCostPerLandingPageView').textContent = formatMoneyOrDash(data.cost_per_landing_page_view, displayCurrency);
     document.getElementById('kpiUniqueClicks').textContent = formatOptionalNumber(data.total_unique_clicks);
     renderSpendComparison(data);
     renderSummaryProvenance(data);
     renderSummaryQuality(data.data_quality || {});
+    renderCurrencyBreakdown(data);
     renderMetricDefinitions(data.metric_definitions || {});
 
     const visibleAccounts = renderSummaryAccountRows(data);
@@ -2320,7 +2376,7 @@
                 <span class="mono text-hint" style="font-size:11px; color:var(--tg-hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subLabel}</span>
                 ${statusPillHtml}
               </div>
-              <span class="mono" style="font-size:16px;font-weight:700;color:var(--tg-link);white-space:nowrap;flex-shrink:0;">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0)) : '—'}</span>
+              <span class="mono" style="font-size:16px;font-weight:700;color:var(--tg-link);white-space:nowrap;flex-shrink:0;">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0), acc.currency) : '—'}</span>
             </div>
             <span class="mob-card-section-label">Доставка</span>
             <div class="mob-card-stats">
@@ -2338,7 +2394,7 @@
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">CPM</span>
-                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cpm) : '—'}</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cpm, acc.currency) : '—'}</span>
               </div>
             </div>
             <span class="mob-card-section-label">Трафик</span>
@@ -2368,7 +2424,7 @@
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">CPL</span>
-                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead) : '—'}</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead, acc.currency) : '—'}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">Регистрации</span>
@@ -2376,7 +2432,7 @@
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">CPReg</span>
-                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration) : '—'}</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration, acc.currency) : '—'}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">Покупки</span>
@@ -2384,7 +2440,7 @@
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">CPP</span>
-                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase) : '—'}</span>
+                <span class="stat-box-val">${hasMetrics ? formatMoneyOrDash(acc.cost_per_purchase, acc.currency) : '—'}</span>
               </div>
             </div>
           </div>
@@ -2614,7 +2670,7 @@
         <div>
           <b>${escapeHtml(record.adset_name)}</b> <span class="mono text-hint">${escapeHtml(record.account_id)}</span>
           <div style="font-size:11px;color:var(--tg-hint);margin-top:2px;">
-            Остановлен ${escapeHtml(record.stopped_at || '—')} · Спенд <b>$${Number(record.stop_spend || 0).toFixed(2)}</b> · Лиды ${record.stop_leads || 0} · Реги ${record.stop_registrations || 0}
+            Остановлен ${escapeHtml(record.stopped_at || '—')} · Спенд <b>${formatMoneyOrDash(Number(record.stop_spend || 0), record.currency)}</b> · Лиды ${record.stop_leads || 0} · Реги ${record.stop_registrations || 0}
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">

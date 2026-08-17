@@ -14,6 +14,7 @@ from sqlalchemy import select, delete
 from core.config import settings
 from core.audit import build_audit_event
 from core.action_undo import UndoError, undo_audit_action
+from core.currency import format_money, normalize_currency
 from core.ownership import entity_is_owned_by, owned_by
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, AppSettings, TelegramUser
@@ -287,6 +288,7 @@ async def process_token_and_save(message: Message, state: FSMContext):
                 acc_info = await meta_client.get_account_info(acc_id, token)
                 timezone_name = acc_info.get("timezone_name", "UTC")
                 fb_name = acc_info.get("name", acc_id)
+                currency = normalize_currency(acc_info.get("currency"))
                 
                 # Формируем имя
                 if batch_name != "-" and len(batch_name) > 0:
@@ -304,6 +306,7 @@ async def process_token_and_save(message: Message, state: FSMContext):
                     existing.name = display_name
                     existing.access_token = token
                     existing.timezone_name = timezone_name
+                    existing.currency = currency
                     existing.owner_id = owner_id
                     existing.owner_user_id = owner_user.id
                     existing.batch_name = batch_name if batch_name != "-" else ""
@@ -317,12 +320,13 @@ async def process_token_and_save(message: Message, state: FSMContext):
                         owner_user_id=owner_user.id,
                         batch_name=batch_name if batch_name != "-" else "",
                         timezone_name=timezone_name,
+                        currency=currency,
                         rules_enabled=False,
                         is_active=True
                     )
                     session.add(new_acc)
 
-                added_results.append(f"• <b>{display_name}</b> (<code>{acc_id}</code>) — {timezone_name}")
+                added_results.append(f"• <b>{display_name}</b> (<code>{acc_id}</code>) — {timezone_name} · {currency}")
 
             except Exception as e:
                 logger.error(f"Error adding account {acc_id}: {e}")
@@ -439,7 +443,7 @@ async def cb_report_period(callback: CallbackQuery):
             )
             return
 
-        total_spend = 0.0
+        spend_by_currency = {}
         total_clicks = 0
         total_leads = 0
         total_regs = 0
@@ -451,24 +455,22 @@ async def cb_report_period(callback: CallbackQuery):
         no_spend_list = []
 
         for acc in accounts:
-            if not acc.is_active or acc.account_status in [2, 101]:
-                continue
             tz_name = acc.timezone_name or tz_name
             short_name = get_short_account_label(acc.name, acc.account_id)
             try:
-                adsets = await meta_client.get_adsets_insights(
+                account_metrics = await meta_client.get_account_insights_summary(
                     account_id=acc.account_id,
                     access_token=acc.access_token,
                     date_preset=period
                 )
-                
-                acc_spend = sum(a.get("spend", 0.0) for a in adsets)
-                acc_clicks = sum(a.get("clicks", 0) for a in adsets)
-                acc_leads = sum(a.get("leads", 0) for a in adsets)
-                acc_regs = sum(a.get("registrations", 0) for a in adsets)
-                acc_purchases = sum(a.get("purchases", 0) for a in adsets)
+                currency = normalize_currency(acc.currency)
+                acc_spend = account_metrics.get("spend", 0.0)
+                acc_clicks = account_metrics.get("clicks", 0)
+                acc_leads = account_metrics.get("leads", 0)
+                acc_regs = account_metrics.get("registrations", 0)
+                acc_purchases = account_metrics.get("purchases", 0)
 
-                total_spend += acc_spend
+                spend_by_currency[currency] = spend_by_currency.get(currency, 0.0) + acc_spend
                 total_clicks += acc_clicks
                 total_leads += acc_leads
                 total_regs += acc_regs
@@ -480,7 +482,8 @@ async def cb_report_period(callback: CallbackQuery):
                     "clicks": acc_clicks,
                     "leads": acc_leads,
                     "regs": acc_regs,
-                    "purchases": acc_purchases
+                    "purchases": acc_purchases,
+                    "currency": currency,
                 })
 
             except Exception as e:
@@ -491,21 +494,26 @@ async def cb_report_period(callback: CallbackQuery):
                     "clicks": 0,
                     "leads": 0,
                     "regs": 0,
-                    "purchases": 0
+                    "purchases": 0,
+                    "currency": normalize_currency(acc.currency),
                 })
 
         # Формируем аккуратную таблицу в блоке <pre>
         header = f"{'Кабинет':<10}{'Спенд':>9}{'Клики':>6}{'Лиды':>5}{'Реги':>5}{'Пок':>4}"
         lines = [header]
         for r in table_rows:
-            spend_str = f"${r['spend']:.2f}"
+            spend_str = format_money(r["spend"], r["currency"])
             lines.append(f"{r['name']:<10}{spend_str:>9}{r['clicks']:>6}{r['leads']:>5}{r['regs']:>5}{r['purchases']:>4}")
 
         table_block = "<pre>\n" + "\n".join(lines) + "\n</pre>"
 
+        totals_text = " · ".join(
+            format_money(amount, currency)
+            for currency, amount in sorted(spend_by_currency.items())
+        ) or "—"
         report_text = (
             f"📊 <b>Отчёт за {period_title}</b>\n\n"
-            f"💵 <code>${total_spend:.2f}</code>\n\n"
+            f"💵 <code>{totals_text}</code>\n\n"
             f"👆 <b>{total_clicks}</b>  ·  🎯 <b>{total_leads}</b>  ·  📝 <b>{total_regs}</b>  ·  💳 <b>{total_purchases}</b>\n\n"
             f"{table_block}"
         )
@@ -533,29 +541,32 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
             await wait_msg.edit_text("ℹ️ У вас пока нет подключенных кабинетов.")
             return
 
-        total_spend = 0.0
+        spend_by_currency = {}
         lines = []
 
         for acc in accounts:
-            if acc.account_status in [2, 101] or not acc.is_active:
-                lines.append(f"• {acc.name}: 🔴 Заблокирован ($0.00)")
-                continue
             try:
-                adsets = await meta_client.get_adsets_insights(
+                account_metrics = await meta_client.get_account_insights_summary(
                     account_id=acc.account_id,
                     access_token=acc.access_token,
                     date_preset="today"
                 )
-                acc_spend = sum(a["spend"] for a in adsets)
-                total_spend += acc_spend
-                lines.append(f"• {acc.name}: ${acc_spend:.2f}")
+                currency = normalize_currency(acc.currency)
+                acc_spend = account_metrics.get("spend", 0.0)
+                spend_by_currency[currency] = spend_by_currency.get(currency, 0.0) + acc_spend
+                lines.append(f"• {acc.name}: {format_money(acc_spend, currency)}")
             except Exception as e:
-                lines.append(f"• {acc.name}: 🔴 Ошибка ($0.00)")
+                lines.append(f"• {acc.name}: 🔴 Ошибка получения данных")
+
+        totals_text = " · ".join(
+            format_money(amount, currency)
+            for currency, amount in sorted(spend_by_currency.items())
+        ) or "—"
 
         text = (
             "<b>Разбивка по кабинетам:</b>\n"
             + "\n".join(lines) + "\n\n"
-            f"💵 <b>Ваш суммарный расход за сегодня:</b> <code>${total_spend:.2f}</code>"
+            f"💵 <b>Расход за сегодня по валютам:</b> <code>{totals_text}</code>"
         )
         await wait_msg.edit_text(text, parse_mode="HTML")
 
@@ -576,7 +587,8 @@ def format_account_card(acc: Account) -> str:
         f"{status_line}\n"
         f"{rules_line}"
         f"{preset_line}"
-        f"🕒 Таймзона: <code>{acc.timezone_name}</code>"
+        f"🕒 Таймзона: <code>{acc.timezone_name}</code>\n"
+        f"💱 Валюта: <code>{normalize_currency(acc.currency)}</code>"
     )
 
 

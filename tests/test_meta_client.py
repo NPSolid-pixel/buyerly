@@ -5,8 +5,10 @@ from meta_api.client import MetaClient
 
 
 class FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self.payload = payload
+        self.status_code = status_code
+        self.text = ""
 
     def json(self):
         return self.payload
@@ -34,6 +36,32 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state["daily_budget"], 123.45)
         call = client._request_with_retry.await_args
         self.assertIn("daily_budget", call.kwargs["params"]["fields"])
+
+    async def test_zero_decimal_currency_budget_is_not_divided_or_multiplied_by_100(self):
+        client = MetaClient()
+        client._request_with_retry = AsyncMock(
+            side_effect=[
+                FakeResponse(
+                    {
+                        "id": "adset_jpy",
+                        "status": "ACTIVE",
+                        "daily_budget": "1200",
+                    }
+                ),
+                FakeResponse({"success": True}),
+            ]
+        )
+
+        state = await client.get_adset_state(
+            "adset_jpy", "test-token", currency="JPY"
+        )
+        await client.update_adset_budget(
+            "adset_jpy", "test-token", 1500, currency="JPY"
+        )
+
+        self.assertEqual(state["daily_budget"], 1200.0)
+        budget_call = client._request_with_retry.await_args_list[1]
+        self.assertEqual(budget_call.kwargs["data"]["daily_budget"], "1500")
 
     async def test_account_summary_uses_unfiltered_account_level_insights(self):
         client = MetaClient()

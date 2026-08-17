@@ -21,6 +21,7 @@ from database.models import (
     TelegramUser,
 )
 from core.audit import build_audit_event
+from core.currency import normalize_currency
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 
@@ -442,6 +443,8 @@ class MonitoringWorker:
                     # 2. Проверяем здоровье кабинета и статус в Meta
                     try:
                         acc_info = await self.meta_client.get_account_info(acc.account_id, acc.access_token)
+                        acc.currency = normalize_currency(acc_info.get("currency"))
+                        await session.commit()
                         status_code = acc_info.get("account_status", 1)
                         if status_code != 1:
                             status_label = acc_info.get("status_label", f"Статус #{status_code}")
@@ -468,6 +471,10 @@ class MonitoringWorker:
                                     local_time=status_label
                                 )
                             continue
+                        if acc.currency == "UNKNOWN":
+                            raise RuntimeError(
+                                "Meta did not return the ad account currency; automation is blocked"
+                            )
                     except PermissionError as pe:
                         logger.error(f"Token expired for account {acc.account_id}: {pe}")
                         acc.is_active = False
@@ -517,7 +524,8 @@ class MonitoringWorker:
                             w_insights = await self.meta_client.get_adsets_insights(
                                 account_id=acc.account_id,
                                 access_token=acc.access_token,
-                                date_preset=w
+                                date_preset=w,
+                                currency=acc.currency,
                             )
                             insights_by_window[w] = {str(a["adset_id"]): a for a in w_insights}
                         except Exception as e:
@@ -527,7 +535,8 @@ class MonitoringWorker:
                     adsets = await self.meta_client.get_adsets_insights(
                         account_id=acc.account_id,
                         access_token=acc.access_token,
-                        date_preset="today"
+                        date_preset="today",
+                        currency=acc.currency,
                     )
 
                     stats["adsets_checked"] += len(adsets)
@@ -555,6 +564,7 @@ class MonitoringWorker:
                                 "timezone_name": acc.timezone_name,
                                 "active_adsets": len(active_adsets),
                                 "start_spend": total_spend,
+                                "currency": acc.currency,
                             },
                         )
                         
@@ -567,7 +577,8 @@ class MonitoringWorker:
                                 timezone_name=acc.timezone_name,
                                 local_time=f"{time_str} ({acc.timezone_name})",
                                 active_count=len(active_adsets),
-                                start_spend=total_spend
+                                start_spend=total_spend,
+                                currency=acc.currency,
                             )
 
                     # 7. Оцениваем каждый адсет через RuleEngine (только если авто-правила включены!)
@@ -861,7 +872,8 @@ class MonitoringWorker:
                                 await self.meta_client.update_adset_budget(
                                     adset_id=a_id,
                                     access_token=acc.access_token,
-                                    new_daily_budget_dollars=new_budget
+                                    new_daily_budget_dollars=new_budget,
+                                    currency=acc.currency,
                                 )
                                 stats["budgets_changed"] += 1
                                 self._finish_execution(execution_state, status="SUCCESS", now=now)
@@ -914,7 +926,8 @@ class MonitoringWorker:
                                 await self.meta_client.update_adset_budget(
                                     adset_id=a_id,
                                     access_token=acc.access_token,
-                                    new_daily_budget_dollars=new_budget
+                                    new_daily_budget_dollars=new_budget,
+                                    currency=acc.currency,
                                 )
                                 stats["budgets_changed"] += 1
                                 self._finish_execution(execution_state, status="SUCCESS", now=now)

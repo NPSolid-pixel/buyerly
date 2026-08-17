@@ -52,6 +52,7 @@ def build_audit_event(
             "cpp": evaluation.cpp,
             "notify_tg": evaluation.notify_tg,
             "cooldown_minutes": evaluation.cooldown_minutes,
+            "currency": evaluation.currency,
         }
 
     merged_details = {**evaluation_details, **(details or {})}

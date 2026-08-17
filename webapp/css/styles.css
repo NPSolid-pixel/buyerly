@@ -1321,6 +1321,67 @@ input:checked + .slider:before {
   border-color: rgba(223, 116, 124, 0.24);
 }
 
+.summary-currency-breakdown {
+  margin-bottom: 12px;
+  padding: 11px;
+  background: var(--tg-card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.summary-currency-head > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+.summary-currency-head b {
+  color: var(--tg-text);
+  font-size: 12px;
+}
+
+.summary-currency-head span {
+  color: var(--tg-hint);
+  font-size: 10px;
+  text-align: right;
+}
+
+.summary-currency-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 7px;
+}
+
+.summary-currency-item {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 9px 10px;
+  background: var(--tg-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.summary-currency-item > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.summary-currency-item span,
+.summary-currency-item small {
+  color: var(--tg-hint);
+  font-size: 10px;
+}
+
+.summary-currency-item strong {
+  color: var(--tg-text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+}
+
 .metric-definitions {
   margin-bottom: 12px;
   padding: 9px 11px;

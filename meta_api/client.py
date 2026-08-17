@@ -5,6 +5,8 @@ import random
 import httpx
 from typing import Optional, List, Dict, Any
 
+from core.currency import from_meta_budget_units, normalize_currency, to_meta_budget_units
+
 logger = logging.getLogger(__name__)
 
 ACCOUNT_STATUS_MAP = {
@@ -323,6 +325,7 @@ class MetaClient:
         resp = await self._request_with_retry("GET", url, params=params, account_id=acc_id)
         data = resp.json()
         status_code = data.get("account_status", 1)
+        data["currency"] = normalize_currency(data.get("currency"))
         data["status_label"] = ACCOUNT_STATUS_MAP.get(status_code, f"Неизвестный статус ({status_code})")
         return data
 
@@ -365,7 +368,8 @@ class MetaClient:
         self, 
         account_id: str, 
         access_token: str, 
-        date_preset: str = "today"
+        date_preset: str = "today",
+        currency: str = "UNKNOWN",
     ) -> List[Dict[str, Any]]:
         """
         Получает сводную информацию по всем адсетам кабинета за указанный период (today, yesterday, last_3d, last_7d):
@@ -435,7 +439,8 @@ class MetaClient:
                 "impressions": impressions,
                 "cpc": round(cpc, 2),
                 "ctr": round(ctr, 2),
-                "daily_budget": float(adset.get("daily_budget", 0)) / 100.0  # Meta returns in cents
+                "daily_budget": from_meta_budget_units(adset.get("daily_budget", 0), currency),
+                "currency": normalize_currency(currency),
             })
 
         return unified_adsets
@@ -468,7 +473,12 @@ class MetaClient:
             logger.error(f"Failed to set adset {adset_id} status: {error_msg}")
             raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
 
-    async def get_adset_state(self, adset_id: str, access_token: str) -> Dict[str, Any]:
+    async def get_adset_state(
+        self,
+        adset_id: str,
+        access_token: str,
+        currency: str = "UNKNOWN",
+    ) -> Dict[str, Any]:
         """Read the live state used by guarded action reversal checks."""
 
         url = f"{self.BASE_URL}/{adset_id}"
@@ -489,32 +499,36 @@ class MetaClient:
             "effective_status": str(
                 payload.get("effective_status") or payload.get("status") or "UNKNOWN"
             ).upper(),
-            "daily_budget": self._safe_float(payload.get("daily_budget")) / 100.0,
+            "daily_budget": from_meta_budget_units(payload.get("daily_budget"), currency),
+            "currency": normalize_currency(currency),
         }
 
     async def update_adset_budget(
         self, 
         adset_id: str, 
         access_token: str, 
-        new_daily_budget_dollars: float
+        new_daily_budget_dollars: float,
+        currency: str = "UNKNOWN",
     ) -> bool:
         """
-        Обновляет дневной бюджет адсета через Meta Graph API.
-        Meta API принимает бюджет в центах (целое число).
+        Обновляет дневной бюджет в минимальных единицах валюты кабинета.
         """
-        new_budget_cents = int(round(new_daily_budget_dollars * 100))
-        if new_budget_cents < 100:  # Минимум $1.00
-            raise ValueError(f"Budget too low: ${new_daily_budget_dollars:.2f}. Minimum is $1.00.")
+        new_budget_units = to_meta_budget_units(new_daily_budget_dollars, currency)
 
         url = f"{self.BASE_URL}/{adset_id}"
         payload = {
-            "daily_budget": str(new_budget_cents),
+            "daily_budget": str(new_budget_units),
             "access_token": access_token
         }
 
         resp = await self._request_with_retry("POST", url, data=payload, account_id=adset_id)
         if resp.status_code == 200 and resp.json().get("success") is True:
-            logger.info(f"Successfully updated adset {adset_id} daily budget to ${new_daily_budget_dollars:.2f}")
+            logger.info(
+                "Successfully updated adset %s daily budget to %.2f %s",
+                adset_id,
+                new_daily_budget_dollars,
+                normalize_currency(currency),
+            )
             return True
         else:
             error_data = resp.json().get("error", {})

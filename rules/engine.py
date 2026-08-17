@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Dict, Any, List
 from database.models import Account
+from core.currency import format_money, normalize_currency
 from core.metrics import (
     compare_metric,
     cost_per_event,
@@ -39,6 +40,7 @@ class RuleEvaluationResult:
     rule_id: Optional[int] = None
     rule_name: str = ""
     conditions_snapshot: List[Dict[str, Any]] = field(default_factory=list)
+    currency: str = "UNKNOWN"
 
 class RuleEngine:
     """
@@ -87,6 +89,7 @@ class RuleEngine:
         cpreg = cost_per_event(spend, registrations)
         cpp = cost_per_event(spend, purchases)
         is_active = status == "ACTIVE" and effective_status == "ACTIVE"
+        currency = normalize_currency(getattr(account, "currency", "UNKNOWN"))
 
         def noop(reason="Метрики в пределах нормы."):
             return RuleEvaluationResult(
@@ -102,7 +105,8 @@ class RuleEngine:
                 cpp=cpp,
                 reason=reason,
                 cooldown_minutes=0,
-                notify_tg=False
+                notify_tg=False,
+                currency=currency,
             )
 
         if not getattr(account, "rules_enabled", False):
@@ -193,9 +197,9 @@ class RuleEngine:
                 if metric_val is None:
                     all_match = False
                     continue
-                if unit == "$":
-                    val_fmt = f"${metric_val:.2f}"
-                    tgt_fmt = f"${target_val:.2f}"
+                if unit == "currency":
+                    val_fmt = format_money(metric_val, currency)
+                    tgt_fmt = format_money(target_val, currency)
                 elif unit == "%":
                     val_fmt = f"{metric_val:.2f}%"
                     tgt_fmt = f"{target_val:.2f}%"
@@ -271,4 +275,5 @@ class RuleEngine:
             rule_id=highest_priority_action["rule_id"],
             rule_name=highest_priority_action["rule_name"],
             conditions_snapshot=highest_priority_action["conditions"],
+            currency=currency,
         )

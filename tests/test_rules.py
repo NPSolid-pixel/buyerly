@@ -11,6 +11,7 @@ class TestRuleEngine(unittest.TestCase):
             name="Тестовый кабинет",
             access_token="mock_token",
             timezone_name="UTC",
+            currency="USD",
             owner_id="123",
             rules_enabled=True,
             active_rules="[]",
@@ -128,7 +129,7 @@ class TestRuleEngine(unittest.TestCase):
         adset_over = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 15.5, "leads": 2, "registrations": 0}
         res = RuleEngine.evaluate(adset_over, self.account)
         self.assertEqual(res.action, RuleAction.STOP)
-        self.assertIn("Спенд ($15.50) ≥ $15.00", res.reason)
+        self.assertIn("Спенд (15.50 USD) ≥ 15.00 USD", res.reason)
 
     # --------------------------------------------------------
     # Метрика: cpl (цена за лид)
@@ -144,7 +145,7 @@ class TestRuleEngine(unittest.TestCase):
         adset = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 20.0, "leads": 2, "registrations": 0}
         res = RuleEngine.evaluate(adset, self.account)
         self.assertEqual(res.action, RuleAction.NOTIFY_ONLY)
-        self.assertIn("Цена за лид (CPL) ($10.00) ≥ $7.00", res.reason)
+        self.assertIn("Цена за лид (CPL) (10.00 USD) ≥ 7.00 USD", res.reason)
 
     # --------------------------------------------------------
     # Метрика: leads (количество лидов)
@@ -193,7 +194,7 @@ class TestRuleEngine(unittest.TestCase):
         }
         res = RuleEngine.evaluate(adset, self.account)
         self.assertEqual(res.action, RuleAction.STOP)
-        self.assertIn("Цена покупки (CPP) ($11.00) > $10.00", res.reason)
+        self.assertIn("Цена покупки (CPP) (11.00 USD) > 10.00 USD", res.reason)
 
     def test_zero_event_cost_is_unavailable(self):
         """Нулевые лиды не превращают Spend в CPL и не запускают масштабирование."""

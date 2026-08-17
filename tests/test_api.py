@@ -94,6 +94,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 access_token="mock_token",
                 owner_id="8948797431",
                 timezone_name="UTC",
+                currency="USD",
                 rules_enabled=False,
                 is_active=True
             )
@@ -610,6 +611,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             "name": "Imported account",
             "account_status": 1,
             "status_label": "Активен",
+            "currency": "EUR",
         }
         legacy_payload = {
             "accounts": [{"account_id": "act_new_account", "name": "New account"}],
@@ -642,6 +644,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             imported = result.scalar_one()
             self.assertFalse(imported.rules_enabled)
             self.assertEqual(imported.active_rules, "[]")
+            self.assertEqual(imported.currency, "EUR")
 
     async def test_analytics_view_is_saved_per_user_and_validated(self):
         buyer_data = generate_valid_telegram_init_data(
@@ -786,6 +789,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         name="Blocked account",
                         access_token="blocked_token",
                         owner_id="8948797431",
+                        currency="USD",
                         account_status=2,
                         is_active=True,
                     ),
@@ -794,6 +798,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         name="Error account",
                         access_token="error_token",
                         owner_id="8948797431",
+                        currency="USD",
                         account_status=1,
                         is_active=True,
                     ),
@@ -868,8 +873,13 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 "accounts_failed": 1,
                 "accounts_blocked": 0,
                 "metrics_coverage_percent": 66.7,
+                "monetary_totals_available": True,
+                "currency_issue": "",
             },
         )
+        self.assertEqual(data["display_currency"], "USD")
+        self.assertFalse(data["mixed_currencies"])
+        self.assertEqual(data["currency_totals"][0]["spend"], 60.0)
         by_id = {account["account_id"]: account for account in data["accounts"]}
         self.assertEqual(by_id["act_1018756607700064"]["data_status"], "synced")
         self.assertEqual(by_id["act_blocked"]["data_status"], "synced")
@@ -964,6 +974,57 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 await session.execute(select(func.count()).select_from(SummarySnapshot))
             ).scalar_one()
         self.assertEqual(snapshot_count_after_failure, 2)
+
+    async def test_summary_never_combines_money_from_different_currencies(self):
+        async with self.test_session_maker() as session:
+            session.add(
+                Account(
+                    account_id="act_eur",
+                    name="Euro account",
+                    access_token="eur_token",
+                    owner_id="8948797431",
+                    currency="EUR",
+                    is_active=True,
+                )
+            )
+            await session.commit()
+
+        async def insights(account_id, access_token, date_preset):
+            return {
+                "spend": 100.0 if account_id == "act_eur" else 50.0,
+                "clicks": 10,
+                "impressions": 1000,
+                "leads": 2,
+                "registrations": 1,
+                "purchases": 0,
+            }
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_account_insights_summary",
+            new=AsyncMock(side_effect=insights),
+        ):
+            transport = httpx.ASGITransport(app=self.app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get(
+                    "/api/summary?period=today&force=true",
+                    headers={"Authorization": f"tma {buyer_data}"},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["mixed_currencies"])
+        self.assertEqual(data["display_currency"], "")
+        self.assertIsNone(data["total_spend"])
+        self.assertIsNone(data["cost_per_lead"])
+        self.assertEqual(
+            {item["currency"]: item["spend"] for item in data["currency_totals"]},
+            {"EUR": 100.0, "USD": 50.0},
+        )
 
 
     async def test_settings_endpoint(self):
@@ -1217,7 +1278,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(first.json()["already_reverted"])
         self.assertEqual(second.status_code, 200)
         self.assertTrue(second.json()["already_reverted"])
-        get_state.assert_awaited_once()
+        get_state.assert_awaited_once_with("undo_stop_adset", "mock_token", currency="USD")
         set_status.assert_awaited_once_with("undo_stop_adset", "mock_token", "ACTIVE")
         source_item = next(item for item in history.json()["items"] if item["id"] == source_id)
         self.assertEqual(source_item["display_status"], "REVERTED")
@@ -1337,7 +1398,9 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(response.status_code, 200)
-        update_budget.assert_awaited_once_with("undo_budget_adset", "mock_token", 50.0)
+        update_budget.assert_awaited_once_with(
+            "undo_budget_adset", "mock_token", 50.0, currency="USD"
+        )
 
     async def test_account_cannot_attach_another_owners_preset(self):
         async with self.test_session_maker() as session:

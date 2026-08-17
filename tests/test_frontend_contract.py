@@ -236,7 +236,20 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.13.0', self.index)
+        self.assertIn('v=9.14.0', self.index)
+
+    def test_money_is_currency_aware_and_mixed_totals_are_separated(self):
+        for contract in (
+            'id="summaryCurrencyBreakdown"',
+            'data.currency_totals',
+            'data.mixed_currencies',
+            'currencyDisplay: \'code\'',
+            'Валюта Meta',
+            'валюте конкретного кабинета',
+        ):
+            self.assertIn(contract, self.index + self.script)
+        self.assertNotIn('Спенд ($)', self.script)
+        self.assertNotIn('Потолок ($/день)', self.index)
 
     def test_rule_builder_uses_independent_cost_metrics_and_exact_operators(self):
         for contract in (

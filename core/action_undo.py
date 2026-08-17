@@ -9,6 +9,7 @@ from typing import Any, Optional
 from sqlalchemy import or_, select
 
 from core.audit import build_audit_event
+from core.currency import UNKNOWN_CURRENCY, normalize_currency
 from core.logging_config import redact_secrets
 from database.models import Account, ActionUndoState, AuditEvent, StoppedAdSet
 
@@ -258,7 +259,22 @@ async def undo_audit_action(
 
     action_started = time.perf_counter()
     try:
-        current_state = await meta_client.get_adset_state(source.adset_id, account.access_token)
+        currency = normalize_currency(account.currency)
+        if currency == UNKNOWN_CURRENCY:
+            account_info = await meta_client.get_account_info(
+                account.account_id,
+                account.access_token,
+            )
+            currency = normalize_currency(account_info.get("currency"))
+            if currency == UNKNOWN_CURRENCY:
+                raise RuntimeError("Meta did not return the ad account currency")
+            account.currency = currency
+            await session.commit()
+        current_state = await meta_client.get_adset_state(
+            source.adset_id,
+            account.access_token,
+            currency=currency,
+        )
     except Exception as error:
         await _mark_failed(
             session,
@@ -292,6 +308,7 @@ async def undo_audit_action(
                     source.adset_id,
                     account.access_token,
                     float(spec.desired_state["daily_budget"]),
+                    currency=currency,
                 )
         except Exception as error:
             await _mark_failed(
@@ -320,6 +337,7 @@ async def undo_audit_action(
             "original_event_id": source.id,
             "original_event_type": source.event_type,
             "reconciled_after_restart": reconciled,
+            "currency": currency,
         },
         duration_ms=(time.perf_counter() - action_started) * 1000,
         actor_type=actor_type,

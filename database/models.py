@@ -48,7 +48,7 @@ class RulePreset(Base):
     check_interval_minutes = Column(Integer, default=5, nullable=False, doc="Интервал проверки воркером (мин)")
     notify_tg = Column(Boolean, default=True, nullable=False, doc="Уведомление в Telegram")
     budget_change_percent = Column(Float, default=0.0, nullable=False, doc="На сколько % изменить бюджет")
-    budget_max_daily = Column(Float, default=0.0, nullable=False, doc="Макс. потолок бюджета ($/день), 0 = без ограничения")
+    budget_max_daily = Column(Float, default=0.0, nullable=False, doc="Макс. дневной бюджет в валюте кабинета, 0 = без ограничения")
     created_at = Column(DateTime, default=utcnow, nullable=False)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -103,6 +103,7 @@ class Account(Base):
     owner_id = Column(String, nullable=False, index=True, doc="Telegram ID байера-владельца")
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     batch_name = Column(String, default="", nullable=False, doc="Имя пачки кабинетов (если добавлялось пачкой)")
+    currency = Column(String, default="UNKNOWN", nullable=False, doc="ISO 4217 валюта рекламного кабинета из Meta")
     
     # Часовой пояс и отслеживание старта нового дня
     timezone_name = Column(String, default="UTC", nullable=False, doc="Часовой пояс рекламного кабинета")
