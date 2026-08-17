@@ -25,6 +25,7 @@ from core.metrics import (
     validate_public_rule_conditions,
     validate_runtime_rule,
 )
+from core.meta_tokens import resolve_account_access_token
 from core.ownership import assign_owner, entity_is_owned_by, owned_by, owned_by_ids
 from core.rule_examples import ensure_rule_examples
 from core.timezones import resolve_account_clock
@@ -1704,10 +1705,11 @@ async def get_summary_report(
             short_name = get_short_account_label(acc.name, acc.account_id)
             account_currency = normalize_currency(acc.currency)
             try:
+                access_token = await resolve_account_access_token(session, acc)
                 if account_currency == UNKNOWN_CURRENCY:
                     account_info = await meta_client.get_account_info(
                         acc.account_id,
-                        acc.access_token,
+                        access_token,
                     )
                     account_currency = normalize_currency(account_info.get("currency"))
                     if account_currency == UNKNOWN_CURRENCY:
@@ -1716,7 +1718,7 @@ async def get_summary_report(
                     await session.commit()
                 account_insights = await meta_client.get_account_insights_summary(
                     account_id=acc.account_id,
-                    access_token=acc.access_token,
+                    access_token=access_token,
                     date_preset=period
                 )
                 acc_spend = account_insights.get("spend", 0.0)
@@ -2304,7 +2306,8 @@ async def reactivate_adset(adset_id: str, user: TelegramUser = Depends(get_curre
 
         action_started = time.perf_counter()
         try:
-            await meta_client.set_adset_status(adset_id=adset_id, access_token=account.access_token, status="ACTIVE")
+            access_token = await resolve_account_access_token(session, account)
+            await meta_client.set_adset_status(adset_id=adset_id, access_token=access_token, status="ACTIVE")
         except Exception as e:
             logger.error("Error reactivating adset %s; details stored in audit history", adset_id)
             session.add(

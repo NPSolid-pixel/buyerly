@@ -105,6 +105,14 @@
     filter: 'all',
     searchQuery: '',
     parsedAccounts: [],
+    metaOAuth: {
+      configured: false,
+      connections: [],
+      activeConnectionId: null,
+      assets: [],
+      selectedAccountIds: new Set(),
+      callbackHandled: false
+    },
     auditEvents: [],
     auditPage: 1,
     auditTotalPages: 1,
@@ -292,6 +300,8 @@
       initializeSummaryTab();
     } else if (tabName === 'logs') {
       loadLogsTab(1);
+    } else if (tabName === 'add') {
+      loadMetaConnections();
     } else if (tabName === 'settings') {
       loadSettings();
     }
@@ -2719,8 +2729,231 @@
   };
 
   // ==========================================================
-  // TAB 3: BATCH ADD (УМНЫЙ ИМПОРТ)
+  // TAB 4: META OAUTH + BATCH ADD
   // ==========================================================
+  function consumeMetaOAuthCallback() {
+    if (state.metaOAuth.callbackHandled) return {};
+    state.metaOAuth.callbackHandled = true;
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('meta_status') || '';
+    const connectionId = Number(params.get('meta_connection') || 0) || null;
+    if (status) {
+      const messages = {
+        connected: ['Facebook-профиль подключён. Загружаем кабинеты…', 'success'],
+        cancelled: ['Подключение Facebook отменено.', 'info'],
+        expired_state: ['Ссылка входа истекла. Запустите подключение ещё раз.', 'error'],
+        invalid_callback: ['Meta вернула неполный ответ. Запустите подключение ещё раз.', 'error'],
+        not_configured: ['OAuth Meta ещё не настроен на сервере.', 'error'],
+        connection_failed: ['Не удалось подтвердить подключение Meta. Попробуйте войти ещё раз.', 'error']
+      };
+      const item = messages[status] || ['Не удалось завершить подключение Meta.', 'error'];
+      showToast(item[0], item[1]);
+      try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+    }
+    return { status, connectionId };
+  }
+
+  function renderMetaConnections() {
+    const container = document.getElementById('metaConnectionsList');
+    if (!container) return;
+    if (!state.metaOAuth.connections.length) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = state.metaOAuth.connections.map(connection => {
+      const healthy = connection.status === 'active';
+      return `
+        <div class="meta-connection-row ${healthy ? '' : 'needs-reconnect'}">
+          <div class="meta-connection-avatar">f</div>
+          <div class="meta-connection-info">
+            <b>${escapeHtml(connection.provider_user_name || 'Facebook-профиль')}</b>
+            <span>${healthy ? 'Подключение активно' : 'Требуется повторный вход'} · ID ${escapeHtml(connection.provider_user_id)}</span>
+          </div>
+          <button class="btn btn-secondary btn-sm" type="button" onclick="window.openMetaConnection(${connection.id})">
+            ${healthy ? 'Показать кабинеты' : 'Переподключить'}
+          </button>
+        </div>`;
+    }).join('');
+  }
+
+  async function loadMetaConnections() {
+    const statusEl = document.getElementById('metaOAuthStatus');
+    const setupEl = document.getElementById('metaOAuthSetupNotice');
+    const startButton = document.getElementById('btnStartMetaOAuth');
+    const callback = consumeMetaOAuthCallback();
+    try {
+      const config = await apiRequest('/api/meta/oauth/config');
+      state.metaOAuth.configured = Boolean(config.configured);
+      if (!config.configured) {
+        const missing = Object.entries(config.checks || {}).filter(([, ready]) => !ready).map(([key]) => key);
+        statusEl.innerHTML = '<span class="status-dot dot-warning"></span><span>Серверная авторизация Meta требует настройки</span>';
+        setupEl.textContent = `Не заполнено на сервере: ${missing.join(', ')}. Данные текущих кабинетов продолжают работать.`;
+        setupEl.classList.remove('hidden');
+        startButton.disabled = true;
+      } else {
+        statusEl.innerHTML = '<span class="status-dot dot-success"></span><span>OAuth готов · защищённое подключение через Meta</span>';
+        setupEl.classList.add('hidden');
+        startButton.disabled = false;
+      }
+      state.metaOAuth.connections = await apiRequest('/api/meta/connections');
+      renderMetaConnections();
+      if (callback.status === 'connected' && callback.connectionId) {
+        await discoverMetaAssets(callback.connectionId);
+      }
+    } catch (err) {
+      statusEl.innerHTML = `<span class="status-dot dot-danger"></span><span>${escapeHtml(err.message)}</span>`;
+      startButton.disabled = true;
+    }
+  }
+
+  document.getElementById('btnStartMetaOAuth')?.addEventListener('click', async () => {
+    const button = document.getElementById('btnStartMetaOAuth');
+    if (!state.metaOAuth.configured) return;
+    button.disabled = true;
+    button.querySelector('span').textContent = 'Открываем Facebook…';
+    try {
+      const result = await apiRequest('/api/meta/oauth/start?return_path=/add-accounts', { method: 'POST' });
+      window.location.assign(result.authorization_url);
+    } catch (err) {
+      showToast(err.message, 'error');
+      button.disabled = false;
+      button.querySelector('span').textContent = 'Войти через Facebook';
+    }
+  });
+
+  window.openMetaConnection = async function (connectionId) {
+    const connection = state.metaOAuth.connections.find(item => item.id === connectionId);
+    if (connection && connection.status !== 'active') {
+      document.getElementById('btnStartMetaOAuth')?.click();
+      return;
+    }
+    await discoverMetaAssets(connectionId);
+  };
+
+  async function discoverMetaAssets(connectionId) {
+    const panel = document.getElementById('metaAssetsPanel');
+    const groups = document.getElementById('metaAssetGroups');
+    state.metaOAuth.activeConnectionId = connectionId;
+    state.metaOAuth.selectedAccountIds.clear();
+    panel.classList.remove('hidden');
+    groups.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Получаем доступные кабинеты из Meta…</p></div>';
+    document.getElementById('metaAssetsEmpty').classList.add('hidden');
+    try {
+      const result = await apiRequest(`/api/meta/connections/${connectionId}/discover`, { method: 'POST' });
+      state.metaOAuth.assets = result.accounts || [];
+      document.getElementById('metaAssetsTitle').textContent = result.connection?.provider_user_name || 'Доступные кабинеты';
+      document.getElementById('metaAssetsSubtitle').textContent = `Найдено ${result.count || 0} · уже подключено ${result.imported_count || 0}`;
+      renderMetaAssets();
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      groups.innerHTML = '';
+      document.getElementById('metaAssetsEmpty').classList.remove('hidden');
+      document.querySelector('#metaAssetsEmpty h3').textContent = 'Не удалось получить кабинеты';
+      document.querySelector('#metaAssetsEmpty p').textContent = err.message;
+      showToast(err.message, 'error');
+      await loadMetaConnections();
+    }
+  }
+
+  function renderMetaAssets() {
+    const groupsEl = document.getElementById('metaAssetGroups');
+    const emptyEl = document.getElementById('metaAssetsEmpty');
+    const grouped = new Map();
+    state.metaOAuth.assets.forEach(asset => {
+      const key = asset.business_name || 'Без Business Manager';
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(asset);
+    });
+    if (!state.metaOAuth.assets.length) {
+      groupsEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      updateMetaSelection();
+      return;
+    }
+    emptyEl.classList.add('hidden');
+    groupsEl.innerHTML = Array.from(grouped.entries()).map(([businessName, accounts]) => `
+      <section class="meta-business-group">
+        <div class="meta-business-title">
+          <span>${escapeHtml(businessName)}</span>
+          <small>${accounts.length} кабинетов</small>
+        </div>
+        <div class="meta-asset-list">
+          ${accounts.map(asset => `
+            <label class="meta-asset-row ${asset.imported ? 'is-imported' : ''}">
+              <input class="meta-asset-checkbox" type="checkbox" value="${escapeHtml(asset.account_id)}" ${asset.imported ? 'checked disabled' : ''}>
+              <span class="meta-asset-main"><b>${escapeHtml(asset.name)}</b><code>${escapeHtml(asset.account_id)}</code></span>
+              <span class="meta-asset-meta"><b>${escapeHtml(asset.currency)}</b><small>${escapeHtml(asset.timezone_name)}</small></span>
+              <span class="badge ${asset.imported ? 'badge-success' : 'badge-neutral'}">${asset.imported ? 'Подключён' : 'Доступен'}</span>
+            </label>`).join('')}
+        </div>
+      </section>`).join('');
+    document.querySelectorAll('.meta-asset-checkbox:not(:disabled)').forEach(input => {
+      input.addEventListener('change', () => {
+        if (input.checked) state.metaOAuth.selectedAccountIds.add(input.value);
+        else state.metaOAuth.selectedAccountIds.delete(input.value);
+        updateMetaSelection();
+      });
+    });
+    updateMetaSelection();
+  }
+
+  function updateMetaSelection() {
+    const available = state.metaOAuth.assets.filter(asset => !asset.imported);
+    const selected = state.metaOAuth.selectedAccountIds.size;
+    const selectAll = document.getElementById('metaSelectAll');
+    document.getElementById('metaSelectionCount').textContent = `Выбрано: ${selected}`;
+    const importButton = document.getElementById('btnImportMetaAssets');
+    importButton.disabled = selected === 0;
+    importButton.querySelector('span').textContent = selected ? `Добавить выбранные (${selected})` : 'Добавить выбранные кабинеты';
+    selectAll.checked = available.length > 0 && selected === available.length;
+    selectAll.indeterminate = selected > 0 && selected < available.length;
+  }
+
+  document.getElementById('metaSelectAll')?.addEventListener('change', event => {
+    state.metaOAuth.selectedAccountIds.clear();
+    if (event.target.checked) {
+      state.metaOAuth.assets.filter(asset => !asset.imported).forEach(asset => state.metaOAuth.selectedAccountIds.add(asset.account_id));
+    }
+    document.querySelectorAll('.meta-asset-checkbox:not(:disabled)').forEach(input => {
+      input.checked = state.metaOAuth.selectedAccountIds.has(input.value);
+    });
+    updateMetaSelection();
+  });
+
+  document.getElementById('btnRefreshMetaAssets')?.addEventListener('click', () => {
+    if (state.metaOAuth.activeConnectionId) discoverMetaAssets(state.metaOAuth.activeConnectionId);
+  });
+
+  document.getElementById('btnImportMetaAssets')?.addEventListener('click', async () => {
+    const accountIds = Array.from(state.metaOAuth.selectedAccountIds);
+    if (!accountIds.length || !state.metaOAuth.activeConnectionId) return;
+    window.openModal('modalBatchProgress');
+    document.getElementById('batchProgressBar').style.width = '35%';
+    document.getElementById('batchProgressText').textContent = `Проверяем и подключаем ${accountIds.length} кабинетов…`;
+    document.getElementById('batchResultsList').innerHTML = '';
+    document.getElementById('btnBatchDone').classList.add('hidden');
+    document.getElementById('btnBatchOpenRules').classList.add('hidden');
+    try {
+      const result = await apiRequest(`/api/meta/connections/${state.metaOAuth.activeConnectionId}/import`, {
+        method: 'POST',
+        body: JSON.stringify({ account_ids: accountIds })
+      });
+      document.getElementById('batchProgressBar').style.width = '100%';
+      document.getElementById('batchProgressText').textContent = `Подключено: ${result.success_count} из ${accountIds.length}`;
+      const rows = [];
+      (result.added || []).forEach(item => rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${escapeHtml(item.account_id)})</span><span class="badge badge-success">OK</span></div>`));
+      (result.errors || []).forEach(item => rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-danger"></span><b>${escapeHtml(item.account_id)}</b>: ${escapeHtml(item.error)}</span><span class="badge badge-danger">Ошибка</span></div>`));
+      document.getElementById('batchResultsList').innerHTML = rows.join('');
+      document.getElementById('btnBatchDone').classList.remove('hidden');
+      if (result.success_count > 0) document.getElementById('btnBatchOpenRules').classList.remove('hidden');
+      state.metaOAuth.selectedAccountIds.clear();
+      await discoverMetaAssets(state.metaOAuth.activeConnectionId);
+    } catch (err) {
+      document.getElementById('batchProgressText').textContent = `Ошибка: ${err.message}`;
+      document.getElementById('btnBatchDone').classList.remove('hidden');
+    }
+  });
+
   const rawInput = document.getElementById('rawAccountsInput');
   const parsedBadge = document.getElementById('parsedCountBadge');
   const previewBox = document.getElementById('parsedPreviewBox');

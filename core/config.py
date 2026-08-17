@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     )
     META_TOKEN_ENCRYPTION_KEY: str = Field(
         default="",
-        description="URL-safe base64 key used to encrypt Meta access tokens at rest",
+        description="Primary URL-safe base64 key followed by optional decrypt-only rotation keys",
     )
     API_PORT: int = Field(default=8080, description="Web API and static files port")
     API_HOST: str = Field(default="0.0.0.0", description="Web API host")

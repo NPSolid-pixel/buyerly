@@ -621,9 +621,59 @@
       <!-- TAB 4: ДОБАВИТЬ КАБИНЕТЫ (BATCH IMPORT) -->
       <!-- ============================================== -->
       <section id="tab-add" class="tab-content">
-        <div class="form-card">
+        <div class="form-card meta-connect-card">
+          <div class="meta-connect-intro">
+            <div>
+              <span class="eyebrow">Рекомендуемый способ</span>
+              <h2>Подключение через Facebook</h2>
+              <p class="form-desc">Войдите в Facebook в текущем профиле браузера. Buyerly найдёт все доступные рекламные кабинеты — без ручного копирования ID и токенов.</p>
+            </div>
+            <button id="btnStartMetaOAuth" class="btn btn-primary btn-lg" type="button">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 12.07C22 6.51 17.52 2 12 2S2 6.51 2 12.07C2 17.09 5.66 21.25 10.44 22v-7.03H7.9v-2.9h2.54V9.85c0-2.52 1.5-3.91 3.78-3.91 1.09 0 2.23.2 2.23.2v2.46H15.2c-1.24 0-1.63.77-1.63 1.56v1.91h2.77l-.44 2.9h-2.33V22C18.34 21.25 22 17.09 22 12.07Z"/></svg>
+              <span>Войти через Facebook</span>
+            </button>
+          </div>
+          <div id="metaOAuthStatus" class="meta-oauth-status">
+            <span class="status-dot dot-muted"></span>
+            <span>Проверяем готовность подключения…</span>
+          </div>
+          <div id="metaOAuthSetupNotice" class="meta-setup-notice hidden"></div>
+          <div id="metaConnectionsList" class="meta-connections-list"></div>
+        </div>
+
+        <div id="metaAssetsPanel" class="form-card meta-assets-panel hidden">
+          <div class="meta-assets-header">
+            <div>
+              <span class="eyebrow">Доступные кабинеты</span>
+              <h2 id="metaAssetsTitle">Выберите кабинеты</h2>
+              <p id="metaAssetsSubtitle" class="form-desc">Отметьте кабинеты, которые нужно добавить в Buyerly.</p>
+            </div>
+            <button id="btnRefreshMetaAssets" class="btn btn-secondary" type="button">Обновить список</button>
+          </div>
+          <div class="meta-assets-toolbar">
+            <label class="meta-select-all"><input id="metaSelectAll" type="checkbox"> Выбрать все неподключённые</label>
+            <span id="metaSelectionCount" class="label-badge">Выбрано: 0</span>
+          </div>
+          <div id="metaAssetsEmpty" class="empty-state hidden">
+            <h3>Доступных кабинетов не найдено</h3>
+            <p>Проверьте права Facebook-профиля или Configuration в Meta App Dashboard.</p>
+          </div>
+          <div id="metaAssetGroups" class="meta-asset-groups"></div>
+          <div class="form-actions">
+            <button id="btnImportMetaAssets" class="btn btn-primary btn-block btn-lg" type="button" disabled>
+              <span>Добавить выбранные кабинеты</span>
+            </button>
+          </div>
+        </div>
+
+        <details class="form-card legacy-import-card">
+          <summary class="legacy-import-summary">
+            <span><b>Ручное подключение по токену</b><small>Для системных пользователей и технических сценариев</small></span>
+            <span class="legacy-import-chevron">⌄</span>
+          </summary>
+          <div class="legacy-import-content">
           <div class="form-header">
-            <h2>Добавление рекламных кабинетов</h2>
+            <h2>Ручное добавление рекламных кабинетов</h2>
             <p class="form-desc">
               Вставьте скопированный текст из <b>Facebook Business Manager</b> или список ID кабинетов. Умный парсер автоматически извлечет все <code>act_...</code> и сопоставит названия.
             </p>
@@ -692,7 +742,8 @@
               <span>Подключить кабинеты</span>
             </button>
           </div>
-        </div>
+          </div>
+        </details>
       </section>
 
       <!-- ============================================== -->

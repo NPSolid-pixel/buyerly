@@ -11,6 +11,7 @@ from sqlalchemy import or_, select
 from core.audit import build_audit_event
 from core.currency import UNKNOWN_CURRENCY, normalize_currency
 from core.logging_config import redact_secrets
+from core.meta_tokens import resolve_account_access_token
 from database.models import Account, ActionUndoState, AuditEvent, StoppedAdSet
 
 
@@ -259,11 +260,12 @@ async def undo_audit_action(
 
     action_started = time.perf_counter()
     try:
+        access_token = await resolve_account_access_token(session, account)
         currency = normalize_currency(account.currency)
         if currency == UNKNOWN_CURRENCY:
             account_info = await meta_client.get_account_info(
                 account.account_id,
-                account.access_token,
+                access_token,
             )
             currency = normalize_currency(account_info.get("currency"))
             if currency == UNKNOWN_CURRENCY:
@@ -272,7 +274,7 @@ async def undo_audit_action(
             await session.commit()
         current_state = await meta_client.get_adset_state(
             source.adset_id,
-            account.access_token,
+            access_token,
             currency=currency,
         )
     except Exception as error:
@@ -300,13 +302,13 @@ async def undo_audit_action(
             if spec.kind == "status":
                 await meta_client.set_adset_status(
                     source.adset_id,
-                    account.access_token,
+                    access_token,
                     spec.desired_state["status"],
                 )
             else:
                 await meta_client.update_adset_budget(
                     source.adset_id,
-                    account.access_token,
+                    access_token,
                     float(spec.desired_state["daily_budget"]),
                     currency=currency,
                 )

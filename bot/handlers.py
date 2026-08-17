@@ -16,6 +16,7 @@ from core.audit import build_audit_event
 from core.action_undo import UndoError, undo_audit_action
 from core.currency import format_money, normalize_currency
 from core.ownership import entity_is_owned_by, owned_by
+from core.meta_tokens import resolve_account_access_token
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, AppSettings, TelegramUser
@@ -465,9 +466,10 @@ async def cb_report_period(callback: CallbackQuery):
             tz_name = acc.timezone_name or tz_name
             short_name = get_short_account_label(acc.name, acc.account_id)
             try:
+                access_token = await resolve_account_access_token(session, acc)
                 account_metrics = await meta_client.get_account_insights_summary(
                     account_id=acc.account_id,
-                    access_token=acc.access_token,
+                    access_token=access_token,
                     date_preset=period
                 )
                 currency = normalize_currency(acc.currency)
@@ -553,9 +555,10 @@ async def cmd_spend(message: Message, bot: Bot, state: FSMContext):
 
         for acc in accounts:
             try:
+                access_token = await resolve_account_access_token(session, acc)
                 account_metrics = await meta_client.get_account_insights_summary(
                     account_id=acc.account_id,
-                    access_token=acc.access_token,
+                    access_token=access_token,
                     date_preset="today"
                 )
                 currency = normalize_currency(acc.currency)
@@ -922,9 +925,10 @@ async def cb_reactivate(callback: CallbackQuery):
             return
 
         try:
+            access_token = await resolve_account_access_token(session, account)
             await meta_client.set_adset_status(
                 adset_id=adset_id,
-                access_token=account.access_token,
+                access_token=access_token,
                 status="ACTIVE"
             )
         except Exception as e:
@@ -1056,9 +1060,10 @@ async def cb_pause_adset(callback: CallbackQuery):
             return
 
         try:
+            access_token = await resolve_account_access_token(session, account)
             await meta_client.set_adset_status(
                 adset_id=adset_id,
-                access_token=account.access_token,
+                access_token=access_token,
                 status="PAUSED"
             )
         except Exception as e:

@@ -9,20 +9,42 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select, update
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import delete, select, update
 
 from api.auth import get_current_user
 from core.config import settings
-from core.meta_tokens import MetaTokenError, encrypt_meta_token
-from core.ownership import owned_by
+from core.currency import normalize_currency
+from core.meta_tokens import (
+    MetaTokenError,
+    decrypt_meta_token,
+    encrypt_meta_token,
+)
+from core.logging_config import redact_secrets
+from core.ownership import entity_is_owned_by, owned_by
+from core.timezones import canonical_timezone_name, resolve_account_clock
 from database.db import async_session_maker
-from database.models import MetaConnection, MetaOAuthState, TelegramUser
+from database.models import (
+    Account,
+    MetaConnection,
+    MetaConnectionAsset,
+    MetaOAuthState,
+    TelegramUser,
+)
+from meta_api.client import MetaClient
 from meta_api.oauth import MetaOAuthClient, MetaOAuthRemoteError, meta_token_expiry
 
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/meta", tags=["Meta OAuth"])
 OAUTH_STATE_TTL_MINUTES = 10
+meta_client = MetaClient()
+
+
+class MetaAccountImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account_ids: list[str] = Field(min_length=1, max_length=500)
 
 
 def _oauth_client() -> MetaOAuthClient:
@@ -68,6 +90,34 @@ def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+async def _owned_connection(session, connection_id: int, user: TelegramUser) -> MetaConnection:
+    connection = (
+        await session.execute(
+            select(MetaConnection).where(
+                MetaConnection.id == connection_id,
+                owned_by(MetaConnection, user),
+            )
+        )
+    ).scalar_one_or_none()
+    if not connection:
+        raise HTTPException(status_code=404, detail="Подключение Meta не найдено")
+    return connection
+
+
+def _serialize_asset(asset: MetaConnectionAsset, imported_ids: set[str]) -> dict:
+    return {
+        "account_id": asset.meta_account_id,
+        "name": asset.name,
+        "business_id": asset.business_id,
+        "business_name": asset.business_name,
+        "account_status": asset.account_status,
+        "currency": asset.currency,
+        "timezone_name": asset.timezone_name,
+        "imported": asset.meta_account_id in imported_ids,
+        "discovered_at": asset.discovered_at.isoformat(),
+    }
 
 
 @router.get("/oauth/config")
@@ -252,3 +302,233 @@ async def list_connections(user: TelegramUser = Depends(get_current_user)):
         }
         for item in rows
     ]
+
+
+@router.post("/connections/{connection_id}/discover")
+async def discover_accounts(
+    connection_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    now = datetime.now(timezone.utc)
+    async with async_session_maker() as session:
+        connection = await _owned_connection(session, connection_id, user)
+        try:
+            access_token = decrypt_meta_token(connection.access_token_encrypted)
+            client = _oauth_client()
+            debug = await client.debug_token(access_token)
+            discovered = await client.discover_ad_accounts(access_token)
+        except (MetaOAuthRemoteError, MetaTokenError) as exc:
+            connection.status = "needs_reconnect"
+            connection.last_error = str(exc)
+            await session.commit()
+            raise HTTPException(
+                status_code=502,
+                detail="Meta не подтвердила подключение. Подключите профиль заново.",
+            ) from exc
+
+        existing_assets = {
+            item.meta_account_id: item
+            for item in (
+                await session.execute(
+                    select(MetaConnectionAsset).where(
+                        MetaConnectionAsset.connection_id == connection.id
+                    )
+                )
+            ).scalars().all()
+        }
+        visible_ids: set[str] = set()
+        for raw in discovered:
+            raw_id = str(raw.get("id") or raw.get("account_id") or "").strip()
+            if not raw_id:
+                continue
+            account_id = raw_id if raw_id.startswith("act_") else f"act_{raw_id}"
+            business = raw.get("business") if isinstance(raw.get("business"), dict) else {}
+            asset = existing_assets.get(account_id) or MetaConnectionAsset(
+                connection_id=connection.id,
+                owner_id=connection.owner_id,
+                owner_user_id=connection.owner_user_id,
+                meta_account_id=account_id,
+            )
+            asset.name = str(raw.get("name") or account_id)
+            asset.business_id = str(business.get("id") or "")
+            asset.business_name = str(business.get("name") or "Без Business Manager")
+            try:
+                asset.account_status = int(raw.get("account_status") or 0)
+            except (TypeError, ValueError):
+                asset.account_status = 0
+            asset.currency = normalize_currency(raw.get("currency"))
+            asset.timezone_name = canonical_timezone_name(raw.get("timezone_name")) or "UNKNOWN"
+            asset.discovered_at = now
+            if account_id not in existing_assets:
+                session.add(asset)
+            visible_ids.add(account_id)
+
+        stale_ids = set(existing_assets) - visible_ids
+        if stale_ids:
+            await session.execute(
+                delete(MetaConnectionAsset).where(
+                    MetaConnectionAsset.connection_id == connection.id,
+                    MetaConnectionAsset.meta_account_id.in_(stale_ids),
+                )
+            )
+        scopes = debug.get("scopes") if isinstance(debug.get("scopes"), list) else []
+        connection.granted_scopes = json.dumps(scopes, ensure_ascii=False)
+        connection.status = "active"
+        connection.last_error = ""
+        connection.last_validated_at = now
+        await session.commit()
+
+    return await list_connection_assets(connection_id, user)
+
+
+@router.get("/connections/{connection_id}/assets")
+async def list_connection_assets(
+    connection_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    async with async_session_maker() as session:
+        connection = await _owned_connection(session, connection_id, user)
+        assets = (
+            await session.execute(
+                select(MetaConnectionAsset)
+                .where(MetaConnectionAsset.connection_id == connection.id)
+                .order_by(
+                    MetaConnectionAsset.business_name.asc(),
+                    MetaConnectionAsset.name.asc(),
+                )
+            )
+        ).scalars().all()
+        imported_ids = set(
+            (
+                await session.execute(
+                    select(Account.account_id).where(owned_by(Account, user))
+                )
+            ).scalars().all()
+        )
+        return {
+            "connection": {
+                "id": connection.id,
+                "provider_user_name": connection.provider_user_name,
+                "status": connection.status,
+            },
+            "accounts": [_serialize_asset(asset, imported_ids) for asset in assets],
+            "count": len(assets),
+            "imported_count": sum(
+                1 for asset in assets if asset.meta_account_id in imported_ids
+            ),
+        }
+
+
+@router.post("/connections/{connection_id}/import")
+async def import_accounts(
+    connection_id: int,
+    payload: MetaAccountImportRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    requested_ids: list[str] = []
+    seen: set[str] = set()
+    for raw_id in payload.account_ids:
+        value = str(raw_id or "").strip()
+        account_id = value if value.startswith("act_") else f"act_{value}"
+        numeric_id = account_id.removeprefix("act_")
+        if not numeric_id.isdigit() or not 5 <= len(numeric_id) <= 25:
+            raise HTTPException(status_code=422, detail=f"Некорректный ID кабинета: {value}")
+        if account_id not in seen:
+            seen.add(account_id)
+            requested_ids.append(account_id)
+
+    added: list[dict] = []
+    errors: list[dict] = []
+    async with async_session_maker() as session:
+        connection = await _owned_connection(session, connection_id, user)
+        if connection.status != "active":
+            raise HTTPException(status_code=409, detail="Сначала переподключите профиль Meta")
+        try:
+            access_token = decrypt_meta_token(connection.access_token_encrypted)
+        except MetaTokenError as exc:
+            raise HTTPException(status_code=503, detail="Ключ подключения Meta недоступен") from exc
+
+        assets = {
+            item.meta_account_id: item
+            for item in (
+                await session.execute(
+                    select(MetaConnectionAsset).where(
+                        MetaConnectionAsset.connection_id == connection.id,
+                        MetaConnectionAsset.meta_account_id.in_(requested_ids),
+                    )
+                )
+            ).scalars().all()
+        }
+        missing_ids = [account_id for account_id in requested_ids if account_id not in assets]
+        if missing_ids:
+            raise HTTPException(
+                status_code=422,
+                detail="Сначала обновите список доступных кабинетов Meta",
+            )
+
+        for account_id in requested_ids:
+            asset = assets[account_id]
+            try:
+                account_info = await meta_client.get_account_info(account_id, access_token)
+                timezone_name = canonical_timezone_name(account_info.get("timezone_name"))
+                if resolve_account_clock(timezone_name) is None:
+                    raise RuntimeError("Meta не вернула поддерживаемый часовой пояс")
+                currency = normalize_currency(account_info.get("currency"))
+                async with session.begin_nested():
+                    existing = (
+                        await session.execute(
+                            select(Account).where(Account.account_id == account_id)
+                        )
+                    ).scalar_one_or_none()
+                    if existing and not entity_is_owned_by(existing, user):
+                        raise RuntimeError("Кабинет уже принадлежит другому пользователю Buyerly")
+
+                    status_code = int(account_info.get("account_status") or 0)
+                    status_label = str(account_info.get("status_label") or f"Статус #{status_code}")
+                    account = existing or Account(
+                        account_id=account_id,
+                        name=str(account_info.get("name") or asset.name or account_id),
+                        owner_id=str(user.telegram_id or ""),
+                        owner_user_id=user.id,
+                        access_token="",
+                        rules_enabled=False,
+                        is_active=True,
+                    )
+                    if existing and existing.timezone_name != timezone_name:
+                        existing.last_day_start_date = ""
+                    account.name = str(account_info.get("name") or asset.name or account_id)
+                    account.owner_id = str(user.telegram_id or "")
+                    account.owner_user_id = user.id
+                    account.batch_name = asset.business_name if asset.business_id else ""
+                    account.access_token = ""
+                    account.meta_connection_id = connection.id
+                    account.timezone_name = timezone_name
+                    account.currency = currency
+                    account.account_status = status_code
+                    account.status_label = status_label
+                    account.is_active = True
+                    if not existing:
+                        session.add(account)
+                    await session.flush()
+                added.append(
+                    {
+                        "account_id": account_id,
+                        "name": account.name,
+                        "business_name": asset.business_name,
+                        "timezone_name": timezone_name,
+                        "currency": currency,
+                    }
+                )
+            except Exception as exc:
+                logger.warning("Meta account import failed for %s", account_id)
+                errors.append(
+                    {"account_id": account_id, "error": redact_secrets(str(exc))}
+                )
+
+        await session.commit()
+    return {
+        "success_count": len(added),
+        "error_count": len(errors),
+        "added": added,
+        "errors": errors,
+    }

@@ -1,6 +1,6 @@
 """Encryption and resolution helpers for Meta access tokens."""
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,12 +11,17 @@ class MetaTokenError(RuntimeError):
     """Safe operational error for a missing or unusable Meta authorization."""
 
 
-def _fernet() -> Fernet:
+def _fernet() -> MultiFernet:
     raw_key = settings.META_TOKEN_ENCRYPTION_KEY.strip()
     if not raw_key:
         raise MetaTokenError("META_TOKEN_ENCRYPTION_KEY is not configured")
     try:
-        return Fernet(raw_key.encode("ascii"))
+        keys = [part.strip() for part in raw_key.split(",") if part.strip()]
+        if not keys:
+            raise ValueError
+        # New tokens use the first key; older keys remain decrypt-only. This
+        # allows zero-downtime rotation by prepending a new key.
+        return MultiFernet([Fernet(key.encode("ascii")) for key in keys])
     except (TypeError, ValueError) as exc:
         raise MetaTokenError("META_TOKEN_ENCRYPTION_KEY is invalid") from exc
 

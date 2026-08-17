@@ -39,6 +39,26 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("btnBatchOpenRules", self.index)
         self.assertIn("Перейти к правилам", self.index)
 
+    def test_meta_oauth_is_primary_and_manual_token_is_advanced(self):
+        for contract in (
+            'id="btnStartMetaOAuth"',
+            'id="metaConnectionsList"',
+            'id="metaAssetGroups"',
+            'id="metaSelectAll"',
+            'id="btnImportMetaAssets"',
+            'class="form-card legacy-import-card"',
+        ):
+            self.assertIn(contract, self.index)
+        for endpoint in (
+            "/api/meta/oauth/start",
+            "/api/meta/connections",
+            "/discover",
+            "/import",
+        ):
+            self.assertIn(endpoint, self.script)
+        self.assertIn("meta_connection", self.script)
+        self.assertIn("meta-asset-row", self.styles)
+
     def test_telegram_mini_app_sends_signed_init_data(self):
         sdk_position = self.index.index("telegram-web-app.js")
         app_position = self.index.index("/static/js/app.js")

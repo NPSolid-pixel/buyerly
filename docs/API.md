@@ -72,10 +72,15 @@ Production: `https://smattrades.com`.
 | `GET /api/meta/oauth/config` | — | показывает готовность серверной OAuth-конфигурации без возврата секретов |
 | `POST /api/meta/oauth/start` | `return_path?` | создаёт одноразовый state на 10 минут и возвращает URL входа Facebook |
 | `GET /api/meta/connections` | — | список Meta-профилей текущего владельца без access token |
+| `POST /api/meta/connections/{connection_id}/discover` | — | проверяет токен и обновляет полный список доступных кабинетов из `/me/adaccounts` |
+| `GET /api/meta/connections/{connection_id}/assets` | — | возвращает последнее сохранённое обнаружение с признаком уже импортированных кабинетов |
+| `POST /api/meta/connections/{connection_id}/import` | `account_ids[]` | повторно проверяет выбранные кабинеты в Meta и связывает их с зашифрованным подключением |
 
 Meta возвращает браузер на служебный callback `/api/meta/oauth/callback`. Callback не требует Buyerly-заголовка, потому что пользователь приходит напрямую от Facebook, но принимает только неистёкший одноразовый `state`, привязанный к Buyerly-пользователю. Полученный токен проверяется через Meta, сверяется с `META_APP_ID`, шифруется и только после этого сохраняется. OAuth `code`, app secret и access token не возвращаются в интерфейс.
 
-Для запуска нужны серверные параметры `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID`, `META_OAUTH_REDIRECT_URI`, `META_GRAPH_VERSION` и `META_TOKEN_ENCRYPTION_KEY`. Точный callback должен совпадать со значением Valid OAuth Redirect URI в Meta.
+Для запуска нужны серверные параметры `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID`, `META_OAUTH_REDIRECT_URI`, `META_GRAPH_VERSION` и `META_TOKEN_ENCRYPTION_KEY`. Точный callback должен совпадать со значением Valid OAuth Redirect URI в Meta. Для ротации шифрования новый ключ ставится первым, а предыдущий временно сохраняется после запятой: новые токены шифруются новым ключом, старые подключения продолжают читаться старым.
+
+Обнаружение возвращает все рекламные аккаунты, доступные вошедшему Facebook-профилю, и группирует их по полю Business Manager. Импорт принимает только ID из последнего обнаружения этого подключения, не переносит кабинет между владельцами и никогда автоматически не включает правила. После OAuth кабинет хранит только ссылку на подключение; расшифрованный access token существует в памяти на время серверного запроса.
 
 ## Одиночные правила
 

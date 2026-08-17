@@ -24,6 +24,21 @@ class TestMetaTokenEncryption(unittest.TestCase):
         with self.assertRaises(MetaTokenError):
             decrypt_meta_token("not-a-fernet-token")
 
+    def test_rotation_decrypts_old_tokens_and_encrypts_with_new_key(self):
+        old_key = settings.META_TOKEN_ENCRYPTION_KEY
+        old_ciphertext = encrypt_meta_token("old-token")
+        new_key = Fernet.generate_key().decode("ascii")
+        settings.META_TOKEN_ENCRYPTION_KEY = f"{new_key},{old_key}"
+
+        new_ciphertext = encrypt_meta_token("new-token")
+
+        self.assertEqual(decrypt_meta_token(old_ciphertext), "old-token")
+        self.assertEqual(decrypt_meta_token(new_ciphertext), "new-token")
+        self.assertEqual(
+            Fernet(new_key.encode("ascii")).decrypt(new_ciphertext.encode("ascii")),
+            b"new-token",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

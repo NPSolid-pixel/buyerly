@@ -21,6 +21,7 @@ from database.models import (
 )
 from core.audit import build_audit_event
 from core.currency import normalize_currency
+from core.meta_tokens import resolve_account_access_token
 from core.timezones import (
     canonical_timezone_name,
     evaluate_day_boundary,
@@ -582,9 +583,10 @@ class MonitoringWorker:
                 stats["rules_checked"] += len(due_rules)
 
                 try:
+                    access_token = await resolve_account_access_token(session, acc)
                     # 2. Проверяем здоровье кабинета и статус в Meta
                     try:
-                        acc_info = await self.meta_client.get_account_info(acc.account_id, acc.access_token)
+                        acc_info = await self.meta_client.get_account_info(acc.account_id, access_token)
                         acc.currency = normalize_currency(acc_info.get("currency"))
                         refreshed_timezone = canonical_timezone_name(
                             acc_info.get("timezone_name") or acc.timezone_name
@@ -661,7 +663,7 @@ class MonitoringWorker:
                         try:
                             w_insights = await self.meta_client.get_adsets_insights(
                                 account_id=acc.account_id,
-                                access_token=acc.access_token,
+                                access_token=access_token,
                                 date_preset=w,
                                 currency=acc.currency,
                             )
@@ -672,7 +674,7 @@ class MonitoringWorker:
                     # 4. Запрашиваем актуальные данные из Meta API за сегодня
                     adsets = await self.meta_client.get_adsets_insights(
                         account_id=acc.account_id,
-                        access_token=acc.access_token,
+                        access_token=access_token,
                         date_preset="today",
                         currency=acc.currency,
                     )
@@ -780,7 +782,7 @@ class MonitoringWorker:
                             try:
                                 await self.meta_client.set_adset_status(
                                     adset_id=a_id,
-                                    access_token=acc.access_token,
+                                    access_token=access_token,
                                     status="PAUSED"
                                 )
                                 stats["adsets_stopped"] += 1
@@ -903,7 +905,7 @@ class MonitoringWorker:
                             try:
                                 await self.meta_client.set_adset_status(
                                     adset_id=a_id,
-                                    access_token=acc.access_token,
+                                    access_token=access_token,
                                     status="ACTIVE"
                                 )
                                 stats["adsets_reactivated"] += 1
@@ -969,7 +971,7 @@ class MonitoringWorker:
                             try:
                                 await self.meta_client.update_adset_budget(
                                     adset_id=a_id,
-                                    access_token=acc.access_token,
+                                    access_token=access_token,
                                     new_daily_budget_dollars=new_budget,
                                     currency=acc.currency,
                                 )
@@ -1023,7 +1025,7 @@ class MonitoringWorker:
                             try:
                                 await self.meta_client.update_adset_budget(
                                     adset_id=a_id,
-                                    access_token=acc.access_token,
+                                    access_token=access_token,
                                     new_daily_budget_dollars=new_budget,
                                     currency=acc.currency,
                                 )

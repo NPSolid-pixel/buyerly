@@ -1,6 +1,7 @@
 """Server-side Facebook Login for Business OAuth exchange and validation."""
 
 import hashlib
+import hmac
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
@@ -126,14 +127,7 @@ class MetaOAuthClient:
         return data
 
     async def get_identity(self, access_token: str) -> Dict[str, Any]:
-        # Meta appsecret_proof is HMAC-SHA256, not a concatenated hash.
-        import hmac
-
-        proof = hmac.new(
-            self.app_secret.encode("utf-8"),
-            access_token.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
+        proof = self.appsecret_proof(access_token)
         identity = await self._get_json(
             "me",
             params={
@@ -145,6 +139,42 @@ class MetaOAuthClient:
         if not identity.get("id"):
             raise MetaOAuthRemoteError("Meta did not return the authorized user")
         return identity
+
+    def appsecret_proof(self, access_token: str) -> str:
+        return hmac.new(
+            self.app_secret.encode("utf-8"),
+            access_token.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+    async def discover_ad_accounts(self, access_token: str) -> list[Dict[str, Any]]:
+        """Return every ad account visible to the authorized Meta profile."""
+
+        rows: list[Dict[str, Any]] = []
+        params: Dict[str, Any] = {
+            "fields": (
+                "id,account_id,name,account_status,currency,timezone_name,business"
+            ),
+            "limit": 100,
+            "access_token": access_token,
+            "appsecret_proof": self.appsecret_proof(access_token),
+        }
+        seen_cursors: set[str] = set()
+        for _ in range(200):
+            payload = await self._get_json("me/adaccounts", params=params)
+            page = payload.get("data")
+            if isinstance(page, list):
+                rows.extend(item for item in page if isinstance(item, dict))
+            paging = payload.get("paging") if isinstance(payload.get("paging"), dict) else {}
+            if not paging.get("next"):
+                return rows
+            cursors = paging.get("cursors") if isinstance(paging.get("cursors"), dict) else {}
+            after = str(cursors.get("after") or "")
+            if not after or after in seen_cursors:
+                raise MetaOAuthRemoteError("Meta returned an invalid accounts cursor")
+            seen_cursors.add(after)
+            params["after"] = after
+        raise MetaOAuthRemoteError("Meta returned too many account pages")
 
 
 def meta_token_expiry(debug_data: Dict[str, Any]) -> Optional[datetime]:

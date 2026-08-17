@@ -76,6 +76,26 @@ class TestMetaOAuthClient(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(expiry)
         self.assertEqual(expiry.tzinfo, timezone.utc)
 
+    async def test_account_discovery_collects_cursor_pages(self):
+        self.client._get_json = AsyncMock(
+            side_effect=[
+                {
+                    "data": [{"id": "act_1", "name": "First"}],
+                    "paging": {
+                        "next": "https://graph.facebook.com/next?access_token=secret",
+                        "cursors": {"after": "cursor-1"},
+                    },
+                },
+                {"data": [{"id": "act_2", "name": "Second"}]},
+            ]
+        )
+
+        rows = await self.client.discover_ad_accounts("access-token")
+
+        self.assertEqual([row["id"] for row in rows], ["act_1", "act_2"])
+        second_call = self.client._get_json.await_args_list[1]
+        self.assertEqual(second_call.kwargs["params"]["after"], "cursor-1")
+
 
 if __name__ == "__main__":
     unittest.main()
