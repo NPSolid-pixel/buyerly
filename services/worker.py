@@ -66,6 +66,8 @@ async def main() -> None:
         await stop_event.wait()
     finally:
         scheduler.shutdown(wait=False)
+        await monitoring_worker.meta_client.aclose()
+        await day_boundary_worker.meta_client.aclose()
         await bot.session.close()
 
 

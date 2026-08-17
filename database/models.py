@@ -34,10 +34,68 @@ class AppSettings(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     poll_interval_minutes = Column(Integer, default=10, nullable=False, doc="Интервал опроса кабинетов (мин)")
+    critical_rule_interval_minutes = Column(
+        Integer,
+        default=2,
+        nullable=False,
+        doc="Максимальный интервал проверки критических STOP-правил (мин)",
+    )
+    inventory_cache_minutes = Column(
+        Integer,
+        default=5,
+        nullable=False,
+        doc="Срок жизни кэша списка и статусов ad set (мин)",
+    )
+    account_health_interval_minutes = Column(
+        Integer,
+        default=15,
+        nullable=False,
+        doc="Интервал проверки валюты, таймзоны и статуса кабинета (мин)",
+    )
+    max_concurrent_accounts = Column(
+        Integer,
+        default=3,
+        nullable=False,
+        doc="Максимум одновременно читаемых кабинетов Meta",
+    )
+    max_concurrent_actions = Column(
+        Integer,
+        default=3,
+        nullable=False,
+        doc="Максимум одновременно выполняемых действий Meta",
+    )
+    usage_soft_limit_percent = Column(
+        Integer,
+        default=60,
+        nullable=False,
+        doc="Порог адаптивного замедления Meta API (%)",
+    )
+    usage_hard_limit_percent = Column(
+        Integer,
+        default=80,
+        nullable=False,
+        doc="Порог приостановки некритичных Meta API запросов (%)",
+    )
+    adaptive_polling_enabled = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        doc="Автоматически уменьшать частоту при росте расхода квоты",
+    )
     admin_chat_id = Column(String, default="", nullable=False)
 
     def __repr__(self):
         return f"<AppSettings(interval={self.poll_interval_minutes}m)>"
+
+
+class AutomationRuntimeState(Base):
+    """Small durable status snapshot shared by the worker and settings UI."""
+
+    __tablename__ = "automation_runtime_states"
+
+    state_key = Column(String, primary_key=True, default="monitoring")
+    payload = Column(Text, default="{}", nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
 
 
 class RulePreset(Base):

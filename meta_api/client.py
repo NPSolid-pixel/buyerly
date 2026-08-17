@@ -1,8 +1,11 @@
 import logging
 import json
 import asyncio
+import hashlib
+import hmac
 import random
 import re
+import time
 import httpx
 from typing import Optional, List, Dict, Any
 
@@ -27,13 +30,18 @@ ACCOUNT_SUMMARY_FIELDS = (
     "inline_link_clicks,outbound_clicks,actions"
 )
 
+
+class MetaRateLimitDeferred(RuntimeError):
+    """A non-critical request was postponed to protect the Meta API quota."""
+
 class MetaClient:
     """
     Асинхронный клиент для работы с Meta Marketing API.
     с поддержкой:
-      1. Экспоненциального Backoff и умных повторов (2s -> 4s -> 8s) при 429/5xx/Network Error.
-      2. Парсинга заголовка X-Business-Use-Case-Usage и предупреждения о расходе квоты >80%.
+      1. Экспоненциального Backoff и умных повторов при 429/5xx/Network Error.
+      2. Адаптивного ограничения запросов по заголовкам квоты Meta.
       3. Канонической дедупликации метрик (Лиды, Реги, Покупки).
+      4. Повторного использования HTTP-соединений и кэша инвентаря адсетов.
     """
 
     GRAPH_VERSION_PATTERN = re.compile(r"^v\d+\.\d+$")
@@ -45,6 +53,91 @@ class MetaClient:
             raise ValueError("META_GRAPH_VERSION must look like v26.0")
         self.graph_version = requested_version
         self.base_url = f"https://graph.facebook.com/{self.graph_version}"
+        self._client: Optional[httpx.AsyncClient] = None
+        self._inventory_cache: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
+        self._inventory_cache_seconds = 5 * 60
+        self._adaptive_polling_enabled = True
+        self._usage_soft_limit_percent = 60
+        self._usage_hard_limit_percent = 80
+        self._usage_snapshot: Dict[str, Any] = {
+            "max_percent": 0,
+            "app": {},
+            "accounts": {},
+            "updated_at": None,
+        }
+
+    def configure_automation(
+        self,
+        *,
+        inventory_cache_minutes: int = 5,
+        adaptive_polling_enabled: bool = True,
+        usage_soft_limit_percent: int = 60,
+        usage_hard_limit_percent: int = 80,
+    ) -> None:
+        """Apply operator-controlled limits without recreating the client."""
+
+        self._inventory_cache_seconds = max(60, int(inventory_cache_minutes) * 60)
+        self._adaptive_polling_enabled = bool(adaptive_polling_enabled)
+        self._usage_soft_limit_percent = max(1, int(usage_soft_limit_percent))
+        self._usage_hard_limit_percent = max(
+            self._usage_soft_limit_percent + 1,
+            int(usage_hard_limit_percent),
+        )
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.timeout)
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+
+    def get_usage_snapshot(self) -> Dict[str, Any]:
+        return {
+            "max_percent": int(self._usage_snapshot.get("max_percent", 0) or 0),
+            "app": dict(self._usage_snapshot.get("app") or {}),
+            "accounts": {
+                key: dict(value)
+                for key, value in (self._usage_snapshot.get("accounts") or {}).items()
+            },
+            "updated_at": self._usage_snapshot.get("updated_at"),
+        }
+
+    @staticmethod
+    def _copy_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [dict(row) for row in rows]
+
+    def _auth_protected_payload(
+        self,
+        payload: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if payload is None:
+            return None
+        protected = dict(payload)
+        access_token = str(protected.get("access_token") or "")
+        app_secret = str(settings.META_APP_SECRET or "")
+        if access_token and app_secret:
+            protected["appsecret_proof"] = hmac.new(
+                app_secret.encode("utf-8"),
+                access_token.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+        return protected
+
+    async def _respect_usage_limit(self, *, priority: str) -> None:
+        if not self._adaptive_polling_enabled:
+            return
+        if priority == "critical":
+            return
+        max_percent = int(self._usage_snapshot.get("max_percent", 0) or 0)
+        if max_percent >= self._usage_hard_limit_percent:
+            raise MetaRateLimitDeferred(
+                f"Meta quota is at {max_percent}%; non-critical polling is deferred"
+            )
+        if max_percent >= self._usage_soft_limit_percent:
+            pressure = max_percent - self._usage_soft_limit_percent + 1
+            await asyncio.sleep(min(2.0, 0.05 * pressure) + random.uniform(0.0, 0.15))
 
     @staticmethod
     def _safe_int(value: Any) -> int:
@@ -152,6 +245,7 @@ class MetaClient:
         *,
         account_id: str,
         max_pages: int = 500,
+        priority: str = "normal",
     ) -> List[Dict[str, Any]]:
         """Fetch every cursor page without following token-bearing `paging.next` URLs."""
 
@@ -165,6 +259,7 @@ class MetaClient:
                 url,
                 params=page_params,
                 account_id=account_id,
+                priority=priority,
             )
             payload = response.json()
             page_rows = payload.get("data", [])
@@ -204,10 +299,12 @@ class MetaClient:
                 # Структура: {"act_123456": [{"type": "ads_management", "call_count": 10, ...}]}
                 for acc_key, metrics_list in buc_data.items():
                     for metric in metrics_list:
-                        call_cnt = metric.get("call_count", 0)
-                        cpu_time = metric.get("total_cputime", 0)
-                        tot_time = metric.get("total_time", 0)
-                        regain_mins = metric.get("estimated_time_to_regain_access", 0)
+                        call_cnt = self._safe_int(metric.get("call_count", 0))
+                        cpu_time = self._safe_int(metric.get("total_cputime", 0))
+                        tot_time = self._safe_int(metric.get("total_time", 0))
+                        regain_mins = self._safe_int(
+                            metric.get("estimated_time_to_regain_access", 0)
+                        )
 
                         usage_info["call_count"] = max(usage_info["call_count"], call_cnt)
                         usage_info["total_cputime"] = max(usage_info["total_cputime"], cpu_time)
@@ -222,6 +319,8 @@ class MetaClient:
                                 f"call_count={call_cnt}%, cputime={cpu_time}%, time={tot_time}%, "
                                 f"regain_in={regain_mins}m"
                             )
+                if account_id:
+                    self._usage_snapshot["accounts"][account_id] = dict(usage_info)
             except Exception as e:
                 logger.debug(f"Failed to parse x-business-use-case-usage header: {e}")
 
@@ -230,13 +329,36 @@ class MetaClient:
         if app_header:
             try:
                 app_data = json.loads(app_header)
-                call_cnt = app_data.get("call_count", 0)
-                if call_cnt >= 80:
+                app_usage = {
+                    "call_count": self._safe_int(app_data.get("call_count", 0)),
+                    "total_cputime": self._safe_int(app_data.get("total_cputime", 0)),
+                    "total_time": self._safe_int(app_data.get("total_time", 0)),
+                }
+                self._usage_snapshot["app"] = app_usage
+                call_cnt = app_usage["call_count"]
+                if max(app_usage.values(), default=0) >= 80:
                     usage_info["is_high_usage"] = True
                     logger.warning(f"⚠️ [App Rate Warning] Meta App Usage is HIGH: {call_cnt}%")
             except Exception as e:
                 logger.debug(f"Failed to parse x-app-usage header: {e}")
 
+        account_max = max(
+            (
+                max(
+                    self._safe_int(row.get("call_count")),
+                    self._safe_int(row.get("total_cputime")),
+                    self._safe_int(row.get("total_time")),
+                )
+                for row in self._usage_snapshot["accounts"].values()
+            ),
+            default=0,
+        )
+        app_max = max(
+            (self._safe_int(value) for value in self._usage_snapshot["app"].values()),
+            default=0,
+        )
+        self._usage_snapshot["max_percent"] = max(account_max, app_max)
+        self._usage_snapshot["updated_at"] = time.time()
         return usage_info
 
     async def _request_with_retry(
@@ -246,80 +368,111 @@ class MetaClient:
         params: Optional[Dict[str, Any]] = None,
         data: Optional[Dict[str, Any]] = None,
         account_id: str = "",
-        max_retries: int = 3
+        max_retries: int = 3,
+        priority: str = "normal",
     ) -> httpx.Response:
         """
         Централизованный исполнитель HTTP-запросов с Exponential Backoff + Jitter и мониторингом лимитов.
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            for attempt in range(max_retries):
-                try:
-                    if method.upper() == "GET":
-                        resp = await client.get(url, params=params)
-                    else:
-                        resp = await client.post(url, data=data, params=params)
+        await self._respect_usage_limit(priority=priority)
+        client = await self._get_client()
+        request_params = self._auth_protected_payload(params)
+        request_data = self._auth_protected_payload(data)
+        for attempt in range(max_retries):
+            try:
+                if method.upper() == "GET":
+                    resp = await client.get(url, params=request_params)
+                else:
+                    resp = await client.post(url, data=request_data, params=request_params)
 
-                    # Анализируем заголовки расхода квоты
-                    self._parse_usage_headers(resp.headers, account_id=account_id)
+                self._parse_usage_headers(resp.headers, account_id=account_id)
+                if resp.status_code == 200:
+                    return resp
 
-                    # Успешный ответ
-                    if resp.status_code == 200:
-                        return resp
-
-                    # Обработка временных ошибок перегрузки и сбоев Meta (429 Too Many Requests, 5xx Server Error)
-                    if resp.status_code in [429, 500, 502, 503, 504]:
-                        error_json = {}
-                        try:
-                            error_json = resp.json().get("error", {})
-                        except Exception:
-                            pass
-                        error_msg = error_json.get("message", resp.text)
-                        
-                        if attempt < max_retries - 1:
-                            # Экспоненциальная задержка: 2с -> 4с -> 8с + случайный джиттер
-                            backoff = (2.0 * (2 ** attempt)) + random.uniform(-0.3, 0.3)
-                            backoff = max(1.0, backoff)
-                            logger.warning(
-                                f"⏳ Meta API Rate Limit/Server Error ({resp.status_code}) on {url} for {account_id}. "
-                                f"Backing off for {backoff:.2f}s (Attempt {attempt + 1}/{max_retries}). Details: {error_msg}"
-                            )
-                            await asyncio.sleep(backoff)
-                            continue
-                        else:
-                            logger.error(f"❌ Meta API rate limit / server error exhausted after {max_retries} retries ({resp.status_code}): {error_msg}")
-                            raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
-
-                    # Фатальные ошибки авторизации и параметров (400, 401, 403)
-                    error_data = {}
+                if resp.status_code in [429, 500, 502, 503, 504]:
+                    error_json = {}
                     try:
-                        error_data = resp.json().get("error", {})
+                        error_json = resp.json().get("error", {})
                     except Exception:
                         pass
-                    error_code = error_data.get("code")
-                    error_msg = error_data.get("message", resp.text)
-
-                    logger.error(f"Meta API Error ({resp.status_code}, code {error_code}) for {account_id}: {error_msg}")
-                    if error_code in [190, 102, 10]:
-                        raise PermissionError(f"Token expired or invalid: {error_msg}")
-                    raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
-
-                except (httpx.TimeoutException, httpx.NetworkError) as net_err:
+                    error_msg = error_json.get("message", resp.text)
                     if attempt < max_retries - 1:
-                        backoff = (2.0 * (2 ** attempt)) + random.uniform(-0.3, 0.3)
+                        retry_after = self._safe_float(resp.headers.get("retry-after"))
+                        backoff = retry_after or (
+                            (2.0 * (2 ** attempt)) + random.uniform(-0.3, 0.3)
+                        )
                         backoff = max(1.0, backoff)
                         logger.warning(
-                            f"🌐 Network error connecting to Meta API ({type(net_err).__name__}) on {url}. "
-                            f"Retrying in {backoff:.2f}s (Attempt {attempt + 1}/{max_retries})..."
+                            "Meta API temporary error %s on %s for %s; retrying in %.2fs "
+                            "(attempt %s/%s): %s",
+                            resp.status_code,
+                            url,
+                            account_id,
+                            backoff,
+                            attempt + 1,
+                            max_retries,
+                            error_msg,
                         )
                         await asyncio.sleep(backoff)
                         continue
-                    else:
-                        logger.error(f"❌ Network connection to Meta API failed after {max_retries} attempts: {net_err}")
-                        raise RuntimeError(f"Network error connecting to Meta API: {net_err}")
+                    logger.error(
+                        "Meta API temporary error exhausted after %s attempts (%s): %s",
+                        max_retries,
+                        resp.status_code,
+                        error_msg,
+                    )
+                    raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
+
+                error_data = {}
+                try:
+                    error_data = resp.json().get("error", {})
+                except Exception:
+                    pass
+                error_code = error_data.get("code")
+                error_msg = error_data.get("message", resp.text)
+                logger.error(
+                    "Meta API Error (%s, code %s) for %s: %s",
+                    resp.status_code,
+                    error_code,
+                    account_id,
+                    error_msg,
+                )
+                if error_code in [190, 102, 10]:
+                    raise PermissionError(f"Token expired or invalid: {error_msg}")
+                raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
+
+            except (httpx.TimeoutException, httpx.NetworkError) as net_err:
+                if attempt < max_retries - 1:
+                    backoff = (2.0 * (2 ** attempt)) + random.uniform(-0.3, 0.3)
+                    backoff = max(1.0, backoff)
+                    logger.warning(
+                        "Network error connecting to Meta API (%s) on %s; retrying in %.2fs "
+                        "(attempt %s/%s)",
+                        type(net_err).__name__,
+                        url,
+                        backoff,
+                        attempt + 1,
+                        max_retries,
+                    )
+                    await asyncio.sleep(backoff)
+                    continue
+                else:
+                    logger.error(
+                        "Network connection to Meta API failed after %s attempts: %s",
+                        max_retries,
+                        net_err,
+                    )
+                    raise RuntimeError(f"Network error connecting to Meta API: {net_err}")
 
         raise RuntimeError("Unexpected end of request execution loop")
 
-    async def get_account_info(self, account_id: str, access_token: str) -> Dict[str, Any]:
+    async def get_account_info(
+        self,
+        account_id: str,
+        access_token: str,
+        *,
+        priority: str = "normal",
+    ) -> Dict[str, Any]:
         """
         Получает информацию о рекламном кабинете (таймзона, имя, статус, валюта).
         """
@@ -330,7 +483,13 @@ class MetaClient:
             "access_token": access_token
         }
 
-        resp = await self._request_with_retry("GET", url, params=params, account_id=acc_id)
+        resp = await self._request_with_retry(
+            "GET",
+            url,
+            params=params,
+            account_id=acc_id,
+            priority=priority,
+        )
         data = resp.json()
         status_code = data.get("account_status", 1)
         data["currency"] = normalize_currency(data.get("currency"))
@@ -379,6 +538,7 @@ class MetaClient:
         access_token: str, 
         date_preset: str = "today",
         currency: str = "UNKNOWN",
+        priority: str = "normal",
     ) -> List[Dict[str, Any]]:
         """
         Получает сводную информацию по всем адсетам кабинета за указанный период (today, yesterday, last_3d, last_7d):
@@ -393,11 +553,20 @@ class MetaClient:
             "limit": 100,
             "access_token": access_token
         }
-        adsets_list = await self._fetch_paginated_data(
-            adsets_url,
-            adsets_params,
-            account_id=acc_id,
-        )
+        cached = self._inventory_cache.get(acc_id)
+        if cached and cached[0] > time.monotonic():
+            adsets_list = self._copy_rows(cached[1])
+        else:
+            adsets_list = await self._fetch_paginated_data(
+                adsets_url,
+                adsets_params,
+                account_id=acc_id,
+                priority=priority,
+            )
+            self._inventory_cache[acc_id] = (
+                time.monotonic() + self._inventory_cache_seconds,
+                self._copy_rows(adsets_list),
+            )
 
         # 2. Получаем Insights за указанный период
         insights_url = f"{self.base_url}/{acc_id}/insights"
@@ -412,6 +581,7 @@ class MetaClient:
             insights_url,
             insights_params,
             account_id=acc_id,
+            priority=priority,
         )
         insights_data = {
             item["adset_id"]: item 
@@ -472,8 +642,19 @@ class MetaClient:
             "access_token": access_token
         }
 
-        resp = await self._request_with_retry("POST", url, data=payload, account_id=adset_id)
+        resp = await self._request_with_retry(
+            "POST",
+            url,
+            data=payload,
+            account_id=adset_id,
+            priority="critical",
+        )
         if resp.status_code == 200 and resp.json().get("success") is True:
+            for _, rows in self._inventory_cache.values():
+                for row in rows:
+                    if str(row.get("id")) == str(adset_id):
+                        row["status"] = status
+                        row["effective_status"] = status
             logger.info(f"Successfully set adset {adset_id} status to {status}")
             return True
         else:
@@ -530,8 +711,18 @@ class MetaClient:
             "access_token": access_token
         }
 
-        resp = await self._request_with_retry("POST", url, data=payload, account_id=adset_id)
+        resp = await self._request_with_retry(
+            "POST",
+            url,
+            data=payload,
+            account_id=adset_id,
+            priority="critical",
+        )
         if resp.status_code == 200 and resp.json().get("success") is True:
+            for _, rows in self._inventory_cache.values():
+                for row in rows:
+                    if str(row.get("id")) == str(adset_id):
+                        row["daily_budget"] = str(new_budget_units)
             logger.info(
                 "Successfully updated adset %s daily budget to %.2f %s",
                 adset_id,

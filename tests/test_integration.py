@@ -60,7 +60,13 @@ class MockMetaClient(MetaClient):
         self.status_changes = []
         self.budget_changes = []
 
-    async def get_account_info(self, account_id: str, access_token: str):
+    async def get_account_info(
+        self,
+        account_id: str,
+        access_token: str,
+        *,
+        priority: str = "normal",
+    ):
         return {"id": account_id, "name": "Underdog 3286", "timezone_name": "HST", "currency": "USD", "account_status": 1, "status_label": "🟢 Активен (ACTIVE)"}
 
     async def get_adsets_insights(
@@ -69,6 +75,7 @@ class MockMetaClient(MetaClient):
         access_token: str,
         date_preset: str = "today",
         currency: str = "UNKNOWN",
+        priority: str = "normal",
     ):
         self.requested_windows.append(date_preset)
         source = self.insights_by_window.get(date_preset, self.adsets_state)
@@ -420,6 +427,86 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         due = await restarted_worker.run_cycle()
         self.assertEqual(due["rules_checked"], 1)
         self.assertGreater(len(mock_meta.requested_windows), initial_request_count)
+
+    async def test_stop_rule_uses_protected_critical_interval(self):
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            rules = json.loads(account.active_rules)
+            rules[0]["check_interval"] = 60
+            account.active_rules = json.dumps(rules)
+            await session.commit()
+
+        now = [1_000.0]
+        mock_meta = MockMetaClient()
+        worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+
+        first = await worker.run_cycle()
+        self.assertEqual(first["rules_checked"], 1)
+
+        now[0] += 119
+        early = await worker.run_cycle()
+        self.assertEqual(early["rules_checked"], 0)
+
+        now[0] += 1
+        due = await worker.run_cycle()
+        self.assertEqual(due["rules_checked"], 1)
+
+    async def test_account_reads_use_bounded_parallelism(self):
+        class TrackingMetaClient(MockMetaClient):
+            def __init__(self):
+                super().__init__()
+                self.active_reads = 0
+                self.max_active_reads = 0
+
+            async def get_account_info(
+                self,
+                account_id: str,
+                access_token: str,
+                *,
+                priority: str = "normal",
+            ):
+                self.active_reads += 1
+                self.max_active_reads = max(self.max_active_reads, self.active_reads)
+                try:
+                    await asyncio.sleep(0.03)
+                    return await super().get_account_info(
+                        account_id,
+                        access_token,
+                        priority=priority,
+                    )
+                finally:
+                    self.active_reads -= 1
+
+        async with self.test_session_maker() as session:
+            primary = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            primary.rules_enabled = False
+            for suffix in ("2", "3"):
+                session.add(
+                    Account(
+                        account_id=f"act_parallel_{suffix}",
+                        name=f"Parallel {suffix}",
+                        access_token=f"token_{suffix}",
+                        owner_id="123456789",
+                        timezone_name="UTC",
+                        currency="USD",
+                        active_rules="[]",
+                        rules_enabled=False,
+                        is_active=True,
+                    )
+                )
+            session.add(AppSettings(max_concurrent_accounts=2))
+            await session.commit()
+
+        mock_meta = TrackingMetaClient()
+        worker = MonitoringWorker(meta_client=mock_meta)
+        stats = await worker.run_cycle()
+
+        self.assertEqual(stats["accounts_checked"], 3)
+        self.assertEqual(mock_meta.max_active_reads, 2)
 
     async def test_unknown_currency_is_refreshed_before_next_scheduled_check(self):
         now = [1_000.0]

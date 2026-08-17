@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.18.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.19.0">
 </head>
 
 <body>
@@ -751,8 +751,13 @@
       <!-- ============================================== -->
       <section id="tab-settings" class="tab-content">
         <div class="settings-cards-grid">
+          <nav class="settings-subnav" aria-label="Разделы настроек">
+            <button type="button" class="settings-subnav-btn active" data-settings-nav="account" onclick="window.switchSettingsPage('account')">Учётная запись</button>
+            <button type="button" class="settings-subnav-btn" data-settings-nav="automation" onclick="window.switchSettingsPage('automation')">Автоматика Meta</button>
+          </nav>
+
           <!-- Card 1: User Profile -->
-          <div class="settings-card">
+          <div class="settings-card" data-settings-page="account">
             <div class="card-header">
               <h2>Профиль пользователя</h2>
             </div>
@@ -781,7 +786,7 @@
           </div>
 
           <!-- Card 2: Password Management -->
-          <div class="settings-card">
+          <div class="settings-card" data-settings-page="account">
             <div class="card-header">
               <h2>Безопасность и пароль</h2>
             </div>
@@ -803,28 +808,115 @@
             </div>
           </div>
 
-          <!-- Card 3: Monitoring Frequency -->
-          <div class="settings-card">
-            <div class="card-header">
-              <h2>Фоновый мониторинг</h2>
-            </div>
-            <div class="setting-item column" style="border:none; padding:0;">
-              <div class="setting-info" style="margin-bottom:12px;">
-                <span class="setting-title">Базовый интервал мониторинга</span>
-                <span class="setting-desc">Проверка статуса кабинетов без активных правил. Для каждого авто-правила используется его собственный интервал.</span>
+          <!-- Card 3: Protected Meta Automation Controls -->
+          <div class="settings-card settings-card-wide automation-settings-card hidden" data-settings-page="automation">
+            <div class="card-header automation-settings-head">
+              <div>
+                <span class="section-eyebrow">META MARKETING API</span>
+                <h2>Автоматика и безопасный опрос</h2>
+                <p class="setting-desc">Скорость реакции, кэш и защита квоты Meta. Сохранение доступно только администратору после повторного ввода пароля.</p>
               </div>
-              <div class="interval-selector" id="intervalSelector">
-                <button class="btn-interval" data-interval="5">5 мин</button>
-                <button class="btn-interval" data-interval="10">10 мин</button>
-                <button class="btn-interval" data-interval="15">15 мин</button>
-                <button class="btn-interval" data-interval="30">30 мин</button>
-                <button class="btn-interval" data-interval="60">60 мин</button>
+              <span id="automationRuntimeBadge" class="badge badge-warning"><span class="status-dot dot-warning"></span>Ожидает первый цикл</span>
+            </div>
+
+            <div class="automation-runtime-grid">
+              <div class="automation-runtime-item"><span>Последний цикл</span><b id="automationLastCycle">—</b></div>
+              <div class="automation-runtime-item"><span>Длительность</span><b id="automationCycleDuration">—</b></div>
+              <div class="automation-runtime-item"><span>Квота Meta</span><b id="automationUsagePercent">Нет данных</b></div>
+              <div class="automation-runtime-item"><span>Ошибки цикла</span><b id="automationCycleErrors">0</b></div>
+            </div>
+
+            <div class="automation-settings-grid">
+              <label class="automation-setting-field">
+                <span>Критические STOP-правила</span>
+                <small>Максимальная пауза между проверками выключения</small>
+                <select id="settingCriticalRuleInterval" class="form-select dark-select">
+                  <option value="1">1 минута</option>
+                  <option value="2">2 минуты</option>
+                  <option value="3">3 минуты</option>
+                  <option value="5">5 минут</option>
+                </select>
+              </label>
+
+              <label class="automation-setting-field">
+                <span>Кэш списка ad set</span>
+                <small>Как часто повторно получать статусы и структуру кабинета</small>
+                <select id="settingInventoryCache" class="form-select dark-select">
+                  <option value="2">2 минуты</option>
+                  <option value="5">5 минут</option>
+                  <option value="10">10 минут</option>
+                  <option value="15">15 минут</option>
+                </select>
+              </label>
+
+              <label class="automation-setting-field">
+                <span>Проверка здоровья кабинета</span>
+                <small>Статус, валюта и часовой пояс Meta</small>
+                <select id="settingAccountHealthInterval" class="form-select dark-select">
+                  <option value="5">5 минут</option>
+                  <option value="10">10 минут</option>
+                  <option value="15">15 минут</option>
+                  <option value="30">30 минут</option>
+                  <option value="60">60 минут</option>
+                </select>
+              </label>
+
+              <label class="automation-setting-field">
+                <span>Фоновый мониторинг</span>
+                <small>Кабинеты без правил и второстепенные проверки</small>
+                <select id="settingBackgroundInterval" class="form-select dark-select">
+                  <option value="5">5 минут</option>
+                  <option value="10">10 минут</option>
+                  <option value="15">15 минут</option>
+                  <option value="30">30 минут</option>
+                  <option value="60">60 минут</option>
+                </select>
+              </label>
+
+              <label class="automation-setting-field">
+                <span>Параллельные кабинеты</span>
+                <small>Ограничение одновременных чтений Meta</small>
+                <input id="settingConcurrentAccounts" class="form-input" type="number" min="1" max="5" value="3">
+              </label>
+
+              <label class="automation-setting-field">
+                <span>Параллельные действия</span>
+                <small>Ограничение одновременных STOP/START/бюджет</small>
+                <input id="settingConcurrentActions" class="form-input" type="number" min="1" max="10" value="3">
+              </label>
+
+              <label class="automation-setting-field">
+                <span>Мягкий порог квоты</span>
+                <small>После него Buyerly начинает замедлять фоновые запросы</small>
+                <div class="input-with-suffix"><input id="settingUsageSoftLimit" class="form-input" type="number" min="40" max="85" value="60"><span>%</span></div>
+              </label>
+
+              <label class="automation-setting-field">
+                <span>Жёсткий порог квоты</span>
+                <small>После него остаются только критические действия</small>
+                <div class="input-with-suffix"><input id="settingUsageHardLimit" class="form-input" type="number" min="60" max="95" value="80"><span>%</span></div>
+              </label>
+            </div>
+
+            <label class="automation-adaptive-toggle">
+              <input id="settingAdaptivePolling" type="checkbox" checked>
+              <span><b>Адаптивная защита квоты</b><small>Buyerly сам увеличивает паузы, когда Meta сообщает о высокой загрузке API.</small></span>
+            </label>
+
+            <div class="automation-protected-save">
+              <div class="setting-info">
+                <span class="setting-title">Подтвердите изменение</span>
+                <span class="setting-desc">Введите текущий пароль от своей учётной записи Buyerly. Пароль проверяется на сервере и не сохраняется.</span>
+              </div>
+              <div class="automation-save-controls">
+                <input type="password" id="automationSettingsPassword" class="form-input" placeholder="Текущий пароль" autocomplete="current-password">
+                <button type="button" id="btnSaveAutomationSettings" class="btn btn-primary" onclick="window.saveAutomationSettings()">Сохранить параметры</button>
               </div>
             </div>
           </div>
 
           <!-- Card 4: Engine Info & System Status -->
-          <div class="settings-card">
+          <div class="settings-card" data-settings-page="account">
             <div class="card-header">
               <h2>О системе Buyerly</h2>
             </div>
@@ -1295,6 +1387,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.18.0"></script>
+  <script src="/static/js/app.js?v=9.19.0"></script>
 </body>
 </html>

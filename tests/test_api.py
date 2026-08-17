@@ -16,7 +16,7 @@ import api.server as api_server_module
 from api.auth import validate_telegram_init_data
 from api.server import create_app
 from core.config import settings
-from database.db import Base, verify_password
+from database.db import Base, hash_password, verify_password
 from database.models import (
     Account,
     AppSettings,
@@ -74,6 +74,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 telegram_id="8634201356",
                 username="admin_user",
                 full_name="Admin Test",
+                password_hash=hash_password("admin-password"),
                 role="admin",
                 is_approved=True
             )
@@ -1232,11 +1233,70 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             s_resp = await client.get("/api/settings", headers=headers)
             self.assertEqual(s_resp.status_code, 200)
             self.assertEqual(s_resp.json()["poll_interval_minutes"], 15)
+            self.assertEqual(s_resp.json()["critical_rule_interval_minutes"], 2)
+            self.assertEqual(s_resp.json()["usage_hard_limit_percent"], 80)
 
-            # Change interval to 30 min
-            set_resp = await client.post("/api/settings/interval", headers=headers, json={"minutes": 30})
-            self.assertEqual(set_resp.status_code, 200)
-            self.assertEqual(set_resp.json()["poll_interval_minutes"], 30)
+            missing_password = await client.post(
+                "/api/settings/interval",
+                headers=headers,
+                json={"minutes": 30},
+            )
+            wrong_password = await client.post(
+                "/api/settings/interval",
+                headers=headers,
+                json={"minutes": 30, "current_password": "wrong"},
+            )
+            set_resp = await client.post(
+                "/api/settings/interval",
+                headers=headers,
+                json={"minutes": 30, "current_password": "admin-password"},
+            )
+
+            automation_resp = await client.post(
+                "/api/settings/automation",
+                headers=headers,
+                json={
+                    "current_password": "admin-password",
+                    "poll_interval_minutes": 15,
+                    "critical_rule_interval_minutes": 1,
+                    "inventory_cache_minutes": 5,
+                    "account_health_interval_minutes": 30,
+                    "max_concurrent_accounts": 2,
+                    "max_concurrent_actions": 4,
+                    "usage_soft_limit_percent": 55,
+                    "usage_hard_limit_percent": 78,
+                    "adaptive_polling_enabled": True,
+                },
+            )
+
+            invalid_thresholds = await client.post(
+                "/api/settings/automation",
+                headers=headers,
+                json={
+                    "current_password": "admin-password",
+                    "poll_interval_minutes": 15,
+                    "critical_rule_interval_minutes": 1,
+                    "inventory_cache_minutes": 5,
+                    "account_health_interval_minutes": 30,
+                    "max_concurrent_accounts": 2,
+                    "max_concurrent_actions": 4,
+                    "usage_soft_limit_percent": 80,
+                    "usage_hard_limit_percent": 70,
+                    "adaptive_polling_enabled": True,
+                },
+            )
+
+            refreshed = await client.get("/api/settings", headers=headers)
+
+        self.assertEqual(missing_password.status_code, 422)
+        self.assertEqual(wrong_password.status_code, 403)
+        self.assertEqual(set_resp.status_code, 200)
+        self.assertEqual(set_resp.json()["poll_interval_minutes"], 30)
+        self.assertEqual(automation_resp.status_code, 200)
+        self.assertEqual(invalid_thresholds.status_code, 422)
+        self.assertEqual(refreshed.json()["critical_rule_interval_minutes"], 1)
+        self.assertEqual(refreshed.json()["max_concurrent_actions"], 4)
+        self.assertEqual(refreshed.json()["usage_hard_limit_percent"], 78)
 
     async def test_buyer_cannot_dismiss_another_users_stopped_adset(self):
         async with self.test_session_maker() as session:

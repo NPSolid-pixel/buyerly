@@ -14,6 +14,7 @@ from database.db import async_session_maker
 from database.models import (
     Account,
     AppSettings,
+    AutomationRuntimeState,
     AutomationScheduleState,
     RuleExecutionState,
     StoppedAdSet,
@@ -55,6 +56,7 @@ class MonitoringWorker:
         # meaningful after a process restart, unlike time.monotonic().
         self._clock = clock or time.time
         self._current_cycle_id = ""
+        self._action_semaphore = asyncio.Semaphore(1)
 
     @staticmethod
     def _load_rules(raw_rules: Any) -> list[dict[str, Any]]:
@@ -72,6 +74,150 @@ class MonitoringWorker:
             return max(1, int(value))
         except (TypeError, ValueError):
             return max(1, fallback)
+
+    @staticmethod
+    def _is_critical_stop_rule(rule: dict[str, Any]) -> bool:
+        return str(rule.get("action") or "").lower() in {
+            "turn_off",
+            "stop",
+            "pause",
+        }
+
+    async def _fetch_account_snapshot(
+        self,
+        *,
+        account: Account,
+        access_token: str,
+        due_rules: list[dict[str, Any]],
+        health_due: bool,
+        semaphore: asyncio.Semaphore,
+    ) -> dict[str, Any]:
+        """Collect one account's Meta reads under the global concurrency cap."""
+
+        async with semaphore:
+            priority = (
+                "critical"
+                if any(self._is_critical_stop_rule(rule) for rule in due_rules)
+                else "normal"
+            )
+            account_info = None
+            currency = normalize_currency(account.currency)
+
+            if health_due or currency == "UNKNOWN":
+                account_info = await self.meta_client.get_account_info(
+                    account.account_id,
+                    access_token,
+                    priority=priority,
+                )
+                currency = normalize_currency(account_info.get("currency") or currency)
+            if currency == "UNKNOWN":
+                raise RuntimeError(
+                    "Meta did not return the ad account currency; automation is blocked"
+                )
+
+            today = await self.meta_client.get_adsets_insights(
+                account_id=account.account_id,
+                access_token=access_token,
+                date_preset="today",
+                currency=currency,
+                priority=priority,
+            )
+            windows = {
+                str(condition.get("time_window") or "today")
+                for rule in due_rules
+                for condition in (rule.get("conditions") or [])
+                if isinstance(condition, dict)
+                and str(condition.get("time_window") or "today") != "today"
+            }
+
+            async def fetch_window(window: str):
+                rows = await self.meta_client.get_adsets_insights(
+                    account_id=account.account_id,
+                    access_token=access_token,
+                    date_preset=window,
+                    currency=currency,
+                    priority=priority,
+                )
+                return window, {str(row["adset_id"]): row for row in rows}
+
+            results = await asyncio.gather(
+                *(fetch_window(window) for window in sorted(windows)),
+                return_exceptions=True,
+            )
+            insights_by_window = {}
+            window_errors = []
+            for result in results:
+                if isinstance(result, Exception):
+                    window_errors.append(str(result))
+                else:
+                    window, rows = result
+                    insights_by_window[window] = rows
+
+            return {
+                "account_info": account_info,
+                "currency": currency,
+                "adsets": today,
+                "insights_by_window": insights_by_window,
+                "window_errors": window_errors,
+            }
+
+    async def _persist_runtime_state(
+        self,
+        *,
+        stats: dict[str, Any],
+        started_at: str,
+        duration_ms: int,
+    ) -> None:
+        usage_snapshot = (
+            self.meta_client.get_usage_snapshot()
+            if hasattr(self.meta_client, "get_usage_snapshot")
+            else {}
+        )
+        # Runtime settings are readable by every signed-in user. Keep the
+        # operational quota signal, but never expose another owner's account
+        # identifiers from the per-account Meta header breakdown.
+        usage = {
+            "max_percent": int(usage_snapshot.get("max_percent", 0) or 0),
+            "app": dict(usage_snapshot.get("app") or {}),
+            "accounts_observed": len(usage_snapshot.get("accounts") or {}),
+            "updated_at": usage_snapshot.get("updated_at"),
+        }
+        payload = {
+            "cycle_id": stats.get("cycle_id"),
+            "started_at": started_at,
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": int(duration_ms),
+            "accounts_checked": int(stats.get("accounts_checked", 0)),
+            "accounts_skipped": int(stats.get("accounts_skipped", 0)),
+            "rules_checked": int(stats.get("rules_checked", 0)),
+            "adsets_checked": int(stats.get("adsets_checked", 0)),
+            "actions_count": sum(
+                int(stats.get(key, 0))
+                for key in (
+                    "adsets_stopped",
+                    "adsets_reactivated",
+                    "budgets_changed",
+                    "proposals_sent",
+                )
+            ),
+            "errors_count": len(stats.get("errors") or []),
+            "recent_errors": list(stats.get("errors") or [])[:5],
+            "usage": usage,
+        }
+        try:
+            async with async_session_maker() as session:
+                row = await session.get(AutomationRuntimeState, "monitoring")
+                if row is None:
+                    row = AutomationRuntimeState(state_key="monitoring")
+                    session.add(row)
+                row.payload = json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                await session.commit()
+        except Exception as error:
+            logger.error("Failed to persist monitoring runtime state: %s", error)
 
     @staticmethod
     def _rule_key(account_id: str, index: int, rule: dict[str, Any]) -> str:
@@ -485,6 +631,8 @@ class MonitoringWorker:
         return stats
 
     async def run_cycle(self) -> dict:
+        cycle_started = time.perf_counter()
+        started_at = datetime.now(timezone.utc).isoformat()
         self._current_cycle_id = uuid.uuid4().hex
         stats = {
             "cycle_id": self._current_cycle_id,
@@ -530,7 +678,41 @@ class MonitoringWorker:
                 app_settings.poll_interval_minutes if app_settings else 10,
                 10,
             )
+            critical_interval = self._interval_minutes(
+                app_settings.critical_rule_interval_minutes if app_settings else 2,
+                2,
+            )
+            health_interval = self._interval_minutes(
+                app_settings.account_health_interval_minutes if app_settings else 15,
+                15,
+            )
+            max_concurrent_accounts = self._interval_minutes(
+                app_settings.max_concurrent_accounts if app_settings else 3,
+                3,
+            )
+            max_concurrent_actions = self._interval_minutes(
+                app_settings.max_concurrent_actions if app_settings else 3,
+                3,
+            )
+            if hasattr(self.meta_client, "configure_automation"):
+                self.meta_client.configure_automation(
+                    inventory_cache_minutes=(
+                        app_settings.inventory_cache_minutes if app_settings else 5
+                    ),
+                    adaptive_polling_enabled=(
+                        app_settings.adaptive_polling_enabled if app_settings else True
+                    ),
+                    usage_soft_limit_percent=(
+                        app_settings.usage_soft_limit_percent if app_settings else 60
+                    ),
+                    usage_hard_limit_percent=(
+                        app_settings.usage_hard_limit_percent if app_settings else 80
+                    ),
+                )
+            read_semaphore = asyncio.Semaphore(max_concurrent_accounts)
+            self._action_semaphore = asyncio.Semaphore(max_concurrent_actions)
 
+            prepared_accounts = []
             for acc in accounts:
                 account_ref = str(acc.account_id)
                 notification_target = owner_chat_ids.get(acc.owner_user_id) or acc.owner_id
@@ -544,6 +726,8 @@ class MonitoringWorker:
                             rule.get("check_interval"),
                             default_interval,
                         )
+                        if self._is_critical_stop_rule(rule):
+                            interval = min(interval, critical_interval)
                         state_key = self._schedule_key("rule", acc.account_id, rule_key)
                         schedule_state = await self._get_or_create_schedule_state(
                             session,
@@ -566,27 +750,102 @@ class MonitoringWorker:
                     account_state.last_checked_at <= 0
                     or now - account_state.last_checked_at >= default_interval * 60
                 )
+                health_state = await self._get_or_create_schedule_state(
+                    session,
+                    state_key=self._schedule_key("health", acc.account_id),
+                    account=acc,
+                )
+                health_due = (
+                    health_state.last_checked_at <= 0
+                    or now - health_state.last_checked_at >= health_interval * 60
+                )
                 currency_refresh_due = normalize_currency(acc.currency) == "UNKNOWN"
-                if not account_monitor_due and not due_rule_entries and not currency_refresh_due:
+                if (
+                    not account_monitor_due
+                    and not due_rule_entries
+                    and not health_due
+                    and not currency_refresh_due
+                ):
                     stats["accounts_skipped"] += 1
-                    await session.commit()
                     continue
 
                 if account_monitor_due:
                     account_state.last_checked_at = now
                 for _, _, schedule_state in due_rule_entries:
                     schedule_state.last_checked_at = now
-                await session.commit()
+                if health_due or currency_refresh_due:
+                    health_state.last_checked_at = now
 
                 due_rules = [rule for _, rule, _ in due_rule_entries]
                 stats["accounts_checked"] += 1
                 stats["rules_checked"] += len(due_rules)
-
                 try:
                     access_token = await resolve_account_access_token(session, acc)
-                    # 2. Проверяем здоровье кабинета и статус в Meta
-                    try:
-                        acc_info = await self.meta_client.get_account_info(acc.account_id, access_token)
+                except Exception as error:
+                    stats["errors"].append(f"Account {account_ref}: {error}")
+                    continue
+                prepared_accounts.append(
+                    {
+                        "account": acc,
+                        "account_ref": account_ref,
+                        "notification_target": notification_target,
+                        "now": now,
+                        "due_rules": due_rules,
+                        "health_due": health_due or currency_refresh_due,
+                        "access_token": access_token,
+                    }
+                )
+
+            await session.commit()
+            snapshots = await asyncio.gather(
+                *(
+                    self._fetch_account_snapshot(
+                        account=item["account"],
+                        access_token=item["access_token"],
+                        due_rules=item["due_rules"],
+                        health_due=item["health_due"],
+                        semaphore=read_semaphore,
+                    )
+                    for item in prepared_accounts
+                ),
+                return_exceptions=True,
+            )
+
+            for item, snapshot in zip(prepared_accounts, snapshots):
+                acc = item["account"]
+                account_ref = item["account_ref"]
+                notification_target = item["notification_target"]
+                now = item["now"]
+                due_rules = item["due_rules"]
+                access_token = item["access_token"]
+                try:
+                    if isinstance(snapshot, PermissionError):
+                        logger.error("Token expired for account %s: %s", acc.account_id, snapshot)
+                        acc.is_active = False
+                        await self._persist_audit_event(
+                            session,
+                            acc,
+                            event_type="TOKEN_EXPIRED",
+                            status="ERROR",
+                            category="ACCOUNT_HEALTH",
+                            action="DISABLE_MONITORING",
+                            message=str(snapshot),
+                            before_state={"is_active": True},
+                            after_state={"is_active": False},
+                        )
+                        if self.telegram_notifier:
+                            await self.telegram_notifier(
+                                event_type="TOKEN_EXPIRED",
+                                account_name=acc.name,
+                                account_id=acc.account_id,
+                                target_chat_id=notification_target,
+                            )
+                        continue
+                    if isinstance(snapshot, Exception):
+                        raise snapshot
+
+                    acc_info = snapshot.get("account_info")
+                    if acc_info:
                         acc.currency = normalize_currency(acc_info.get("currency"))
                         refreshed_timezone = canonical_timezone_name(
                             acc_info.get("timezone_name") or acc.timezone_name
@@ -594,7 +853,6 @@ class MonitoringWorker:
                         if refreshed_timezone != acc.timezone_name:
                             acc.timezone_name = refreshed_timezone
                             acc.last_day_start_date = ""
-                        await session.commit()
                         status_code = acc_info.get("account_status", 1)
                         if status_code != 1:
                             status_label = acc_info.get("status_label", f"Статус #{status_code}")
@@ -621,69 +879,19 @@ class MonitoringWorker:
                                     local_time=status_label
                                 )
                             continue
-                        if acc.currency == "UNKNOWN":
-                            raise RuntimeError(
-                                "Meta did not return the ad account currency; automation is blocked"
-                            )
-                    except PermissionError as pe:
-                        logger.error(f"Token expired for account {acc.account_id}: {pe}")
-                        acc.is_active = False
-                        await self._persist_audit_event(
-                            session,
-                            acc,
-                            event_type="TOKEN_EXPIRED",
-                            status="ERROR",
-                            category="ACCOUNT_HEALTH",
-                            action="DISABLE_MONITORING",
-                            message=str(pe),
-                            before_state={"is_active": True},
-                            after_state={"is_active": False},
+                    acc.currency = snapshot["currency"]
+                    window_errors = snapshot.get("window_errors") or []
+                    if window_errors and due_rules:
+                        stats["errors"].extend(
+                            f"Account {account_ref} window: {error}"
+                            for error in window_errors
                         )
-                        if self.telegram_notifier:
-                            await self.telegram_notifier(
-                                event_type="TOKEN_EXPIRED",
-                                account_name=acc.name,
-                                account_id=acc.account_id,
-                                target_chat_id=notification_target
-                            )
                         continue
-
-                    # 3. Собираем данные за нужные time_windows, кроме 'today'
-                    windows = set()
-                    for rule in due_rules:
-                        conds = rule.get("conditions", [])
-                        for cond in conds:
-                            if isinstance(cond, dict):
-                                window = cond.get("time_window", "today")
-                                if window != "today":
-                                    windows.add(window)
-                    
-                    insights_by_window = {}
-                    for w in windows:
-                        try:
-                            w_insights = await self.meta_client.get_adsets_insights(
-                                account_id=acc.account_id,
-                                access_token=access_token,
-                                date_preset=w,
-                                currency=acc.currency,
-                            )
-                            insights_by_window[w] = {str(a["adset_id"]): a for a in w_insights}
-                        except Exception as e:
-                            logger.error(f"Error fetching insights for window {w} (account {acc.account_id}): {e}")
-
-                    # 4. Запрашиваем актуальные данные из Meta API за сегодня
-                    adsets = await self.meta_client.get_adsets_insights(
-                        account_id=acc.account_id,
-                        access_token=access_token,
-                        date_preset="today",
-                        currency=acc.currency,
-                    )
-
+                    insights_by_window = snapshot["insights_by_window"]
+                    adsets = snapshot["adsets"]
                     stats["adsets_checked"] += len(adsets)
 
-                    # 5. Оцениваем каждый адсет через RuleEngine (только если авто-правила включены!)
                     if not acc.rules_enabled or not due_rules:
-                        # Авто-правила выключены: кабинет только собирает статистику
                         continue
 
                     for adset in adsets:
@@ -780,11 +988,12 @@ class MonitoringWorker:
                         if eval_res.action == RuleAction.STOP:
                             action_started = time.perf_counter()
                             try:
-                                await self.meta_client.set_adset_status(
-                                    adset_id=a_id,
-                                    access_token=access_token,
-                                    status="PAUSED"
-                                )
+                                async with self._action_semaphore:
+                                    await self.meta_client.set_adset_status(
+                                        adset_id=a_id,
+                                        access_token=access_token,
+                                        status="PAUSED"
+                                    )
                                 stats["adsets_stopped"] += 1
                                 logger.info(f"STOPPED AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
 
@@ -903,11 +1112,12 @@ class MonitoringWorker:
                         elif eval_res.action == RuleAction.AUTO_REACTIVATE:
                             action_started = time.perf_counter()
                             try:
-                                await self.meta_client.set_adset_status(
-                                    adset_id=a_id,
-                                    access_token=access_token,
-                                    status="ACTIVE"
-                                )
+                                async with self._action_semaphore:
+                                    await self.meta_client.set_adset_status(
+                                        adset_id=a_id,
+                                        access_token=access_token,
+                                        status="ACTIVE"
+                                    )
                                 stats["adsets_reactivated"] += 1
 
                                 try:
@@ -969,12 +1179,13 @@ class MonitoringWorker:
                         elif eval_res.action == RuleAction.INCREASE_BUDGET:
                             action_started = time.perf_counter()
                             try:
-                                await self.meta_client.update_adset_budget(
-                                    adset_id=a_id,
-                                    access_token=access_token,
-                                    new_daily_budget_dollars=new_budget,
-                                    currency=acc.currency,
-                                )
+                                async with self._action_semaphore:
+                                    await self.meta_client.update_adset_budget(
+                                        adset_id=a_id,
+                                        access_token=access_token,
+                                        new_daily_budget_dollars=new_budget,
+                                        currency=acc.currency,
+                                    )
                                 stats["budgets_changed"] += 1
                                 self._finish_execution(execution_state, status="SUCCESS", now=now)
                                 audit_event_id = await self._persist_audit_event(
@@ -1023,12 +1234,13 @@ class MonitoringWorker:
                         elif eval_res.action == RuleAction.DECREASE_BUDGET:
                             action_started = time.perf_counter()
                             try:
-                                await self.meta_client.update_adset_budget(
-                                    adset_id=a_id,
-                                    access_token=access_token,
-                                    new_daily_budget_dollars=new_budget,
-                                    currency=acc.currency,
-                                )
+                                async with self._action_semaphore:
+                                    await self.meta_client.update_adset_budget(
+                                        adset_id=a_id,
+                                        access_token=access_token,
+                                        new_daily_budget_dollars=new_budget,
+                                        currency=acc.currency,
+                                    )
                                 stats["budgets_changed"] += 1
                                 self._finish_execution(execution_state, status="SUCCESS", now=now)
                                 audit_event_id = await self._persist_audit_event(
@@ -1083,4 +1295,9 @@ class MonitoringWorker:
 
             await session.commit()
 
+        await self._persist_runtime_state(
+            stats=stats,
+            started_at=started_at,
+            duration_ms=(time.perf_counter() - cycle_started) * 1000,
+        )
         return stats

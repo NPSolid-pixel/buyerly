@@ -10,6 +10,7 @@ from database.db import (
     migrate_account_profile_contract,
     migrate_account_day_boundary_contract,
     migrate_account_currency_contract,
+    migrate_automation_settings_contract,
     migrate_audit_undo_contract,
     migrate_legacy_account_rules,
     migrate_rule_metric_contract,
@@ -372,6 +373,50 @@ class TestAuditUndoContractMigration(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(second)
         self.assertIn("reverts_event_id", columns)
         self.assertIn("ix_audit_events_reverts_event_id", indexes)
+
+
+class TestAutomationSettingsContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE app_settings ("
+                    "id INTEGER PRIMARY KEY, "
+                    "poll_interval_minutes INTEGER NOT NULL DEFAULT 10, "
+                    "admin_chat_id VARCHAR NOT NULL DEFAULT '')"
+                )
+            )
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+
+    async def test_adds_safe_polling_controls_idempotently(self):
+        async with self.engine.begin() as conn:
+            first = await migrate_automation_settings_contract(conn)
+            columns = {
+                row[1]
+                for row in (
+                    await conn.execute(text("PRAGMA table_info(app_settings)"))
+                ).all()
+            }
+            second = await migrate_automation_settings_contract(conn)
+
+        self.assertEqual(
+            set(first),
+            {
+                "critical_rule_interval_minutes",
+                "inventory_cache_minutes",
+                "account_health_interval_minutes",
+                "max_concurrent_accounts",
+                "max_concurrent_actions",
+                "usage_soft_limit_percent",
+                "usage_hard_limit_percent",
+                "adaptive_polling_enabled",
+            },
+        )
+        self.assertTrue(set(first).issubset(columns))
+        self.assertEqual(second, [])
 
 
 class TestStableOwnerContractMigration(unittest.IsolatedAsyncioTestCase):

@@ -96,6 +96,29 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("window.switchTab('settings')", self.script)
         self.assertNotIn('class="mobile-nav-item" data-tab="settings"', self.index)
 
+    def test_automation_settings_are_separate_and_password_protected(self):
+        for contract in (
+            'aria-label="Разделы настроек"',
+            'data-settings-nav="automation"',
+            'data-settings-page="automation"',
+            'id="automationSettingsPassword"',
+            'id="btnSaveAutomationSettings"',
+            'id="automationRuntimeBadge"',
+            'id="automationUsagePercent"',
+        ):
+            self.assertIn(contract, self.index)
+
+        for contract in (
+            "window.switchSettingsPage",
+            "window.saveAutomationSettings",
+            "apiRequest('/api/settings/automation'",
+            "current_password: password",
+        ):
+            self.assertIn(contract, self.script)
+
+        self.assertIn('.automation-settings-grid', self.styles)
+        self.assertIn('.settings-subnav', self.styles)
+
     def test_sections_have_stable_urls_and_restore_after_reload(self):
         for contract in (
             "accounts: '/accounts'",
@@ -256,7 +279,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.18.0', self.index)
+        self.assertIn('v=9.19.0', self.index)
 
     def test_money_is_currency_aware_and_mixed_totals_are_separated(self):
         for contract in (

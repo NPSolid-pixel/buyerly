@@ -525,6 +525,40 @@ async def migrate_account_profile_contract(conn) -> bool:
     return changed
 
 
+async def migrate_automation_settings_contract(conn) -> list[str]:
+    """Add safe Meta polling controls to installations created before this release."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "app_settings" not in table_names:
+        return []
+    columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"] for column in inspect(sync_conn).get_columns("app_settings")
+        }
+    )
+    definitions = {
+        "critical_rule_interval_minutes": "INTEGER NOT NULL DEFAULT 2",
+        "inventory_cache_minutes": "INTEGER NOT NULL DEFAULT 5",
+        "account_health_interval_minutes": "INTEGER NOT NULL DEFAULT 15",
+        "max_concurrent_accounts": "INTEGER NOT NULL DEFAULT 3",
+        "max_concurrent_actions": "INTEGER NOT NULL DEFAULT 3",
+        "usage_soft_limit_percent": "INTEGER NOT NULL DEFAULT 60",
+        "usage_hard_limit_percent": "INTEGER NOT NULL DEFAULT 80",
+        "adaptive_polling_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
+    }
+    added = []
+    for name, definition in definitions.items():
+        if name in columns:
+            continue
+        await conn.execute(
+            text(f"ALTER TABLE app_settings ADD COLUMN {name} {definition}")
+        )
+        added.append(name)
+    return added
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -546,6 +580,12 @@ async def init_schema():
             logger.info("Added encrypted Meta connection links to accounts.")
         if await migrate_account_profile_contract(conn):
             logger.info("Added editable Buyerly account names and notes.")
+        automation_settings_added = await migrate_automation_settings_contract(conn)
+        if automation_settings_added:
+            logger.info(
+                "Added automation polling controls: %s",
+                ", ".join(automation_settings_added),
+            )
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:
             logger.info(

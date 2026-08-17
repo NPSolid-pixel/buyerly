@@ -1,7 +1,12 @@
+import hashlib
+import hmac
 import unittest
 from unittest.mock import AsyncMock
 
-from meta_api.client import MetaClient
+import httpx
+
+from core.config import settings
+from meta_api.client import MetaClient, MetaRateLimitDeferred
 
 
 class FakeResponse:
@@ -206,6 +211,83 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
             second_call.args[1],
             "https://graph.facebook.com/v20.0/act_123/adsets",
         )
+
+    async def test_requests_reuse_connection_and_add_appsecret_proof(self):
+        seen_queries = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen_queries.append(dict(request.url.params))
+            return httpx.Response(200, json={"success": True})
+
+        previous_secret = settings.META_APP_SECRET
+        settings.META_APP_SECRET = "test-app-secret"
+        client = MetaClient()
+        client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        try:
+            original = {"access_token": "test-token", "fields": "id"}
+            first_client = await client._get_client()
+            await client._request_with_retry(
+                "GET",
+                f"{client.base_url}/act_1",
+                params=original,
+            )
+            await client._request_with_retry(
+                "GET",
+                f"{client.base_url}/act_2",
+                params=original,
+            )
+            second_client = await client._get_client()
+        finally:
+            await client.aclose()
+            settings.META_APP_SECRET = previous_secret
+
+        expected_proof = hmac.new(
+            b"test-app-secret",
+            b"test-token",
+            hashlib.sha256,
+        ).hexdigest()
+        self.assertIs(first_client, second_client)
+        self.assertEqual(len(seen_queries), 2)
+        self.assertEqual(seen_queries[0]["appsecret_proof"], expected_proof)
+        self.assertNotIn("appsecret_proof", original)
+
+    async def test_inventory_is_cached_between_reporting_windows(self):
+        client = MetaClient()
+        client.configure_automation(inventory_cache_minutes=5)
+        client._fetch_paginated_data = AsyncMock(
+            side_effect=[
+                [
+                    {
+                        "id": "adset_1",
+                        "name": "Test",
+                        "status": "ACTIVE",
+                        "effective_status": "ACTIVE",
+                        "daily_budget": "1000",
+                    }
+                ],
+                [{"adset_id": "adset_1", "spend": "2"}],
+                [{"adset_id": "adset_1", "spend": "3"}],
+            ]
+        )
+
+        await client.get_adsets_insights("act_1", "token", "today", currency="USD")
+        await client.get_adsets_insights("act_1", "token", "yesterday", currency="USD")
+
+        urls = [call.args[0] for call in client._fetch_paginated_data.await_args_list]
+        self.assertEqual(sum(url.endswith("/adsets") for url in urls), 1)
+        self.assertEqual(sum(url.endswith("/insights") for url in urls), 2)
+
+    async def test_hard_quota_defers_background_but_allows_critical_request(self):
+        client = MetaClient()
+        client.configure_automation(
+            usage_soft_limit_percent=60,
+            usage_hard_limit_percent=80,
+        )
+        client._usage_snapshot["max_percent"] = 85
+
+        with self.assertRaises(MetaRateLimitDeferred):
+            await client._respect_usage_limit(priority="normal")
+        await client._respect_usage_limit(priority="critical")
 
 
 if __name__ == "__main__":

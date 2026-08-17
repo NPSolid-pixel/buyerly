@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 from sqlalchemy import select, delete, func, or_, update
 
 from core.audit import build_audit_event
@@ -46,6 +46,7 @@ from database.models import (
     AutomationScheduleState,
     RuleExecutionState,
     ActionUndoState,
+    AutomationRuntimeState,
 )
 from meta_api.client import MetaClient
 from bot.handlers import parse_fb_raw_accounts, get_short_account_label
@@ -276,6 +277,28 @@ class BatchAddRequest(BaseModel):
 
 class SetIntervalRequest(BaseModel):
     minutes: int = Field(ge=1, le=1440)
+    current_password: SecretStr
+
+
+class AutomationSettingsUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: SecretStr
+    poll_interval_minutes: int = Field(ge=5, le=120)
+    critical_rule_interval_minutes: int = Field(ge=1, le=15)
+    inventory_cache_minutes: int = Field(ge=1, le=30)
+    account_health_interval_minutes: int = Field(ge=5, le=120)
+    max_concurrent_accounts: int = Field(ge=1, le=5)
+    max_concurrent_actions: int = Field(ge=1, le=10)
+    usage_soft_limit_percent: int = Field(ge=40, le=85)
+    usage_hard_limit_percent: int = Field(ge=60, le=95)
+    adaptive_polling_enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_usage_thresholds(self):
+        if self.usage_soft_limit_percent >= self.usage_hard_limit_percent:
+            raise ValueError("Мягкий порог квоты должен быть ниже жёсткого")
+        return self
 
 
 class AnalyticsViewPreferenceRequest(BaseModel):
@@ -2119,20 +2142,89 @@ async def get_settings(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
         res = await session.execute(select(AppSettings).limit(1))
         app_settings = res.scalar_one_or_none()
-        interval = app_settings.poll_interval_minutes if app_settings else 10
+        runtime_row = (
+            await session.execute(
+                select(AutomationRuntimeState).where(
+                    AutomationRuntimeState.state_key == "monitoring"
+                )
+            )
+        ).scalar_one_or_none()
+        runtime = _load_json_object(runtime_row.payload) if runtime_row else {}
+        if runtime_row and "updated_at" not in runtime:
+            runtime["updated_at"] = _utc_iso(runtime_row.updated_at)
         return {
-            "poll_interval_minutes": interval,
+            "poll_interval_minutes": app_settings.poll_interval_minutes if app_settings else 10,
+            "critical_rule_interval_minutes": (
+                app_settings.critical_rule_interval_minutes if app_settings else 2
+            ),
+            "inventory_cache_minutes": app_settings.inventory_cache_minutes if app_settings else 5,
+            "account_health_interval_minutes": (
+                app_settings.account_health_interval_minutes if app_settings else 15
+            ),
+            "max_concurrent_accounts": app_settings.max_concurrent_accounts if app_settings else 3,
+            "max_concurrent_actions": app_settings.max_concurrent_actions if app_settings else 3,
+            "usage_soft_limit_percent": app_settings.usage_soft_limit_percent if app_settings else 60,
+            "usage_hard_limit_percent": app_settings.usage_hard_limit_percent if app_settings else 80,
+            "adaptive_polling_enabled": (
+                app_settings.adaptive_polling_enabled if app_settings else True
+            ),
             "admin_chat_id": settings.ADMIN_CHAT_ID,
-            "user_role": user.role
+            "user_role": user.role,
+            "runtime": runtime,
         }
+
+
+async def _confirm_admin_password(session, user: TelegramUser, password: SecretStr) -> TelegramUser:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Только администратор может изменять автоматику.")
+    db_user = (
+        await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
+    ).scalar_one_or_none()
+    if not db_user or not verify_password(password.get_secret_value(), db_user.password_hash):
+        raise HTTPException(status_code=403, detail="Неверный пароль учётной записи.")
+    return db_user
+
+
+@router.post("/settings/automation")
+async def update_automation_settings(
+    payload: AutomationSettingsUpdateRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Update global polling controls after explicit account-password confirmation."""
+
+    async with async_session_maker() as session:
+        await _confirm_admin_password(session, user, payload.current_password)
+        app_settings = (
+            await session.execute(select(AppSettings).limit(1))
+        ).scalar_one_or_none()
+        if app_settings is None:
+            app_settings = AppSettings()
+            session.add(app_settings)
+
+        for field_name in (
+            "poll_interval_minutes",
+            "critical_rule_interval_minutes",
+            "inventory_cache_minutes",
+            "account_health_interval_minutes",
+            "max_concurrent_accounts",
+            "max_concurrent_actions",
+            "usage_soft_limit_percent",
+            "usage_hard_limit_percent",
+            "adaptive_polling_enabled",
+        ):
+            setattr(app_settings, field_name, getattr(payload, field_name))
+        await session.commit()
+
+    return {
+        "success": True,
+        "message": "Настройки автоматики сохранены",
+    }
 
 
 @router.post("/settings/interval")
 async def set_poll_interval(payload: SetIntervalRequest, user: TelegramUser = Depends(get_current_user)):
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Только администратор может изменять интервал опроса.")
-
     async with async_session_maker() as session:
+        await _confirm_admin_password(session, user, payload.current_password)
         res = await session.execute(select(AppSettings).limit(1))
         app_settings = res.scalar_one_or_none()
         if not app_settings:

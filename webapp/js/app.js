@@ -120,7 +120,18 @@
     auditTotalPages: 1,
     pendingLogsAccountId: '',
     stoppedAdsets: [],
-    settings: { poll_interval_minutes: 10 }
+    settings: {
+      poll_interval_minutes: 10,
+      critical_rule_interval_minutes: 2,
+      inventory_cache_minutes: 5,
+      account_health_interval_minutes: 15,
+      max_concurrent_accounts: 3,
+      max_concurrent_actions: 3,
+      usage_soft_limit_percent: 60,
+      usage_hard_limit_percent: 80,
+      adaptive_polling_enabled: true,
+      runtime: {}
+    }
   };
 
   // Helper to get Web Auth Token
@@ -3274,17 +3285,52 @@
   // ==========================================================
   // TAB 4: SETTINGS (НАСТРОЙКИ)
   // ==========================================================
+  window.switchSettingsPage = function (page) {
+    const target = page === 'automation' ? 'automation' : 'account';
+    document.querySelectorAll('[data-settings-page]').forEach(element => {
+      element.classList.toggle('hidden', element.dataset.settingsPage !== target);
+    });
+    document.querySelectorAll('[data-settings-nav]').forEach(button => {
+      button.classList.toggle('active', button.dataset.settingsNav === target);
+    });
+  };
+
   async function loadSettings() {
     try {
       const data = await apiRequest('/api/settings');
       state.settings = data;
 
       const canManageInterval = data.user_role === 'admin';
-      document.querySelectorAll('.btn-interval').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.interval) === data.poll_interval_minutes);
-        btn.disabled = !canManageInterval;
-        btn.title = canManageInterval ? '' : 'Изменение доступно администратору';
+      const fieldValues = {
+        settingBackgroundInterval: data.poll_interval_minutes,
+        settingCriticalRuleInterval: data.critical_rule_interval_minutes,
+        settingInventoryCache: data.inventory_cache_minutes,
+        settingAccountHealthInterval: data.account_health_interval_minutes,
+        settingConcurrentAccounts: data.max_concurrent_accounts,
+        settingConcurrentActions: data.max_concurrent_actions,
+        settingUsageSoftLimit: data.usage_soft_limit_percent,
+        settingUsageHardLimit: data.usage_hard_limit_percent
+      };
+      Object.entries(fieldValues).forEach(([id, value]) => {
+        const input = document.getElementById(id);
+        if (input) {
+          input.value = String(value ?? '');
+          input.disabled = !canManageInterval;
+        }
       });
+      const adaptiveInput = document.getElementById('settingAdaptivePolling');
+      if (adaptiveInput) {
+        adaptiveInput.checked = data.adaptive_polling_enabled !== false;
+        adaptiveInput.disabled = !canManageInterval;
+      }
+      const passwordInput = document.getElementById('automationSettingsPassword');
+      const saveButton = document.getElementById('btnSaveAutomationSettings');
+      if (passwordInput) passwordInput.disabled = !canManageInterval;
+      if (saveButton) {
+        saveButton.disabled = !canManageInterval;
+        saveButton.title = canManageInterval ? '' : 'Изменение доступно только администратору';
+      }
+      renderAutomationRuntime(data.runtime || {});
 
       if (state.user) {
         const dName = document.getElementById('settingsDisplayName');
@@ -3302,6 +3348,75 @@
       }
     } catch (err) {}
   }
+
+  function renderAutomationRuntime(runtime) {
+    const lastCycle = document.getElementById('automationLastCycle');
+    const duration = document.getElementById('automationCycleDuration');
+    const usage = document.getElementById('automationUsagePercent');
+    const errors = document.getElementById('automationCycleErrors');
+    const badge = document.getElementById('automationRuntimeBadge');
+    const finishedAt = runtime.finished_at || runtime.updated_at || '';
+    const usagePercent = Number(runtime.usage?.max_percent ?? runtime.usage_percent ?? 0);
+    const errorCount = Number(runtime.errors_count ?? runtime.errors?.length ?? 0);
+
+    if (lastCycle) lastCycle.textContent = finishedAt ? formatSummaryTime(finishedAt) : 'Ожидает первый цикл';
+    if (duration) duration.textContent = Number.isFinite(Number(runtime.duration_ms))
+      ? `${(Number(runtime.duration_ms) / 1000).toFixed(1)} сек`
+      : '—';
+    if (usage) usage.textContent = usagePercent > 0 ? `${usagePercent.toFixed(0)}%` : 'Нет данных';
+    if (errors) errors.textContent = String(errorCount);
+    if (badge) {
+      const waiting = !finishedAt;
+      const unhealthy = waiting || errorCount > 0 || usagePercent >= Number(state.settings.usage_hard_limit_percent || 80);
+      badge.className = `badge ${unhealthy ? 'badge-warning' : 'badge-success'}`;
+      const label = waiting ? 'Ожидает первый цикл' : unhealthy ? 'Нужна проверка' : 'Воркер онлайн';
+      badge.innerHTML = `<span class="status-dot ${unhealthy ? 'dot-warning' : 'dot-success'}"></span>${label}`;
+    }
+  }
+
+  window.saveAutomationSettings = async function () {
+    const readNumber = id => Number(document.getElementById(id)?.value);
+    const passwordInput = document.getElementById('automationSettingsPassword');
+    const password = passwordInput?.value || '';
+    const payload = {
+      current_password: password,
+      poll_interval_minutes: readNumber('settingBackgroundInterval'),
+      critical_rule_interval_minutes: readNumber('settingCriticalRuleInterval'),
+      inventory_cache_minutes: readNumber('settingInventoryCache'),
+      account_health_interval_minutes: readNumber('settingAccountHealthInterval'),
+      max_concurrent_accounts: readNumber('settingConcurrentAccounts'),
+      max_concurrent_actions: readNumber('settingConcurrentActions'),
+      usage_soft_limit_percent: readNumber('settingUsageSoftLimit'),
+      usage_hard_limit_percent: readNumber('settingUsageHardLimit'),
+      adaptive_polling_enabled: document.getElementById('settingAdaptivePolling')?.checked !== false
+    };
+    if (!password) {
+      showToast('Введите текущий пароль учётной записи', 'error');
+      passwordInput?.focus();
+      return;
+    }
+    if (payload.usage_soft_limit_percent >= payload.usage_hard_limit_percent) {
+      showToast('Мягкий порог квоты должен быть ниже жёсткого', 'error');
+      return;
+    }
+
+    const button = document.getElementById('btnSaveAutomationSettings');
+    if (button) button.disabled = true;
+    haptic('impact', 'medium');
+    try {
+      const res = await apiRequest('/api/settings/automation', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (passwordInput) passwordInput.value = '';
+      showToast(res.message || 'Настройки автоматики сохранены', 'success');
+      await loadSettings();
+    } catch (error) {
+      showToast(`Ошибка: ${error.message}`, 'error');
+    } finally {
+      if (button) button.disabled = state.user?.role !== 'admin';
+    }
+  };
 
   window.saveTelegramId = async function () {
     const input = document.getElementById('settingsTelegramIdInput');
@@ -3351,25 +3466,6 @@
       showToast(`Ошибка: ${e.message}`, 'error');
     }
   };
-
-  document.querySelectorAll('.btn-interval').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const interval = parseInt(btn.dataset.interval);
-      haptic('impact', 'medium');
-
-      try {
-        await apiRequest('/api/settings/interval', {
-          method: 'POST',
-          body: JSON.stringify({ minutes: interval })
-        });
-        showToast(`Базовый интервал мониторинга: ${interval} мин`, 'success');
-        document.querySelectorAll('.btn-interval').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-      } catch (err) {
-        showToast(`Ошибка: ${err.message}`, 'error');
-      }
-    });
-  });
 
   // ==========================================================
   // GLOBAL MODALS & UTILS

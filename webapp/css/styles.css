@@ -4635,11 +4635,236 @@ input[type=number] {
   gap: 16px;
 }
 
+.settings-subnav {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--tg-sec-bg);
+}
+
+.settings-subnav-btn {
+  min-height: 32px;
+  padding: 0 13px;
+  color: var(--tg-hint);
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.settings-subnav-btn.active {
+  color: var(--tg-text);
+  background: var(--tg-card-bg);
+  box-shadow: 0 0 0 1px var(--border-subtle);
+}
+
 @media (min-width: 768px) {
   .settings-cards-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 20px;
+  }
+
+  .settings-card-wide {
+    grid-column: 1 / -1;
+  }
+
+  .settings-subnav {
+    grid-column: 1 / -1;
+  }
+}
+
+.automation-settings-card {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(121, 105, 237, 0.14), transparent 34%),
+    var(--tg-card-bg);
+  border-color: rgba(155, 140, 255, 0.24);
+}
+
+.automation-settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.automation-settings-head > div {
+  max-width: 760px;
+}
+
+.section-eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--tg-link);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+}
+
+.automation-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.automation-runtime-item {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.13);
+}
+
+.automation-runtime-item span,
+.automation-runtime-item b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-runtime-item span {
+  color: var(--tg-hint);
+  font-size: 10px;
+}
+
+.automation-runtime-item b {
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.automation-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.automation-setting-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.automation-setting-field > span {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.automation-setting-field > small {
+  min-height: 28px;
+  color: var(--tg-hint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.input-with-suffix {
+  position: relative;
+}
+
+.input-with-suffix .form-input {
+  padding-right: 34px;
+}
+
+.input-with-suffix > span {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  color: var(--tg-hint);
+  transform: translateY(-50%);
+}
+
+.automation-adaptive-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(89, 203, 144, 0.2);
+  border-radius: var(--radius-md);
+  background: rgba(89, 203, 144, 0.055);
+  cursor: pointer;
+}
+
+.automation-adaptive-toggle input {
+  margin-top: 2px;
+  accent-color: var(--color-success);
+}
+
+.automation-adaptive-toggle b,
+.automation-adaptive-toggle small {
+  display: block;
+}
+
+.automation-adaptive-toggle b {
+  font-size: 12px;
+}
+
+.automation-adaptive-toggle small {
+  margin-top: 2px;
+  color: var(--tg-hint);
+  font-size: 10px;
+}
+
+.automation-protected-save {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.automation-protected-save > .setting-info {
+  max-width: 520px;
+}
+
+.automation-save-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(100%, 470px);
+}
+
+.automation-save-controls .form-input {
+  flex: 1;
+}
+
+@media (max-width: 720px) {
+  .automation-settings-head,
+  .automation-protected-save,
+  .automation-save-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .automation-runtime-grid,
+  .automation-settings-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .automation-save-controls {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 460px) {
+  .automation-runtime-grid,
+  .automation-settings-grid {
+    grid-template-columns: 1fr;
   }
 }
 
