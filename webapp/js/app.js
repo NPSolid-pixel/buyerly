@@ -771,6 +771,13 @@
       const legacyWarningHtml = condList.some(c => c.metric === 'legacy_cpa' || c.metric === 'cpa')
         ? '<div class="rule-migration-warning">Правило выключено: замените старый общий CPA на CPL, CPReg или CPP.</div>'
         : '';
+      const plainSummary = buildPlainRuleTextFromValues(
+        p.action,
+        p.condition_logic || 'and',
+        condList,
+        p.budget_change_percent || 0,
+        p.budget_max_daily || 0
+      );
 
       let budgetInfoHtml = '';
       if (p.action === 'increase_budget' || p.action === 'decrease_budget') {
@@ -801,6 +808,11 @@
               ${logicText}
             </div>
             ${condsHtml || '<span style="font-size:12px; color:var(--tg-hint);">Без условий</span>'}
+          </div>
+
+          <div class="rule-card-plain-summary">
+            <span>Простым языком</span>
+            <p>${escapeHtml(plainSummary)}</p>
           </div>
 
           <div class="rule-card-footer">
@@ -1266,6 +1278,255 @@
     return parseInt(activeBtn.dataset.val) || 5;
   }
 
+  function getRuleDraftRows() {
+    return Array.from(document.querySelectorAll('.rule-condition-row')).map(row => {
+      const rawValue = row.querySelector('.cond-value')?.value ?? '';
+      const value = Number(rawValue);
+      return {
+        metric: row.querySelector('.cond-metric')?.value || 'spend',
+        operator: row.querySelector('.cond-operator')?.value || 'gte',
+        value,
+        time_window: row.querySelector('.cond-window')?.value || 'today',
+        valid: rawValue !== '' && Number.isFinite(value) && value >= 0 && value <= 1000000000
+      };
+    });
+  }
+
+  function ruleConditionSignature(condition) {
+    return [condition.metric, condition.operator, Number(condition.value), condition.time_window || 'today'].join('|');
+  }
+
+  function ruleTriggerSignature(logic, conditions) {
+    return `${logic}|${conditions.map(ruleConditionSignature).sort().join('||')}`;
+  }
+
+  function updateDraftBound(current, candidate, direction) {
+    if (!current) return candidate;
+    if (direction === 'lower') {
+      if (candidate.value > current.value) return candidate;
+      if (candidate.value < current.value) return current;
+    } else {
+      if (candidate.value < current.value) return candidate;
+      if (candidate.value > current.value) return current;
+    }
+    return { value: candidate.value, inclusive: current.inclusive && candidate.inclusive };
+  }
+
+  function draftAndRangeIsEmpty(conditions) {
+    let lower = null;
+    let upper = null;
+    conditions.forEach(condition => {
+      if (condition.operator === 'gt') lower = updateDraftBound(lower, { value: condition.value, inclusive: false }, 'lower');
+      if (condition.operator === 'gte') lower = updateDraftBound(lower, { value: condition.value, inclusive: true }, 'lower');
+      if (condition.operator === 'lt') upper = updateDraftBound(upper, { value: condition.value, inclusive: false }, 'upper');
+      if (condition.operator === 'lte') upper = updateDraftBound(upper, { value: condition.value, inclusive: true }, 'upper');
+      if (condition.operator === 'eq') {
+        lower = updateDraftBound(lower, { value: condition.value, inclusive: true }, 'lower');
+        upper = updateDraftBound(upper, { value: condition.value, inclusive: true }, 'upper');
+      }
+    });
+    if (!lower || !upper) return false;
+    return lower.value > upper.value || (lower.value === upper.value && !(lower.inclusive && upper.inclusive));
+  }
+
+  function draftOrRangeIsAlwaysTrue(conditions) {
+    const signatures = new Set(conditions.map(condition => `${condition.operator}|${condition.value}`));
+    return conditions.some(condition => (
+      (signatures.has(`gte|${condition.value}`) && signatures.has(`lt|${condition.value}`))
+      || (signatures.has(`gt|${condition.value}`) && signatures.has(`lte|${condition.value}`))
+    ));
+  }
+
+  function stopConditionNeedsDeepConversion(condition) {
+    if (condition.metric === 'cpreg' || condition.metric === 'cpp') return true;
+    if (condition.metric !== 'registrations' && condition.metric !== 'purchases') return false;
+    return condition.operator === 'gt'
+      || ((condition.operator === 'gte' || condition.operator === 'eq') && condition.value > 0);
+  }
+
+  function validateRuleDraft() {
+    const rows = getRuleDraftRows();
+    const conditions = rows.filter(row => row.valid).map(({ valid, ...condition }) => condition);
+    const logic = getLogicFromUI();
+    const action = document.getElementById('ruleActionSelect')?.value || 'turn_off';
+    const errors = [];
+    const warnings = [];
+
+    if (rows.length === 0) errors.push('Добавьте хотя бы одно условие.');
+    if (rows.some(row => !row.valid)) errors.push('У каждого условия должно быть заполнено корректное неотрицательное значение.');
+
+    const signatures = conditions.map(ruleConditionSignature);
+    if (new Set(signatures).size !== signatures.length) {
+      errors.push('Одно и то же условие добавлено несколько раз. Оставьте только одно.');
+    }
+
+    if (conditions.some(condition => ['leads', 'registrations', 'purchases'].includes(condition.metric) && !Number.isInteger(condition.value))) {
+      errors.push('Лиды, регистрации и покупки указываются только целыми числами.');
+    }
+
+    if (action === 'turn_off' && conditions.some(stopConditionNeedsDeepConversion)) {
+      errors.push('Такое правило не сработает: регистрация или покупка защищает группу объявлений от выключения. Для этого случая выберите уведомление или включение.');
+    }
+
+    const grouped = new Map();
+    conditions.forEach(condition => {
+      const key = `${condition.metric}|${condition.time_window}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(condition);
+    });
+    grouped.forEach(metricConditions => {
+      if (logic === 'and' && draftAndRangeIsEmpty(metricConditions)) {
+        errors.push('В одном из показателей задан невозможный диапазон: нижняя граница выше верхней.');
+      }
+      if (logic === 'or' && draftOrRangeIsAlwaysTrue(metricConditions)) {
+        errors.push('Два условия покрывают вообще все значения, поэтому правило будет срабатывать всегда.');
+      }
+    });
+
+    const oppositeActions = [
+      new Set(['turn_off', 'turn_on']),
+      new Set(['increase_budget', 'decrease_budget'])
+    ];
+    const currentPresetId = Number(document.getElementById('editingPresetId')?.value || 0);
+    const draftTrigger = ruleTriggerSignature(logic, conditions);
+    state.presets.forEach(preset => {
+      if (preset.id === currentPresetId) return;
+      const actions = new Set([action, preset.action]);
+      const isOpposite = oppositeActions.some(pair => pair.size === actions.size && [...pair].every(item => actions.has(item)));
+      if (!isOpposite) return;
+      const presetTrigger = ruleTriggerSignature(preset.condition_logic || 'and', preset.conditions || []);
+      if (draftTrigger === presetTrigger) {
+        warnings.push(`Конфликт с правилом «${preset.name}»: одинаковые условия запускают противоположные действия. Вместе к одному кабинету они не назначатся.`);
+      }
+    });
+
+    return { rows, conditions, logic, action, errors: [...new Set(errors)], warnings: [...new Set(warnings)] };
+  }
+
+  function plainRuleValue(condition) {
+    const value = Number(condition.value);
+    const shown = Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+    if (condition.metric === 'ctr') return `${shown}%`;
+    if (['spend', 'cpl', 'cpreg', 'cpp', 'cpc'].includes(condition.metric)) {
+      return `${shown} в валюте кабинета`;
+    }
+    return shown;
+  }
+
+  function plainRuleCondition(condition) {
+    const windows = {
+      today: 'сегодня', yesterday: 'вчера', last_3d: 'за последние 3 дня', last_7d: 'за последние 7 дней'
+    };
+    const metrics = {
+      spend: 'расход', cpl: 'цена лида', cpreg: 'цена регистрации', cpp: 'цена покупки',
+      leads: 'лидов', registrations: 'регистраций', purchases: 'покупок',
+      ctr: 'кликабельность', cpc: 'цена клика'
+    };
+    const operators = {
+      gt: 'больше', gte: 'не меньше', lt: 'меньше', lte: 'не больше', eq: 'ровно'
+    };
+    return `${windows[condition.time_window] || 'сегодня'} ${metrics[condition.metric] || condition.metric} ${operators[condition.operator] || condition.operator} ${plainRuleValue(condition)}`;
+  }
+
+  function buildPlainRuleTextFromValues(action, logic, conditions, budgetPercent = 0, budgetCeiling = 0) {
+    const actions = {
+      turn_off: 'Выключить группу объявлений',
+      notify_only: 'Прислать уведомление',
+      turn_on: 'Включить группу объявлений',
+      increase_budget: `Увеличить дневной бюджет на ${budgetPercent || 0}%${budgetCeiling > 0 ? `, но не выше ${budgetCeiling} в валюте кабинета` : ''}`,
+      decrease_budget: `Уменьшить дневной бюджет на ${budgetPercent || 0}%`
+    };
+    const joiner = logic === 'or' ? ' или ' : ' и ';
+    const conditionText = conditions.map(plainRuleCondition).join(joiner);
+    return conditionText
+      ? `${actions[action] || 'Выполнить действие'}, если ${conditionText}.`
+      : 'Настройте действие и условия — здесь появится понятное описание.';
+  }
+
+  function buildPlainRuleText(validation) {
+    return buildPlainRuleTextFromValues(
+      validation.action,
+      validation.logic,
+      validation.conditions,
+      Number(document.getElementById('budgetChangePercentInput')?.value || 0),
+      Number(document.getElementById('budgetMaxDailyInput')?.value || 0)
+    );
+  }
+
+  function fitPlainRuleName(text) {
+    const clean = String(text || '').replace(/\.$/, '');
+    if (clean.length <= 120) return clean;
+    const shortened = clean.slice(0, 119);
+    const lastSpace = shortened.lastIndexOf(' ');
+    return `${shortened.slice(0, lastSpace > 80 ? lastSpace : 119)}…`;
+  }
+
+  function renderRuleDraftSummary() {
+    const textElement = document.getElementById('rulePlainText');
+    const detailsElement = document.getElementById('rulePlainDetails');
+    const messagesElement = document.getElementById('ruleValidationMessages');
+    if (!textElement || !detailsElement || !messagesElement) return { errors: [], warnings: [] };
+
+    const validation = validateRuleDraft();
+    const plainText = buildPlainRuleText(validation);
+    textElement.textContent = plainText;
+    textElement.dataset.ruleName = fitPlainRuleName(plainText);
+
+    const interval = getIntervalFromUI();
+    const cooldown = getCooldownFromUI();
+    const notify = document.getElementById('ruleNotifyTgToggle')?.checked !== false;
+    const protection = validation.action === 'turn_off'
+      ? ' Если есть регистрация или покупка, выключения не будет.'
+      : '';
+    detailsElement.textContent = `Проверять каждые ${interval} мин. Пауза после срабатывания: ${cooldown ? `${cooldown} мин` : 'нет'}. Telegram: ${notify ? 'да' : 'нет'}.${protection}`;
+    messagesElement.innerHTML = [
+      ...validation.errors.map(message => `<div class="rule-validation-message error">⛔ ${escapeHtml(message)}</div>`),
+      ...validation.warnings.map(message => `<div class="rule-validation-message warning">⚠️ ${escapeHtml(message)}</div>`)
+    ].join('');
+
+    const saveButton = document.getElementById('btnSaveLimits');
+    if (saveButton) saveButton.disabled = validation.errors.length > 0;
+    return validation;
+  }
+
+  function setupRuleBuilderPreview() {
+    const preview = document.getElementById('rulePlainPreview');
+    if (!preview || preview.dataset.bound === 'true') return;
+    preview.dataset.bound = 'true';
+
+    const builder = document.getElementById('modalEditLimits');
+    builder?.addEventListener('input', event => {
+      if (event.target.matches('.cond-value, #budgetChangePercentInput, #budgetMaxDailyInput, #customCooldownInput, #customIntervalInput')) {
+        renderRuleDraftSummary();
+      }
+    });
+    builder?.addEventListener('change', event => {
+      if (event.target.matches('.cond-metric, .cond-operator, .cond-window, #ruleNotifyTgToggle')) {
+        renderRuleDraftSummary();
+      }
+    });
+
+    document.getElementById('btnUseRulePlainName')?.addEventListener('click', () => {
+      const input = document.getElementById('ruleNameInput');
+      const name = document.getElementById('rulePlainText')?.dataset.ruleName || '';
+      if (input && name) {
+        input.value = name;
+        input.focus();
+        showToast('Понятное название вставлено', 'success');
+      }
+    });
+    document.getElementById('btnCopyRulePlainText')?.addEventListener('click', async () => {
+      const text = document.getElementById('rulePlainText')?.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('Описание скопировано', 'success');
+      } catch (error) {
+        showToast('Не удалось скопировать описание', 'error');
+      }
+    });
+    renderRuleDraftSummary();
+  }
+
   function setupSettingsChips() {
     document.querySelectorAll('#cooldownChipGroup .chip-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1279,6 +1540,7 @@
         } else {
           customInput?.classList.add('hidden');
         }
+        renderRuleDraftSummary();
       });
     });
 
@@ -1294,6 +1556,7 @@
         } else {
           customInput?.classList.add('hidden');
         }
+        renderRuleDraftSummary();
       });
     });
   }
@@ -1315,6 +1578,7 @@
         haptic('selection');
         document.querySelectorAll('#logicToggleGroup .chip-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        renderRuleDraftSummary();
       });
     });
   }
@@ -1332,6 +1596,7 @@
 
   document.getElementById('ruleActionSelect')?.addEventListener('change', (e) => {
     handleActionChange(e.target.value);
+    renderRuleDraftSummary();
   });
 
   function updateRuleSaveButtonLabel() {
@@ -1375,6 +1640,7 @@
 
     renderConditions(preset.conditions || []);
     renderPresetsList(preset.id);
+    renderRuleDraftSummary();
   };
 
   window.newPresetMode = function () {
@@ -1404,6 +1670,7 @@
       { metric: 'spend', operator: 'gte', value: 2.0, time_window: 'today' }
     ]);
     renderPresetsList(null);
+    renderRuleDraftSummary();
     document.getElementById('ruleNameInput')?.focus();
   };
 
@@ -1443,9 +1710,15 @@
         <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
         <option value="last_7d" ${timeWindow === 'last_7d' ? 'selected' : ''}>7 дней</option>
       </select>
-      <button type="button" class="btn-remove-cond" onclick="this.closest('.rule-condition-row').remove()" title="Удалить условие">&times;</button>
+      <button type="button" class="btn-remove-cond" onclick="window.removeConditionRow(this)" title="Удалить условие">&times;</button>
     `;
     container.appendChild(row);
+    renderRuleDraftSummary();
+  };
+
+  window.removeConditionRow = function (button) {
+    button?.closest('.rule-condition-row')?.remove();
+    renderRuleDraftSummary();
   };
 
   function renderConditions(conditionsList) {
@@ -1461,6 +1734,7 @@
     conditionsList.forEach(c => {
       window.addConditionRow(c.metric, c.operator || 'gte', c.value, c.time_window || 'today');
     });
+    renderRuleDraftSummary();
   }
 
   function getConditionsFromUI() {
@@ -1522,8 +1796,9 @@
     const budgetChangePercent = parseFloat(document.getElementById('budgetChangePercentInput')?.value) || 0.0;
     const budgetMaxDaily = parseFloat(document.getElementById('budgetMaxDailyInput')?.value) || 0.0;
 
-    if (conditions.length === 0) {
-      showToast('Добавьте хотя бы одно условие правила', 'error');
+    const draftValidation = renderRuleDraftSummary();
+    if (draftValidation.errors.length > 0) {
+      showToast(draftValidation.errors[0], 'error');
       return;
     }
 
@@ -3767,6 +4042,7 @@
   async function initApp() {
     setupSettingsChips();
     setupLogicToggle();
+    setupRuleBuilderPreview();
     setupModalListeners();
 
     try {

@@ -3623,6 +3623,113 @@ input[type=number] {
   padding: 6px 12px;
 }
 
+.rule-plain-preview {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(155, 140, 255, 0.24);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(155, 140, 255, 0.09), rgba(155, 140, 255, 0.025));
+}
+
+.rule-plain-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+  color: var(--tg-hint);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.rule-plain-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rule-plain-actions .btn-link-action {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#rulePlainText {
+  margin: 0;
+  color: var(--tg-text);
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.45;
+}
+
+#rulePlainDetails {
+  display: block;
+  margin-top: 5px;
+  color: var(--tg-hint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.rule-validation-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.rule-validation-message {
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.rule-validation-message.error {
+  color: #ffaaa5;
+  background: rgba(248, 113, 113, 0.09);
+  border: 1px solid rgba(248, 113, 113, 0.22);
+}
+
+.rule-validation-message.warning {
+  color: #f6d38a;
+  background: rgba(245, 185, 66, 0.08);
+  border: 1px solid rgba(245, 185, 66, 0.2);
+}
+
+.rule-card-plain-summary {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-left: 2px solid rgba(155, 140, 255, 0.52);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: rgba(155, 140, 255, 0.055);
+}
+
+.rule-card-plain-summary span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--tg-hint);
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.rule-card-plain-summary p {
+  margin: 0;
+  color: var(--tg-text);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .rule-plain-preview-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 /* ==========================================================================
    Rule Settings Card & Chips (Facebook / Automation Platform Style)
    ========================================================================== */

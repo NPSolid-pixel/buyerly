@@ -24,6 +24,7 @@ from core.metrics import (
     normalize_runtime_rule,
     validate_public_rule_conditions,
     validate_runtime_rule,
+    validate_rule_set_compatibility,
 )
 from core.meta_tokens import resolve_account_access_token
 from core.ownership import assign_owner, entity_is_owned_by, owned_by, owned_by_ids
@@ -811,6 +812,23 @@ def _validated_condition_payloads(conditions: List[ConditionItem]) -> List[Dict[
     return normalized
 
 
+def _ensure_compatible_rule_set(rules: List[Dict[str, Any]]) -> None:
+    try:
+        validate_rule_set_compatibility(rules)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+def _ensure_compatible_presets(presets: List[RulePreset]) -> None:
+    snapshots = [_preset_snapshot(preset) for preset in presets]
+    if any(snapshot.get("needs_review") for snapshot in snapshots):
+        raise HTTPException(
+            status_code=400,
+            detail="В наборе есть небезопасное или устаревшее правило. Пересохраните его.",
+        )
+    _ensure_compatible_rule_set(snapshots)
+
+
 def _unique_preset_ids(preset_ids: List[int]) -> List[int]:
     return list(dict.fromkeys(preset_ids))
 
@@ -1181,6 +1199,7 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
                     active_rules[index] = updated_snapshot.copy()
                     changed = True
             if changed:
+                _ensure_compatible_rule_set(active_rules)
                 account.active_rules = json.dumps(active_rules)
 
         await session.commit()
@@ -1252,6 +1271,7 @@ async def create_rule_group(
 ):
     async with async_session_maker() as session:
         presets = await _get_owned_presets(session, user, payload.preset_ids)
+        _ensure_compatible_presets(presets)
         group = RuleGroup(
             owner_id=user.telegram_id,
             owner_user_id=user.id,
@@ -1288,6 +1308,7 @@ async def update_rule_group(
             raise HTTPException(status_code=404, detail="Группа правил не найдена.")
 
         presets = await _get_owned_presets(session, user, payload.preset_ids)
+        _ensure_compatible_presets(presets)
         group.name = _clean_rule_group_name(payload.name)
         group.description = payload.description.strip()
         await session.execute(delete(RuleGroupItem).where(RuleGroupItem.group_id == group.id))
@@ -1368,6 +1389,7 @@ async def assign_rule_to_account(
             raise HTTPException(status_code=400, detail="Это правило уже привязано к кабинету.")
             
         active_rules.append(new_rule)
+        _ensure_compatible_rule_set(active_rules)
         acc.active_rules = json.dumps(active_rules)
         acc.rules_enabled = True
         
@@ -1436,6 +1458,7 @@ async def assign_rule_group_to_account(
                 detail="В группе есть небезопасное или устаревшее правило. Пересохраните его перед назначением.",
             )
         active_rules.extend(new_snapshots)
+        _ensure_compatible_rule_set(active_rules)
         account.active_rules = json.dumps(active_rules)
         account.rules_enabled = bool(active_rules)
         await session.commit()
@@ -1511,6 +1534,9 @@ async def toggle_rules(account_id: str, user: TelegramUser = Depends(get_current
                 status_code=400,
                 detail="Сначала привяжите хотя бы одно правило к кабинету.",
             )
+
+        if not acc.rules_enabled:
+            _ensure_compatible_rule_set(active_rules)
 
         acc.rules_enabled = not acc.rules_enabled
         await session.commit()

@@ -6,7 +6,7 @@ instead of inventing local meanings for the same metric.
 
 from dataclasses import dataclass
 import math
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 
 LEGACY_METRIC_ALIASES = {
@@ -40,6 +40,13 @@ RULE_MAX_BUDGET = 10_000_000.0
 RULE_MAX_COOLDOWN_MINUTES = 10_080
 RULE_MAX_CHECK_INTERVAL_MINUTES = 1_440
 RULE_MAX_BUDGET_CHANGE_PERCENT = 100.0
+
+CONFLICTING_RULE_ACTIONS = frozenset(
+    {
+        frozenset({"turn_off", "turn_on"}),
+        frozenset({"increase_budget", "decrease_budget"}),
+    }
+)
 
 METRIC_LABELS = {
     "spend": "Спенд",
@@ -277,6 +284,191 @@ def validate_public_rule_conditions(conditions: Iterable[Mapping[str, Any]]) -> 
             raise ValueError("Rule value is outside the safe range")
 
 
+def _condition_signature(condition: Mapping[str, Any]) -> tuple[str, str, float, str]:
+    return (
+        canonical_rule_metric(condition.get("metric")),
+        str(condition.get("operator", "")),
+        float(condition.get("value", 0.0)),
+        str(condition.get("time_window", "today")),
+    )
+
+
+def _metric_context_label(metric: str, time_window: str) -> str:
+    metric_labels = {
+        "spend": "расход",
+        "cpl": "цена лида",
+        "cpreg": "цена регистрации",
+        "cpp": "цена покупки",
+        "leads": "количество лидов",
+        "registrations": "количество регистраций",
+        "purchases": "количество покупок",
+        "ctr": "кликабельность",
+        "cpc": "цена клика",
+    }
+    window_labels = {
+        "today": "сегодня",
+        "yesterday": "вчера",
+        "last_3d": "за последние 3 дня",
+        "last_7d": "за последние 7 дней",
+    }
+    return f"{metric_labels.get(metric, metric)} {window_labels.get(time_window, time_window)}"
+
+
+def _update_lower_bound(
+    current: Optional[tuple[float, bool]],
+    candidate: tuple[float, bool],
+) -> tuple[float, bool]:
+    if current is None or candidate[0] > current[0]:
+        return candidate
+    if candidate[0] < current[0]:
+        return current
+    return candidate[0], current[1] and candidate[1]
+
+
+def _update_upper_bound(
+    current: Optional[tuple[float, bool]],
+    candidate: tuple[float, bool],
+) -> tuple[float, bool]:
+    if current is None or candidate[0] < current[0]:
+        return candidate
+    if candidate[0] > current[0]:
+        return current
+    return candidate[0], current[1] and candidate[1]
+
+
+def _and_group_is_empty(conditions: Sequence[Mapping[str, Any]]) -> bool:
+    lower: Optional[tuple[float, bool]] = None
+    upper: Optional[tuple[float, bool]] = None
+    for condition in conditions:
+        operator = str(condition.get("operator", ""))
+        value = float(condition.get("value", 0.0))
+        if operator == "gt":
+            lower = _update_lower_bound(lower, (value, False))
+        elif operator == "gte":
+            lower = _update_lower_bound(lower, (value, True))
+        elif operator == "lt":
+            upper = _update_upper_bound(upper, (value, False))
+        elif operator == "lte":
+            upper = _update_upper_bound(upper, (value, True))
+        elif operator == "eq":
+            lower = _update_lower_bound(lower, (value, True))
+            upper = _update_upper_bound(upper, (value, True))
+
+    if lower is None or upper is None:
+        return False
+    if lower[0] > upper[0]:
+        return True
+    return lower[0] == upper[0] and not (lower[1] and upper[1])
+
+
+def _or_group_is_always_true(conditions: Sequence[Mapping[str, Any]]) -> bool:
+    """Detect direct complementary bounds such as x >= 5 OR x < 5."""
+
+    bounds = {
+        (str(condition.get("operator", "")), float(condition.get("value", 0.0)))
+        for condition in conditions
+    }
+    return any(
+        (("gte", value) in bounds and ("lt", value) in bounds)
+        or (("gt", value) in bounds and ("lte", value) in bounds)
+        for _, value in bounds
+    )
+
+
+def _stop_condition_requires_deep_conversion(condition: Mapping[str, Any]) -> bool:
+    metric = canonical_rule_metric(condition.get("metric"))
+    if metric in {"cpreg", "cpp"}:
+        return True
+    if metric not in {"registrations", "purchases"}:
+        return False
+    operator = str(condition.get("operator", ""))
+    value = float(condition.get("value", 0.0))
+    return (
+        operator == "gt"
+        or (operator in {"gte", "eq"} and value > 0)
+    )
+
+
+def validate_rule_semantics(
+    conditions: Sequence[Mapping[str, Any]],
+    logic: str,
+    action: str,
+) -> None:
+    """Reject rules that can never work or that are unconditionally true."""
+
+    signatures = [_condition_signature(condition) for condition in conditions]
+    if len(signatures) != len(set(signatures)):
+        raise ValueError("Одно и то же условие добавлено в правило несколько раз.")
+
+    count_metrics = {"leads", "registrations", "purchases"}
+    for condition in conditions:
+        metric = canonical_rule_metric(condition.get("metric"))
+        value = float(condition.get("value", 0.0))
+        if metric in count_metrics and not value.is_integer():
+            raise ValueError("Лиды, регистрации и покупки указываются только целыми числами.")
+        if action == "turn_off" and _stop_condition_requires_deep_conversion(condition):
+            raise ValueError(
+                "Это условие не может выключить группу объявлений: регистрация или покупка "
+                "всегда защищает её от выключения. Используйте уведомление или правило включения."
+            )
+
+    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for condition in conditions:
+        key = (
+            canonical_rule_metric(condition.get("metric")),
+            str(condition.get("time_window", "today")),
+        )
+        grouped.setdefault(key, []).append(condition)
+
+    for (metric, time_window), metric_conditions in grouped.items():
+        label = _metric_context_label(metric, time_window)
+        if logic == "and" and _and_group_is_empty(metric_conditions):
+            raise ValueError(
+                f"Условия противоречат друг другу: «{label}» не может попасть "
+                "в указанный диапазон."
+            )
+        if logic == "or" and _or_group_is_always_true(metric_conditions):
+            raise ValueError(
+                f"Правило будет срабатывать всегда: условия для «{label}» "
+                "покрывают все возможные значения."
+            )
+
+
+def _rule_trigger_signature(rule: Mapping[str, Any]) -> tuple[str, tuple[tuple[str, str, float, str], ...]]:
+    conditions = rule.get("conditions", [])
+    if not isinstance(conditions, list):
+        conditions = []
+    return (
+        str(rule.get("logic", rule.get("condition_logic", "and"))),
+        tuple(sorted(_condition_signature(condition) for condition in conditions)),
+    )
+
+
+def validate_rule_set_compatibility(rules: Sequence[Mapping[str, Any]]) -> None:
+    """Reject exact opposite actions driven by the same trigger."""
+
+    usable_rules = [
+        rule
+        for rule in rules
+        if isinstance(rule, Mapping)
+        and rule.get("enabled", True) is not False
+        and rule.get("needs_review", False) is not True
+    ]
+    for index, first in enumerate(usable_rules):
+        for second in usable_rules[index + 1:]:
+            actions = frozenset({str(first.get("action", "")), str(second.get("action", ""))})
+            if actions not in CONFLICTING_RULE_ACTIONS:
+                continue
+            if _rule_trigger_signature(first) != _rule_trigger_signature(second):
+                continue
+            first_name = str(first.get("name") or "Первое правило")
+            second_name = str(second.get("name") or "Второе правило")
+            raise ValueError(
+                f"Правила «{first_name}» и «{second_name}» противоречат друг другу: "
+                "у них одинаковые условия, но противоположные действия."
+            )
+
+
 def validate_runtime_rule(rule: Mapping[str, Any]) -> None:
     """Fail closed for stored snapshots before RuleEngine can choose an action."""
 
@@ -292,6 +484,7 @@ def validate_runtime_rule(rule: Mapping[str, Any]) -> None:
     if not isinstance(conditions, list) or not 1 <= len(conditions) <= RULE_MAX_CONDITIONS:
         raise ValueError("Rule must contain between 1 and 20 conditions")
     validate_public_rule_conditions(conditions)
+    validate_rule_semantics(conditions, logic, action)
 
     def safe_number(key: str, default: float = 0.0) -> float:
         try:

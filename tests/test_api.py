@@ -487,6 +487,20 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     "budget_max_daily": 0,
                 },
                 {"name": "Negative threshold", "conditions": [{**base_condition[0], "value": -1}]},
+                {
+                    "name": "Impossible range",
+                    "conditions": [
+                        {"metric": "spend", "operator": "gte", "value": 10, "time_window": "today"},
+                        {"metric": "spend", "operator": "lt", "value": 5, "time_window": "today"},
+                    ],
+                },
+                {
+                    "name": "Protected conversion",
+                    "action": "turn_off",
+                    "conditions": [
+                        {"metric": "registrations", "operator": "gte", "value": 1, "time_window": "today"}
+                    ],
+                },
             ]
             for invalid_payload in invalid_payloads:
                 invalid_response = await client.post(
@@ -561,6 +575,54 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(d_resp.status_code, 200)
             self.assertEqual(d_resp.json()["active_rules"], [])
             self.assertFalse(d_resp.json()["rules_enabled"])
+
+    async def test_account_rejects_rules_with_opposite_actions_and_same_trigger(self):
+        init_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {init_data}"}
+        condition = [
+            {"metric": "spend", "operator": "gte", "value": 10, "time_window": "today"}
+        ]
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            stop = await client.post(
+                "/api/presets",
+                headers=headers,
+                json={"name": "Выключить", "action": "turn_off", "conditions": condition},
+            )
+            start = await client.post(
+                "/api/presets",
+                headers=headers,
+                json={"name": "Включить", "action": "turn_on", "conditions": condition},
+            )
+            self.assertEqual(stop.status_code, 200)
+            self.assertEqual(start.status_code, 200)
+
+            first_assignment = await client.post(
+                "/api/accounts/act_1018756607700064/assign-rule",
+                headers=headers,
+                json={"preset_id": stop.json()["id"]},
+            )
+            conflict = await client.post(
+                "/api/accounts/act_1018756607700064/assign-rule",
+                headers=headers,
+                json={"preset_id": start.json()["id"]},
+            )
+
+        self.assertEqual(first_assignment.status_code, 200)
+        self.assertEqual(conflict.status_code, 409)
+        self.assertIn("противоречат", conflict.json()["detail"])
+
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_1018756607700064")
+                )
+            ).scalar_one()
+        self.assertEqual(len(json.loads(account.active_rules)), 1)
 
     async def test_rule_groups_are_isolated_editable_and_assigned_atomically(self):
         async with self.test_session_maker() as session:

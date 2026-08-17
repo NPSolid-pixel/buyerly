@@ -282,7 +282,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.19.0', self.index)
+        self.assertIn('v=9.20.0', self.index)
 
     def test_money_is_currency_aware_and_mixed_totals_are_separated(self):
         for contract in (
@@ -312,6 +312,28 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         self.assertNotIn('<option value="cpa"', self.script)
         self.assertNotIn('<option value="cpr"', self.script)
+
+    def test_rule_builder_explains_and_validates_rules_in_plain_russian(self):
+        for contract in (
+            'id="rulePlainPreview"',
+            'id="rulePlainText"',
+            'id="ruleValidationMessages"',
+            'id="btnCopyRulePlainText"',
+            'id="btnUseRulePlainName"',
+            'Правило простым языком',
+            'validateRuleDraft',
+            'buildPlainRuleTextFromValues',
+            'renderRuleDraftSummary',
+            'Выключить группу объявлений',
+        ):
+            self.assertIn(contract, self.index + self.script)
+
+        for style_contract in (
+            '.rule-plain-preview',
+            '.rule-validation-message.error',
+            '.rule-card-plain-summary',
+        ):
+            self.assertIn(style_contract, self.styles)
 
     def test_account_cards_separate_meta_automation_and_rule_state(self):
         for contract in (

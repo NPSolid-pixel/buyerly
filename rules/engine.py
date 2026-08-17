@@ -8,6 +8,7 @@ from core.metrics import (
     compare_metric,
     cost_per_event,
     rule_metric_reading,
+    validate_rule_set_compatibility,
     validate_runtime_rule,
 )
 
@@ -123,6 +124,11 @@ class RuleEngine:
 
         if not active_rules or not isinstance(active_rules, list) or len(active_rules) == 0:
             return noop("Правила не настроены.")
+
+        try:
+            validate_rule_set_compatibility(active_rules)
+        except (TypeError, ValueError) as error:
+            return noop(f"Автоматика остановлена: {error}")
 
         def get_action_priority(action: RuleAction) -> int:
             priorities = {
