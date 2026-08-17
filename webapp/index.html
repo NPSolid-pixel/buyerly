@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.14.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.15.0">
 </head>
 
 <body>
@@ -210,9 +210,14 @@
 
         <!-- Rules Stats Banner -->
         <div class="rules-stats-bar" id="rulesStatsBar">
-          <div class="stat-pill"><span class="status-dot dot-success"></span> <span id="rulesActiveCount">0</span> активных правил</div>
+          <div class="stat-pill"><span class="status-dot dot-success"></span> <span id="rulesActiveCount">0</span> правил в библиотеке</div>
           <div class="stat-pill"><span id="rulesGroupsCount">0</span> групп</div>
           <div class="stat-pill"><span id="rulesLinkedAccsCount">0</span> привязанных кабинетов</div>
+        </div>
+
+        <div class="rules-examples-note">
+          <b>Готовые примеры не включают автоматику сами.</b>
+          Отредактируйте пороги под свою воронку и назначьте правило или группу нужному кабинету вручную. Любой пример можно удалить — повторно он не появится.
         </div>
 
         <section id="ruleGroupsSection" class="rule-groups-section hidden">
@@ -1208,6 +1213,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.14.0"></script>
+  <script src="/static/js/app.js?v=9.15.0"></script>
 </body>
 </html>

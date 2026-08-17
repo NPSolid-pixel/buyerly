@@ -303,8 +303,8 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(accounts.status_code, 200)
         self.assertEqual(len(accounts.json()), 1)
-        self.assertEqual([item["id"] for item in presets.json()], [preset_id])
-        self.assertEqual(groups.json()[0]["name"], "Stable group")
+        self.assertIn(preset_id, [item["id"] for item in presets.json()])
+        self.assertIn("Stable group", [item["name"] for item in groups.json()])
         self.assertEqual(view.json()["view_mode"], "traffic")
 
         async with self.test_session_maker() as session:
@@ -538,8 +538,11 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 headers=admin_headers,
                 json={"name": "Hijack", "preset_ids": [foreign_id]},
             )
-            self.assertEqual(len(buyer_list.json()), 1)
-            self.assertEqual(admin_list.json(), [])
+            self.assertIn(group_id, [item["id"] for item in buyer_list.json()])
+            self.assertEqual(
+                len([item for item in admin_list.json() if item["name"].startswith("Пример ·")]),
+                2,
+            )
             self.assertEqual(forbidden_update.status_code, 404)
 
             single_assign = await client.post(

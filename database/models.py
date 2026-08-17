@@ -91,6 +91,27 @@ class RuleGroupItem(Base):
         return f"<RuleGroupItem(group={self.group_id}, preset={self.preset_id}, position={self.position})>"
 
 
+class RuleExamplesBootstrap(Base):
+    """One-time marker so deleted examples are never silently recreated."""
+
+    __tablename__ = "rule_examples_bootstrap"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id = Column(
+        Integer,
+        ForeignKey("telegram_users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    owner_id = Column(String, default="", nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<RuleExamplesBootstrap(owner_user_id={self.owner_user_id}, version={self.version})>"
+
+
 class Account(Base):
     __tablename__ = "accounts"
 

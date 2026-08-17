@@ -26,6 +26,7 @@ from core.metrics import (
     validate_runtime_rule,
 )
 from core.ownership import assign_owner, entity_is_owned_by, owned_by, owned_by_ids
+from core.rule_examples import ensure_rule_examples
 from database.db import async_session_maker, hash_password, password_needs_rehash, verify_password
 import json
 from database.models import (
@@ -987,6 +988,7 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
 @router.get("/presets", response_model=List[RulePresetItem])
 async def list_presets(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
+        await ensure_rule_examples(session, user)
         stmt = select(RulePreset).where(owned_by(RulePreset, user)).order_by(RulePreset.id.desc())
         res = await session.execute(stmt)
         presets = res.scalars().all()
@@ -1116,6 +1118,7 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
 @router.get("/rule-groups", response_model=List[RuleGroupResponse])
 async def list_rule_groups(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
+        await ensure_rule_examples(session, user)
         groups = (
             await session.execute(
                 select(RuleGroup)
