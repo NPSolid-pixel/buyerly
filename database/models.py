@@ -40,6 +40,12 @@ class AppSettings(Base):
         nullable=False,
         doc="Максимальный интервал проверки критических STOP-правил (мин)",
     )
+    stop_confirmation_minutes = Column(
+        Integer,
+        default=10,
+        nullable=False,
+        doc="Сколько минут STOP-условие должно подтверждаться до выключения ad set",
+    )
     inventory_cache_minutes = Column(
         Integer,
         default=5,

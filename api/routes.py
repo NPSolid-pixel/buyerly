@@ -286,6 +286,7 @@ class AutomationSettingsUpdateRequest(BaseModel):
     current_password: SecretStr
     poll_interval_minutes: int = Field(ge=5, le=120)
     critical_rule_interval_minutes: int = Field(ge=1, le=15)
+    stop_confirmation_minutes: int = Field(default=10, ge=0, le=60)
     inventory_cache_minutes: int = Field(ge=1, le=30)
     account_health_interval_minutes: int = Field(ge=5, le=120)
     max_concurrent_accounts: int = Field(ge=1, le=5)
@@ -2157,6 +2158,9 @@ async def get_settings(user: TelegramUser = Depends(get_current_user)):
             "critical_rule_interval_minutes": (
                 app_settings.critical_rule_interval_minutes if app_settings else 2
             ),
+            "stop_confirmation_minutes": (
+                app_settings.stop_confirmation_minutes if app_settings else 10
+            ),
             "inventory_cache_minutes": app_settings.inventory_cache_minutes if app_settings else 5,
             "account_health_interval_minutes": (
                 app_settings.account_health_interval_minutes if app_settings else 15
@@ -2204,6 +2208,7 @@ async def update_automation_settings(
         for field_name in (
             "poll_interval_minutes",
             "critical_rule_interval_minutes",
+            "stop_confirmation_minutes",
             "inventory_cache_minutes",
             "account_health_interval_minutes",
             "max_concurrent_accounts",

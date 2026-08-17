@@ -105,6 +105,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="btnSaveAutomationSettings"',
             'id="automationRuntimeBadge"',
             'id="automationUsagePercent"',
+            'id="settingStopConfirmation"',
+            'id="funnelProtectionNotice"',
         ):
             self.assertIn(contract, self.index)
 
@@ -113,6 +115,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             "window.saveAutomationSettings",
             "apiRequest('/api/settings/automation'",
             "current_password: password",
+            "stop_confirmation_minutes: readNumber('settingStopConfirmation')",
         ):
             self.assertIn(contract, self.script)
 

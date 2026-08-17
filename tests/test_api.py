@@ -1234,6 +1234,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(s_resp.status_code, 200)
             self.assertEqual(s_resp.json()["poll_interval_minutes"], 15)
             self.assertEqual(s_resp.json()["critical_rule_interval_minutes"], 2)
+            self.assertEqual(s_resp.json()["stop_confirmation_minutes"], 10)
             self.assertEqual(s_resp.json()["usage_hard_limit_percent"], 80)
 
             missing_password = await client.post(
@@ -1259,6 +1260,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     "current_password": "admin-password",
                     "poll_interval_minutes": 15,
                     "critical_rule_interval_minutes": 1,
+                    "stop_confirmation_minutes": 7,
                     "inventory_cache_minutes": 5,
                     "account_health_interval_minutes": 30,
                     "max_concurrent_accounts": 2,
@@ -1276,6 +1278,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     "current_password": "admin-password",
                     "poll_interval_minutes": 15,
                     "critical_rule_interval_minutes": 1,
+                    "stop_confirmation_minutes": 7,
                     "inventory_cache_minutes": 5,
                     "account_health_interval_minutes": 30,
                     "max_concurrent_accounts": 2,
@@ -1295,6 +1298,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(automation_resp.status_code, 200)
         self.assertEqual(invalid_thresholds.status_code, 422)
         self.assertEqual(refreshed.json()["critical_rule_interval_minutes"], 1)
+        self.assertEqual(refreshed.json()["stop_confirmation_minutes"], 7)
         self.assertEqual(refreshed.json()["max_concurrent_actions"], 4)
         self.assertEqual(refreshed.json()["usage_hard_limit_percent"], 78)
 

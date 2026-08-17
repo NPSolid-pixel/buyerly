@@ -844,6 +844,19 @@
               </label>
 
               <label class="automation-setting-field">
+                <span>Подтверждение перед STOP</span>
+                <small>Условие должно сохраняться это время; Meta успевает доставить регистрацию или покупку</small>
+                <select id="settingStopConfirmation" class="form-select dark-select">
+                  <option value="0">Без ожидания</option>
+                  <option value="3">3 минуты</option>
+                  <option value="5">5 минут</option>
+                  <option value="10">10 минут</option>
+                  <option value="15">15 минут</option>
+                  <option value="30">30 минут</option>
+                </select>
+              </label>
+
+              <label class="automation-setting-field">
                 <span>Кэш списка ad set</span>
                 <small>Как часто повторно получать статусы и структуру кабинета</small>
                 <select id="settingInventoryCache" class="form-select dark-select">
@@ -1049,6 +1062,11 @@
                 </div>
               </div>
               <span class="input-hint" style="font-size: 11px; margin-top: 4px;">Все денежные пороги применяются в валюте конкретного кабинета. Потолок защищает от чрезмерного увеличения.</span>
+            </div>
+
+            <div id="funnelProtectionNotice" class="form-group" style="margin-bottom: 12px; background: rgba(52, 211, 153, 0.06); padding: 12px; border-radius: 7px; border: 1px solid rgba(52, 211, 153, 0.2);">
+              <div style="font-size: 12px; font-weight: 650; color: var(--color-success);">Защита воронки включена</div>
+              <span class="input-hint" style="font-size: 11px; margin-top: 4px;">Любой STOP не выполнится, если Meta уже показывает хотя бы одну регистрацию или покупку. Перед выключением нулевая воронка должна повторно подтвердиться.</span>
             </div>
 
             <!-- 3. Conditions Builder -->

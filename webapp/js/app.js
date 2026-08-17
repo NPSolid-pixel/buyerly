@@ -123,6 +123,7 @@
     settings: {
       poll_interval_minutes: 10,
       critical_rule_interval_minutes: 2,
+      stop_confirmation_minutes: 10,
       inventory_cache_minutes: 5,
       account_health_interval_minutes: 15,
       max_concurrent_accounts: 3,
@@ -1320,11 +1321,13 @@
 
   function handleActionChange(action) {
     const budgetSection = document.getElementById('budgetConfigSection');
+    const funnelProtectionNotice = document.getElementById('funnelProtectionNotice');
     if (action === 'increase_budget' || action === 'decrease_budget') {
       budgetSection?.classList.remove('hidden');
     } else {
       budgetSection?.classList.add('hidden');
     }
+    funnelProtectionNotice?.classList.toggle('hidden', action !== 'turn_off');
   }
 
   document.getElementById('ruleActionSelect')?.addEventListener('change', (e) => {
@@ -3304,6 +3307,7 @@
       const fieldValues = {
         settingBackgroundInterval: data.poll_interval_minutes,
         settingCriticalRuleInterval: data.critical_rule_interval_minutes,
+        settingStopConfirmation: data.stop_confirmation_minutes,
         settingInventoryCache: data.inventory_cache_minutes,
         settingAccountHealthInterval: data.account_health_interval_minutes,
         settingConcurrentAccounts: data.max_concurrent_accounts,
@@ -3382,6 +3386,7 @@
       current_password: password,
       poll_interval_minutes: readNumber('settingBackgroundInterval'),
       critical_rule_interval_minutes: readNumber('settingCriticalRuleInterval'),
+      stop_confirmation_minutes: readNumber('settingStopConfirmation'),
       inventory_cache_minutes: readNumber('settingInventoryCache'),
       account_health_interval_minutes: readNumber('settingAccountHealthInterval'),
       max_concurrent_accounts: readNumber('settingConcurrentAccounts'),

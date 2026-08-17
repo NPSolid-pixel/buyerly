@@ -401,6 +401,163 @@ class MonitoringWorker:
         await session.commit()
         return True, "claimed", state
 
+    async def _confirm_stop_evaluation(
+        self,
+        session,
+        account: Account,
+        evaluation: RuleEvaluationResult,
+        *,
+        now: float,
+        confirmation_seconds: int,
+        max_gap_seconds: int,
+    ) -> tuple[bool, str, Optional[RuleExecutionState]]:
+        """Require a durable sequence of matching reads before a destructive STOP."""
+
+        if confirmation_seconds <= 0:
+            return True, "disabled", None
+
+        execution_key, rule_key = self._execution_key(account, evaluation)
+        query = select(RuleExecutionState).where(
+            RuleExecutionState.execution_key == execution_key
+        )
+        state = (await session.execute(query.with_for_update())).scalar_one_or_none()
+        if state is None:
+            state = RuleExecutionState(
+                execution_key=execution_key,
+                owner_id=str(account.owner_id or ""),
+                owner_user_id=account.owner_user_id,
+                account_id=str(account.account_id),
+                adset_id=str(evaluation.adset_id),
+                rule_key=rule_key,
+                action=evaluation.action.value,
+            )
+            session.add(state)
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+            state = (await session.execute(query.with_for_update())).scalar_one()
+
+        # Let the normal claim path reconcile a Meta mutation that may have
+        # completed immediately before a worker restart.
+        if state.status == "PENDING":
+            await session.commit()
+            return True, "execution_pending", state
+
+        details = self._json_dict(state.details)
+        try:
+            first_seen_at = float(details.get("first_seen_at", 0.0) or 0.0)
+            last_seen_at = float(details.get("last_seen_at", 0.0) or 0.0)
+            observations = int(details.get("observations", 0) or 0)
+        except (TypeError, ValueError):
+            first_seen_at = 0.0
+            last_seen_at = 0.0
+            observations = 0
+
+        is_continuous = (
+            state.status == "STOP_CONFIRMING"
+            and first_seen_at > 0
+            and last_seen_at > 0
+            and now >= last_seen_at
+            and now - last_seen_at <= max(1, max_gap_seconds)
+        )
+        if not is_continuous:
+            state.status = "STOP_CONFIRMING"
+            state.owner_id = str(account.owner_id or "")
+            state.owner_user_id = account.owner_user_id
+            state.correlation_id = self._current_cycle_id
+            state.last_attempt_at = now
+            state.before_state = json.dumps(
+                {"status": "ACTIVE"}, ensure_ascii=False, separators=(",", ":")
+            )
+            state.after_state = json.dumps(
+                {"status": "PAUSED"}, ensure_ascii=False, separators=(",", ":")
+            )
+            state.details = json.dumps(
+                {
+                    "first_seen_at": now,
+                    "last_seen_at": now,
+                    "observations": 1,
+                    "confirmation_seconds": confirmation_seconds,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            await session.commit()
+            return False, "started", state
+
+        observations += 1
+        state.last_attempt_at = now
+        state.details = json.dumps(
+            {
+                "first_seen_at": first_seen_at,
+                "last_seen_at": now,
+                "observations": observations,
+                "confirmation_seconds": confirmation_seconds,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if now - first_seen_at < confirmation_seconds:
+            await session.commit()
+            return False, "waiting", state
+
+        state.status = "IDLE"
+        state.details = json.dumps(
+            {
+                "confirmed_at": now,
+                "first_seen_at": first_seen_at,
+                "observations": observations,
+                "confirmation_seconds": confirmation_seconds,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        await session.commit()
+        return True, "confirmed", state
+
+    async def _reset_stop_confirmations(
+        self,
+        session,
+        account: Account,
+        adset_id: str,
+        *,
+        keep_execution_key: Optional[str] = None,
+        now: float,
+    ) -> int:
+        """Cancel stale STOP candidates when a scheduled STOP check no longer matches."""
+
+        rows = (
+            await session.execute(
+                select(RuleExecutionState)
+                .where(
+                    RuleExecutionState.account_id == str(account.account_id),
+                    RuleExecutionState.adset_id == str(adset_id),
+                    RuleExecutionState.action == RuleAction.STOP.value,
+                    RuleExecutionState.status == "STOP_CONFIRMING",
+                )
+                .with_for_update()
+            )
+        ).scalars().all()
+        reset_count = 0
+        for state in rows:
+            if keep_execution_key and state.execution_key == keep_execution_key:
+                continue
+            state.status = "IDLE"
+            state.correlation_id = self._current_cycle_id
+            state.details = json.dumps(
+                {
+                    "cancelled_at": now,
+                    "reason": "stop_condition_no_longer_matched",
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            reset_count += 1
+        if reset_count:
+            await session.commit()
+        return reset_count
+
     @staticmethod
     def _finish_execution(
         state: RuleExecutionState,
@@ -645,6 +802,7 @@ class MonitoringWorker:
             "budgets_changed": 0,
             "actions_skipped": 0,
             "actions_reconciled": 0,
+            "stop_confirmations_waiting": 0,
             "proposals_sent": 0,
             "errors": []
         }
@@ -681,6 +839,13 @@ class MonitoringWorker:
             critical_interval = self._interval_minutes(
                 app_settings.critical_rule_interval_minutes if app_settings else 2,
                 2,
+            )
+            stop_confirmation_minutes = max(
+                0,
+                min(
+                    60,
+                    int(app_settings.stop_confirmation_minutes if app_settings else 10),
+                ),
             )
             health_interval = self._interval_minutes(
                 app_settings.account_health_interval_minutes if app_settings else 15,
@@ -894,6 +1059,10 @@ class MonitoringWorker:
                     if not acc.rules_enabled or not due_rules:
                         continue
 
+                    stop_rules_due = any(
+                        self._is_critical_stop_rule(rule) for rule in due_rules
+                    )
+
                     for adset in adsets:
                         a_id = str(adset["adset_id"])
                         current_adset_windows = {
@@ -910,7 +1079,26 @@ class MonitoringWorker:
                         
                         should_notify_tg = eval_res.notify_tg
                         if eval_res.action == RuleAction.NOOP:
+                            if stop_rules_due:
+                                await self._reset_stop_confirmations(
+                                    session,
+                                    acc,
+                                    a_id,
+                                    now=now,
+                                )
                             continue
+
+                        if stop_rules_due:
+                            keep_execution_key = None
+                            if eval_res.action == RuleAction.STOP:
+                                keep_execution_key, _ = self._execution_key(acc, eval_res)
+                            await self._reset_stop_confirmations(
+                                session,
+                                acc,
+                                a_id,
+                                keep_execution_key=keep_execution_key,
+                                now=now,
+                            )
 
                         current_budget = float(adset.get("daily_budget", 0.0) or 0.0)
                         observed_state: dict[str, Any]
@@ -943,6 +1131,42 @@ class MonitoringWorker:
                         else:
                             observed_state = {"status": adset.get("status", "UNKNOWN")}
                             desired_state = dict(observed_state)
+
+                        if eval_res.action == RuleAction.STOP:
+                            confirmed, confirmation_reason, confirmation_state = (
+                                await self._confirm_stop_evaluation(
+                                    session,
+                                    acc,
+                                    eval_res,
+                                    now=now,
+                                    confirmation_seconds=stop_confirmation_minutes * 60,
+                                    max_gap_seconds=max(180, critical_interval * 60 * 3),
+                                )
+                            )
+                            if not confirmed:
+                                stats["actions_skipped"] += 1
+                                stats["stop_confirmations_waiting"] += 1
+                                if confirmation_reason == "started" and confirmation_state:
+                                    await self._persist_audit_event(
+                                        session,
+                                        acc,
+                                        event_type="STOP_CONFIRMATION_STARTED",
+                                        status="WAITING",
+                                        category="RULE_ENGINE",
+                                        evaluation=eval_res,
+                                        action=RuleAction.STOP.value,
+                                        message=(
+                                            "STOP-кандидат найден. Buyerly повторно проверит "
+                                            f"метрики в течение {stop_confirmation_minutes} мин."
+                                        ),
+                                        before_state=observed_state,
+                                        after_state=desired_state,
+                                        details={
+                                            "confirmation_minutes": stop_confirmation_minutes,
+                                            "execution_key": confirmation_state.execution_key,
+                                        },
+                                    )
+                                continue
 
                         claimed, claim_reason, execution_state = await self._claim_execution(
                             session,
