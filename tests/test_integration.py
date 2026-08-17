@@ -6,7 +6,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from database.db import Base
-from database.models import Account, AppSettings, AuditEvent, StoppedAdSet
+from database.models import (
+    Account,
+    AppSettings,
+    AuditEvent,
+    AutomationScheduleState,
+    RuleExecutionState,
+    StoppedAdSet,
+)
 from rules.engine import RuleEngine, RuleAction
 from scheduler.worker import MonitoringWorker
 from meta_api.client import MetaClient
@@ -142,11 +149,16 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         """Пользовательское правило: Спенд >= $10 И Лиды = 0 → STOP."""
         mock_meta = MockMetaClient()
         sent_alerts = []
+        now = [10_000.0]
 
         async def mock_notifier(**kwargs):
             sent_alerts.append(kwargs)
 
-        worker = MonitoringWorker(meta_client=mock_meta, telegram_notifier=mock_notifier)
+        worker = MonitoringWorker(
+            meta_client=mock_meta,
+            telegram_notifier=mock_notifier,
+            clock=lambda: now[0],
+        )
 
         # adset_1: spend=$15.50, leads=0 → match → STOP
         # adset_2: spend=$1.00, leads=0 → spend < $10 → NOOP
@@ -184,7 +196,8 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         mock_meta.adsets_state["adset_1"]["status"] = "ACTIVE"
         mock_meta.adsets_state["adset_1"]["effective_status"] = "ACTIVE"
         mock_meta.adsets_state["adset_1"]["spend"] = 20.0
-        second_worker = MonitoringWorker(meta_client=mock_meta)
+        now[0] += 10 * 60
+        second_worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
         await second_worker.run_cycle()
 
         async with self.test_session_maker() as session:
@@ -297,12 +310,14 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["rules_checked"], 1)
 
         now[0] += 4 * 60
-        early = await worker.run_cycle()
+        # A new worker instance must read the same persisted schedule state.
+        restarted_worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+        early = await restarted_worker.run_cycle()
         self.assertEqual(early["accounts_skipped"], 1)
         self.assertEqual(len(mock_meta.requested_windows), initial_request_count)
 
         now[0] += 60
-        due = await worker.run_cycle()
+        due = await restarted_worker.run_cycle()
         self.assertEqual(due["rules_checked"], 1)
         self.assertGreater(len(mock_meta.requested_windows), initial_request_count)
 
@@ -339,12 +354,116 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         now = [2_000.0]
         mock_meta = MockMetaClient()
         worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
-        worker._rule_last_checked[f"{self.account_id}:6"] = now[0]
+        async with self.test_session_maker() as session:
+            session.add(
+                AutomationScheduleState(
+                    state_key=f"rule:{self.account_id}:{self.account_id}:6",
+                    owner_id="123456789",
+                    account_id=self.account_id,
+                    rule_key=f"{self.account_id}:6",
+                    last_checked_at=now[0],
+                )
+            )
+            await session.commit()
 
         stats = await worker.run_cycle()
 
         self.assertEqual(stats["rules_checked"], 1)
         self.assertEqual(mock_meta.status_changes, [])
+
+    async def test_budget_action_is_not_repeated_after_worker_restart(self):
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            account.active_rules = json.dumps([
+                {
+                    "preset_id": 22,
+                    "name": "Durable scale",
+                    "action": "increase_budget",
+                    "conditions": [{"metric": "leads", "operator": "gte", "value": 1.0}],
+                    "logic": "and",
+                    "check_interval": 5,
+                    "cooldown_minutes": 30,
+                    "notify_tg": False,
+                    "budget_change_percent": 20.0,
+                    "budget_max_daily": 100.0,
+                }
+            ])
+            await session.commit()
+
+        now = [5_000.0]
+        mock_meta = MockMetaClient()
+        mock_meta.adsets_state["adset_2"]["leads"] = 2
+        first_worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+        first = await first_worker.run_cycle()
+        self.assertEqual(first["budgets_changed"], 1)
+        self.assertEqual(len(mock_meta.budget_changes), 1)
+
+        now[0] += 5 * 60
+        restarted_worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+        second = await restarted_worker.run_cycle()
+
+        self.assertEqual(second["budgets_changed"], 0)
+        self.assertGreaterEqual(second["actions_skipped"], 1)
+        self.assertEqual(len(mock_meta.budget_changes), 1)
+        async with self.test_session_maker() as session:
+            execution = (await session.execute(select(RuleExecutionState))).scalars().all()
+            self.assertTrue(any(row.status == "SUCCESS" for row in execution))
+
+    async def test_pending_budget_action_is_reconciled_from_meta_state(self):
+        now = [8_000.0]
+        mock_meta = MockMetaClient()
+        mock_meta.adsets_state["adset_2"]["leads"] = 2
+        mock_meta.adsets_state["adset_2"]["daily_budget"] = 60.0
+
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            account.active_rules = json.dumps([
+                {
+                    "preset_id": 23,
+                    "name": "Reconcile scale",
+                    "action": "increase_budget",
+                    "conditions": [{"metric": "leads", "operator": "gte", "value": 1.0}],
+                    "logic": "and",
+                    "check_interval": 5,
+                    "cooldown_minutes": 30,
+                    "notify_tg": False,
+                    "budget_change_percent": 20.0,
+                    "budget_max_daily": 100.0,
+                }
+            ])
+            evaluation = RuleEngine.evaluate(mock_meta.adsets_state["adset_2"], account)
+            execution_key, rule_key = MonitoringWorker._execution_key(account, evaluation)
+            session.add(
+                RuleExecutionState(
+                    execution_key=execution_key,
+                    owner_id=account.owner_id,
+                    account_id=account.account_id,
+                    adset_id="adset_2",
+                    rule_key=rule_key,
+                    action=RuleAction.INCREASE_BUDGET.value,
+                    status="PENDING",
+                    correlation_id="crashed-cycle",
+                    last_attempt_at=now[0] - 60,
+                    before_state='{"daily_budget":50.0}',
+                    after_state='{"daily_budget":60.0}',
+                )
+            )
+            await session.commit()
+
+        restarted_worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+        stats = await restarted_worker.run_cycle()
+
+        self.assertEqual(stats["budgets_changed"], 0)
+        self.assertEqual(stats["actions_reconciled"], 1)
+        self.assertEqual(mock_meta.budget_changes, [])
+        async with self.test_session_maker() as session:
+            state = (await session.execute(select(RuleExecutionState))).scalar_one()
+            self.assertEqual(state.status, "SUCCESS")
+            self.assertEqual(json.loads(state.details)["reconciled_after_restart"], True)
 
     async def test_budget_increase_action(self):
         """Правило: CPL < $5 И Лиды >= 2 → увеличить бюджет на 20%, потолок $100."""

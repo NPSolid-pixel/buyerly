@@ -231,3 +231,40 @@ class AuditEvent(Base):
             f"<AuditEvent(type='{self.event_type}', account='{self.account_id}', "
             f"status='{self.status}', time='{self.created_at}')>"
         )
+
+
+class AutomationScheduleState(Base):
+    """Durable worker schedule state that survives restart and deploy."""
+
+    __tablename__ = "automation_schedule_states"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    state_key = Column(String, unique=True, nullable=False, index=True)
+    owner_id = Column(String, default="", nullable=False, index=True)
+    account_id = Column(String, default="", nullable=False, index=True)
+    rule_key = Column(String, default="", nullable=False, index=True)
+    last_checked_at = Column(Float, default=0.0, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class RuleExecutionState(Base):
+    """One durable execution slot per account/ad set/rule/action combination."""
+
+    __tablename__ = "rule_execution_states"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    execution_key = Column(String, unique=True, nullable=False, index=True)
+    owner_id = Column(String, default="", nullable=False, index=True)
+    account_id = Column(String, default="", nullable=False, index=True)
+    adset_id = Column(String, default="", nullable=False, index=True)
+    rule_key = Column(String, default="", nullable=False, index=True)
+    action = Column(String, default="", nullable=False, index=True)
+    status = Column(String, default="IDLE", nullable=False, index=True)
+    correlation_id = Column(String, default="", nullable=False, index=True)
+    last_attempt_at = Column(Float, default=0.0, nullable=False)
+    last_success_at = Column(Float, nullable=True)
+    before_state = Column(Text, default="{}", nullable=False)
+    after_state = Column(Text, default="{}", nullable=False)
+    details = Column(Text, default="{}", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
