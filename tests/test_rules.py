@@ -181,8 +181,11 @@ class TestRuleEngine(unittest.TestCase):
         self.assertEqual(res.action, RuleAction.NOOP)
 
     def test_cpp_metric(self):
-        """CPP > $10 → STOP."""
-        self.set_rule(conditions=[{"metric": "cpp", "operator": "gt", "value": 10.0}])
+        """CPP remains available for non-destructive actions."""
+        self.set_rule(
+            action="notify_only",
+            conditions=[{"metric": "cpp", "operator": "gt", "value": 10.0}],
+        )
         adset = {
             "adset_id": "1",
             "adset_name": "Test",
@@ -193,8 +196,78 @@ class TestRuleEngine(unittest.TestCase):
             "purchases": 2,
         }
         res = RuleEngine.evaluate(adset, self.account)
-        self.assertEqual(res.action, RuleAction.STOP)
+        self.assertEqual(res.action, RuleAction.NOTIFY_ONLY)
         self.assertIn("Цена покупки (CPP) (11.00 USD) > 10.00 USD", res.reason)
+
+    def test_lead_stop_is_blocked_when_registration_exists(self):
+        """A delayed lead-based STOP must not erase a deeper funnel result."""
+        self.set_rule(
+            conditions=[
+                {"metric": "spend", "operator": "gte", "value": 2.0},
+                {"metric": "leads", "operator": "lte", "value": 1.0},
+            ]
+        )
+        adset = {
+            "adset_id": "1",
+            "adset_name": "Test",
+            "status": "ACTIVE",
+            "effective_status": "ACTIVE",
+            "spend": 6.0,
+            "leads": 1,
+            "registrations": 1,
+            "purchases": 0,
+        }
+
+        result = RuleEngine.evaluate(adset, self.account)
+
+        self.assertEqual(result.action, RuleAction.NOOP)
+        self.assertIn("Защита воронки", result.reason)
+
+    def test_lead_stop_is_blocked_when_purchase_exists(self):
+        self.set_rule(
+            conditions=[
+                {"metric": "spend", "operator": "gte", "value": 2.0},
+                {"metric": "leads", "operator": "eq", "value": 0.0},
+            ]
+        )
+        adset = {
+            "adset_id": "1",
+            "adset_name": "Test",
+            "status": "ACTIVE",
+            "effective_status": "ACTIVE",
+            "spend": 6.0,
+            "leads": 0,
+            "registrations": 0,
+            "purchases": 1,
+        }
+
+        result = RuleEngine.evaluate(adset, self.account)
+
+        self.assertEqual(result.action, RuleAction.NOOP)
+        self.assertIn("покупки (1)", result.reason)
+
+    def test_explicit_deep_funnel_stop_is_also_blocked(self):
+        """A registration protects the ad set even from an explicit deep-funnel STOP."""
+        self.set_rule(
+            conditions=[
+                {"metric": "spend", "operator": "gte", "value": 20.0},
+                {"metric": "registrations", "operator": "lte", "value": 1.0},
+            ]
+        )
+        adset = {
+            "adset_id": "1",
+            "adset_name": "Test",
+            "status": "ACTIVE",
+            "effective_status": "ACTIVE",
+            "spend": 25.0,
+            "leads": 2,
+            "registrations": 1,
+            "purchases": 0,
+        }
+
+        result = RuleEngine.evaluate(adset, self.account)
+        self.assertEqual(result.action, RuleAction.NOOP)
+        self.assertIn("Защита воронки", result.reason)
 
     def test_zero_event_cost_is_unavailable(self):
         """Нулевые лиды не превращают Spend в CPL и не запускают масштабирование."""
@@ -256,8 +329,9 @@ class TestRuleEngine(unittest.TestCase):
     # --------------------------------------------------------
 
     def test_and_logic_all_match(self):
-        """AND: Спенд >= $10 И CPReg >= $5 → STOP."""
+        """AND: Спенд >= $10 И CPReg >= $5 → NOTIFY_ONLY."""
         self.set_rule(
+            action="notify_only",
             logic="and",
             conditions=[
                 {"metric": "spend", "operator": "gte", "value": 10.0},
@@ -266,7 +340,10 @@ class TestRuleEngine(unittest.TestCase):
         )
         
         adset_match = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 12.0, "leads": 0, "registrations": 1}
-        self.assertEqual(RuleEngine.evaluate(adset_match, self.account).action, RuleAction.STOP)
+        self.assertEqual(
+            RuleEngine.evaluate(adset_match, self.account).action,
+            RuleAction.NOTIFY_ONLY,
+        )
 
         adset_no_match = {"adset_id": "1", "adset_name": "Test", "status": "ACTIVE", "spend": 8.0, "leads": 0, "registrations": 1}
         self.assertEqual(RuleEngine.evaluate(adset_no_match, self.account).action, RuleAction.NOOP)

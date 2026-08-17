@@ -406,6 +406,7 @@ class TestAutomationSettingsContractMigration(unittest.IsolatedAsyncioTestCase):
             set(first),
             {
                 "critical_rule_interval_minutes",
+                "stop_confirmation_minutes",
                 "inventory_cache_minutes",
                 "account_health_interval_minutes",
                 "max_concurrent_accounts",

@@ -8,6 +8,8 @@
   const SUMMARY_AUTO_REFRESH_MS = 3 * 60 * 1000;
   const SUMMARY_COLUMNS = [
     { key: 'account', label: 'Кабинет', group: 'base', required: true },
+    { key: 'custom_name', label: 'Моё название', group: 'base' },
+    { key: 'note', label: 'Заметка', group: 'base' },
     { key: 'data', label: 'Статус данных', group: 'base', required: true },
     { key: 'spend', label: 'Spend', group: 'base' },
     { key: 'impressions', label: 'Показы', group: 'delivery' },
@@ -31,20 +33,20 @@
     { key: 'cpp', label: 'CPP', group: 'funnel' }
   ];
   const SUMMARY_VIEW_PRESETS = {
-    overview: ['account', 'data', 'spend', 'impressions', 'clicks', 'link_clicks', 'leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'],
-    delivery: ['account', 'data', 'spend', 'impressions', 'reach', 'frequency', 'cpm'],
-    traffic: ['account', 'data', 'spend', 'impressions', 'clicks', 'link_clicks', 'unique_clicks', 'outbound_clicks', 'landing_page_views', 'ctr', 'ctr_link', 'cpc', 'cpc_link'],
-    funnel: ['account', 'data', 'spend', 'leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'],
+    overview: ['account', 'custom_name', 'note', 'data', 'spend', 'impressions', 'clicks', 'link_clicks', 'leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'],
+    delivery: ['account', 'custom_name', 'data', 'spend', 'impressions', 'reach', 'frequency', 'cpm'],
+    traffic: ['account', 'custom_name', 'data', 'spend', 'impressions', 'clicks', 'link_clicks', 'unique_clicks', 'outbound_clicks', 'landing_page_views', 'ctr', 'ctr_link', 'cpc', 'cpc_link'],
+    funnel: ['account', 'custom_name', 'data', 'spend', 'leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'],
     all: SUMMARY_COLUMNS.map(column => column.key)
   };
   const SUMMARY_COLUMN_GROUPS = {
-    base: { label: 'Основное', columns: ['account', 'data', 'spend'] },
+    base: { label: 'Основное', columns: ['account', 'custom_name', 'note', 'data', 'spend'] },
     delivery: { label: 'Доставка', columns: ['impressions', 'reach', 'frequency', 'cpm'] },
     traffic: { label: 'Трафик', columns: ['clicks', 'link_clicks', 'unique_clicks', 'outbound_clicks', 'landing_page_views', 'ctr', 'ctr_link', 'cpc', 'cpc_link'] },
     funnel: { label: 'Воронка', columns: ['leads', 'registrations', 'purchases', 'cpl', 'cpreg', 'cpp'] }
   };
   const SUMMARY_DEFAULT_COLUMN_WIDTHS = {
-    account: 260, data: 120, spend: 112,
+    account: 260, custom_name: 180, note: 280, data: 120, spend: 112,
     impressions: 104, reach: 104, frequency: 96, cpm: 96,
     clicks: 104, link_clicks: 104, unique_clicks: 104, outbound_clicks: 112,
     landing_page_views: 120, ctr: 96, ctr_link: 96, cpc: 96, cpc_link: 96,
@@ -82,6 +84,8 @@
   const state = {
     user: null,
     accounts: [],
+    accountGroups: [],
+    accountGroupFilter: 'all',
     summary: null,
     summaryCache: {},
     summaryLoading: false,
@@ -93,7 +97,7 @@
       column_widths: { ...SUMMARY_DEFAULT_COLUMN_WIDTHS },
       sort_column: '',
       sort_direction: 'desc',
-      filters: { query: '', status: 'all' },
+      filters: { query: '', status: 'all', group_id: 'all' },
       period: 'today'
     },
     summaryViewLoaded: false,
@@ -123,6 +127,7 @@
     settings: {
       poll_interval_minutes: 10,
       critical_rule_interval_minutes: 2,
+      stop_confirmation_minutes: 10,
       inventory_cache_minutes: 5,
       account_health_interval_minutes: 15,
       max_concurrent_accounts: 3,
@@ -331,8 +336,16 @@
     const emptyEl = document.getElementById('accountsEmptyState');
 
     try {
-      const data = await apiRequest('/api/accounts');
-      state.accounts = data;
+      const [accounts, groups] = await Promise.all([
+        apiRequest('/api/accounts'),
+        apiRequest('/api/account-groups')
+      ]);
+      state.accounts = accounts;
+      state.accountGroups = groups;
+      if (state.accountGroupFilter !== 'all' && !groups.some(group => String(group.id) === state.accountGroupFilter)) {
+        state.accountGroupFilter = 'all';
+      }
+      renderAccountGroups();
       renderAccounts();
     } catch (err) {
       listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
@@ -341,6 +354,38 @@
 
   function accountDisplayName(account) {
     return String(account?.custom_name || '').trim() || account?.name || account?.account_id || 'Кабинет';
+  }
+
+  function accountGroupsFor(account) {
+    const groupIds = new Set((account?.group_ids || []).map(String));
+    return state.accountGroups.filter(group => groupIds.has(String(group.id)));
+  }
+
+  function renderAccountGroupTags(account, options = {}) {
+    const groups = accountGroupsFor(account);
+    if (!groups.length) {
+      return options.empty
+        ? '<span class="account-group-tag empty">Без группы</span>'
+        : '';
+    }
+    return groups.map(group => (
+      `<button class="account-group-tag" type="button" onclick="window.openAccountGroupEditor(${group.id})" title="${escapeHtml(group.description || 'Изменить группу')}">${escapeHtml(group.name)}</button>`
+    )).join('');
+  }
+
+  function renderAccountGroups() {
+    const container = document.getElementById('accountGroupsBar');
+    if (!container) return;
+    const buttons = [
+      `<button type="button" class="account-group-filter ${state.accountGroupFilter === 'all' ? 'active' : ''}" data-account-group-filter="all"><span>Все кабинеты</span><b>${state.accounts.length}</b></button>`,
+      ...state.accountGroups.map(group => (
+        `<span class="account-group-filter-wrap">
+          <button type="button" class="account-group-filter ${state.accountGroupFilter === String(group.id) ? 'active' : ''}" data-account-group-filter="${group.id}" title="${escapeHtml(group.description || '')}"><span>${escapeHtml(group.name)}</span><b>${group.accounts_count || 0}</b></button>
+          <button type="button" class="account-group-edit" onclick="window.openAccountGroupEditor(${group.id})" aria-label="Изменить группу ${escapeHtml(group.name)}" title="Изменить состав группы">✎</button>
+        </span>`
+      ))
+    ];
+    container.innerHTML = buttons.join('');
   }
 
   function getAccountConnectionState(account) {
@@ -414,6 +459,7 @@
         searchText.includes(query);
 
       if (!matchSearch) return false;
+      if (state.accountGroupFilter !== 'all' && !(acc.group_ids || []).map(String).includes(state.accountGroupFilter)) return false;
 
       if (state.filter === 'active') return acc.account_status === 1 && acc.is_active;
       if (state.filter === 'rules') return acc.rules_enabled;
@@ -483,6 +529,11 @@
           <div class="account-note-preview ${noteText ? '' : 'empty'}">
             <div><span>Внутренняя заметка</span><p>${escapeHtml(noteText || 'Добавьте гео, оффер или рабочий комментарий')}</p></div>
             <button type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" aria-label="Изменить название и заметку">${noteText || acc.custom_name ? 'Изменить' : 'Добавить'}</button>
+          </div>
+
+          <div class="account-group-tags" aria-label="Группы кабинета">
+            ${renderAccountGroupTags(acc, { empty: true })}
+            <button class="account-group-tag add" type="button" onclick="window.openAccountGroupForAccount('${escapeHtml(acc.account_id)}')">+ Группа</button>
           </div>
 
           ${renderAccountLatestMetrics(acc)}
@@ -613,6 +664,11 @@
         <p class="${note ? '' : 'empty'}">${escapeHtml(note || 'Заметка пока не заполнена. Здесь можно хранить гео, оффер или текущий статус работы.')}</p>
       </section>
 
+      <section class="account-detail-profile">
+        <div class="account-detail-section-head"><h3>Группы кабинета</h3><button type="button" onclick="window.openAccountGroupForAccount('${escapeHtml(account.account_id)}')">Новая группа</button></div>
+        <div class="account-group-tags">${renderAccountGroupTags(account, { empty: true })}</div>
+      </section>
+
       <section class="account-detail-performance">
         <div class="account-detail-section-head"><h3>Последний сохранённый снимок</h3><span>Сегодня</span></div>
         ${renderAccountLatestMetrics(account, 'details')}
@@ -682,12 +738,111 @@
       const detailsWasOpen = !document.getElementById('modalAccountDetails')?.classList.contains('hidden');
       window.closeModal('modalAccountProfile');
       renderAccounts();
+      if (state.activeTab === 'summary') rerenderSummaryForTableControls();
       if (detailsWasOpen) window.openAccountDetails(accountId);
       showToast(saved.message || 'Название и заметка сохранены', 'success');
     } catch (err) {
       showToast(`Ошибка сохранения: ${err.message}`, 'error');
     } finally {
       button.disabled = false;
+    }
+  });
+
+  function renderAccountGroupMemberOptions(selectedIds = []) {
+    const container = document.getElementById('accountGroupMembers');
+    if (!container) return;
+    const selected = new Set(selectedIds);
+    container.innerHTML = state.accounts.map(account => `
+      <label class="account-group-member-option">
+        <input type="checkbox" value="${escapeHtml(account.account_id)}" ${selected.has(account.account_id) ? 'checked' : ''}>
+        <span>
+          <b>${escapeHtml(accountDisplayName(account))}</b>
+          <small>${escapeHtml(account.name)} · ${escapeHtml(account.account_id)}</small>
+        </span>
+      </label>`).join('') || '<p class="text-hint">Сначала добавьте хотя бы один рекламный кабинет.</p>';
+    updateAccountGroupSelectionCount();
+  }
+
+  function updateAccountGroupSelectionCount() {
+    const count = document.querySelectorAll('#accountGroupMembers input:checked').length;
+    const label = document.getElementById('accountGroupSelectionCount');
+    if (label) label.textContent = `Выбрано: ${count}`;
+  }
+
+  window.openCreateAccountGroup = function (preselectedAccountId = '') {
+    document.getElementById('accountGroupId').value = '';
+    document.getElementById('accountGroupName').value = '';
+    document.getElementById('accountGroupDescription').value = '';
+    document.getElementById('accountGroupModalTitle').textContent = 'Новая группа кабинетов';
+    document.getElementById('btnDeleteAccountGroup')?.classList.add('hidden');
+    renderAccountGroupMemberOptions(preselectedAccountId ? [preselectedAccountId] : []);
+    window.openModal('modalAccountGroup');
+    window.setTimeout(() => document.getElementById('accountGroupName')?.focus(), 50);
+  };
+
+  window.openAccountGroupForAccount = function (accountId) {
+    window.openCreateAccountGroup(accountId);
+  };
+
+  window.openAccountGroupEditor = function (groupId) {
+    const group = state.accountGroups.find(item => Number(item.id) === Number(groupId));
+    if (!group) return;
+    document.getElementById('accountGroupId').value = String(group.id);
+    document.getElementById('accountGroupName').value = group.name || '';
+    document.getElementById('accountGroupDescription').value = group.description || '';
+    document.getElementById('accountGroupModalTitle').textContent = 'Изменить группу кабинетов';
+    document.getElementById('btnDeleteAccountGroup')?.classList.remove('hidden');
+    renderAccountGroupMemberOptions(group.account_ids || []);
+    window.openModal('modalAccountGroup');
+  };
+
+  document.getElementById('accountGroupMembers')?.addEventListener('change', updateAccountGroupSelectionCount);
+
+  document.getElementById('btnSaveAccountGroup')?.addEventListener('click', async () => {
+    const groupId = document.getElementById('accountGroupId')?.value || '';
+    const name = document.getElementById('accountGroupName')?.value.trim() || '';
+    const description = document.getElementById('accountGroupDescription')?.value.trim() || '';
+    const accountIds = Array.from(document.querySelectorAll('#accountGroupMembers input:checked')).map(input => input.value);
+    const button = document.getElementById('btnSaveAccountGroup');
+    if (!name) {
+      showToast('Введите название группы', 'error');
+      document.getElementById('accountGroupName')?.focus();
+      return;
+    }
+    button.disabled = true;
+    try {
+      await apiRequest(groupId ? `/api/account-groups/${groupId}` : '/api/account-groups', {
+        method: groupId ? 'PUT' : 'POST',
+        body: JSON.stringify({ name, description, account_ids: accountIds })
+      });
+      window.closeModal('modalAccountGroup');
+      await loadAccounts();
+      if (state.activeTab === 'summary') rerenderSummaryForTableControls();
+      showToast(groupId ? 'Группа обновлена' : 'Группа создана', 'success');
+    } catch (err) {
+      showToast(`Ошибка: ${err.message}`, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.getElementById('btnDeleteAccountGroup')?.addEventListener('click', async () => {
+    const groupId = document.getElementById('accountGroupId')?.value || '';
+    const group = state.accountGroups.find(item => String(item.id) === groupId);
+    if (!groupId || !group) return;
+    if (!window.confirm(`Удалить группу «${group.name}»? Кабинеты останутся подключёнными.`)) return;
+    try {
+      await apiRequest(`/api/account-groups/${groupId}`, { method: 'DELETE' });
+      if (state.summaryView.filters.group_id === groupId) {
+        state.summaryView.filters.group_id = 'all';
+        await persistSummaryView(state.summaryView);
+      }
+      window.closeModal('modalAccountGroup');
+      await loadAccounts();
+      if (state.activeTab === 'summary') rerenderSummaryForTableControls();
+      showToast('Группа удалена', 'success');
+    } catch (err) {
+      showToast(`Ошибка удаления: ${err.message}`, 'error');
     }
   });
 
@@ -767,6 +922,13 @@
       const legacyWarningHtml = condList.some(c => c.metric === 'legacy_cpa' || c.metric === 'cpa')
         ? '<div class="rule-migration-warning">Правило выключено: замените старый общий CPA на CPL, CPReg или CPP.</div>'
         : '';
+      const plainSummary = buildPlainRuleTextFromValues(
+        p.action,
+        p.condition_logic || 'and',
+        condList,
+        p.budget_change_percent || 0,
+        p.budget_max_daily || 0
+      );
 
       let budgetInfoHtml = '';
       if (p.action === 'increase_budget' || p.action === 'decrease_budget') {
@@ -797,6 +959,11 @@
               ${logicText}
             </div>
             ${condsHtml || '<span style="font-size:12px; color:var(--tg-hint);">Без условий</span>'}
+          </div>
+
+          <div class="rule-card-plain-summary">
+            <span>Простым языком</span>
+            <p>${escapeHtml(plainSummary)}</p>
           </div>
 
           <div class="rule-card-footer">
@@ -1262,6 +1429,255 @@
     return parseInt(activeBtn.dataset.val) || 5;
   }
 
+  function getRuleDraftRows() {
+    return Array.from(document.querySelectorAll('.rule-condition-row')).map(row => {
+      const rawValue = row.querySelector('.cond-value')?.value ?? '';
+      const value = Number(rawValue);
+      return {
+        metric: row.querySelector('.cond-metric')?.value || 'spend',
+        operator: row.querySelector('.cond-operator')?.value || 'gte',
+        value,
+        time_window: row.querySelector('.cond-window')?.value || 'today',
+        valid: rawValue !== '' && Number.isFinite(value) && value >= 0 && value <= 1000000000
+      };
+    });
+  }
+
+  function ruleConditionSignature(condition) {
+    return [condition.metric, condition.operator, Number(condition.value), condition.time_window || 'today'].join('|');
+  }
+
+  function ruleTriggerSignature(logic, conditions) {
+    return `${logic}|${conditions.map(ruleConditionSignature).sort().join('||')}`;
+  }
+
+  function updateDraftBound(current, candidate, direction) {
+    if (!current) return candidate;
+    if (direction === 'lower') {
+      if (candidate.value > current.value) return candidate;
+      if (candidate.value < current.value) return current;
+    } else {
+      if (candidate.value < current.value) return candidate;
+      if (candidate.value > current.value) return current;
+    }
+    return { value: candidate.value, inclusive: current.inclusive && candidate.inclusive };
+  }
+
+  function draftAndRangeIsEmpty(conditions) {
+    let lower = null;
+    let upper = null;
+    conditions.forEach(condition => {
+      if (condition.operator === 'gt') lower = updateDraftBound(lower, { value: condition.value, inclusive: false }, 'lower');
+      if (condition.operator === 'gte') lower = updateDraftBound(lower, { value: condition.value, inclusive: true }, 'lower');
+      if (condition.operator === 'lt') upper = updateDraftBound(upper, { value: condition.value, inclusive: false }, 'upper');
+      if (condition.operator === 'lte') upper = updateDraftBound(upper, { value: condition.value, inclusive: true }, 'upper');
+      if (condition.operator === 'eq') {
+        lower = updateDraftBound(lower, { value: condition.value, inclusive: true }, 'lower');
+        upper = updateDraftBound(upper, { value: condition.value, inclusive: true }, 'upper');
+      }
+    });
+    if (!lower || !upper) return false;
+    return lower.value > upper.value || (lower.value === upper.value && !(lower.inclusive && upper.inclusive));
+  }
+
+  function draftOrRangeIsAlwaysTrue(conditions) {
+    const signatures = new Set(conditions.map(condition => `${condition.operator}|${condition.value}`));
+    return conditions.some(condition => (
+      (signatures.has(`gte|${condition.value}`) && signatures.has(`lt|${condition.value}`))
+      || (signatures.has(`gt|${condition.value}`) && signatures.has(`lte|${condition.value}`))
+    ));
+  }
+
+  function stopConditionNeedsDeepConversion(condition) {
+    if (condition.metric === 'cpreg' || condition.metric === 'cpp') return true;
+    if (condition.metric !== 'registrations' && condition.metric !== 'purchases') return false;
+    return condition.operator === 'gt'
+      || ((condition.operator === 'gte' || condition.operator === 'eq') && condition.value > 0);
+  }
+
+  function validateRuleDraft() {
+    const rows = getRuleDraftRows();
+    const conditions = rows.filter(row => row.valid).map(({ valid, ...condition }) => condition);
+    const logic = getLogicFromUI();
+    const action = document.getElementById('ruleActionSelect')?.value || 'turn_off';
+    const errors = [];
+    const warnings = [];
+
+    if (rows.length === 0) errors.push('Добавьте хотя бы одно условие.');
+    if (rows.some(row => !row.valid)) errors.push('У каждого условия должно быть заполнено корректное неотрицательное значение.');
+
+    const signatures = conditions.map(ruleConditionSignature);
+    if (new Set(signatures).size !== signatures.length) {
+      errors.push('Одно и то же условие добавлено несколько раз. Оставьте только одно.');
+    }
+
+    if (conditions.some(condition => ['leads', 'registrations', 'purchases'].includes(condition.metric) && !Number.isInteger(condition.value))) {
+      errors.push('Лиды, регистрации и покупки указываются только целыми числами.');
+    }
+
+    if (action === 'turn_off' && conditions.some(stopConditionNeedsDeepConversion)) {
+      errors.push('Такое правило не сработает: регистрация или покупка защищает группу объявлений от выключения. Для этого случая выберите уведомление или включение.');
+    }
+
+    const grouped = new Map();
+    conditions.forEach(condition => {
+      const key = `${condition.metric}|${condition.time_window}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(condition);
+    });
+    grouped.forEach(metricConditions => {
+      if (logic === 'and' && draftAndRangeIsEmpty(metricConditions)) {
+        errors.push('В одном из показателей задан невозможный диапазон: нижняя граница выше верхней.');
+      }
+      if (logic === 'or' && draftOrRangeIsAlwaysTrue(metricConditions)) {
+        errors.push('Два условия покрывают вообще все значения, поэтому правило будет срабатывать всегда.');
+      }
+    });
+
+    const oppositeActions = [
+      new Set(['turn_off', 'turn_on']),
+      new Set(['increase_budget', 'decrease_budget'])
+    ];
+    const currentPresetId = Number(document.getElementById('editingPresetId')?.value || 0);
+    const draftTrigger = ruleTriggerSignature(logic, conditions);
+    state.presets.forEach(preset => {
+      if (preset.id === currentPresetId) return;
+      const actions = new Set([action, preset.action]);
+      const isOpposite = oppositeActions.some(pair => pair.size === actions.size && [...pair].every(item => actions.has(item)));
+      if (!isOpposite) return;
+      const presetTrigger = ruleTriggerSignature(preset.condition_logic || 'and', preset.conditions || []);
+      if (draftTrigger === presetTrigger) {
+        warnings.push(`Конфликт с правилом «${preset.name}»: одинаковые условия запускают противоположные действия. Вместе к одному кабинету они не назначатся.`);
+      }
+    });
+
+    return { rows, conditions, logic, action, errors: [...new Set(errors)], warnings: [...new Set(warnings)] };
+  }
+
+  function plainRuleValue(condition) {
+    const value = Number(condition.value);
+    const shown = Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+    if (condition.metric === 'ctr') return `${shown}%`;
+    if (['spend', 'cpl', 'cpreg', 'cpp', 'cpc'].includes(condition.metric)) {
+      return `${shown} в валюте кабинета`;
+    }
+    return shown;
+  }
+
+  function plainRuleCondition(condition) {
+    const windows = {
+      today: 'сегодня', yesterday: 'вчера', last_3d: 'за последние 3 дня', last_7d: 'за последние 7 дней'
+    };
+    const metrics = {
+      spend: 'расход', cpl: 'цена лида', cpreg: 'цена регистрации', cpp: 'цена покупки',
+      leads: 'лидов', registrations: 'регистраций', purchases: 'покупок',
+      ctr: 'кликабельность', cpc: 'цена клика'
+    };
+    const operators = {
+      gt: 'больше', gte: 'не меньше', lt: 'меньше', lte: 'не больше', eq: 'ровно'
+    };
+    return `${windows[condition.time_window] || 'сегодня'} ${metrics[condition.metric] || condition.metric} ${operators[condition.operator] || condition.operator} ${plainRuleValue(condition)}`;
+  }
+
+  function buildPlainRuleTextFromValues(action, logic, conditions, budgetPercent = 0, budgetCeiling = 0) {
+    const actions = {
+      turn_off: 'Выключить группу объявлений',
+      notify_only: 'Прислать уведомление',
+      turn_on: 'Включить группу объявлений',
+      increase_budget: `Увеличить дневной бюджет на ${budgetPercent || 0}%${budgetCeiling > 0 ? `, но не выше ${budgetCeiling} в валюте кабинета` : ''}`,
+      decrease_budget: `Уменьшить дневной бюджет на ${budgetPercent || 0}%`
+    };
+    const joiner = logic === 'or' ? ' или ' : ' и ';
+    const conditionText = conditions.map(plainRuleCondition).join(joiner);
+    return conditionText
+      ? `${actions[action] || 'Выполнить действие'}, если ${conditionText}.`
+      : 'Настройте действие и условия — здесь появится понятное описание.';
+  }
+
+  function buildPlainRuleText(validation) {
+    return buildPlainRuleTextFromValues(
+      validation.action,
+      validation.logic,
+      validation.conditions,
+      Number(document.getElementById('budgetChangePercentInput')?.value || 0),
+      Number(document.getElementById('budgetMaxDailyInput')?.value || 0)
+    );
+  }
+
+  function fitPlainRuleName(text) {
+    const clean = String(text || '').replace(/\.$/, '');
+    if (clean.length <= 120) return clean;
+    const shortened = clean.slice(0, 119);
+    const lastSpace = shortened.lastIndexOf(' ');
+    return `${shortened.slice(0, lastSpace > 80 ? lastSpace : 119)}…`;
+  }
+
+  function renderRuleDraftSummary() {
+    const textElement = document.getElementById('rulePlainText');
+    const detailsElement = document.getElementById('rulePlainDetails');
+    const messagesElement = document.getElementById('ruleValidationMessages');
+    if (!textElement || !detailsElement || !messagesElement) return { errors: [], warnings: [] };
+
+    const validation = validateRuleDraft();
+    const plainText = buildPlainRuleText(validation);
+    textElement.textContent = plainText;
+    textElement.dataset.ruleName = fitPlainRuleName(plainText);
+
+    const interval = getIntervalFromUI();
+    const cooldown = getCooldownFromUI();
+    const notify = document.getElementById('ruleNotifyTgToggle')?.checked !== false;
+    const protection = validation.action === 'turn_off'
+      ? ' Если есть регистрация или покупка, выключения не будет.'
+      : '';
+    detailsElement.textContent = `Проверять каждые ${interval} мин. Пауза после срабатывания: ${cooldown ? `${cooldown} мин` : 'нет'}. Telegram: ${notify ? 'да' : 'нет'}.${protection}`;
+    messagesElement.innerHTML = [
+      ...validation.errors.map(message => `<div class="rule-validation-message error">⛔ ${escapeHtml(message)}</div>`),
+      ...validation.warnings.map(message => `<div class="rule-validation-message warning">⚠️ ${escapeHtml(message)}</div>`)
+    ].join('');
+
+    const saveButton = document.getElementById('btnSaveLimits');
+    if (saveButton) saveButton.disabled = validation.errors.length > 0;
+    return validation;
+  }
+
+  function setupRuleBuilderPreview() {
+    const preview = document.getElementById('rulePlainPreview');
+    if (!preview || preview.dataset.bound === 'true') return;
+    preview.dataset.bound = 'true';
+
+    const builder = document.getElementById('modalEditLimits');
+    builder?.addEventListener('input', event => {
+      if (event.target.matches('.cond-value, #budgetChangePercentInput, #budgetMaxDailyInput, #customCooldownInput, #customIntervalInput')) {
+        renderRuleDraftSummary();
+      }
+    });
+    builder?.addEventListener('change', event => {
+      if (event.target.matches('.cond-metric, .cond-operator, .cond-window, #ruleNotifyTgToggle')) {
+        renderRuleDraftSummary();
+      }
+    });
+
+    document.getElementById('btnUseRulePlainName')?.addEventListener('click', () => {
+      const input = document.getElementById('ruleNameInput');
+      const name = document.getElementById('rulePlainText')?.dataset.ruleName || '';
+      if (input && name) {
+        input.value = name;
+        input.focus();
+        showToast('Понятное название вставлено', 'success');
+      }
+    });
+    document.getElementById('btnCopyRulePlainText')?.addEventListener('click', async () => {
+      const text = document.getElementById('rulePlainText')?.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('Описание скопировано', 'success');
+      } catch (error) {
+        showToast('Не удалось скопировать описание', 'error');
+      }
+    });
+    renderRuleDraftSummary();
+  }
+
   function setupSettingsChips() {
     document.querySelectorAll('#cooldownChipGroup .chip-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1275,6 +1691,7 @@
         } else {
           customInput?.classList.add('hidden');
         }
+        renderRuleDraftSummary();
       });
     });
 
@@ -1290,6 +1707,7 @@
         } else {
           customInput?.classList.add('hidden');
         }
+        renderRuleDraftSummary();
       });
     });
   }
@@ -1311,21 +1729,25 @@
         haptic('selection');
         document.querySelectorAll('#logicToggleGroup .chip-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        renderRuleDraftSummary();
       });
     });
   }
 
   function handleActionChange(action) {
     const budgetSection = document.getElementById('budgetConfigSection');
+    const funnelProtectionNotice = document.getElementById('funnelProtectionNotice');
     if (action === 'increase_budget' || action === 'decrease_budget') {
       budgetSection?.classList.remove('hidden');
     } else {
       budgetSection?.classList.add('hidden');
     }
+    funnelProtectionNotice?.classList.toggle('hidden', action !== 'turn_off');
   }
 
   document.getElementById('ruleActionSelect')?.addEventListener('change', (e) => {
     handleActionChange(e.target.value);
+    renderRuleDraftSummary();
   });
 
   function updateRuleSaveButtonLabel() {
@@ -1369,6 +1791,7 @@
 
     renderConditions(preset.conditions || []);
     renderPresetsList(preset.id);
+    renderRuleDraftSummary();
   };
 
   window.newPresetMode = function () {
@@ -1398,6 +1821,7 @@
       { metric: 'spend', operator: 'gte', value: 2.0, time_window: 'today' }
     ]);
     renderPresetsList(null);
+    renderRuleDraftSummary();
     document.getElementById('ruleNameInput')?.focus();
   };
 
@@ -1437,9 +1861,15 @@
         <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
         <option value="last_7d" ${timeWindow === 'last_7d' ? 'selected' : ''}>7 дней</option>
       </select>
-      <button type="button" class="btn-remove-cond" onclick="this.closest('.rule-condition-row').remove()" title="Удалить условие">&times;</button>
+      <button type="button" class="btn-remove-cond" onclick="window.removeConditionRow(this)" title="Удалить условие">&times;</button>
     `;
     container.appendChild(row);
+    renderRuleDraftSummary();
+  };
+
+  window.removeConditionRow = function (button) {
+    button?.closest('.rule-condition-row')?.remove();
+    renderRuleDraftSummary();
   };
 
   function renderConditions(conditionsList) {
@@ -1455,6 +1885,7 @@
     conditionsList.forEach(c => {
       window.addConditionRow(c.metric, c.operator || 'gte', c.value, c.time_window || 'today');
     });
+    renderRuleDraftSummary();
   }
 
   function getConditionsFromUI() {
@@ -1516,8 +1947,9 @@
     const budgetChangePercent = parseFloat(document.getElementById('budgetChangePercentInput')?.value) || 0.0;
     const budgetMaxDaily = parseFloat(document.getElementById('budgetMaxDailyInput')?.value) || 0.0;
 
-    if (conditions.length === 0) {
-      showToast('Добавьте хотя бы одно условие правила', 'error');
+    const draftValidation = renderRuleDraftSummary();
+    if (draftValidation.errors.length > 0) {
+      showToast(draftValidation.errors[0], 'error');
       return;
     }
 
@@ -1698,7 +2130,7 @@
   }
 
   async function initializeSummaryTab() {
-    await loadSummaryViewPreference();
+    await Promise.all([loadSummaryViewPreference(), loadAccounts()]);
     if (state.activeTab !== 'summary') return;
 
     state.currentPeriod = state.summaryView.period;
@@ -1718,10 +2150,20 @@
   function normalizeSummaryView(preference = {}) {
     const canonicalOrder = SUMMARY_COLUMNS.map(column => column.key);
     const knownColumns = new Set(canonicalOrder);
+    const savedOrder = Array.isArray(preference.column_order) ? preference.column_order : [];
+    const isLegacyProfileColumnView = savedOrder.length > 0
+      && !savedOrder.includes('custom_name')
+      && !savedOrder.includes('note');
     const requested = Array.isArray(preference.visible_columns)
       ? preference.visible_columns.filter(key => knownColumns.has(key))
       : SUMMARY_VIEW_PRESETS.all;
     const visibleSet = new Set([...requested, 'account', 'data']);
+    // One-time compatibility for views saved before the profile columns existed.
+    // Once the new order is persisted, users may hide both columns normally.
+    if (isLegacyProfileColumnView) {
+      visibleSet.add('custom_name');
+      visibleSet.add('note');
+    }
     const requestedOrder = Array.isArray(preference.column_order)
       ? preference.column_order.filter(key => knownColumns.has(key))
       : canonicalOrder;
@@ -1751,6 +2193,10 @@
       ? rawFilters.status
       : 'all';
     const queryFilter = String(rawFilters.query || '').trim().slice(0, 120);
+    const rawGroupFilter = String(rawFilters.group_id || 'all');
+    const groupFilter = rawGroupFilter === 'all' || /^\d+$/.test(rawGroupFilter)
+      ? rawGroupFilter
+      : 'all';
     const period = ['today', 'yesterday', 'last_3d', 'last_7d'].includes(preference.period)
       ? preference.period
       : 'today';
@@ -1764,7 +2210,7 @@
       column_widths: columnWidths,
       sort_column: sortColumn,
       sort_direction: sortDirection,
-      filters: { query: queryFilter, status: statusFilter },
+      filters: { query: queryFilter, status: statusFilter, group_id: groupFilter },
       period
     };
   }
@@ -1793,6 +2239,26 @@
     document.querySelectorAll('.period-btn').forEach(button => {
       button.classList.toggle('active', button.dataset.period === state.summaryView.period);
     });
+    renderSummaryGroupSelector();
+  }
+
+  function renderSummaryGroupSelector() {
+    const select = document.getElementById('summaryAccountGroupSelect');
+    const label = document.getElementById('summaryGroupScopeLabel');
+    if (!select || !label) return;
+    const selectedId = state.summaryView.filters.group_id || 'all';
+    const selectedExists = selectedId === 'all' || state.accountGroups.some(group => String(group.id) === selectedId);
+    if (!selectedExists) state.summaryView.filters.group_id = 'all';
+    const activeId = state.summaryView.filters.group_id || 'all';
+    select.innerHTML = [
+      `<option value="all">Все кабинеты (${state.accounts.length})</option>`,
+      ...state.accountGroups.map(group => `<option value="${group.id}">${escapeHtml(group.name)} (${group.accounts_count || 0})</option>`)
+    ].join('');
+    select.value = activeId;
+    const group = state.accountGroups.find(item => String(item.id) === activeId);
+    label.textContent = group
+      ? `${group.accounts_count || 0} кабинетов · переключение без нового запроса в Meta`
+      : `Все подключённые кабинеты · ${state.accounts.length}`;
   }
 
   function renderSummaryTableHeader() {
@@ -2253,9 +2719,12 @@
     const origin = data.cache?.origin || (data.cache?.is_cached ? 'memory' : 'live');
     const isStale = ageSeconds >= (SUMMARY_AUTO_REFRESH_MS / 1000);
     if (status) {
+      const scopeLabel = data.scope?.group_id && data.scope.group_id !== 'all'
+        ? ` · группа «${data.scope.name}»`
+        : '';
       status.textContent = options.refreshError
-        ? `Обновление не удалось · показываем данные от ${generatedLabel}`
-        : `${data.source || 'Meta Marketing API'} · последнее обновление ${generatedLabel}`;
+        ? `Обновление не удалось · показываем данные от ${generatedLabel}${scopeLabel}`
+        : `${data.source || 'Meta Marketing API'} · последнее обновление ${generatedLabel}${scopeLabel}`;
     }
     if (freshness) {
       if (options.refreshError) {
@@ -2276,6 +2745,11 @@
   function renderSpendComparison(data) {
     const comparison = document.getElementById('kpiSpendPrevious');
     if (!comparison) return;
+    if (data.scope?.group_id && data.scope.group_id !== 'all') {
+      comparison.className = 'kpi-comparison';
+      comparison.textContent = `Срез по группе «${data.scope.name}» · ${data.accounts_count || 0} кабинетов`;
+      return;
+    }
     const previous = data.snapshot?.previous;
     if (!previous) {
       comparison.className = 'kpi-comparison';
@@ -2381,8 +2855,133 @@
     return summaryAccountStatusKey(account) === 'synced';
   }
 
+  function summaryAccountsWithLiveMetadata(accounts = []) {
+    const liveById = new Map(state.accounts.map(account => [account.account_id, account]));
+    return accounts.map(account => {
+      const live = liveById.get(account.account_id);
+      if (!live) return account;
+      return {
+        ...account,
+        name: live.name || account.name,
+        custom_name: live.custom_name || '',
+        note: live.note || '',
+        group_ids: Array.isArray(live.group_ids) ? live.group_ids : (account.group_ids || [])
+      };
+    });
+  }
+
+  function summaryCost(spend, count) {
+    return count > 0 ? Math.round((spend / count) * 100) / 100 : null;
+  }
+
+  function buildScopedSummaryData(rawData) {
+    const allAccounts = summaryAccountsWithLiveMetadata(Array.isArray(rawData?.accounts) ? rawData.accounts : []);
+    const groupId = state.summaryView.filters.group_id || 'all';
+    if (groupId === 'all') return { ...rawData, accounts: allAccounts, scope: { group_id: 'all', name: 'Все кабинеты' } };
+
+    const group = state.accountGroups.find(item => String(item.id) === groupId);
+    if (!group) {
+      state.summaryView.filters.group_id = 'all';
+      return { ...rawData, accounts: allAccounts, scope: { group_id: 'all', name: 'Все кабинеты' } };
+    }
+
+    const accountIdSet = new Set((group.account_ids || []).map(String));
+    const accounts = allAccounts.filter(account => accountIdSet.has(String(account.account_id)));
+    const synced = accounts.filter(summaryAccountHasMetrics);
+    const sum = key => synced.reduce((total, account) => total + Number(account[key] || 0), 0);
+    const totalSpendAcrossCurrencies = sum('spend');
+    const totalClicks = sum('clicks');
+    const totalImpressions = sum('impressions');
+    const totalReach = sum('reach');
+    const totalUniqueClicks = sum('unique_clicks');
+    const totalLinkClicks = sum('link_clicks');
+    const totalOutboundClicks = sum('outbound_clicks');
+    const totalLandingPageViews = sum('landing_page_views');
+    const totalLeads = sum('leads');
+    const totalRegs = sum('registrations');
+    const totalPurchases = sum('purchases');
+    const buckets = new Map();
+    synced.forEach(account => {
+      const currency = normalizeCurrencyCode(account.currency) || 'UNKNOWN';
+      const bucket = buckets.get(currency) || {
+        currency, accounts_count: 0, spend: 0, impressions: 0, clicks: 0,
+        link_clicks: 0, landing_page_views: 0, leads: 0, registrations: 0, purchases: 0
+      };
+      bucket.accounts_count += 1;
+      ['spend', 'impressions', 'clicks', 'link_clicks', 'landing_page_views', 'leads', 'registrations', 'purchases']
+        .forEach(key => { bucket[key] += Number(account[key] || 0); });
+      buckets.set(currency, bucket);
+    });
+    const currencyTotals = Array.from(buckets.values())
+      .sort((left, right) => left.currency.localeCompare(right.currency))
+      .map(bucket => ({
+        ...bucket,
+        spend: Math.round(bucket.spend * 100) / 100,
+        cpm: summaryCost(bucket.spend * 1000, bucket.impressions),
+        cpc: summaryCost(bucket.spend, bucket.clicks),
+        cpc_link: summaryCost(bucket.spend, bucket.link_clicks),
+        cost_per_landing_page_view: summaryCost(bucket.spend, bucket.landing_page_views),
+        cost_per_lead: summaryCost(bucket.spend, bucket.leads),
+        cost_per_registration: summaryCost(bucket.spend, bucket.registrations),
+        cost_per_purchase: summaryCost(bucket.spend, bucket.purchases)
+      }));
+    const displayCurrency = currencyTotals.length === 1 && currencyTotals[0].currency !== 'UNKNOWN'
+      ? currencyTotals[0].currency
+      : '';
+    const monetaryTotalsAvailable = Boolean(displayCurrency);
+    const blocked = accounts.filter(account => summaryAccountStatusKey(account) === 'blocked').length;
+    const failed = accounts.filter(account => summaryAccountStatusKey(account) === 'error').length;
+    const coverage = accounts.length ? Math.round((synced.length / accounts.length) * 1000) / 10 : 0;
+    const qualityStatus = synced.length === accounts.length && accounts.length
+      ? 'complete'
+      : (synced.length ? 'partial' : 'unavailable');
+
+    return {
+      ...rawData,
+      accounts,
+      accounts_count: accounts.length,
+      total_spend: monetaryTotalsAvailable ? Math.round(totalSpendAcrossCurrencies * 100) / 100 : null,
+      display_currency: displayCurrency,
+      mixed_currencies: currencyTotals.length > 1,
+      currency_totals: currencyTotals,
+      total_clicks: totalClicks,
+      total_impressions: totalImpressions,
+      total_reach: totalReach,
+      total_unique_clicks: totalUniqueClicks,
+      total_link_clicks: totalLinkClicks,
+      total_outbound_clicks: totalOutboundClicks,
+      total_landing_page_views: totalLandingPageViews,
+      total_leads: totalLeads,
+      total_regs: totalRegs,
+      total_purchases: totalPurchases,
+      avg_cpc: monetaryTotalsAvailable ? summaryCost(totalSpendAcrossCurrencies, totalClicks) : null,
+      avg_ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+      avg_frequency: totalReach > 0 ? totalImpressions / totalReach : null,
+      avg_cpm: monetaryTotalsAvailable ? summaryCost(totalSpendAcrossCurrencies * 1000, totalImpressions) : null,
+      avg_cpc_link: monetaryTotalsAvailable ? summaryCost(totalSpendAcrossCurrencies, totalLinkClicks) : null,
+      avg_ctr_link: totalImpressions > 0 ? (totalLinkClicks / totalImpressions) * 100 : null,
+      avg_ctr_outbound: totalImpressions > 0 ? (totalOutboundClicks / totalImpressions) * 100 : null,
+      cost_per_landing_page_view: monetaryTotalsAvailable ? summaryCost(totalSpendAcrossCurrencies, totalLandingPageViews) : null,
+      cost_per_lead: monetaryTotalsAvailable ? summaryCost(totalSpendAcrossCurrencies, totalLeads) : null,
+      cost_per_registration: monetaryTotalsAvailable ? summaryCost(totalSpendAcrossCurrencies, totalRegs) : null,
+      cost_per_purchase: monetaryTotalsAvailable ? summaryCost(totalSpendAcrossCurrencies, totalPurchases) : null,
+      data_quality: {
+        status: qualityStatus,
+        accounts_total: accounts.length,
+        accounts_synced: synced.length,
+        accounts_failed: failed,
+        accounts_blocked: blocked,
+        metrics_coverage_percent: coverage
+      },
+      snapshot: rawData.snapshot ? { ...rawData.snapshot, previous: null } : rawData.snapshot,
+      scope: { group_id: groupId, name: group.name, description: group.description || '' }
+    };
+  }
+
   function summaryAccountSortValue(account, key) {
     if (key === 'account') return String(account.short_name || account.name || account.account_id || '').toLocaleLowerCase('ru');
+    if (key === 'custom_name') return String(account.custom_name || '').toLocaleLowerCase('ru');
+    if (key === 'note') return String(account.note || '').toLocaleLowerCase('ru');
     if (key === 'data') return summaryAccountStatusKey(account);
     if (!summaryAccountHasMetrics(account)) return null;
     const metricMap = {
@@ -2405,7 +3004,8 @@
     const filtered = accounts.filter(account => {
       if (status !== 'all' && summaryAccountStatusKey(account) !== status) return false;
       if (!query) return true;
-      return [account.short_name, account.name, account.account_id]
+      const groupNames = accountGroupsFor(account).map(group => group.name);
+      return [account.short_name, account.name, account.custom_name, account.note, account.account_id, ...groupNames]
         .some(value => String(value || '').toLocaleLowerCase('ru').includes(query));
     });
 
@@ -2456,6 +3056,8 @@
         return `
           <tr>
             <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
+            <td class="summary-custom-name-cell" data-summary-column="custom_name">${acc.custom_name ? `<b>${escapeHtml(acc.custom_name)}</b>` : '<span class="text-hint">—</span>'}</td>
+            <td class="summary-note-cell" data-summary-column="note" title="${escapeHtml(acc.note || '')}">${acc.note ? escapeHtml(acc.note) : '<span class="text-hint">—</span>'}</td>
             <td data-summary-column="data">${summaryDataStatus(acc)}</td>
             <td class="text-right mono" data-summary-column="spend"><b>${spendStr}</b></td>
             <td class="text-right mono" data-summary-column="impressions">${hasMetrics ? formatNumber(acc.impressions) : '—'}</td>
@@ -2484,7 +3086,8 @@
     return accounts;
   }
 
-  function renderSummaryData(data) {
+  function renderSummaryData(rawData) {
+    const data = buildScopedSummaryData(rawData);
     // KPI Cards
     const displayCurrency = normalizeCurrencyCode(data.display_currency);
     document.getElementById('kpiSpend').textContent = displayCurrency
@@ -2528,10 +3131,17 @@
       mobileCards.innerHTML = `<div class="empty-state"><p>${emptyMessage}</p></div>`;
     } else {
       mobileCards.innerHTML = visibleAccounts.map(acc => {
-        const displayName = acc.short_name || acc.name;
-        const subLabel = acc.name !== displayName ? `${escapeHtml(acc.name)} · ${acc.account_id}` : acc.account_id;
+        const metaName = acc.short_name || acc.name;
+        const displayName = acc.custom_name || metaName;
+        const subLabel = acc.custom_name
+          ? `${escapeHtml(metaName)} · ${acc.account_id}`
+          : (acc.name !== metaName ? `${escapeHtml(acc.name)} · ${acc.account_id}` : acc.account_id);
         const hasMetrics = summaryAccountHasMetrics(acc);
         const statusPillHtml = summaryDataStatus(acc);
+        const noteHtml = acc.note
+          ? `<p class="mob-summary-note">${escapeHtml(acc.note)}</p>`
+          : '';
+        const groupsHtml = renderAccountGroupTags(acc, { compact: true });
 
         return `
           <div class="mob-summary-card">
@@ -2543,6 +3153,8 @@
               </div>
               <span class="mono" style="font-size:16px;font-weight:700;color:var(--tg-link);white-space:nowrap;flex-shrink:0;">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0), acc.currency) : '—'}</span>
             </div>
+            ${noteHtml}
+            ${groupsHtml ? `<div class="mob-summary-groups">${groupsHtml}</div>` : ''}
             <span class="mob-card-section-label">Доставка</span>
             <div class="mob-card-stats">
               <div class="stat-box">
@@ -3301,6 +3913,7 @@
       const fieldValues = {
         settingBackgroundInterval: data.poll_interval_minutes,
         settingCriticalRuleInterval: data.critical_rule_interval_minutes,
+        settingStopConfirmation: data.stop_confirmation_minutes,
         settingInventoryCache: data.inventory_cache_minutes,
         settingAccountHealthInterval: data.account_health_interval_minutes,
         settingConcurrentAccounts: data.max_concurrent_accounts,
@@ -3379,6 +3992,7 @@
       current_password: password,
       poll_interval_minutes: readNumber('settingBackgroundInterval'),
       critical_rule_interval_minutes: readNumber('settingCriticalRuleInterval'),
+      stop_confirmation_minutes: readNumber('settingStopConfirmation'),
       inventory_cache_minutes: readNumber('settingInventoryCache'),
       account_health_interval_minutes: readNumber('settingAccountHealthInterval'),
       max_concurrent_accounts: readNumber('settingConcurrentAccounts'),
@@ -3574,6 +4188,14 @@
     });
   });
 
+  document.getElementById('accountGroupsBar')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-account-group-filter]');
+    if (!button) return;
+    state.accountGroupFilter = button.dataset.accountGroupFilter || 'all';
+    renderAccountGroups();
+    renderAccounts();
+  });
+
   function rerenderSummaryForTableControls() {
     const data = state.summaryCache[state.currentPeriod] || state.summary;
     if (data) renderSummaryData(data);
@@ -3600,6 +4222,11 @@
 
   document.getElementById('summaryAccountSearch')?.addEventListener('input', event => {
     updateSummaryFilters({ query: event.target.value });
+  });
+
+  document.getElementById('summaryAccountGroupSelect')?.addEventListener('change', event => {
+    haptic('selection');
+    updateSummaryFilters({ group_id: event.target.value || 'all' }, { immediate: true });
   });
 
   document.getElementById('summaryAccountSearchClear')?.addEventListener('click', () => {
@@ -3759,6 +4386,7 @@
   async function initApp() {
     setupSettingsChips();
     setupLogicToggle();
+    setupRuleBuilderPreview();
     setupModalListeners();
 
     try {

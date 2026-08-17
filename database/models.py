@@ -40,6 +40,12 @@ class AppSettings(Base):
         nullable=False,
         doc="Максимальный интервал проверки критических STOP-правил (мин)",
     )
+    stop_confirmation_minutes = Column(
+        Integer,
+        default=10,
+        nullable=False,
+        doc="Сколько минут STOP-условие должно подтверждаться до выключения ad set",
+    )
     inventory_cache_minutes = Column(
         Integer,
         default=5,
@@ -321,6 +327,44 @@ class Account(Base):
 
     def __repr__(self):
         return f"<Account(account_id='{self.account_id}', name='{self.name}', status={self.account_status})>"
+
+
+class AccountGroup(Base):
+    """Owner-scoped, reusable grouping of advertising accounts."""
+
+    __tablename__ = "account_groups"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "name", name="uq_account_group_owner_name"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String, nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, default="", nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
+
+    def __repr__(self):
+        return f"<AccountGroup(id={self.id}, name='{self.name}', owner='{self.owner_id}')>"
+
+
+class AccountGroupMember(Base):
+    """Ordered many-to-many membership between account groups and accounts."""
+
+    __tablename__ = "account_group_members"
+    __table_args__ = (
+        UniqueConstraint("group_id", "account_id", name="uq_account_group_member"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_id = Column(Integer, ForeignKey("account_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+
+    def __repr__(self):
+        return f"<AccountGroupMember(group={self.group_id}, account={self.account_id}, position={self.position})>"
 
 
 class SummarySnapshot(Base):

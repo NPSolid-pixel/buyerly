@@ -19,6 +19,8 @@ from core.config import settings
 from database.db import Base, hash_password, verify_password
 from database.models import (
     Account,
+    AccountGroup,
+    AccountGroupMember,
     AppSettings,
     AuditEvent,
     RuleGroup,
@@ -337,9 +339,143 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(data[0]["name"], "Швеция 1")
             self.assertEqual(data[0]["custom_name"], "")
             self.assertEqual(data[0]["note"], "")
+            self.assertEqual(data[0]["group_ids"], [])
             self.assertEqual(data[0]["connection_type"], "system_user")
             self.assertIsNone(data[0]["latest_metrics"])
             self.assertEqual(data[0]["active_rules"], [])
+
+    async def test_account_groups_are_crud_owner_scoped_and_exposed_on_accounts(self):
+        async with self.test_session_maker() as session:
+            session.add_all(
+                [
+                    Account(
+                        account_id="act_2000000000000001",
+                        name="NL second",
+                        access_token="mock_token",
+                        owner_id="8948797431",
+                        timezone_name="UTC",
+                        currency="USD",
+                    ),
+                    Account(
+                        account_id="act_9000000000000001",
+                        name="Admin foreign",
+                        access_token="mock_token",
+                        owner_id="8634201356",
+                        timezone_name="UTC",
+                        currency="USD",
+                    ),
+                ]
+            )
+            await session.commit()
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        admin_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8634201356, "first_name": "Admin", "username": "admin_user"},
+        )
+        buyer_headers = {"Authorization": f"tma {buyer_data}"}
+        admin_headers = {"Authorization": f"tma {admin_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            created = await client.post(
+                "/api/account-groups",
+                headers=buyer_headers,
+                json={
+                    "name": "  NL · основной  ",
+                    "description": "  Нидерланды, основной оффер  ",
+                    "account_ids": ["act_2000000000000001", "act_1018756607700064"],
+                },
+            )
+            self.assertEqual(created.status_code, 201)
+            group = created.json()
+            self.assertEqual(group["name"], "NL · основной")
+            self.assertEqual(group["description"], "Нидерланды, основной оффер")
+            self.assertEqual(
+                group["account_ids"],
+                ["act_2000000000000001", "act_1018756607700064"],
+            )
+            self.assertEqual(group["accounts_count"], 2)
+
+            duplicate = await client.post(
+                "/api/account-groups",
+                headers=buyer_headers,
+                json={"name": "nl · ОСНОВНОЙ", "account_ids": []},
+            )
+            self.assertEqual(duplicate.status_code, 409)
+
+            foreign_member = await client.post(
+                "/api/account-groups",
+                headers=buyer_headers,
+                json={"name": "Invalid", "account_ids": ["act_9000000000000001"]},
+            )
+            self.assertEqual(foreign_member.status_code, 422)
+
+            buyer_groups = await client.get("/api/account-groups", headers=buyer_headers)
+            admin_groups = await client.get("/api/account-groups", headers=admin_headers)
+            accounts = await client.get("/api/accounts", headers=buyer_headers)
+            self.assertEqual(len(buyer_groups.json()), 1)
+            self.assertEqual(admin_groups.json(), [])
+            grouped_accounts = {
+                item["account_id"]: item["group_ids"] for item in accounts.json()
+            }
+            self.assertEqual(grouped_accounts["act_1018756607700064"], [group["id"]])
+            self.assertEqual(grouped_accounts["act_2000000000000001"], [group["id"]])
+
+            forbidden_update = await client.put(
+                f"/api/account-groups/{group['id']}",
+                headers=admin_headers,
+                json={"name": "Hijack", "account_ids": []},
+            )
+            self.assertEqual(forbidden_update.status_code, 404)
+
+            updated = await client.put(
+                f"/api/account-groups/{group['id']}",
+                headers=buyer_headers,
+                json={
+                    "name": "NL · масштабирование",
+                    "description": "",
+                    "account_ids": ["act_1018756607700064"],
+                },
+            )
+            self.assertEqual(updated.status_code, 200)
+            self.assertEqual(updated.json()["accounts_count"], 1)
+            self.assertEqual(updated.json()["account_ids"], ["act_1018756607700064"])
+
+            account_deleted = await client.delete(
+                "/api/accounts/act_1018756607700064",
+                headers=buyer_headers,
+            )
+            self.assertEqual(account_deleted.status_code, 200)
+            group_after_account_delete = await client.get(
+                "/api/account-groups",
+                headers=buyer_headers,
+            )
+            self.assertEqual(group_after_account_delete.json()[0]["accounts_count"], 0)
+            self.assertEqual(group_after_account_delete.json()[0]["account_ids"], [])
+
+            deleted = await client.delete(
+                f"/api/account-groups/{group['id']}",
+                headers=buyer_headers,
+            )
+            self.assertEqual(deleted.status_code, 200)
+            self.assertEqual(
+                (await client.get("/api/account-groups", headers=buyer_headers)).json(),
+                [],
+            )
+
+        async with self.test_session_maker() as session:
+            self.assertEqual(
+                int((await session.execute(select(func.count()).select_from(AccountGroup))).scalar_one()),
+                0,
+            )
+            self.assertEqual(
+                int((await session.execute(select(func.count()).select_from(AccountGroupMember))).scalar_one()),
+                0,
+            )
 
     async def test_account_profile_and_latest_saved_metrics_are_owner_isolated(self):
         async with self.test_session_maker() as session:
@@ -381,6 +517,15 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     ),
                 )
             )
+            account_group = AccountGroup(
+                owner_id="8948797431",
+                owner_user_id=buyer.id,
+                name="NL",
+                description="Netherlands",
+            )
+            session.add(account_group)
+            await session.flush()
+            session.add(AccountGroupMember(group_id=account_group.id, account_id=account.id, position=0))
             session.add(
                 Account(
                     account_id="act_999999999",
@@ -415,6 +560,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 headers=headers,
                 json={"custom_name": "x" * 121, "note": ""},
             )
+            summary = await client.get("/api/summary?period=today", headers=headers)
 
         self.assertEqual(accounts.status_code, 200)
         item = accounts.json()[0]
@@ -428,6 +574,11 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.json()["custom_name"], "NL · основной")
         self.assertEqual(updated.json()["note"], "Льётся NL, новый оффер")
+        self.assertEqual(summary.status_code, 200)
+        summary_account = summary.json()["accounts"][0]
+        self.assertEqual(summary_account["custom_name"], "NL · основной")
+        self.assertEqual(summary_account["note"], "Льётся NL, новый оффер")
+        self.assertEqual(summary_account["group_ids"], [account_group.id])
         self.assertEqual(forbidden.status_code, 404)
         self.assertEqual(invalid.status_code, 422)
 
@@ -487,6 +638,20 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     "budget_max_daily": 0,
                 },
                 {"name": "Negative threshold", "conditions": [{**base_condition[0], "value": -1}]},
+                {
+                    "name": "Impossible range",
+                    "conditions": [
+                        {"metric": "spend", "operator": "gte", "value": 10, "time_window": "today"},
+                        {"metric": "spend", "operator": "lt", "value": 5, "time_window": "today"},
+                    ],
+                },
+                {
+                    "name": "Protected conversion",
+                    "action": "turn_off",
+                    "conditions": [
+                        {"metric": "registrations", "operator": "gte", "value": 1, "time_window": "today"}
+                    ],
+                },
             ]
             for invalid_payload in invalid_payloads:
                 invalid_response = await client.post(
@@ -561,6 +726,54 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(d_resp.status_code, 200)
             self.assertEqual(d_resp.json()["active_rules"], [])
             self.assertFalse(d_resp.json()["rules_enabled"])
+
+    async def test_account_rejects_rules_with_opposite_actions_and_same_trigger(self):
+        init_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {init_data}"}
+        condition = [
+            {"metric": "spend", "operator": "gte", "value": 10, "time_window": "today"}
+        ]
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            stop = await client.post(
+                "/api/presets",
+                headers=headers,
+                json={"name": "Выключить", "action": "turn_off", "conditions": condition},
+            )
+            start = await client.post(
+                "/api/presets",
+                headers=headers,
+                json={"name": "Включить", "action": "turn_on", "conditions": condition},
+            )
+            self.assertEqual(stop.status_code, 200)
+            self.assertEqual(start.status_code, 200)
+
+            first_assignment = await client.post(
+                "/api/accounts/act_1018756607700064/assign-rule",
+                headers=headers,
+                json={"preset_id": stop.json()["id"]},
+            )
+            conflict = await client.post(
+                "/api/accounts/act_1018756607700064/assign-rule",
+                headers=headers,
+                json={"preset_id": start.json()["id"]},
+            )
+
+        self.assertEqual(first_assignment.status_code, 200)
+        self.assertEqual(conflict.status_code, 409)
+        self.assertIn("противоречат", conflict.json()["detail"])
+
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_1018756607700064")
+                )
+            ).scalar_one()
+        self.assertEqual(len(json.loads(account.active_rules)), 1)
 
     async def test_rule_groups_are_isolated_editable_and_assigned_atomically(self):
         async with self.test_session_maker() as session:
@@ -858,9 +1071,9 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(default_view.status_code, 200)
             self.assertFalse(default_view.json()["is_saved"])
             self.assertEqual(default_view.json()["view_mode"], "all")
-            self.assertEqual(len(default_view.json()["visible_columns"]), 22)
+            self.assertEqual(len(default_view.json()["visible_columns"]), 24)
             self.assertEqual(default_view.json()["sort_column"], "")
-            self.assertEqual(default_view.json()["filters"], {"query": "", "status": "all"})
+            self.assertEqual(default_view.json()["filters"], {"query": "", "status": "all", "group_id": "all"})
             self.assertEqual(default_view.json()["period"], "today")
 
             saved_view = await client.put(
@@ -874,8 +1087,8 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 saved_view.json()["visible_columns"],
                 ["account", "data", "spend", "impressions", "cpm"],
             )
-            self.assertEqual(len(saved_view.json()["column_order"]), 22)
-            self.assertEqual(saved_view.json()["column_order"][:3], ["account", "data", "spend"])
+            self.assertEqual(len(saved_view.json()["column_order"]), 24)
+            self.assertEqual(saved_view.json()["column_order"][:3], ["account", "custom_name", "note"])
             self.assertEqual(saved_view.json()["column_widths"]["account"], 260)
 
             restored_view = await client.get("/api/analytics-view", headers=buyer_headers)
@@ -892,7 +1105,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     "column_widths": {"spend": 176, "account": 320, "cpp": 88},
                     "sort_column": "spend",
                     "sort_direction": "desc",
-                    "filters": {"query": "sweden", "status": "synced"},
+                    "filters": {"query": "sweden", "status": "synced", "group_id": "42"},
                     "period": "last_7d",
                 },
             )
@@ -905,7 +1118,10 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(reordered_view.json()["column_widths"]["account"], 320)
             self.assertEqual(reordered_view.json()["sort_column"], "spend")
             self.assertEqual(reordered_view.json()["sort_direction"], "desc")
-            self.assertEqual(reordered_view.json()["filters"], {"query": "sweden", "status": "synced"})
+            self.assertEqual(
+                reordered_view.json()["filters"],
+                {"query": "sweden", "status": "synced", "group_id": "42"},
+            )
             self.assertEqual(reordered_view.json()["period"], "last_7d")
 
             restored_reordered_view = await client.get("/api/analytics-view", headers=buyer_headers)
@@ -917,7 +1133,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
             isolated_admin_view = await client.get("/api/analytics-view", headers=admin_headers)
             self.assertFalse(isolated_admin_view.json()["is_saved"])
-            self.assertEqual(len(isolated_admin_view.json()["visible_columns"]), 22)
+            self.assertEqual(len(isolated_admin_view.json()["visible_columns"]), 24)
 
             invalid_view = await client.put(
                 "/api/analytics-view",
@@ -960,6 +1176,13 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 json={"filters": {"status": "archived"}},
             )
             self.assertEqual(invalid_status.status_code, 422)
+
+            invalid_group = await client.put(
+                "/api/analytics-view",
+                headers=buyer_headers,
+                json={"filters": {"group_id": "foreign"}},
+            )
+            self.assertEqual(invalid_group.status_code, 422)
 
             invalid_period = await client.put(
                 "/api/analytics-view",
@@ -1234,6 +1457,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(s_resp.status_code, 200)
             self.assertEqual(s_resp.json()["poll_interval_minutes"], 15)
             self.assertEqual(s_resp.json()["critical_rule_interval_minutes"], 2)
+            self.assertEqual(s_resp.json()["stop_confirmation_minutes"], 10)
             self.assertEqual(s_resp.json()["usage_hard_limit_percent"], 80)
 
             missing_password = await client.post(
@@ -1259,6 +1483,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     "current_password": "admin-password",
                     "poll_interval_minutes": 15,
                     "critical_rule_interval_minutes": 1,
+                    "stop_confirmation_minutes": 7,
                     "inventory_cache_minutes": 5,
                     "account_health_interval_minutes": 30,
                     "max_concurrent_accounts": 2,
@@ -1276,6 +1501,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     "current_password": "admin-password",
                     "poll_interval_minutes": 15,
                     "critical_rule_interval_minutes": 1,
+                    "stop_confirmation_minutes": 7,
                     "inventory_cache_minutes": 5,
                     "account_health_interval_minutes": 30,
                     "max_concurrent_accounts": 2,
@@ -1295,6 +1521,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(automation_resp.status_code, 200)
         self.assertEqual(invalid_thresholds.status_code, 422)
         self.assertEqual(refreshed.json()["critical_rule_interval_minutes"], 1)
+        self.assertEqual(refreshed.json()["stop_confirmation_minutes"], 7)
         self.assertEqual(refreshed.json()["max_concurrent_actions"], 4)
         self.assertEqual(refreshed.json()["usage_hard_limit_percent"], 78)
 

@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.19.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.21.0">
 </head>
 
 <body>
@@ -144,6 +144,18 @@
           </button>
         </div>
 
+        <section class="account-groups-panel" aria-labelledby="accountGroupsTitle">
+          <div class="account-groups-panel-head">
+            <div>
+              <span class="eyebrow">Сегментация</span>
+              <h3 id="accountGroupsTitle">Группы кабинетов</h3>
+              <p>Один кабинет может входить сразу в несколько групп: по гео, офферу или команде.</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="window.openCreateAccountGroup()">+ Новая группа</button>
+          </div>
+          <div id="accountGroupsBar" class="account-groups-bar"></div>
+        </section>
+
         <!-- Filter & Search Toolbar -->
         <div class="toolbar">
           <div class="search-box">
@@ -271,6 +283,13 @@
         </div>
 
         <div class="summary-toolbar">
+          <div class="summary-scope-control">
+            <label for="summaryAccountGroupSelect">Группа кабинетов</label>
+            <select id="summaryAccountGroupSelect" aria-label="Группа кабинетов">
+              <option value="all">Все кабинеты</option>
+            </select>
+            <span id="summaryGroupScopeLabel">Все подключённые кабинеты</span>
+          </div>
           <span>Период отчёта</span>
           <div class="period-switcher">
             <button class="period-btn active" data-period="today">Сегодня</button>
@@ -498,7 +517,7 @@
               <button class="summary-view-btn active" type="button" data-summary-view="all">Все метрики</button>
             </div>
             <button id="btnOpenSummaryColumns" class="btn btn-secondary summary-columns-button" type="button">
-              Колонки таблицы <span id="summaryVisibleColumnsCount" class="summary-columns-count">22</span>
+              Колонки таблицы <span id="summaryVisibleColumnsCount" class="summary-columns-count">24</span>
             </button>
           </div>
 
@@ -837,6 +856,19 @@
               </label>
 
               <label class="automation-setting-field">
+                <span>Подтверждение перед STOP</span>
+                <small>Условие должно сохраняться это время; Meta успевает доставить регистрацию или покупку</small>
+                <select id="settingStopConfirmation" class="form-select dark-select">
+                  <option value="0">Без ожидания</option>
+                  <option value="3">3 минуты</option>
+                  <option value="5">5 минут</option>
+                  <option value="10">10 минут</option>
+                  <option value="15">15 минут</option>
+                  <option value="30">30 минут</option>
+                </select>
+              </label>
+
+              <label class="automation-setting-field">
                 <span>Кэш списка ad set</span>
                 <small>Как часто повторно получать статусы и структуру кабинета</small>
                 <select id="settingInventoryCache" class="form-select dark-select">
@@ -1014,7 +1046,7 @@
             <!-- 1. Rule Name -->
             <div class="form-group" style="margin-bottom: 12px;">
               <label for="ruleNameInput">Название правила (пресета):</label>
-              <input type="text" id="ruleNameInput" class="form-input" placeholder="Например: Стоп CPL выше лимита">
+              <input type="text" id="ruleNameInput" class="form-input" maxlength="120" placeholder="Например: Выключить при расходе 6 и не больше 1 лида">
             </div>
 
             <!-- 2. Action Selector -->
@@ -1044,6 +1076,11 @@
               <span class="input-hint" style="font-size: 11px; margin-top: 4px;">Все денежные пороги применяются в валюте конкретного кабинета. Потолок защищает от чрезмерного увеличения.</span>
             </div>
 
+            <div id="funnelProtectionNotice" class="form-group" style="margin-bottom: 12px; background: rgba(52, 211, 153, 0.06); padding: 12px; border-radius: 7px; border: 1px solid rgba(52, 211, 153, 0.2);">
+              <div style="font-size: 12px; font-weight: 650; color: var(--color-success);">Защита воронки включена</div>
+              <span class="input-hint" style="font-size: 11px; margin-top: 4px;">Любой STOP не выполнится, если Meta уже показывает хотя бы одну регистрацию или покупку. Перед выключением нулевая воронка должна повторно подтвердиться.</span>
+            </div>
+
             <!-- 3. Conditions Builder -->
             <div class="form-group" style="margin-bottom: 8px;">
               <div class="form-label-group" style="display: flex; justify-content: space-between; align-items: center;">
@@ -1065,6 +1102,19 @@
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Добавить условие
               </button>
+
+              <div id="rulePlainPreview" class="rule-plain-preview" aria-live="polite">
+                <div class="rule-plain-preview-head">
+                  <span>Правило простым языком</span>
+                  <div class="rule-plain-actions">
+                    <button type="button" id="btnCopyRulePlainText" class="btn-link-action">Копировать</button>
+                    <button type="button" id="btnUseRulePlainName" class="btn-link-action">Вставить в название</button>
+                  </div>
+                </div>
+                <p id="rulePlainText">Настройте действие и условия — здесь появится понятное описание.</p>
+                <small id="rulePlainDetails"></small>
+                <div id="ruleValidationMessages" class="rule-validation-messages"></div>
+              </div>
             </div>
           </div>
 
@@ -1188,6 +1238,40 @@
         <div class="modal-footer account-profile-footer">
           <button class="btn btn-secondary" type="button" onclick="window.closeModal('modalAccountProfile')">Отмена</button>
           <button id="btnSaveAccountProfile" class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="modalAccountGroup" class="modal-overlay hidden">
+      <div class="modal-dialog account-group-dialog">
+        <div class="modal-header">
+          <div>
+            <h3 id="accountGroupModalTitle">Новая группа кабинетов</h3>
+            <p class="account-profile-heading">Группа будет доступна на «Моих кабинетах» и в Сводке.</p>
+          </div>
+          <button class="btn-close" type="button" onclick="window.closeModal('modalAccountGroup')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input id="accountGroupId" type="hidden" value="">
+          <div class="form-group">
+            <label for="accountGroupName">Название группы</label>
+            <input id="accountGroupName" class="form-input" maxlength="80" placeholder="Например: NL · основной оффер">
+          </div>
+          <div class="form-group">
+            <label for="accountGroupDescription">Описание</label>
+            <textarea id="accountGroupDescription" class="form-textarea" rows="3" maxlength="300" placeholder="Что объединяет эти кабинеты"></textarea>
+          </div>
+          <div class="account-group-members-head">
+            <label>Кабинеты в группе</label>
+            <span id="accountGroupSelectionCount">Выбрано: 0</span>
+          </div>
+          <div id="accountGroupMembers" class="account-group-members"></div>
+        </div>
+        <div class="modal-footer account-profile-footer">
+          <button id="btnDeleteAccountGroup" class="btn btn-danger hidden" type="button">Удалить группу</button>
+          <span class="modal-footer-spacer"></span>
+          <button class="btn btn-secondary" type="button" onclick="window.closeModal('modalAccountGroup')">Отмена</button>
+          <button id="btnSaveAccountGroup" class="btn btn-primary" type="button">Сохранить</button>
         </div>
       </div>
     </div>
@@ -1385,6 +1469,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.19.0"></script>
+  <script src="/static/js/app.js?v=9.21.0"></script>
 </body>
 </html>

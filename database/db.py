@@ -365,6 +365,7 @@ async def migrate_audit_undo_contract(conn) -> bool:
 STABLE_OWNER_TABLES = (
     "rule_presets",
     "rule_groups",
+    "account_groups",
     "accounts",
     "summary_snapshots",
     "analytics_view_preferences",
@@ -540,6 +541,7 @@ async def migrate_automation_settings_contract(conn) -> list[str]:
     )
     definitions = {
         "critical_rule_interval_minutes": "INTEGER NOT NULL DEFAULT 2",
+        "stop_confirmation_minutes": "INTEGER NOT NULL DEFAULT 10",
         "inventory_cache_minutes": "INTEGER NOT NULL DEFAULT 5",
         "account_health_interval_minutes": "INTEGER NOT NULL DEFAULT 15",
         "max_concurrent_accounts": "INTEGER NOT NULL DEFAULT 3",

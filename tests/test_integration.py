@@ -169,6 +169,9 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
 
     async def test_custom_rule_stops_adset(self):
         """Пользовательское правило: Спенд >= $10 И Лиды = 0 → STOP."""
+        async with self.test_session_maker() as session:
+            session.add(AppSettings(stop_confirmation_minutes=0))
+            await session.commit()
         mock_meta = MockMetaClient()
         sent_alerts = []
         now = [10_000.0]
@@ -336,6 +339,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                     "notify_tg": False,
                 }
             ])
+            session.add(AppSettings(stop_confirmation_minutes=0))
             await session.commit()
 
         mock_meta = MockMetaClient()
@@ -364,6 +368,9 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(json.loads(audit_event.details)["notify_tg"])
 
     async def test_failed_rule_action_is_audited_and_secret_safe(self):
+        async with self.test_session_maker() as session:
+            session.add(AppSettings(stop_confirmation_minutes=0))
+            await session.commit()
         mock_meta = MockMetaClient()
         mock_meta.set_adset_status = AsyncMock(
             side_effect=RuntimeError("Meta failed: access_token=private-secret")
@@ -387,6 +394,88 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("private-secret", failed_event.message)
             self.assertIn("access_token=[REDACTED]", failed_event.message)
             self.assertEqual(json.loads(failed_event.before_state)["status"], "ACTIVE")
+
+    async def test_stop_requires_repeated_confirmation_before_meta_mutation(self):
+        now = [1_000.0]
+        async with self.test_session_maker() as session:
+            session.add(
+                AppSettings(
+                    critical_rule_interval_minutes=2,
+                    stop_confirmation_minutes=5,
+                )
+            )
+            await session.commit()
+
+        mock_meta = MockMetaClient()
+        worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+
+        first = await worker.run_cycle()
+        self.assertEqual(first["adsets_stopped"], 0)
+        self.assertEqual(first["stop_confirmations_waiting"], 1)
+        self.assertEqual(mock_meta.status_changes, [])
+
+        now[0] += 4 * 60
+        second = await worker.run_cycle()
+        self.assertEqual(second["adsets_stopped"], 0)
+        self.assertEqual(second["stop_confirmations_waiting"], 1)
+
+        now[0] += 2 * 60
+        third = await worker.run_cycle()
+        self.assertEqual(third["adsets_stopped"], 1)
+        self.assertEqual(mock_meta.status_changes, [("adset_1", "PAUSED")])
+
+        async with self.test_session_maker() as session:
+            pending_event = (
+                await session.execute(
+                    select(AuditEvent).where(
+                        AuditEvent.event_type == "STOP_CONFIRMATION_STARTED"
+                    )
+                )
+            ).scalar_one()
+            self.assertEqual(pending_event.status, "WAITING")
+
+    async def test_stop_confirmation_restarts_when_funnel_guard_breaks_the_match(self):
+        now = [2_000.0]
+        async with self.test_session_maker() as session:
+            session.add(
+                AppSettings(
+                    critical_rule_interval_minutes=2,
+                    stop_confirmation_minutes=5,
+                )
+            )
+            await session.commit()
+
+        mock_meta = MockMetaClient()
+        worker = MonitoringWorker(meta_client=mock_meta, clock=lambda: now[0])
+
+        first = await worker.run_cycle()
+        self.assertEqual(first["stop_confirmations_waiting"], 1)
+
+        now[0] += 4 * 60
+        mock_meta.adsets_state["adset_1"]["registrations"] = 1
+        guarded = await worker.run_cycle()
+        self.assertEqual(guarded["adsets_stopped"], 0)
+        self.assertEqual(mock_meta.status_changes, [])
+
+        now[0] += 2 * 60
+        mock_meta.adsets_state["adset_1"]["registrations"] = 0
+        restarted = await worker.run_cycle()
+        self.assertEqual(restarted["adsets_stopped"], 0)
+        self.assertEqual(restarted["stop_confirmations_waiting"], 1)
+
+        async with self.test_session_maker() as session:
+            state = (
+                await session.execute(
+                    select(RuleExecutionState).where(
+                        RuleExecutionState.adset_id == "adset_1",
+                        RuleExecutionState.action == RuleAction.STOP.value,
+                    )
+                )
+            ).scalar_one()
+            details = json.loads(state.details)
+            self.assertEqual(state.status, "STOP_CONFIRMING")
+            self.assertEqual(details["first_seen_at"], now[0])
+            self.assertEqual(details["observations"], 1)
 
     async def test_rule_check_interval_is_enforced_without_extra_meta_calls(self):
         async with self.test_session_maker() as session:

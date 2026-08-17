@@ -8,6 +8,7 @@ from core.metrics import (
     compare_metric,
     cost_per_event,
     rule_metric_reading,
+    validate_rule_set_compatibility,
     validate_runtime_rule,
 )
 
@@ -124,6 +125,11 @@ class RuleEngine:
         if not active_rules or not isinstance(active_rules, list) or len(active_rules) == 0:
             return noop("Правила не настроены.")
 
+        try:
+            validate_rule_set_compatibility(active_rules)
+        except (TypeError, ValueError) as error:
+            return noop(f"Автоматика остановлена: {error}")
+
         def get_action_priority(action: RuleAction) -> int:
             priorities = {
                 RuleAction.STOP: 100,
@@ -146,6 +152,7 @@ class RuleEngine:
 
         triggered_actions = []
         invalid_rule_seen = False
+        funnel_guarded = False
 
         for rule in active_rules:
             if rule.get("enabled", True) is False or rule.get("needs_review", False) is True:
@@ -227,6 +234,13 @@ class RuleEngine:
                 if rule_action is None:
                     invalid_rule_seen = True
                     continue
+
+                # Funnel protection is deliberately enforced below the rule
+                # builder so it also covers legacy and already attached rules.
+                # A deeper conversion always wins over every STOP condition.
+                if rule_action == RuleAction.STOP and (registrations > 0 or purchases > 0):
+                    funnel_guarded = True
+                    continue
                 rule_name = rule.get("name", "Unknown Rule")
                 reason_str = f"[{rule_name}] " + ", ".join(matched_reasons)
                 
@@ -244,6 +258,11 @@ class RuleEngine:
                 })
 
         if not triggered_actions:
+            if funnel_guarded:
+                return noop(
+                    "Защита воронки: STOP пропущен, потому что Meta показывает "
+                    f"регистрации ({registrations}) или покупки ({purchases})."
+                )
             return noop(
                 "Правила не настроены или некорректны; действия в Meta пропущены."
                 if invalid_rule_seen

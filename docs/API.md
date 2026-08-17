@@ -52,6 +52,25 @@ Production: `https://smattrades.com`.
 | `POST /api/accounts/{account_id}/detach-rule/{preset_id}` | — | удаляет назначение одного правила; при пустом списке выключает правила |
 | `POST /api/accounts/{account_id}/toggle-rules` | — | включает/выключает уже назначенные правила; без правил включение запрещено |
 
+### Группы кабинетов
+
+| Метод и путь | Тело | Назначение |
+|---|---|---|
+| `GET /api/account-groups` | — | возвращает собственные группы пользователя и упорядоченный список входящих в них кабинетов |
+| `POST /api/account-groups` | `name`, `description?`, `account_ids[]` | создаёт группу из доступных пользователю кабинетов |
+| `PUT /api/account-groups/{group_id}` | полный group payload | изменяет название, описание и состав своей группы |
+| `DELETE /api/account-groups/{group_id}` | — | удаляет группу и её связи; сами кабинеты и их данные не удаляются |
+
+```json
+{
+  "name": "NL · основной залив",
+  "description": "Кабинеты команды по Нидерландам",
+  "account_ids": ["act_123456789", "act_987654321"]
+}
+```
+
+Один кабинет может входить в несколько групп. API отклоняет чужие или несуществующие кабинеты, дубли названий внутри одного владельца и пустое название. Все операции изолированы по неизменяемому `owner_user_id`.
+
 Формат элемента `accounts` для пакетного добавления:
 
 ```json
@@ -66,7 +85,7 @@ Production: `https://smattrades.com`.
 
 Импорт кабинета никогда не включает автоматику и не назначает правила автоматически. Валюта и часовой пояс берутся из Meta. Если Meta не вернула валюту, сохраняется `UNKNOWN`, а денежные действия блокируются до успешного уточнения.
 
-В `GET /api/accounts` поле `connection_type` равно `facebook_login` для кабинета, связанного с зашифрованным OAuth-подключением, и `system_user` для ручного резервного подключения. `custom_name` и `note` принадлежат Buyerly и не перезаписываются очередным импортом данных Meta. `latest_metrics` берётся из последнего успешного сохранённого snapshot периода `today`; если сводка ещё не загружалась или кабинет появился позже снимка, поле равно `null`. Открытие списка кабинетов не создаёт новый запрос в Meta.
+В `GET /api/accounts` поле `connection_type` равно `facebook_login` для кабинета, связанного с зашифрованным OAuth-подключением, и `system_user` для ручного резервного подключения. `custom_name` и `note` принадлежат Buyerly и не перезаписываются очередным импортом данных Meta, а `group_ids[]` перечисляет группы кабинета. `latest_metrics` берётся из последнего успешного сохранённого snapshot периода `today`; если сводка ещё не загружалась или кабинет появился позже снимка, поле равно `null`. Открытие списка кабинетов не создаёт новый запрос в Meta.
 
 ## Подключение Meta через Facebook Login for Business
 
@@ -152,7 +171,7 @@ Meta возвращает браузер на служебный callback `/api/
 | `GET /api/analytics-view` | — | сохранённое представление таблицы пользователя |
 | `PUT /api/analytics-view` | view payload | сохраняет вид, колонки, порядок, ширины, сортировку, фильтры и период |
 
-`force=true` запрашивает Meta и сохраняет новый snapshot; обычный запрос сначала возвращает память или последний успешный snapshot PostgreSQL. Ответ сводки содержит `generated_at`, `snapshot`, `cache`, `data_quality`, `metric_definitions`, итоги и `accounts[]`.
+`force=true` запрашивает Meta и сохраняет новый snapshot; обычный запрос сначала возвращает память или последний успешный snapshot PostgreSQL. Ответ сводки содержит `generated_at`, `snapshot`, `cache`, `data_quality`, `metric_definitions`, итоги и `accounts[]`. Перед возвратом сохранённые строки обогащаются актуальными `custom_name`, `note` и `group_ids`, поэтому изменение внутренней подписи или состава группы видно без повторной синхронизации Meta.
 
 Денежный контракт:
 
@@ -160,7 +179,9 @@ Meta возвращает браузер на служебный callback `/api/
 - при нескольких валютах `mixed_currencies=true`, общий `total_spend` и общие стоимости равны `null`, значения выдаются отдельно в `currency_totals[]`;
 - при `UNKNOWN` общие денежные показатели также недоступны, чтобы Buyerly не создавал ложную сумму.
 
-View payload принимает `view_mode` (`all`, `overview`, `delivery`, `traffic`, `funnel`, `custom`), `visible_columns`, `column_order`, `column_widths`, `sort_column`, `sort_direction`, `filters` и `period`. Обязательные колонки — `account` и `data`, допустимая ширина — 72–420 px. Фильтры: `query` и `status` (`all`, `synced`, `blocked`, `error`).
+View payload принимает `view_mode` (`all`, `overview`, `delivery`, `traffic`, `funnel`, `custom`), `visible_columns`, `column_order`, `column_widths`, `sort_column`, `sort_direction`, `filters` и `period`. Обязательные колонки — `account` и `data`, допустимая ширина — 72–420 px. Фильтры: `query`, `status` (`all`, `synced`, `blocked`, `error`) и `group_id` (`all` или положительный ID своей группы). Колонки `custom_name` и `note` настраиваются и сохраняются по тем же правилам, что и метрики.
+
+Выбор группы в web-интерфейсе является глобальным срезом сводки: из уже полученного snapshot локально пересчитываются верхние KPI, качество синхронизации, раздельные итоги валют и строки таблицы. Переключение группы не создаёт новый запрос в Meta. Для группового среза сравнение с предыдущим обновлением пока не показывается, потому что прежний snapshot не хранит историю состава группы.
 
 ## История и безопасная отмена
 
@@ -191,9 +212,11 @@ View payload принимает `view_mode` (`all`, `overview`, `delivery`, `tra
 | `POST /api/settings/automation` | только admin + текущий пароль | атомарно сохраняет параметры автоматики и защиты квоты |
 | `POST /api/settings/interval` | только admin + текущий пароль | совместимый endpoint базового интервала; тело `{"minutes": 10, "current_password": "…"}` |
 
-`POST /api/settings/automation` принимает `current_password`, `poll_interval_minutes`, `critical_rule_interval_minutes`, `inventory_cache_minutes`, `account_health_interval_minutes`, `max_concurrent_accounts`, `max_concurrent_actions`, `usage_soft_limit_percent`, `usage_hard_limit_percent` и `adaptive_polling_enabled`. Пароль проверяется по защищённому хэшу текущей учётной записи и не сохраняется. Мягкий порог должен быть ниже жёсткого; числовые пределы проверяются API.
+`POST /api/settings/automation` принимает `current_password`, `poll_interval_minutes`, `critical_rule_interval_minutes`, `stop_confirmation_minutes`, `inventory_cache_minutes`, `account_health_interval_minutes`, `max_concurrent_accounts`, `max_concurrent_actions`, `usage_soft_limit_percent`, `usage_hard_limit_percent` и `adaptive_polling_enabled`. `stop_confirmation_minutes` задаёт непрерывное окно повторной проверки перед STOP (0–60 минут, по умолчанию 10). Пароль проверяется по защищённому хэшу текущей учётной записи и не сохраняется. Мягкий порог должен быть ниже жёсткого; числовые пределы проверяются API.
 
 Интервал правила применяется к самому правилу, но STOP-правило никогда не ждёт дольше защищённого критического интервала. Базовый интервал относится к фоновому мониторингу кабинета, а здоровье (статус, валюта, часовой пояс) имеет отдельный более редкий график. Worker запускает диспетчерский цикл каждую минуту, но обращается к Meta только при наступлении сохранённого расписания или когда нужно уточнить неизвестную валюту.
+
+Любой STOP не выполняется, когда текущий Ads Insights показывает хотя бы одну регистрацию или покупку, в том числе если само правило содержит Registrations, Purchases, CPReg или CPP. После первого совпадения нулевой воронки создаётся только аудит `STOP_CONFIRMATION_STARTED`; фактический STOP возможен после непрерывных повторных совпадений в пределах настроенного окна. События, присутствующие только во внешнем трекере, не могут участвовать в этой защите без интеграции трекера.
 
 Чтения разных кабинетов выполняются с ограниченной параллельностью. Список и текущие статусы ad set временно кэшируются, а Insights для нужных окон остаются свежими. `MetaClient` переиспользует HTTP-соединения, добавляет `appsecret_proof`, учитывает `X-App-Usage` и `X-Business-Use-Case-Usage`: после мягкого порога фоновые запросы замедляются, после жёсткого откладываются, но критические проверки и уже заявленные действия не блокируются. Поле `runtime` ответа `GET /api/settings` содержит время и длительность последнего цикла, количества обработанных объектов, ошибок и безопасный снимок квоты без token.
 

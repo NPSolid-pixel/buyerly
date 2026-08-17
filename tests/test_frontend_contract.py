@@ -105,6 +105,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="btnSaveAutomationSettings"',
             'id="automationRuntimeBadge"',
             'id="automationUsagePercent"',
+            'id="settingStopConfirmation"',
+            'id="funnelProtectionNotice"',
         ):
             self.assertIn(contract, self.index)
 
@@ -113,6 +115,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             "window.saveAutomationSettings",
             "apiRequest('/api/settings/automation'",
             "current_password: password",
+            "stop_confirmation_minutes: readNumber('settingStopConfirmation')",
         ):
             self.assertIn(contract, self.script)
 
@@ -279,7 +282,34 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.19.0', self.index)
+        self.assertIn('v=9.21.0', self.index)
+
+    def test_account_groups_scope_the_whole_summary_and_keep_profile_columns_configurable(self):
+        for contract in (
+            'id="accountGroupsBar"',
+            'id="modalAccountGroup"',
+            'id="accountGroupMembers"',
+            'id="summaryAccountGroupSelect"',
+            'id="summaryGroupScopeLabel"',
+            'data-summary-column="custom_name"',
+            'data-summary-column="note"',
+        ):
+            self.assertIn(contract, self.index + self.script)
+
+        for contract in (
+            "apiRequest('/api/account-groups')",
+            "apiRequest(groupId ? `/api/account-groups/${groupId}` : '/api/account-groups'",
+            'buildScopedSummaryData',
+            "updateSummaryFilters({ group_id:",
+            "{ key: 'custom_name', label: 'Моё название'",
+            "{ key: 'note', label: 'Заметка'",
+            'renderAccountGroupTags',
+        ):
+            self.assertIn(contract, self.script)
+
+        self.assertIn('.account-groups-panel', self.styles)
+        self.assertIn('.summary-scope-control', self.styles)
+        self.assertIn('.summary-note-cell', self.styles)
 
     def test_money_is_currency_aware_and_mixed_totals_are_separated(self):
         for contract in (
@@ -309,6 +339,28 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         self.assertNotIn('<option value="cpa"', self.script)
         self.assertNotIn('<option value="cpr"', self.script)
+
+    def test_rule_builder_explains_and_validates_rules_in_plain_russian(self):
+        for contract in (
+            'id="rulePlainPreview"',
+            'id="rulePlainText"',
+            'id="ruleValidationMessages"',
+            'id="btnCopyRulePlainText"',
+            'id="btnUseRulePlainName"',
+            'Правило простым языком',
+            'validateRuleDraft',
+            'buildPlainRuleTextFromValues',
+            'renderRuleDraftSummary',
+            'Выключить группу объявлений',
+        ):
+            self.assertIn(contract, self.index + self.script)
+
+        for style_contract in (
+            '.rule-plain-preview',
+            '.rule-validation-message.error',
+            '.rule-card-plain-summary',
+        ):
+            self.assertIn(style_contract, self.styles)
 
     def test_account_cards_separate_meta_automation_and_rule_state(self):
         for contract in (
