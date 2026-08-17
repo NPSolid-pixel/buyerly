@@ -132,9 +132,10 @@ class Account(Base):
     batch_name = Column(String, default="", nullable=False, doc="Имя пачки кабинетов (если добавлялось пачкой)")
     currency = Column(String, default="UNKNOWN", nullable=False, doc="ISO 4217 валюта рекламного кабинета из Meta")
     
-    # Часовой пояс и отслеживание старта нового дня
+    # Часовой пояс и отслеживание локальной границы календарных суток
     timezone_name = Column(String, default="UTC", nullable=False, doc="Часовой пояс рекламного кабинета")
-    last_started_date = Column(String, default="", nullable=False, doc="Дата последнего зафиксированного старта открута")
+    last_started_date = Column(String, default="", nullable=False, doc="Legacy: прежняя дата обнаружения Spend")
+    last_day_start_date = Column(String, default="", nullable=False, doc="Последняя локальная дата, обработанная уведомлением новых суток")
     
     # Привязанные правила (JSON)
     active_rules = Column(Text, default="[]", nullable=False, doc="JSON массив объектов привязанных правил")
@@ -221,7 +222,7 @@ class EventLog(Base):
     __tablename__ = "event_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    event_type = Column(String, nullable=False, index=True, doc="Тип события (ALERT_SENT, DAY_START, STOP, etc.)")
+    event_type = Column(String, nullable=False, index=True, doc="Тип события (ACCOUNT_DAY_STARTED, STOP, etc.)")
     target_chat_id = Column(String, default="", index=True, doc="Кому отправлено (Telegram ID)")
     account_id = Column(String, default="", index=True, doc="ID кабинета")
     message = Column(Text, nullable=False, doc="Текст отправленного сообщения или события")

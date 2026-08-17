@@ -6,6 +6,7 @@ import httpx
 from typing import Optional, List, Dict, Any
 
 from core.currency import from_meta_budget_units, normalize_currency, to_meta_budget_units
+from core.timezones import canonical_timezone_name
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +327,7 @@ class MetaClient:
         data = resp.json()
         status_code = data.get("account_status", 1)
         data["currency"] = normalize_currency(data.get("currency"))
+        data["timezone_name"] = canonical_timezone_name(data.get("timezone_name"))
         data["status_label"] = ACCOUNT_STATUS_MAP.get(status_code, f"Неизвестный статус ({status_code})")
         return data
 

@@ -6,7 +6,6 @@ import hashlib
 import time
 import uuid
 from datetime import datetime, timezone
-import zoneinfo
 from typing import Optional, Callable, Awaitable, Any
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -22,12 +21,19 @@ from database.models import (
 )
 from core.audit import build_audit_event
 from core.currency import normalize_currency
+from core.timezones import (
+    canonical_timezone_name,
+    evaluate_day_boundary,
+    resolve_account_clock,
+    utc_offset_label,
+)
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 
 logger = logging.getLogger(__name__)
 
 PENDING_RECONCILIATION_SECONDS = 15 * 60
+DAY_BOUNDARY_NOTIFICATION_WINDOW_MINUTES = 5
 
 class MonitoringWorker:
     """
@@ -342,6 +348,141 @@ class MonitoringWorker:
             logger.error("Failed to persist audit event %s: %s", event_type, audit_error)
             return None
 
+    async def run_day_boundary_cycle(self) -> dict:
+        """Notify once when each connected account enters a new local date."""
+
+        self._current_cycle_id = uuid.uuid4().hex
+        stats = {
+            "cycle_id": self._current_cycle_id,
+            "accounts_seen": 0,
+            "dates_initialized": 0,
+            "days_notified": 0,
+            "boundaries_missed": 0,
+            "invalid_timezones": 0,
+            "errors": [],
+        }
+        now_ts = self._clock()
+
+        async with async_session_maker() as session:
+            accounts = (await session.execute(select(Account))).scalars().all()
+            stats["accounts_seen"] = len(accounts)
+            owner_user_ids = {
+                account.owner_user_id
+                for account in accounts
+                if account.owner_user_id is not None
+            }
+            owner_chat_ids = {}
+            if owner_user_ids:
+                owners = (
+                    await session.execute(
+                        select(TelegramUser).where(TelegramUser.id.in_(owner_user_ids))
+                    )
+                ).scalars().all()
+                owner_chat_ids = {
+                    owner.id: str(owner.telegram_id or "")
+                    for owner in owners
+                }
+
+            for account in accounts:
+                account_id = str(account.account_id)
+                account_name = str(account.name)
+                notification_target = (
+                    owner_chat_ids.get(account.owner_user_id) or str(account.owner_id or "")
+                )
+                clock = resolve_account_clock(account.timezone_name)
+                if clock is None:
+                    stats["invalid_timezones"] += 1
+                    stats["errors"].append(
+                        f"Account {account_id}: unknown timezone {account.timezone_name!r}"
+                    )
+                    logger.error(
+                        "Account %s day boundary skipped: unknown timezone %r",
+                        account_id,
+                        account.timezone_name,
+                    )
+                    continue
+
+                local_now = datetime.fromtimestamp(now_ts, timezone.utc).astimezone(clock.zone)
+                decision = evaluate_day_boundary(
+                    account.last_day_start_date,
+                    local_now,
+                    notification_window_minutes=DAY_BOUNDARY_NOTIFICATION_WINDOW_MINUTES,
+                )
+                timezone_changed = clock.canonical_name != account.timezone_name
+                if timezone_changed:
+                    account.timezone_name = clock.canonical_name
+                if not decision.should_update:
+                    if timezone_changed:
+                        await session.commit()
+                    continue
+
+                previous_date = str(account.last_day_start_date or "")
+                account.last_day_start_date = decision.current_date
+                if not decision.should_notify:
+                    if decision.reason == "initialized":
+                        stats["dates_initialized"] += 1
+                    else:
+                        stats["boundaries_missed"] += 1
+                        logger.warning(
+                            "Account %s new local date %s was observed outside the midnight window",
+                            account_id,
+                            decision.current_date,
+                        )
+                    await session.commit()
+                    continue
+
+                offset = utc_offset_label(local_now)
+                local_time = local_now.strftime("%H:%M")
+                local_date = local_now.strftime("%d.%m.%Y")
+                audit_event_id = await self._persist_audit_event(
+                    session,
+                    account,
+                    event_type="ACCOUNT_DAY_STARTED",
+                    status="SUCCESS",
+                    category="MONITORING",
+                    action="DETECT_ACCOUNT_DAY_BOUNDARY",
+                    message=(
+                        f"В кабинете начались новые сутки: {decision.current_date} "
+                        f"в {local_time} ({clock.canonical_name}, {offset})"
+                    ),
+                    before_state={"last_day_start_date": previous_date},
+                    after_state={"last_day_start_date": decision.current_date},
+                    details={
+                        "timezone_name": clock.canonical_name,
+                        "utc_offset": offset,
+                        "local_date": decision.current_date,
+                        "local_time": local_time,
+                    },
+                )
+                if audit_event_id is None:
+                    stats["errors"].append(
+                        f"Account {account_id}: failed to persist account day boundary"
+                    )
+                    continue
+
+                if self.telegram_notifier:
+                    await self.telegram_notifier(
+                        event_type="ACCOUNT_DAY_STARTED",
+                        account_name=account_name,
+                        account_id=account_id,
+                        target_chat_id=notification_target,
+                        timezone_name=clock.canonical_name,
+                        local_time=local_time,
+                        local_date=local_date,
+                        utc_offset=offset,
+                    )
+                stats["days_notified"] += 1
+                logger.info(
+                    "Account %s entered local date %s at %s (%s, %s)",
+                    account_id,
+                    decision.current_date,
+                    local_time,
+                    clock.canonical_name,
+                    offset,
+                )
+
+        return stats
+
     async def run_cycle(self) -> dict:
         self._current_cycle_id = uuid.uuid4().hex
         stats = {
@@ -356,7 +497,6 @@ class MonitoringWorker:
             "actions_skipped": 0,
             "actions_reconciled": 0,
             "proposals_sent": 0,
-            "starts_notified": 0,
             "errors": []
         }
 
@@ -446,6 +586,12 @@ class MonitoringWorker:
                     try:
                         acc_info = await self.meta_client.get_account_info(acc.account_id, acc.access_token)
                         acc.currency = normalize_currency(acc_info.get("currency"))
+                        refreshed_timezone = canonical_timezone_name(
+                            acc_info.get("timezone_name") or acc.timezone_name
+                        )
+                        if refreshed_timezone != acc.timezone_name:
+                            acc.timezone_name = refreshed_timezone
+                            acc.last_day_start_date = ""
                         await session.commit()
                         status_code = acc_info.get("account_status", 1)
                         if status_code != 1:
@@ -500,17 +646,7 @@ class MonitoringWorker:
                             )
                         continue
 
-                    # 3. Определяем текущее локальное время и дату в часовом поясе кабинета
-                    try:
-                        tz = zoneinfo.ZoneInfo(acc.timezone_name)
-                    except Exception:
-                        tz = timezone.utc
-                    
-                    now_in_tz = datetime.now(tz)
-                    today_str = now_in_tz.strftime("%Y-%m-%d")
-                    time_str = now_in_tz.strftime("%H:%M")
-
-                    # 4. Собираем данные за нужные time_windows, кроме 'today'
+                    # 3. Собираем данные за нужные time_windows, кроме 'today'
                     windows = set()
                     for rule in due_rules:
                         conds = rule.get("conditions", [])
@@ -533,7 +669,7 @@ class MonitoringWorker:
                         except Exception as e:
                             logger.error(f"Error fetching insights for window {w} (account {acc.account_id}): {e}")
 
-                    # 5. Запрашиваем актуальные данные из Meta API за сегодня
+                    # 4. Запрашиваем актуальные данные из Meta API за сегодня
                     adsets = await self.meta_client.get_adsets_insights(
                         account_id=acc.account_id,
                         access_token=acc.access_token,
@@ -543,47 +679,7 @@ class MonitoringWorker:
 
                     stats["adsets_checked"] += len(adsets)
 
-                    # 6. Проверяем старт открута рекламы в новые сутки (00:00)
-                    total_spend = sum(a["spend"] for a in adsets)
-                    active_adsets = [a for a in adsets if a["status"] == "ACTIVE"]
-
-                    if total_spend > 0 and acc.last_started_date != today_str:
-                        previous_started_date = acc.last_started_date
-                        acc.last_started_date = today_str
-                        stats["starts_notified"] += 1
-                        logger.info(f"Account {acc.name} started spending today ({today_str} {time_str} {acc.timezone_name})")
-                        await self._persist_audit_event(
-                            session,
-                            acc,
-                            event_type="DAY_START",
-                            status="SUCCESS",
-                            category="MONITORING",
-                            action="DETECT_SPEND_START",
-                            message=f"Кабинет начал открутку {today_str} в {time_str}",
-                            before_state={"last_started_date": previous_started_date},
-                            after_state={"last_started_date": today_str},
-                            details={
-                                "timezone_name": acc.timezone_name,
-                                "active_adsets": len(active_adsets),
-                                "start_spend": total_spend,
-                                "currency": acc.currency,
-                            },
-                        )
-                        
-                        if self.telegram_notifier:
-                            await self.telegram_notifier(
-                                event_type="DAY_START",
-                                account_name=acc.name,
-                                account_id=acc.account_id,
-                                target_chat_id=notification_target,
-                                timezone_name=acc.timezone_name,
-                                local_time=f"{time_str} ({acc.timezone_name})",
-                                active_count=len(active_adsets),
-                                start_spend=total_spend,
-                                currency=acc.currency,
-                            )
-
-                    # 7. Оцениваем каждый адсет через RuleEngine (только если авто-правила включены!)
+                    # 5. Оцениваем каждый адсет через RuleEngine (только если авто-правила включены!)
                     if not acc.rules_enabled or not due_rules:
                         # Авто-правила выключены: кабинет только собирает статистику
                         continue

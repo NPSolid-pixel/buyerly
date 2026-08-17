@@ -14,6 +14,26 @@ logger = logging.getLogger(__name__)
 def _cost_text(value: Optional[float], currency: str) -> str:
     return format_money(value, currency)
 
+
+def format_account_day_started_message(
+    *,
+    account_name: str,
+    account_id: str,
+    local_date: str,
+    local_time: str,
+    timezone_name: str,
+    utc_offset: str,
+) -> str:
+    return (
+        "🌅 <b>В рекламном кабинете начались новые сутки</b>\n\n"
+        f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
+        f"📅 <b>Новая дата:</b> <code>{local_date}</code>\n"
+        f"🕛 <b>Локальное время:</b> <code>{local_time}</code>\n"
+        f"🌍 <b>Часовой пояс:</b> <code>{timezone_name}</code> ({utc_offset})\n\n"
+        "<i>Начался новый дневной период Meta. Это время можно использовать "
+        "как ориентир для запуска и настройки правил.</i>"
+    )
+
 class TelegramNotifier:
     """
     Форматирует и отправляет алерты и отчеты в Telegram конкретному владельцу или админу
@@ -48,8 +68,6 @@ class TelegramNotifier:
         eval_result: Optional[RuleEvaluationResult] = None,
         timezone_name: str = "",
         local_time: str = "",
-        active_count: int = 0,
-        start_spend: float = 0.0,
         **kwargs
     ):
         from core.config import settings
@@ -147,15 +165,15 @@ class TelegramNotifier:
                     f"⚠️ <i>{eval_result.reason}</i>"
                 )
 
-            # 4. СТАРТ ОТКРУТА В 00:00 ПО ВРЕМЕНИ КАБИНЕТА
-            elif event_type == "DAY_START":
-                text = (
-                    f"🚀 <b>Кабинет начал открут рекламы!</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"🕒 <b>Время кабинета:</b> <code>{local_time}</code>\n"
-                    f"⚡ <b>Активных адсетов:</b> {active_count}\n"
-                    f"💰 <b>Стартовый спенд:</b> {format_money(start_spend, currency)}\n\n"
-                    f"<i>Бот непрерывно мониторит кампании.</i>"
+            # 4. НОВЫЕ КАЛЕНДАРНЫЕ СУТКИ РЕКЛАМНОГО КАБИНЕТА
+            elif event_type == "ACCOUNT_DAY_STARTED":
+                text = format_account_day_started_message(
+                    account_name=account_name,
+                    account_id=account_id,
+                    local_date=str(kwargs.get("local_date") or "—"),
+                    local_time=local_time or "00:00",
+                    timezone_name=timezone_name or "UTC",
+                    utc_offset=str(kwargs.get("utc_offset") or "UTC"),
                 )
 
             # 5. ПРОБЛЕМА С КАБИНЕТОМ (БАН / ХОЛД / ПРОВЕРКА)

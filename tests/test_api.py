@@ -649,6 +649,48 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(imported.active_rules, "[]")
             self.assertEqual(imported.currency, "EUR")
 
+    async def test_batch_import_rejects_account_without_supported_meta_timezone(self):
+        user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
+        init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)
+        payload = {
+            "accounts": [{"account_id": "act_missing_timezone", "name": "Broken clock"}],
+            "batch_name": "-",
+            "access_token": "new_mock_token",
+        }
+        meta_account = {
+            "timezone_name": "Mars/Olympus_Mons",
+            "name": "Broken clock",
+            "account_status": 1,
+            "status_label": "Активен",
+            "currency": "USD",
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_account_info",
+            new=AsyncMock(return_value=meta_account),
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/accounts/batch-add",
+                    headers={"Authorization": f"tma {init_data}"},
+                    json=payload,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["success_count"], 0)
+        self.assertEqual(response.json()["error_count"], 1)
+        self.assertIn("часовой пояс", response.json()["errors"][0]["error"])
+
+        async with self.test_session_maker() as session:
+            rejected = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_missing_timezone")
+                )
+            ).scalar_one_or_none()
+            self.assertIsNone(rejected)
+
     async def test_analytics_view_is_saved_per_user_and_validated(self):
         buyer_data = generate_valid_telegram_init_data(
             settings.BOT_TOKEN,

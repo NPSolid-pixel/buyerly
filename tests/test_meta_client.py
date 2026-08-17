@@ -15,6 +15,26 @@ class FakeResponse:
 
 
 class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
+    async def test_account_info_normalizes_legacy_meta_timezone(self):
+        client = MetaClient()
+        client._request_with_retry = AsyncMock(
+            return_value=FakeResponse(
+                {
+                    "id": "act_123",
+                    "name": "Hawaii account",
+                    "timezone_name": "US/Hawaii",
+                    "currency": "USD",
+                    "account_status": 1,
+                }
+            )
+        )
+
+        result = await client.get_account_info("act_123", "test-token")
+
+        self.assertEqual(result["timezone_name"], "Pacific/Honolulu")
+        call = client._request_with_retry.await_args
+        self.assertIn("timezone_name", call.kwargs["params"]["fields"])
+
     async def test_live_adset_state_normalizes_meta_budget_units(self):
         client = MetaClient()
         client._request_with_retry = AsyncMock(

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from database.db import (
+    migrate_account_day_boundary_contract,
     migrate_account_currency_contract,
     migrate_audit_undo_contract,
     migrate_legacy_account_rules,
@@ -390,6 +391,37 @@ class TestAccountCurrencyContractMigration(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(first)
             self.assertFalse(second)
             self.assertEqual(currency, "UNKNOWN")
+        finally:
+            await engine.dispose()
+
+
+class TestAccountDayBoundaryContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def test_adds_independent_empty_day_marker_idempotently(self):
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "CREATE TABLE accounts ("
+                        "id INTEGER PRIMARY KEY, last_started_date VARCHAR NOT NULL DEFAULT '')"
+                    )
+                )
+                await conn.execute(
+                    text("INSERT INTO accounts (id, last_started_date) VALUES (1, '2026-08-17')")
+                )
+                first = await migrate_account_day_boundary_contract(conn)
+                second = await migrate_account_day_boundary_contract(conn)
+                row = (
+                    await conn.execute(
+                        text(
+                            "SELECT last_started_date, last_day_start_date "
+                            "FROM accounts WHERE id = 1"
+                        )
+                    )
+                ).one()
+            self.assertTrue(first)
+            self.assertFalse(second)
+            self.assertEqual(row, ("2026-08-17", ""))
         finally:
             await engine.dispose()
 

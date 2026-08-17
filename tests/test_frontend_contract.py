@@ -236,7 +236,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.15.0', self.index)
+        self.assertIn('v=9.16.0', self.index)
 
     def test_money_is_currency_aware_and_mixed_totals_are_separated(self):
         for contract in (

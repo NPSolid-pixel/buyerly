@@ -27,6 +27,7 @@ from core.metrics import (
 )
 from core.ownership import assign_owner, entity_is_owned_by, owned_by, owned_by_ids
 from core.rule_examples import ensure_rule_examples
+from core.timezones import resolve_account_clock
 from database.db import async_session_maker, hash_password, password_needs_rehash, verify_password
 import json
 from database.models import (
@@ -1455,7 +1456,11 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
 
             try:
                 acc_info = await meta_client.get_account_info(acc_id, token)
-                timezone_name = acc_info.get("timezone_name", "UTC")
+                timezone_name = str(acc_info.get("timezone_name") or "").strip()
+                if resolve_account_clock(timezone_name) is None:
+                    raise RuntimeError(
+                        "Meta не вернула поддерживаемый часовой пояс рекламного кабинета."
+                    )
                 fb_name = acc_info.get("name", acc_id)
                 status_code = acc_info.get("account_status", 1)
                 status_label = acc_info.get("status_label", "🟢 Активен (ACTIVE)")
@@ -1472,6 +1477,8 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                 existing = res.scalar_one_or_none()
 
                 if existing:
+                    if existing.timezone_name != timezone_name:
+                        existing.last_day_start_date = ""
                     existing.name = display_name
                     existing.access_token = token
                     existing.timezone_name = timezone_name

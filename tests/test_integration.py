@@ -1,7 +1,9 @@
 import asyncio
 import json
 import unittest
+from datetime import datetime
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
@@ -152,8 +154,8 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         worker = MonitoringWorker(meta_client=mock_meta, telegram_notifier=mock_notifier)
         stats = await worker.run_cycle()
 
-        # Day start should still trigger, but NO adsets should be stopped
-        self.assertEqual(stats["starts_notified"], 1)
+        # Calendar day notifications are handled by a separate minute job.
+        self.assertEqual(sent_alerts, [])
         self.assertEqual(stats["adsets_stopped"], 0)
         self.assertEqual(mock_meta.adsets_state["adset_1"]["status"], "ACTIVE")
         self.assertEqual(mock_meta.adsets_state["adset_2"]["status"], "ACTIVE")
@@ -181,7 +183,6 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mock_meta.adsets_state["adset_2"]["status"], "ACTIVE")
 
         event_types = [a["event_type"] for a in sent_alerts]
-        self.assertIn("DAY_START", event_types)
         self.assertIn("STOP", event_types)
 
         async with self.test_session_maker() as session:
@@ -218,6 +219,92 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(stored), 1)
             self.assertEqual(stored[0].stop_spend, 20.0)
             self.assertFalse(stored[0].is_resolved)
+
+    async def test_new_account_day_uses_meta_timezone_without_spend_or_rules(self):
+        hawaii = ZoneInfo("Pacific/Honolulu")
+        now = [datetime(2026, 8, 18, 0, 0, 30, tzinfo=hawaii).timestamp()]
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            account.timezone_name = "US/Hawaii"
+            account.last_day_start_date = "2026-08-17"
+            account.rules_enabled = False
+            account.is_active = False
+            await session.commit()
+
+        sent_alerts = []
+
+        async def mock_notifier(**kwargs):
+            sent_alerts.append(kwargs)
+
+        meta_client = MockMetaClient()
+        meta_client.get_account_info = AsyncMock()
+        worker = MonitoringWorker(
+            meta_client=meta_client,
+            telegram_notifier=mock_notifier,
+            clock=lambda: now[0],
+        )
+        stats = await worker.run_day_boundary_cycle()
+
+        self.assertEqual(stats["days_notified"], 1)
+        self.assertEqual(stats["invalid_timezones"], 0)
+        self.assertEqual(len(sent_alerts), 1)
+        self.assertEqual(sent_alerts[0]["event_type"], "ACCOUNT_DAY_STARTED")
+        self.assertEqual(sent_alerts[0]["local_time"], "00:00")
+        self.assertEqual(sent_alerts[0]["local_date"], "18.08.2026")
+        self.assertEqual(sent_alerts[0]["timezone_name"], "Pacific/Honolulu")
+        self.assertEqual(sent_alerts[0]["utc_offset"], "UTC−10:00")
+        self.assertNotIn("start_spend", sent_alerts[0])
+        meta_client.get_account_info.assert_not_awaited()
+
+        now[0] += 60
+        restarted_worker = MonitoringWorker(
+            meta_client=meta_client,
+            telegram_notifier=mock_notifier,
+            clock=lambda: now[0],
+        )
+        repeated = await restarted_worker.run_day_boundary_cycle()
+        self.assertEqual(repeated["days_notified"], 0)
+        self.assertEqual(len(sent_alerts), 1)
+
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            self.assertEqual(account.timezone_name, "Pacific/Honolulu")
+            self.assertEqual(account.last_day_start_date, "2026-08-18")
+            events = (
+                await session.execute(
+                    select(AuditEvent).where(AuditEvent.event_type == "ACCOUNT_DAY_STARTED")
+                )
+            ).scalars().all()
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0].status, "SUCCESS")
+
+    async def test_first_observation_anchors_date_without_midday_notification(self):
+        hawaii = ZoneInfo("Pacific/Honolulu")
+        now = datetime(2026, 8, 18, 12, 30, tzinfo=hawaii).timestamp()
+        sent_alerts = []
+
+        async def mock_notifier(**kwargs):
+            sent_alerts.append(kwargs)
+
+        worker = MonitoringWorker(
+            telegram_notifier=mock_notifier,
+            clock=lambda: now,
+        )
+
+        stats = await worker.run_day_boundary_cycle()
+
+        self.assertEqual(stats["dates_initialized"], 1)
+        self.assertEqual(stats["days_notified"], 0)
+        self.assertEqual(sent_alerts, [])
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == self.account_id))
+            ).scalar_one()
+            self.assertEqual(account.last_day_start_date, "2026-08-18")
 
     async def test_historical_window_uses_current_adset_metrics(self):
         """Yesterday metrics are matched by ad set instead of as one account-wide map."""

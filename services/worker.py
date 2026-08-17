@@ -22,13 +22,16 @@ async def main() -> None:
         bot=bot,
         target_chat_id=settings.ADMIN_CHAT_ID,
     )
-    worker = MonitoringWorker(
+    monitoring_worker = MonitoringWorker(
+        telegram_notifier=notifier.send_alert
+    )
+    day_boundary_worker = MonitoringWorker(
         telegram_notifier=notifier.send_alert
     )
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
-        worker.run_cycle,
+        monitoring_worker.run_cycle,
         "interval",
         minutes=1,
         id="monitoring_job",
@@ -36,9 +39,20 @@ async def main() -> None:
         max_instances=1,
         coalesce=True,
     )
+    scheduler.add_job(
+        day_boundary_worker.run_day_boundary_cycle,
+        "interval",
+        minutes=1,
+        id="account_day_boundary_job",
+        next_run_time=datetime.now(timezone.utc),
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.start()
     Path("/tmp/buyerly-worker-ready").touch()
-    logger.info("Monitoring worker started with a one-minute dispatch tick")
+    logger.info(
+        "Monitoring and account day-boundary workers started with one-minute dispatch ticks"
+    )
 
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()

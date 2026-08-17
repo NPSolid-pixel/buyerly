@@ -16,6 +16,7 @@ from core.audit import build_audit_event
 from core.action_undo import UndoError, undo_audit_action
 from core.currency import format_money, normalize_currency
 from core.ownership import entity_is_owned_by, owned_by
+from core.timezones import resolve_account_clock
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, AppSettings, TelegramUser
 from meta_api.client import MetaClient
@@ -133,7 +134,7 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
         "• ⏱ <b>Авто-мониторинг:</b> проверка спенда, лидов и регистраций каждые 10–60 мин\n"
         "• 🛑 <b>Авто-правила:</b> гибкий конструктор условий (CPL, CPReg, CPP, Spend и события) с AND/OR логикой\n"
         "• 🟢 <b>Ловля долета:</b> кнопка мгновенного включения адсета при долете конверсии\n"
-        "• 🚀 <b>Пуш о старте (00:00):</b> уведомление о начале открута в часовом поясе кабинета\n"
+        "• 🌅 <b>Новые сутки кабинета:</b> точное уведомление в 00:00 по часовому поясу Meta\n"
         "• 📊 <b>Сводки и Расходы:</b> персональная статистика по вашим кабинетам\n\n"
         "Используйте кнопки меню ниже для управления."
     )
@@ -286,7 +287,11 @@ async def process_token_and_save(message: Message, state: FSMContext):
 
             try:
                 acc_info = await meta_client.get_account_info(acc_id, token)
-                timezone_name = acc_info.get("timezone_name", "UTC")
+                timezone_name = str(acc_info.get("timezone_name") or "").strip()
+                if resolve_account_clock(timezone_name) is None:
+                    raise RuntimeError(
+                        "Meta не вернула поддерживаемый часовой пояс рекламного кабинета."
+                    )
                 fb_name = acc_info.get("name", acc_id)
                 currency = normalize_currency(acc_info.get("currency"))
                 
@@ -303,6 +308,8 @@ async def process_token_and_save(message: Message, state: FSMContext):
                 existing = res.scalar_one_or_none()
 
                 if existing:
+                    if existing.timezone_name != timezone_name:
+                        existing.last_day_start_date = ""
                     existing.name = display_name
                     existing.access_token = token
                     existing.timezone_name = timezone_name
