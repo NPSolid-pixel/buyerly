@@ -372,6 +372,9 @@ STABLE_OWNER_TABLES = (
     "automation_schedule_states",
     "rule_execution_states",
     "action_undo_states",
+    "meta_connections",
+    "meta_oauth_states",
+    "meta_connection_assets",
 )
 
 
@@ -462,6 +465,33 @@ async def migrate_account_day_boundary_contract(conn) -> bool:
     return True
 
 
+async def migrate_meta_connection_contract(conn) -> bool:
+    """Link legacy account rows to encrypted OAuth connections when available."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "accounts" not in table_names:
+        return False
+    columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"] for column in inspect(sync_conn).get_columns("accounts")
+        }
+    )
+    if "meta_connection_id" in columns:
+        return False
+    await conn.execute(
+        text("ALTER TABLE accounts ADD COLUMN meta_connection_id INTEGER")
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_accounts_meta_connection_id "
+            "ON accounts (meta_connection_id)"
+        )
+    )
+    return True
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -479,6 +509,8 @@ async def init_schema():
             logger.info("Added the persisted account currency contract.")
         if await migrate_account_day_boundary_contract(conn):
             logger.info("Added the account-local day boundary contract.")
+        if await migrate_meta_connection_contract(conn):
+            logger.info("Added encrypted Meta connection links to accounts.")
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:
             logger.info(

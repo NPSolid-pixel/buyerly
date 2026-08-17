@@ -118,13 +118,114 @@ class RuleExamplesBootstrap(Base):
         return f"<RuleExamplesBootstrap(owner_user_id={self.owner_user_id}, version={self.version})>"
 
 
+class MetaConnection(Base):
+    """One encrypted Meta user authorization owned by one Buyerly user."""
+
+    __tablename__ = "meta_connections"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_user_id",
+            "provider_user_id",
+            name="uq_meta_connection_owner_provider_user",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String, nullable=False, index=True)
+    owner_user_id = Column(
+        Integer,
+        ForeignKey("telegram_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider_user_id = Column(String, nullable=False, index=True)
+    provider_user_name = Column(String, default="", nullable=False)
+    access_token_encrypted = Column(Text, nullable=False)
+    granted_scopes = Column(Text, default="[]", nullable=False)
+    token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String, default="active", nullable=False, index=True)
+    last_error = Column(Text, default="", nullable=False)
+    last_validated_at = Column(DateTime(timezone=True), nullable=True)
+    connected_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utcnow_aware,
+        onupdate=utcnow_aware,
+        nullable=False,
+    )
+
+
+class MetaOAuthState(Base):
+    """Short-lived, single-use OAuth state; the browser secret itself is never stored."""
+
+    __tablename__ = "meta_oauth_states"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    state_hash = Column(String, unique=True, nullable=False, index=True)
+    owner_id = Column(String, nullable=False, index=True)
+    owner_user_id = Column(
+        Integer,
+        ForeignKey("telegram_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    return_path = Column(String, default="/add-accounts", nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+
+
+class MetaConnectionAsset(Base):
+    """Latest safe discovery snapshot of an ad account visible to a connection."""
+
+    __tablename__ = "meta_connection_assets"
+    __table_args__ = (
+        UniqueConstraint(
+            "connection_id",
+            "meta_account_id",
+            name="uq_meta_connection_asset_account",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    connection_id = Column(
+        Integer,
+        ForeignKey("meta_connections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    owner_id = Column(String, nullable=False, index=True)
+    owner_user_id = Column(
+        Integer,
+        ForeignKey("telegram_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    meta_account_id = Column(String, nullable=False, index=True)
+    name = Column(String, default="", nullable=False)
+    business_id = Column(String, default="", nullable=False, index=True)
+    business_name = Column(String, default="Без Business Manager", nullable=False)
+    account_status = Column(Integer, default=1, nullable=False)
+    currency = Column(String, default="UNKNOWN", nullable=False)
+    timezone_name = Column(String, default="UTC", nullable=False)
+    discovered_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+
+
 class Account(Base):
     __tablename__ = "accounts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     account_id = Column(String, unique=True, nullable=False, index=True, doc="Facebook Ad Account ID (act_...)")
     name = Column(String, nullable=False, doc="Понятное название кабинета")
-    access_token = Column(String, nullable=False, doc="User/System User Access Token")
+    access_token = Column(String, nullable=True, default="", doc="Legacy manual User/System User Access Token")
+    meta_connection_id = Column(
+        Integer,
+        ForeignKey("meta_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Encrypted Meta OAuth connection used by this account",
+    )
     
     # Привязка к владельцу (мульти-пользовательская изоляция)
     owner_id = Column(String, nullable=False, index=True, doc="Legacy-метка владельца для совместимости")
