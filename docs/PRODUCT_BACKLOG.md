@@ -136,7 +136,8 @@ Production: `a3631fe`, 17.08.2026. Расписание и состояния в
 ### BL-007. Официальное подключение Meta через Facebook Login
 
 - [x] Зафиксировать по скриншотам режим, владельца, продукты и OAuth switches Meta App Dashboard.
-- [ ] Дозаполнить App Domain, exact redirect URI, собственные legal URL и статусы permissions/review; Configuration ID уже установлен в production.
+- [x] Добавить App Domain, exact redirect URI, Configuration ID и App Secret; пара App ID/App Secret проверена через Meta.
+- [ ] Добавить собственные legal URL и зафиксировать статусы permissions/review.
 - [x] Перевести Meta-клиент с жёсткого Graph API `v20.0` на настраиваемую `v26.0`.
 - [x] Добавить отдельное подключение на Facebook-профиль и не дублировать token по кабинетам.
 - [x] Шифровать token в PostgreSQL ключом с поддержкой ротации.

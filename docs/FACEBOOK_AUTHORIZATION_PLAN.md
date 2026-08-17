@@ -1,6 +1,6 @@
 # META-AUTH-001 — официальное подключение Facebook-профилей
 
-Статус: `пилотный контур развёрнут; ожидаются Meta App Secret и настройка Dashboard`
+Статус: `OAuth production настроен; готов к первому app-role тесту`
 
 Приоритет: `P0`
 
@@ -12,17 +12,15 @@
 
 Backend, база и интерфейс AUTH-01…AUTH-04 выпущены в production. Buyerly умеет начать официальный Facebook Login for Business, безопасно принять callback, зашифровать token, найти все доступные через `/me/adaccounts` кабинеты, сгруппировать их по Business Manager и импортировать выбранные без автоматического включения правил.
 
-В production уже заданы Graph API `v26.0`, App ID, Login Configuration ID, callback `https://smattrades.com/api/meta/oauth/callback` и отдельный ключ шифрования. Кнопка входа намеренно неактивна, пока на сервере не появится:
-
-- `META_APP_SECRET` — вводится только в production secrets, не в GitHub и не в чат.
+В production заданы Graph API `v26.0`, App ID, App Secret, Login Configuration ID, callback `https://smattrades.com/api/meta/oauth/callback` и отдельный ключ шифрования. Значение App Secret хранится только в серверном окружении и не попадает в Git, документацию или frontend. Meta подтвердила пару App ID/App Secret через server-side client credentials; OAuth URL, публичный callback и внутренняя диагностика конфигурации также проверены.
 
 Точные действия в Meta Dashboard для первого теста:
 
-1. В `Facebook Login for Business → Configurations` проверить, что созданная конфигурация использует User Access Token и permissions `ads_read`, `ads_management` и `business_management`. Configuration ID уже установлен в production.
-2. В `Facebook Login for Business → Settings` добавить в `Valid OAuth Redirect URIs` ровно `https://smattrades.com/api/meta/oauth/callback`; Web OAuth, HTTPS и Strict Mode оставить включёнными.
-3. В `App settings → Basic` добавить App Domain `smattrades.com`.
-4. Ввести App Secret напрямую в production `.env`, перезапустить API и проверить `/api/meta/oauth/config`.
-5. Первый пилот провести на Facebook-профиле с ролью в приложении. Обычные внешние профили проверять после Advanced Access/Access Verification, если этого потребует Dashboard.
+1. Configuration ID установлен в production. При первом реальном входе проверить фактически выданные scopes `ads_read`, `ads_management` и `business_management` через сохранённую диагностику token.
+2. `[выполнено]` В `Valid OAuth Redirect URIs` добавлен точный адрес `https://smattrades.com/api/meta/oauth/callback`; Web OAuth, HTTPS и Strict Mode включены.
+3. `[выполнено]` В `App settings → Basic` добавлен App Domain `smattrades.com`.
+4. `[выполнено]` App Secret введён напрямую в production `.env`; API, bot, worker, web и PostgreSQL после перезапуска здоровы.
+5. `[следующий шаг]` Провести пилот на Facebook-профиле с ролью в приложении. Обычные внешние профили проверять после Advanced Access/Access Verification, если этого потребует Dashboard.
 
 ## Результат задачи
 
@@ -70,7 +68,7 @@ System User Token не удаляется в первом релизе. Он о�
 - [ ] Состояние Business Verification.
 - [ ] Состояние проверки домена Buyerly.
 - [ ] Заменить рабочее название `API COTROL`, добавить иконку и категорию; contact email заполнен.
-- [ ] Добавить App Domain `smattrades.com`; на скриншоте поле пустое.
+- [x] App Domain `smattrades.com` добавлен.
 - [ ] Заменить ссылку на общую Facebook Privacy Policy на собственную Privacy Policy Buyerly.
 - [ ] Заменить общую ссылку Facebook на Terms of Service Buyerly.
 - [ ] Заменить общую ссылку Facebook на Data Deletion Instructions Buyerly или callback.
@@ -84,7 +82,7 @@ System User Token не удаляется в первом релизе. Он о�
 - [x] Configuration ID production-входа создан и установлен на сервере.
 - [ ] Какой тип token выдаёт конфигурация.
 - [ ] Какие разрешения выбраны внутри конфигурации.
-- [ ] Добавить exact Valid OAuth Redirect URI `https://smattrades.com/api/meta/oauth/callback`; на скриншоте список пустой.
+- [x] Exact Valid OAuth Redirect URI `https://smattrades.com/api/meta/oauth/callback` добавлен.
 - [ ] Отдельный redirect URI для локального или staging-теста.
 - [x] Client OAuth Login, Web OAuth Login, Enforce HTTPS и Strict Mode включены.
 - [ ] Как Meta показывает повторное согласие и частично выданные разрешения.
@@ -225,7 +223,7 @@ System User Token не удаляется в первом релизе. Он о�
 
 ## Обязательная безопасность
 
-- [ ] App Secret существует только в production secrets и никогда не отдаётся frontend.
+- [x] App Secret установлен только в production `.env`, не хранится в Git и никогда не отдаётся frontend.
 - [x] OAuth authorization code обменивается только backend-сервисом.
 - [x] `state` криптографически случайный, живёт 10 минут, одноразовый и привязан к владельцу.
 - [x] Callback использует заданный production redirect URI и отклоняет неверный, истёкший или повторный `state`.
