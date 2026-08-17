@@ -74,7 +74,7 @@ scripts/             backup и атомарный production deploy
 tests/               unit, integration и contract tests
 ```
 
-Подробности: [архитектура](docs/ARCHITECTURE.md), [развёртывание](docs/DEPLOYMENT.md), [архитектурные решения](docs/DECISIONS.md), [работа с Meta-токеном](docs/TOKEN_GUIDE.md).
+Подробности: [архитектура](docs/ARCHITECTURE.md), [развёртывание](docs/DEPLOYMENT.md), [архитектурные решения](docs/DECISIONS.md), [сквозной аудит продукта](docs/PRODUCT_AUDIT_2026-08-17.md), [работа с Meta-токеном](docs/TOKEN_GUIDE.md).
 
 ## Продуктовая разработка
 
