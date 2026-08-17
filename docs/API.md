@@ -1,0 +1,198 @@
+# API Buyerly
+
+Этот документ фиксирует публичный HTTP-контракт текущей production-версии. Интерактивная OpenAPI-схема доступна на `/docs`, исходная JSON-схема — на `/openapi.json`. Все даты в API передаются в ISO 8601, серверные даты истории — в UTC.
+
+## Базовый адрес и авторизация
+
+Production: `https://smattrades.com`.
+
+Кроме входа и healthcheck, каждый `/api/*` endpoint требует один из способов авторизации:
+
+| Способ | Заголовок | Назначение |
+|---|---|---|
+| Web token | `Authorization: Bearer <token>` | прямой вход по логину и паролю |
+| Web token | `X-Auth-Token: <token>` | совместимый вариант для web-клиента |
+| Telegram Mini App | `Authorization: tma <initData>` | подписанные Telegram `initData` |
+| Telegram Mini App | `X-Init-Data: <initData>` | совместимый вариант |
+
+`dev_user_id` работает только в локальной среде при явно включённом `ENABLE_DEV_AUTH`; в production fallback выключен. Обычный пользователь получает только свои данные. Администратор имеет расширенный операционный обзор там, где это предусмотрено endpoint.
+
+Не записывайте web token или Meta access token в документацию, URL, issue и логи. После `POST /api/auth/logout` прежний web token перестаёт действовать.
+
+## Healthcheck
+
+| Метод и путь | Авторизация | Результат |
+|---|---|---|
+| `GET /health/live` | нет | процесс API запущен; возвращает `status` и commit в `version` |
+| `GET /health/ready` | нет | API может обратиться к PostgreSQL; при проблеме возвращает `503` |
+
+## Пользователь и сессия
+
+| Метод и путь | Тело | Результат |
+|---|---|---|
+| `POST /api/auth/login` | `username`, `password` | web token, профиль и роль |
+| `POST /api/auth/change-password` | `old_password`, `new_password` | меняет пароль; минимум 8 символов |
+| `POST /api/auth/update-profile` | `full_name?`, `telegram_id?` | обновляет профиль и адрес Telegram-доставки |
+| `POST /api/auth/logout` | — | ротирует web token |
+| `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `role`, `is_approved` |
+
+Изменение `telegram_id` не меняет внутреннего владельца данных: кабинеты, правила, сводки и история продолжают принадлежать тому же `telegram_users.id`.
+
+## Кабинеты
+
+| Метод и путь | Тело | Назначение |
+|---|---|---|
+| `GET /api/accounts` | — | список доступных кабинетов, их Meta/monitoring/rules state, валюта и назначения |
+| `POST /api/accounts/parse-raw` | `raw_text` | разбирает текстовый экспорт в `account_id` и `parsed_name`, ничего не сохраняет |
+| `POST /api/accounts/batch-add` | `accounts[]`, `batch_name?`, `access_token` | проверяет кабинеты через Meta и добавляет/обновляет их |
+| `DELETE /api/accounts/{account_id}` | — | удаляет доступный пользователю кабинет из Buyerly |
+| `POST /api/accounts/{account_id}/assign-rule` | `preset_id` | назначает один пресет и включает исполнение правил кабинета |
+| `POST /api/accounts/{account_id}/assign-rule-group/{group_id}` | — | атомарно назначает всю группу, уже назначенные пресеты пропускает |
+| `POST /api/accounts/{account_id}/detach-rule/{preset_id}` | — | удаляет назначение одного правила; при пустом списке выключает правила |
+| `POST /api/accounts/{account_id}/toggle-rules` | — | включает/выключает уже назначенные правила; без правил включение запрещено |
+
+Формат элемента `accounts` для пакетного добавления:
+
+```json
+{
+  "accounts": [
+    {"account_id": "act_123456789", "name": "Тестовый кабинет"}
+  ],
+  "batch_name": "Пачка A",
+  "access_token": "META_TOKEN_PLACEHOLDER"
+}
+```
+
+Импорт кабинета никогда не включает автоматику и не назначает правила автоматически. Валюта и часовой пояс берутся из Meta. Если Meta не вернула валюту, сохраняется `UNKNOWN`, а денежные действия блокируются до успешного уточнения.
+
+## Одиночные правила
+
+| Метод и путь | Тело | Назначение |
+|---|---|---|
+| `GET /api/presets` | — | список пресетов текущего владельца |
+| `POST /api/presets` | rule payload | создаёт пресет |
+| `PUT /api/presets/{preset_id}` | полный rule payload | обновляет пресет и его назначенные snapshot |
+| `DELETE /api/presets/{preset_id}` | — | удаляет пресет, назначения и ссылки в группах |
+
+Полный rule payload:
+
+```json
+{
+  "name": "Стоп без лидов после 20",
+  "action": "turn_off",
+  "conditions": [
+    {"metric": "spend", "operator": "gte", "value": 20, "time_window": "today"},
+    {"metric": "leads", "operator": "eq", "value": 0, "time_window": "today"}
+  ],
+  "condition_logic": "and",
+  "cooldown_minutes": 60,
+  "check_interval_minutes": 5,
+  "notify_tg": true,
+  "budget_change_percent": 0,
+  "budget_max_daily": 0
+}
+```
+
+Разрешённые значения:
+
+- `action`: `turn_off`, `turn_on`, `notify_only`, `increase_budget`, `decrease_budget`;
+- `metric`: `spend`, `cpl`, `cpreg`, `cpp`, `leads`, `registrations`, `purchases`, `ctr`, `cpc`;
+- `operator`: `gte`, `gt`, `lte`, `lt`, `eq`;
+- `time_window`: `today`, `yesterday`, `last_3d`, `last_7d`;
+- `condition_logic`: `and`, `or`;
+- 1–20 условий, интервал 1–1440 минут, cooldown 0–10080 минут;
+- процент изменения бюджета 0–100; для `increase_budget` обязателен положительный `budget_max_daily`.
+
+Неизвестные поля и значения, пустые условия, отрицательные/бесконечные числа и небезопасные границы отклоняются с `422`. Сохранённый snapshot повторно проверяется worker; некорректное правило завершается без действия в Meta. Все денежные пороги трактуются в валюте конкретного кабинета (`currency_mode: account`).
+
+При первом открытии правил Buyerly один раз создаёт для владельца шесть примеров и две группы с префиксом «Пример ·». Они не назначены кабинетам и не включают автоматику. Их можно редактировать или удалить; удалённые примеры не создаются повторно.
+
+## Группы правил
+
+| Метод и путь | Тело | Назначение |
+|---|---|---|
+| `GET /api/rule-groups` | — | группы с упорядоченными пресетами |
+| `POST /api/rule-groups` | `name`, `description`, `preset_ids` | создаёт группу из 1–50 своих пресетов |
+| `PUT /api/rule-groups/{group_id}` | полный group payload | меняет название, описание и состав |
+| `DELETE /api/rule-groups/{group_id}` | — | удаляет группу; уже назначенные кабинетам правила сохраняются |
+
+```json
+{
+  "name": "Контроль запуска",
+  "description": "Остановка потерь и алерт стоимости регистрации",
+  "preset_ids": [12, 15, 18]
+}
+```
+
+## Сводка и представление таблицы
+
+| Метод и путь | Параметры/тело | Назначение |
+|---|---|---|
+| `GET /api/summary` | `period=today|yesterday|last_3d|last_7d`, `force=false|true` | возвращает сохранённую или свежую account-level сводку Meta |
+| `GET /api/analytics-view` | — | сохранённое представление таблицы пользователя |
+| `PUT /api/analytics-view` | view payload | сохраняет вид, колонки, порядок, ширины, сортировку, фильтры и период |
+
+`force=true` запрашивает Meta и сохраняет новый snapshot; обычный запрос сначала возвращает память или последний успешный snapshot PostgreSQL. Ответ сводки содержит `generated_at`, `snapshot`, `cache`, `data_quality`, `metric_definitions`, итоги и `accounts[]`.
+
+Денежный контракт:
+
+- при одной известной валюте `display_currency` содержит ISO-код, а общие денежные показатели доступны;
+- при нескольких валютах `mixed_currencies=true`, общий `total_spend` и общие стоимости равны `null`, значения выдаются отдельно в `currency_totals[]`;
+- при `UNKNOWN` общие денежные показатели также недоступны, чтобы Buyerly не создавал ложную сумму.
+
+View payload принимает `view_mode` (`all`, `overview`, `delivery`, `traffic`, `funnel`, `custom`), `visible_columns`, `column_order`, `column_widths`, `sort_column`, `sort_direction`, `filters` и `period`. Обязательные колонки — `account` и `data`, допустимая ширина — 72–420 px. Фильтры: `query` и `status` (`all`, `synced`, `blocked`, `error`).
+
+## История и безопасная отмена
+
+| Метод и путь | Параметры | Назначение |
+|---|---|---|
+| `GET /api/audit-events` | `page`, `page_size`, `category?`, `status?`, `account_id?`, `search?`, `date_from?`, `date_to?` | изолированная история с пагинацией и счётчиками |
+| `POST /api/audit-events/{event_id}/undo` | — | безопасно отменяет последнее обратимое действие |
+
+Статусы истории: `SUCCESS` (Выполнено), `ERROR` (Ошибка), `SKIPPED` (Пропущено); исходное событие с успешной отменой отображается как `REVERTED`. Ответ каждого элемента содержит `before_state`, `after_state`, `correlation_id`, `can_undo` и `undo_reason`.
+
+Отмена доступна только для успешного STOP/START/изменения бюджета, если событие является последним изменением этого ad set, текущее состояние Meta совпадает с ожидаемым, действие ещё не отменено и не прошло 24 часа. Повторный запрос идемпотентен. История append-only: исходная запись не удаляется, создаётся связанное событие отмены.
+
+## Внутренние карточки остановок
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /api/adsets/stopped` | незакрытые внутренние записи остановленных ad set |
+| `POST /api/adsets/{adset_id}/reactivate` | вручную включает ad set и пишет действие в общий аудит |
+| `POST /api/adsets/{adset_id}/dismiss` | скрывает карточку; состояние ad set в Meta не меняется |
+
+Эта коллекция не является очередью подтверждения: успешное правило уже считается выполненным.
+
+## Настройки
+
+| Метод и путь | Доступ | Назначение |
+|---|---|---|
+| `GET /api/settings` | авторизованный пользователь | базовый интервал и роль |
+| `POST /api/settings/interval` | только admin | меняет базовый интервал; тело `{"minutes": 10}` |
+
+Интервал правила имеет приоритет для самого правила. Базовый интервал относится к фоновому мониторингу кабинета. Worker запускает диспетчерский цикл каждую минуту, но обращается к кабинету только при наступлении сохранённого расписания или когда нужно уточнить неизвестную валюту.
+
+## Ответы и ошибки
+
+- `200` — запрос выполнен;
+- `400` — бизнес-ограничение или небезопасная операция;
+- `401` — отсутствует/истёкла авторизация;
+- `403` — нет доступа или аккаунт пользователя не одобрен;
+- `404` — сущность не существует в доступной области;
+- `409` — конфликт уникальности или состояния;
+- `422` — payload/параметры не прошли строгую схему;
+- `500` — внешнее действие или локальное сохранение завершилось ошибкой;
+- `503` — readiness не подтверждён.
+
+Ошибки FastAPI возвращаются как `{"detail": "..."}`. Ошибка Meta не должна раскрывать access token: безопасное сообщение возвращается клиенту, технические детали сохраняются в очищенной истории/журнале.
+
+Пример безопасного чтения профиля:
+
+```bash
+curl -fsS https://smattrades.com/api/me \
+  -H 'Authorization: Bearer WEB_TOKEN_PLACEHOLDER'
+```
+
+## Совместимость
+
+Текущая OpenAPI-версия приложения — `1.0.0`; пути пока не имеют префикса версии. Добавление полей в ответы считается совместимым. Удаление/переименование полей, изменение смысла метрики или допустимых enum требует миграции данных, обновления web/bot/worker одним релизом, contract-тестов и явной записи в `DECISIONS.md` и `PRODUCT_BACKLOG.md`.

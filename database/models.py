@@ -38,9 +38,9 @@ class RulePreset(Base):
     __tablename__ = "rule_presets"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    owner_id = Column(String, nullable=False, index=True, doc="Telegram ID владельца")
+    owner_id = Column(String, nullable=False, index=True, doc="Legacy-метка владельца для совместимости")
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
-    name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPA > $6')")
+    name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPL выше порога')")
     action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only', 'increase_budget', 'decrease_budget'")
     conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
     condition_logic = Column(String, default="and", nullable=False, doc="'and' или 'or' — логика объединения условий")
@@ -121,7 +121,7 @@ class Account(Base):
     access_token = Column(String, nullable=False, doc="User/System User Access Token")
     
     # Привязка к владельцу (мульти-пользовательская изоляция)
-    owner_id = Column(String, nullable=False, index=True, doc="Telegram ID байера-владельца")
+    owner_id = Column(String, nullable=False, index=True, doc="Legacy-метка владельца для совместимости")
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     batch_name = Column(String, default="", nullable=False, doc="Имя пачки кабинетов (если добавлялось пачкой)")
     currency = Column(String, default="UNKNOWN", nullable=False, doc="ISO 4217 валюта рекламного кабинета из Meta")
@@ -199,7 +199,7 @@ class StoppedAdSet(Base):
     adset_id = Column(String, unique=True, nullable=False, index=True)
     adset_name = Column(String, nullable=False)
     
-    stop_spend = Column(Float, nullable=False, doc="Спенд на момент отключения ($)")
+    stop_spend = Column(Float, nullable=False, doc="Спенд на момент отключения в валюте кабинета")
     stop_leads = Column(Integer, default=0, nullable=False, doc="Лиды на момент отключения")
     stop_registrations = Column(Integer, default=0, nullable=False, doc="Регистрации на момент отключения")
     
@@ -208,7 +208,7 @@ class StoppedAdSet(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<StoppedAdSet(adset_id='{self.adset_id}', spend=${self.stop_spend})>"
+        return f"<StoppedAdSet(adset_id='{self.adset_id}', spend={self.stop_spend})>"
 
 
 class EventLog(Base):
