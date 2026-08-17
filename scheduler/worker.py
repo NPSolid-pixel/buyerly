@@ -267,7 +267,7 @@ class MonitoringWorker:
             select(StoppedAdSet).where(StoppedAdSet.adset_id == result.adset_id)
         )
         stopped = query.scalar_one_or_none()
-        stopped_at = datetime.now(timezone.utc)
+        stopped_at = datetime.now(timezone.utc).replace(tzinfo=None)
         if stopped:
             stopped.account_id = account.account_id
             stopped.adset_name = result.adset_name
@@ -391,6 +391,7 @@ class MonitoringWorker:
             )
 
             for acc in accounts:
+                account_ref = str(acc.account_id)
                 notification_target = owner_chat_ids.get(acc.owner_user_id) or acc.owner_id
                 now = self._clock()
                 active_rules = self._load_rules(acc.active_rules)
@@ -975,8 +976,8 @@ class MonitoringWorker:
                                 )
 
                 except Exception as e:
-                    logger.error(f"Error processing account {acc.account_id}: {e}")
-                    stats["errors"].append(f"Account {acc.account_id}: {e}")
+                    logger.error(f"Error processing account {account_ref}: {e}")
+                    stats["errors"].append(f"Account {account_ref}: {e}")
 
                 # Межаккаунтный случайный джиттер (0.5–1.5с) для сглаживания нагрузки на Meta API
                 jitter = random.uniform(0.5, 1.5)

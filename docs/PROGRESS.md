@@ -32,7 +32,7 @@
 
 ## Контроль качества
 
-Автоматическая серия включает 106 unit-, API-, integration-, migration-, documentation- и frontend-contract тестов. Production считается готовым только после успешной проверки базы через API, публичного веб-шлюза и точного commit всех контейнеров.
+Автоматическая серия включает 107 unit-, API-, integration-, migration-, PostgreSQL-contract, documentation- и frontend-contract тестов. Production считается готовым только после успешной проверки базы через API, публичного веб-шлюза и точного commit всех контейнеров.
 
 ## Следующие продуктовые направления
 

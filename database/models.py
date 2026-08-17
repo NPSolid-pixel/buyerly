@@ -2,7 +2,13 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Index, UniqueConstraint
 from database.db import Base
 
-def utcnow():
+def utcnow_naive():
+    """UTC for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def utcnow_aware():
+    """UTC for PostgreSQL TIMESTAMP WITH TIME ZONE columns."""
     return datetime.now(timezone.utc)
 
 class TelegramUser(Base):
@@ -16,7 +22,7 @@ class TelegramUser(Base):
     auth_token = Column(String, unique=True, nullable=True, index=True, doc="Постоянный токен авторизации веб-интерфейса")
     role = Column(String, default="admin", nullable=False, doc="'admin' или 'buyer'")
     is_approved = Column(Boolean, default=True, nullable=False, doc="Одобрен ли доступ")
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
     def __repr__(self):
         return f"<TelegramUser(username='{self.username}', role='{self.role}', approved={self.is_approved})>"
@@ -49,8 +55,8 @@ class RulePreset(Base):
     notify_tg = Column(Boolean, default=True, nullable=False, doc="Уведомление в Telegram")
     budget_change_percent = Column(Float, default=0.0, nullable=False, doc="На сколько % изменить бюджет")
     budget_max_daily = Column(Float, default=0.0, nullable=False, doc="Макс. дневной бюджет в валюте кабинета, 0 = без ограничения")
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
 
     def __repr__(self):
         return f"<RulePreset(id={self.id}, name='{self.name}', action='{self.action}')>"
@@ -66,8 +72,8 @@ class RuleGroup(Base):
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
 
     def __repr__(self):
         return f"<RuleGroup(id={self.id}, name='{self.name}', owner='{self.owner_id}')>"
@@ -85,7 +91,7 @@ class RuleGroupItem(Base):
     group_id = Column(Integer, ForeignKey("rule_groups.id", ondelete="CASCADE"), nullable=False, index=True)
     preset_id = Column(Integer, ForeignKey("rule_presets.id", ondelete="CASCADE"), nullable=False, index=True)
     position = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
     def __repr__(self):
         return f"<RuleGroupItem(group={self.group_id}, preset={self.preset_id}, position={self.position})>"
@@ -106,7 +112,7 @@ class RuleExamplesBootstrap(Base):
     )
     owner_id = Column(String, default="", nullable=False)
     version = Column(Integer, default=1, nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
     def __repr__(self):
         return f"<RuleExamplesBootstrap(owner_user_id={self.owner_user_id}, version={self.version})>"
@@ -139,7 +145,7 @@ class Account(Base):
     
     rules_enabled = Column(Boolean, default=False, nullable=False, doc="Включены ли авто-правила стопов")
     is_active = Column(Boolean, default=True, nullable=False, doc="Включен ли кабинет в системе")
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
     def __repr__(self):
         return f"<Account(account_id='{self.account_id}', name='{self.name}', status={self.account_status})>"
@@ -164,8 +170,8 @@ class SummarySnapshot(Base):
     period = Column(String, nullable=False, index=True)
     payload = Column(Text, nullable=False, doc="Безопасный JSON сводки без access token")
     schema_version = Column(Integer, default=1, nullable=False)
-    generated_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    generated_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False, index=True)
 
     def __repr__(self):
         return f"<SummarySnapshot(owner='{self.owner_id}', period='{self.period}', generated='{self.generated_at}')>"
@@ -184,8 +190,8 @@ class AnalyticsViewPreference(Base):
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     scope = Column(String, default="summary", nullable=False, index=True)
     config = Column(Text, default="{}", nullable=False, doc="Безопасный JSON настроек представления")
-    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
 
     def __repr__(self):
         return f"<AnalyticsViewPreference(owner='{self.owner_id}', scope='{self.scope}')>"
@@ -204,8 +210,8 @@ class StoppedAdSet(Base):
     stop_registrations = Column(Integer, default=0, nullable=False, doc="Регистрации на момент отключения")
     
     is_resolved = Column(Boolean, default=False, nullable=False, doc="Обработан ли долет (включен/отклонен)")
-    stopped_at = Column(DateTime, default=utcnow, nullable=False)
-    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    stopped_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
 
     def __repr__(self):
         return f"<StoppedAdSet(adset_id='{self.adset_id}', spend={self.stop_spend})>"
@@ -220,7 +226,7 @@ class EventLog(Base):
     account_id = Column(String, default="", index=True, doc="ID кабинета")
     message = Column(Text, nullable=False, doc="Текст отправленного сообщения или события")
     status = Column(String, default="SUCCESS", nullable=False, doc="Статус: SUCCESS или ERROR")
-    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False, index=True)
 
     def __repr__(self):
         return f"<EventLog(type='{self.event_type}', chat='{self.target_chat_id}', status='{self.status}', time='{self.created_at}')>"
@@ -253,7 +259,7 @@ class AuditEvent(Base):
     correlation_id = Column(String, default="", nullable=False, index=True)
     reverts_event_id = Column(Integer, ForeignKey("audit_events.id"), nullable=True, unique=True, index=True)
     duration_ms = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False, index=True)
 
     def __repr__(self):
         return (
@@ -274,7 +280,7 @@ class AutomationScheduleState(Base):
     account_id = Column(String, default="", nullable=False, index=True)
     rule_key = Column(String, default="", nullable=False, index=True)
     last_checked_at = Column(Float, default=0.0, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
 
 
 class RuleExecutionState(Base):
@@ -297,8 +303,8 @@ class RuleExecutionState(Base):
     before_state = Column(Text, default="{}", nullable=False)
     after_state = Column(Text, default="{}", nullable=False)
     details = Column(Text, default="{}", nullable=False)
-    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
 
 
 class ActionUndoState(Base):
@@ -316,5 +322,5 @@ class ActionUndoState(Base):
     expected_state = Column(Text, default="{}", nullable=False)
     desired_state = Column(Text, default="{}", nullable=False)
     last_error = Column(Text, default="", nullable=False)
-    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
