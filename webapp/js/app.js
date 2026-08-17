@@ -477,10 +477,7 @@
     document.getElementById('countActive').textContent = activeCount;
     document.getElementById('countRules').textContent = rulesCount;
     document.getElementById('countIssue').textContent = issueCount;
-    document.getElementById('accountsHealthTotal').textContent = totalCount;
-    document.getElementById('accountsHealthActive').textContent = activeCount;
-    document.getElementById('accountsHealthAutomation').textContent = rulesCount;
-    document.getElementById('accountsHealthIssues').textContent = issueCount;
+
 
     if (filtered.length === 0) {
       listEl.innerHTML = '';
