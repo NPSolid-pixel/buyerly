@@ -39,6 +39,7 @@ class RulePreset(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_id = Column(String, nullable=False, index=True, doc="Telegram ID владельца")
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPA > $6')")
     action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only', 'increase_budget', 'decrease_budget'")
     conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
@@ -62,6 +63,7 @@ class RuleGroup(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_id = Column(String, nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
@@ -99,6 +101,7 @@ class Account(Base):
     
     # Привязка к владельцу (мульти-пользовательская изоляция)
     owner_id = Column(String, nullable=False, index=True, doc="Telegram ID байера-владельца")
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     batch_name = Column(String, default="", nullable=False, doc="Имя пачки кабинетов (если добавлялось пачкой)")
     
     # Часовой пояс и отслеживание старта нового дня
@@ -135,6 +138,7 @@ class SummarySnapshot(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_id = Column(String, nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     period = Column(String, nullable=False, index=True)
     payload = Column(Text, nullable=False, doc="Безопасный JSON сводки без access token")
     schema_version = Column(Integer, default=1, nullable=False)
@@ -155,6 +159,7 @@ class AnalyticsViewPreference(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_id = Column(String, nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     scope = Column(String, default="summary", nullable=False, index=True)
     config = Column(Text, default="{}", nullable=False, doc="Безопасный JSON настроек представления")
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -206,6 +211,7 @@ class AuditEvent(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_id = Column(String, default="", nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     actor_type = Column(String, default="system", nullable=False, index=True)
     actor_id = Column(String, default="monitoring_worker", nullable=False)
     category = Column(String, default="RULE_ACTION", nullable=False, index=True)
@@ -242,6 +248,7 @@ class AutomationScheduleState(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     state_key = Column(String, unique=True, nullable=False, index=True)
     owner_id = Column(String, default="", nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     account_id = Column(String, default="", nullable=False, index=True)
     rule_key = Column(String, default="", nullable=False, index=True)
     last_checked_at = Column(Float, default=0.0, nullable=False)
@@ -256,6 +263,7 @@ class RuleExecutionState(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     execution_key = Column(String, unique=True, nullable=False, index=True)
     owner_id = Column(String, default="", nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     account_id = Column(String, default="", nullable=False, index=True)
     adset_id = Column(String, default="", nullable=False, index=True)
     rule_key = Column(String, default="", nullable=False, index=True)
@@ -279,6 +287,7 @@ class ActionUndoState(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     original_event_id = Column(Integer, ForeignKey("audit_events.id"), unique=True, nullable=False, index=True)
     owner_id = Column(String, default="", nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     status = Column(String, default="PENDING", nullable=False, index=True)
     correlation_id = Column(String, default="", nullable=False, index=True)
     attempt_count = Column(Integer, default=1, nullable=False)

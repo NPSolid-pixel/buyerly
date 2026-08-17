@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-from sqlalchemy import select, delete, func, or_
+from sqlalchemy import select, delete, func, or_, update
 
 from core.audit import build_audit_event
 from core.action_undo import (
@@ -24,6 +24,7 @@ from core.metrics import (
     validate_public_rule_conditions,
     validate_runtime_rule,
 )
+from core.ownership import assign_owner, entity_is_owned_by, owned_by, owned_by_ids
 from database.db import async_session_maker, hash_password, password_needs_rehash, verify_password
 import json
 from database.models import (
@@ -38,6 +39,9 @@ from database.models import (
     RuleGroupItem,
     SummarySnapshot,
     AnalyticsViewPreference,
+    AutomationScheduleState,
+    RuleExecutionState,
+    ActionUndoState,
 )
 from meta_api.client import MetaClient
 from bot.handlers import parse_fb_raw_accounts, get_short_account_label
@@ -259,7 +263,7 @@ async def get_user_accounts(session, user: TelegramUser) -> List[Account]:
     if user.role == "admin":
         stmt = select(Account).order_by(Account.id.desc())
     else:
-        stmt = select(Account).where(Account.owner_id == user.telegram_id).order_by(Account.id.desc())
+        stmt = select(Account).where(owned_by(Account, user)).order_by(Account.id.desc())
     res = await session.execute(stmt)
     return res.scalars().all()
 
@@ -321,7 +325,7 @@ def _summary_with_cache_metadata(
 
 
 def _summary_owner_key(user: TelegramUser) -> str:
-    return str(user.telegram_id or f"user:{user.id}")
+    return f"user:{user.id}"
 
 
 def _normalize_summary_view_config(config: Any, *, strict: bool = True) -> Dict[str, Any]:
@@ -465,13 +469,14 @@ async def _load_persisted_summary(
     session,
     *,
     owner_id: str,
+    owner_user_id: int,
     period: str,
 ) -> Optional[Dict[str, Any]]:
     rows = (
         await session.execute(
             select(SummarySnapshot)
             .where(
-                SummarySnapshot.owner_id == owner_id,
+                owned_by_ids(SummarySnapshot, owner_user_id, owner_id),
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -518,6 +523,7 @@ async def _persist_summary(
     session,
     *,
     owner_id: str,
+    owner_user_id: int,
     period: str,
     payload: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -525,7 +531,7 @@ async def _persist_summary(
         await session.execute(
             select(SummarySnapshot)
             .where(
-                SummarySnapshot.owner_id == owner_id,
+                owned_by_ids(SummarySnapshot, owner_user_id, owner_id),
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -554,6 +560,7 @@ async def _persist_summary(
 
     snapshot = SummarySnapshot(
         owner_id=owner_id,
+        owner_user_id=owner_user_id,
         period=period,
         payload=json.dumps(stored_payload, ensure_ascii=False, separators=(",", ":")),
         generated_at=generated_at,
@@ -565,7 +572,7 @@ async def _persist_summary(
         await session.execute(
             select(SummarySnapshot.id)
             .where(
-                SummarySnapshot.owner_id == owner_id,
+                owned_by_ids(SummarySnapshot, owner_user_id, owner_id),
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -678,11 +685,23 @@ def _clean_rule_group_name(value: str) -> str:
     return name
 
 
-async def _get_owned_presets(session, owner_id: str, preset_ids: List[int]) -> List[RulePreset]:
+async def _get_owned_presets(
+    session,
+    user: TelegramUser,
+    preset_ids: List[int],
+    *,
+    owner_user_id: Optional[int] = None,
+    owner_id: str = "",
+) -> List[RulePreset]:
     ordered_ids = _unique_preset_ids(preset_ids)
+    owner_clause = (
+        owned_by_ids(RulePreset, owner_user_id, owner_id)
+        if owner_user_id is not None or owner_id
+        else owned_by(RulePreset, user)
+    )
     result = await session.execute(
         select(RulePreset).where(
-            RulePreset.owner_id == owner_id,
+            owner_clause,
             RulePreset.id.in_(ordered_ids),
         )
     )
@@ -694,6 +713,18 @@ async def _get_owned_presets(session, owner_id: str, preset_ids: List[int]) -> L
             detail=f"Правила не найдены или недоступны: {', '.join(map(str, missing_ids))}",
         )
     return [by_id[preset_id] for preset_id in ordered_ids]
+
+
+async def _ensure_stable_account_owner(session, account: Account) -> None:
+    if account.owner_user_id is not None or not account.owner_id:
+        return
+    owner_user_id = (
+        await session.execute(
+            select(TelegramUser.id).where(TelegramUser.telegram_id == account.owner_id)
+        )
+    ).scalar_one_or_none()
+    if owner_user_id is not None:
+        account.owner_user_id = owner_user_id
 
 
 def _rule_group_response(group: RuleGroup, presets: List[RulePreset]) -> RuleGroupResponse:
@@ -816,7 +847,42 @@ async def update_profile(req: UpdateProfileRequest, user: TelegramUser = Depends
         if req.full_name is not None:
             db_user.full_name = req.full_name.strip()
         if req.telegram_id is not None:
-            db_user.telegram_id = req.telegram_id.strip()
+            new_telegram_id = req.telegram_id.strip()
+            if not new_telegram_id:
+                raise HTTPException(status_code=400, detail="Telegram ID не может быть пустым")
+            collision = (
+                await session.execute(
+                    select(TelegramUser.id).where(
+                        TelegramUser.telegram_id == new_telegram_id,
+                        TelegramUser.id != db_user.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if collision is not None:
+                raise HTTPException(status_code=409, detail="Этот Telegram ID уже используется")
+
+            legacy_owner_id = str(db_user.telegram_id or "")
+            if legacy_owner_id:
+                for model in (
+                    Account,
+                    RulePreset,
+                    RuleGroup,
+                    SummarySnapshot,
+                    AnalyticsViewPreference,
+                    AuditEvent,
+                    AutomationScheduleState,
+                    RuleExecutionState,
+                    ActionUndoState,
+                ):
+                    await session.execute(
+                        update(model)
+                        .where(
+                            model.owner_user_id.is_(None),
+                            model.owner_id == legacy_owner_id,
+                        )
+                        .values(owner_user_id=db_user.id)
+                    )
+            db_user.telegram_id = new_telegram_id
         await session.commit()
         return {
             "message": "Профиль успешно обновлен",
@@ -883,7 +949,7 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
 @router.get("/presets", response_model=List[RulePresetItem])
 async def list_presets(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
-        stmt = select(RulePreset).where(RulePreset.owner_id == user.telegram_id).order_by(RulePreset.id.desc())
+        stmt = select(RulePreset).where(owned_by(RulePreset, user)).order_by(RulePreset.id.desc())
         res = await session.execute(stmt)
         presets = res.scalars().all()
         return [_preset_response(preset) for preset in presets]
@@ -896,6 +962,7 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
         conds_json = json.dumps(condition_payloads)
         preset = RulePreset(
             owner_id=user.telegram_id,
+            owner_user_id=user.id,
             name=payload.name.strip() or "Новое правило",
             action=payload.action or "turn_off",
             conditions=conds_json,
@@ -930,7 +997,7 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
         condition_payloads = _validated_condition_payloads(payload.conditions)
         stmt = select(RulePreset).where(RulePreset.id == preset_id)
         if user.role != "admin":
-            stmt = stmt.where(RulePreset.owner_id == user.telegram_id)
+            stmt = stmt.where(owned_by(RulePreset, user))
         res = await session.execute(stmt)
         preset = res.scalar_one_or_none()
         if not preset:
@@ -986,7 +1053,7 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
     async with async_session_maker() as session:
         stmt = select(RulePreset).where(RulePreset.id == preset_id)
         if user.role != "admin":
-            stmt = stmt.where(RulePreset.owner_id == user.telegram_id)
+            stmt = stmt.where(owned_by(RulePreset, user))
         res = await session.execute(stmt)
         preset = res.scalar_one_or_none()
         if not preset:
@@ -1014,7 +1081,7 @@ async def list_rule_groups(user: TelegramUser = Depends(get_current_user)):
         groups = (
             await session.execute(
                 select(RuleGroup)
-                .where(RuleGroup.owner_id == user.telegram_id)
+                .where(owned_by(RuleGroup, user))
                 .order_by(RuleGroup.id.desc())
             )
         ).scalars().all()
@@ -1031,9 +1098,10 @@ async def create_rule_group(
     user: TelegramUser = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
-        presets = await _get_owned_presets(session, user.telegram_id, payload.preset_ids)
+        presets = await _get_owned_presets(session, user, payload.preset_ids)
         group = RuleGroup(
             owner_id=user.telegram_id,
+            owner_user_id=user.id,
             name=_clean_rule_group_name(payload.name),
             description=payload.description.strip(),
         )
@@ -1059,14 +1127,14 @@ async def update_rule_group(
             await session.execute(
                 select(RuleGroup).where(
                     RuleGroup.id == group_id,
-                    RuleGroup.owner_id == user.telegram_id,
+                    owned_by(RuleGroup, user),
                 )
             )
         ).scalar_one_or_none()
         if not group:
             raise HTTPException(status_code=404, detail="Группа правил не найдена.")
 
-        presets = await _get_owned_presets(session, user.telegram_id, payload.preset_ids)
+        presets = await _get_owned_presets(session, user, payload.preset_ids)
         group.name = _clean_rule_group_name(payload.name)
         group.description = payload.description.strip()
         await session.execute(delete(RuleGroupItem).where(RuleGroupItem.group_id == group.id))
@@ -1089,7 +1157,7 @@ async def delete_rule_group(
             await session.execute(
                 select(RuleGroup).where(
                     RuleGroup.id == group_id,
-                    RuleGroup.owner_id == user.telegram_id,
+                    owned_by(RuleGroup, user),
                 )
             )
         ).scalar_one_or_none()
@@ -1112,18 +1180,19 @@ async def assign_rule_to_account(
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(Account.owner_id == user.telegram_id)
+            stmt = stmt.where(owned_by(Account, user))
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
         if not acc:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
+        await _ensure_stable_account_owner(session, acc)
 
         # If preset_id provided, load preset
         if payload.preset_id:
             p_stmt = select(RulePreset).where(
                 RulePreset.id == payload.preset_id,
-                RulePreset.owner_id == acc.owner_id,
+                owned_by_ids(RulePreset, acc.owner_user_id, acc.owner_id),
             )
             p_res = await session.execute(p_stmt)
             preset = p_res.scalar_one_or_none()
@@ -1170,16 +1239,17 @@ async def assign_rule_group_to_account(
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
         account_stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            account_stmt = account_stmt.where(Account.owner_id == user.telegram_id)
+            account_stmt = account_stmt.where(owned_by(Account, user))
         account = (await session.execute(account_stmt)).scalar_one_or_none()
         if not account:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
+        await _ensure_stable_account_owner(session, account)
 
         group = (
             await session.execute(
                 select(RuleGroup).where(
                     RuleGroup.id == group_id,
-                    RuleGroup.owner_id == account.owner_id,
+                    owned_by_ids(RuleGroup, account.owner_user_id, account.owner_id),
                 )
             )
         ).scalar_one_or_none()
@@ -1198,8 +1268,10 @@ async def assign_rule_group_to_account(
 
         presets = await _get_owned_presets(
             session,
-            account.owner_id,
+            user,
             [item.preset_id for item in group_items],
+            owner_user_id=account.owner_user_id,
+            owner_id=account.owner_id,
         )
         active_rules = _load_active_rules(account.active_rules)
         attached_ids = {rule.get("preset_id") for rule in active_rules}
@@ -1244,7 +1316,7 @@ async def detach_rule_from_account(
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(Account.owner_id == user.telegram_id)
+            stmt = stmt.where(owned_by(Account, user))
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -1273,7 +1345,7 @@ async def toggle_rules(account_id: str, user: TelegramUser = Depends(get_current
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(Account.owner_id == user.telegram_id)
+            stmt = stmt.where(owned_by(Account, user))
         
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -1303,7 +1375,7 @@ async def delete_account(account_id: str, user: TelegramUser = Depends(get_curre
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(Account.owner_id == user.telegram_id)
+            stmt = stmt.where(owned_by(Account, user))
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -1362,6 +1434,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                     existing.access_token = token
                     existing.timezone_name = timezone_name
                     existing.owner_id = owner_id
+                    existing.owner_user_id = user.id
                     existing.batch_name = batch_name if batch_name != "-" else ""
                     existing.account_status = status_code
                     existing.status_label = status_label
@@ -1372,6 +1445,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                         name=display_name,
                         access_token=token,
                         owner_id=owner_id,
+                        owner_user_id=user.id,
                         batch_name=batch_name if batch_name != "-" else "",
                         timezone_name=timezone_name,
                         account_status=status_code,
@@ -1411,7 +1485,7 @@ async def get_analytics_view(user: TelegramUser = Depends(get_current_user)):
         row = (
             await session.execute(
                 select(AnalyticsViewPreference).where(
-                    AnalyticsViewPreference.owner_id == owner_key,
+                    owned_by(AnalyticsViewPreference, user),
                     AnalyticsViewPreference.scope == SUMMARY_VIEW_SCOPE,
                 )
             )
@@ -1438,14 +1512,15 @@ async def save_analytics_view(
         row = (
             await session.execute(
                 select(AnalyticsViewPreference).where(
-                    AnalyticsViewPreference.owner_id == owner_key,
+                    owned_by(AnalyticsViewPreference, user),
                     AnalyticsViewPreference.scope == SUMMARY_VIEW_SCOPE,
                 )
             )
         ).scalar_one_or_none()
         if row is None:
             row = AnalyticsViewPreference(
-                owner_id=owner_key,
+                owner_id=str(user.telegram_id or ""),
+                owner_user_id=user.id,
                 scope=SUMMARY_VIEW_SCOPE,
                 config=json.dumps(config, ensure_ascii=False),
             )
@@ -1484,7 +1559,8 @@ async def get_summary_report(
         if not force:
             persisted = await _load_persisted_summary(
                 session,
-                owner_id=owner_key,
+                owner_id=str(user.telegram_id or ""),
+                owner_user_id=user.id,
                 period=period,
             )
             if persisted:
@@ -1538,7 +1614,8 @@ async def get_summary_report(
             }
             empty_res["snapshot"] = await _persist_summary(
                 session,
-                owner_id=owner_key,
+                owner_id=str(user.telegram_id or ""),
+                owner_user_id=user.id,
                 period=period,
                 payload=empty_res,
             )
@@ -1773,7 +1850,8 @@ async def get_summary_report(
         }
         res_data["snapshot"] = await _persist_summary(
             session,
-            owner_id=owner_key,
+            owner_id=str(user.telegram_id or ""),
+            owner_user_id=user.id,
             period=period,
             payload=res_data,
         )
@@ -1838,7 +1916,7 @@ async def list_audit_events(
 
     filters = []
     if user.role != "admin":
-        filters.append(AuditEvent.owner_id == user.telegram_id)
+        filters.append(owned_by(AuditEvent, user))
     if category:
         filters.append(AuditEvent.category == category.upper())
     if account_id:
@@ -2036,6 +2114,7 @@ async def undo_audit_event(
                 actor_type="user",
                 actor_id=str(user.telegram_id or user.id),
                 owner_id=user.telegram_id,
+                owner_user_id=user.id,
                 is_admin=user.role == "admin",
             )
         except UndoError as error:
@@ -2082,7 +2161,7 @@ async def reactivate_adset(adset_id: str, user: TelegramUser = Depends(get_curre
 
         acc_res = await session.execute(select(Account).where(Account.account_id == stopped_entry.account_id))
         account = acc_res.scalar_one_or_none()
-        if not account or (user.role != "admin" and account.owner_id != user.telegram_id):
+        if not account or (user.role != "admin" and not entity_is_owned_by(account, user)):
             raise HTTPException(status_code=403, detail="Доступ запрещен.")
 
         action_started = time.perf_counter()
@@ -2158,7 +2237,7 @@ async def dismiss_adset(adset_id: str, user: TelegramUser = Depends(get_current_
             select(Account).where(Account.account_id == stopped_entry.account_id)
         )
         account = account_res.scalar_one_or_none()
-        if not account or (user.role != "admin" and account.owner_id != user.telegram_id):
+        if not account or (user.role != "admin" and not entity_is_owned_by(account, user)):
             raise HTTPException(status_code=403, detail="Доступ запрещен.")
 
         stopped_entry.is_resolved = True

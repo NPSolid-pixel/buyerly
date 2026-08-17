@@ -14,6 +14,7 @@ from sqlalchemy import select, delete
 from core.config import settings
 from core.audit import build_audit_event
 from core.action_undo import UndoError, undo_audit_action
+from core.ownership import entity_is_owned_by, owned_by
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, AppSettings, TelegramUser
 from meta_api.client import MetaClient
@@ -269,6 +270,15 @@ async def process_token_and_save(message: Message, state: FSMContext):
     error_results = []
 
     async with async_session_maker() as session:
+        owner_user = (
+            await session.execute(
+                select(TelegramUser).where(TelegramUser.telegram_id == owner_id)
+            )
+        ).scalar_one_or_none()
+        if not owner_user or not owner_user.is_approved:
+            await state.clear()
+            await progress_msg.edit_text("⛔️ Доступ не подтверждён.")
+            return
         for idx, item in enumerate(parsed_accounts, start=1):
             acc_id = item["account_id"]
             parsed_name = item.get("parsed_name", "")
@@ -295,6 +305,7 @@ async def process_token_and_save(message: Message, state: FSMContext):
                     existing.access_token = token
                     existing.timezone_name = timezone_name
                     existing.owner_id = owner_id
+                    existing.owner_user_id = owner_user.id
                     existing.batch_name = batch_name if batch_name != "-" else ""
                     existing.is_active = True
                 else:
@@ -303,6 +314,7 @@ async def process_token_and_save(message: Message, state: FSMContext):
                         name=display_name,
                         access_token=token,
                         owner_id=owner_id,
+                        owner_user_id=owner_user.id,
                         batch_name=batch_name if batch_name != "-" else "",
                         timezone_name=timezone_name,
                         rules_enabled=False,
@@ -368,10 +380,17 @@ def get_short_account_label(name: str, account_id: str) -> str:
 
 
 async def get_user_accounts(session, user_id: str) -> List[Account]:
-    if await _is_admin_user(session, user_id):
+    user = (
+        await session.execute(
+            select(TelegramUser).where(TelegramUser.telegram_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if user and user.is_approved and user.role == "admin":
         stmt = select(Account)
+    elif user and user.is_approved:
+        stmt = select(Account).where(owned_by(Account, user))
     else:
-        stmt = select(Account).where(Account.owner_id == user_id)
+        return []
     res = await session.execute(stmt)
     return res.scalars().all()
 
@@ -391,7 +410,7 @@ async def _can_manage_account(session, user_id: str, account: Account) -> bool:
     user = result.scalar_one_or_none()
     if not user or not user.is_approved:
         return False
-    return account.owner_id == user_id or user.role == "admin"
+    return entity_is_owned_by(account, user) or user.role == "admin"
 
 
 @router.callback_query(F.data.startswith("report_period:"))
@@ -767,7 +786,7 @@ async def cmd_admin_panel(message: Message, bot: Bot, state: FSMContext):
 
         user_lines = []
         for u in approved_users:
-            u_accs = sum(1 for a in all_accounts if a.owner_id == u.telegram_id)
+            u_accs = sum(1 for a in all_accounts if entity_is_owned_by(a, u))
             user_lines.append(f"• <b>{u.full_name}</b> (@{u.username}) | Кабинетов: {u_accs}")
 
         text = (
@@ -1111,6 +1130,7 @@ async def cb_undo_action(callback: CallbackQuery):
                 actor_type="telegram_user",
                 actor_id=user_id,
                 owner_id=user_id,
+                owner_user_id=user.id,
                 is_admin=user.role == "admin",
             )
         except UndoError as error:

@@ -59,6 +59,7 @@ def build_audit_event(
 
     return AuditEvent(
         owner_id=str(account.owner_id or ""),
+        owner_user_id=account.owner_user_id,
         actor_type=str(actor_type),
         actor_id=str(actor_id),
         category=category,

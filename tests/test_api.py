@@ -249,6 +249,77 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             changed_buyer = result.scalar_one()
             self.assertTrue(verify_password(new_password, changed_buyer.password_hash))
 
+    async def test_telegram_id_change_keeps_all_data_owned_by_the_same_user(self):
+        old_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        old_headers = {"Authorization": f"tma {old_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            preset_response = await client.post(
+                "/api/presets",
+                headers=old_headers,
+                json={
+                    "name": "Stable owner rule",
+                    "action": "notify_only",
+                    "conditions": [
+                        {"metric": "spend", "operator": "gte", "value": 10, "time_window": "today"}
+                    ],
+                    "condition_logic": "and",
+                },
+            )
+            self.assertEqual(preset_response.status_code, 200)
+            preset_id = preset_response.json()["id"]
+            group_response = await client.post(
+                "/api/rule-groups",
+                headers=old_headers,
+                json={"name": "Stable group", "description": "", "preset_ids": [preset_id]},
+            )
+            self.assertEqual(group_response.status_code, 200)
+            view_response = await client.put(
+                "/api/analytics-view",
+                headers=old_headers,
+                json={"view_mode": "traffic", "visible_columns": ["account", "data", "clicks"]},
+            )
+            self.assertEqual(view_response.status_code, 200)
+            update_response = await client.post(
+                "/api/auth/update-profile",
+                headers=old_headers,
+                json={"telegram_id": "9000000001"},
+            )
+            self.assertEqual(update_response.status_code, 200)
+
+            new_data = generate_valid_telegram_init_data(
+                settings.BOT_TOKEN,
+                {"id": 9000000001, "first_name": "Nick", "username": "buyer_nick"},
+            )
+            new_headers = {"Authorization": f"tma {new_data}"}
+            accounts = await client.get("/api/accounts", headers=new_headers)
+            presets = await client.get("/api/presets", headers=new_headers)
+            groups = await client.get("/api/rule-groups", headers=new_headers)
+            view = await client.get("/api/analytics-view", headers=new_headers)
+
+        self.assertEqual(accounts.status_code, 200)
+        self.assertEqual(len(accounts.json()), 1)
+        self.assertEqual([item["id"] for item in presets.json()], [preset_id])
+        self.assertEqual(groups.json()[0]["name"], "Stable group")
+        self.assertEqual(view.json()["view_mode"], "traffic")
+
+        async with self.test_session_maker() as session:
+            user = (
+                await session.execute(
+                    select(TelegramUser).where(TelegramUser.telegram_id == "9000000001")
+                )
+            ).scalar_one()
+            account = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_1018756607700064")
+                )
+            ).scalar_one()
+            self.assertEqual(account.owner_user_id, user.id)
+            self.assertEqual(account.owner_id, "8948797431")
+
     async def test_get_accounts_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
         init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)

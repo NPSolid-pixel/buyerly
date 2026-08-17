@@ -362,6 +362,58 @@ async def migrate_audit_undo_contract(conn) -> bool:
     return changed
 
 
+STABLE_OWNER_TABLES = (
+    "rule_presets",
+    "rule_groups",
+    "accounts",
+    "summary_snapshots",
+    "analytics_view_preferences",
+    "audit_events",
+    "automation_schedule_states",
+    "rule_execution_states",
+    "action_undo_states",
+)
+
+
+async def migrate_stable_owner_contract(conn) -> dict[str, int]:
+    """Backfill immutable user PKs without rewriting legacy owner labels."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    counts: dict[str, int] = {}
+    for table_name in STABLE_OWNER_TABLES:
+        if table_name not in table_names:
+            continue
+        columns = await conn.run_sync(
+            lambda sync_conn, name=table_name: {
+                column["name"] for column in inspect(sync_conn).get_columns(name)
+            }
+        )
+        if "owner_id" not in columns:
+            continue
+        if "owner_user_id" not in columns:
+            await conn.execute(
+                text(f"ALTER TABLE {table_name} ADD COLUMN owner_user_id INTEGER")
+            )
+        await conn.execute(
+            text(
+                f"CREATE INDEX IF NOT EXISTS ix_{table_name}_owner_user_id "
+                f"ON {table_name} (owner_user_id)"
+            )
+        )
+        result = await conn.execute(
+            text(
+                f"UPDATE {table_name} SET owner_user_id = ("
+                "SELECT telegram_users.id FROM telegram_users "
+                f"WHERE telegram_users.telegram_id = {table_name}.owner_id LIMIT 1"
+                ") WHERE owner_user_id IS NULL AND owner_id IS NOT NULL"
+            )
+        )
+        counts[table_name] = max(0, int(result.rowcount or 0))
+    return counts
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -372,6 +424,9 @@ async def init_schema():
         audit_undo_migrated = await migrate_audit_undo_contract(conn)
         if audit_undo_migrated:
             logger.info("Added immutable audit reversal links.")
+        owner_migration = await migrate_stable_owner_contract(conn)
+        if any(owner_migration.values()):
+            logger.info("Backfilled stable ownership: %s", owner_migration)
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:
             logger.info(

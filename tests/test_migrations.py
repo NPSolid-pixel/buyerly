@@ -11,6 +11,7 @@ from database.db import (
     migrate_legacy_account_rules,
     migrate_rule_metric_contract,
     migrate_rule_safety_contract,
+    migrate_stable_owner_contract,
 )
 from database.migrate_sqlite import _source_rows
 from database.models import Account
@@ -326,6 +327,47 @@ class TestAuditUndoContractMigration(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(second)
         self.assertIn("reverts_event_id", columns)
         self.assertIn("ix_audit_events_reverts_event_id", indexes)
+
+
+class TestStableOwnerContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE telegram_users ("
+                    "id INTEGER PRIMARY KEY, telegram_id VARCHAR UNIQUE)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE TABLE accounts ("
+                    "id INTEGER PRIMARY KEY, owner_id VARCHAR NOT NULL)"
+                )
+            )
+            await conn.execute(
+                text("INSERT INTO telegram_users (id, telegram_id) VALUES (7, 'tg-old')")
+            )
+            await conn.execute(
+                text("INSERT INTO accounts (id, owner_id) VALUES (1, 'tg-old')")
+            )
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+
+    async def test_backfills_internal_user_id_without_rewriting_legacy_owner(self):
+        async with self.engine.begin() as conn:
+            first = await migrate_stable_owner_contract(conn)
+            second = await migrate_stable_owner_contract(conn)
+            row = (
+                await conn.execute(
+                    text("SELECT owner_id, owner_user_id FROM accounts WHERE id = 1")
+                )
+            ).one()
+
+        self.assertEqual(row, ("tg-old", 7))
+        self.assertEqual(first["accounts"], 1)
+        self.assertEqual(second["accounts"], 0)
 
 
 if __name__ == "__main__":

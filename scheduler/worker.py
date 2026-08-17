@@ -18,6 +18,7 @@ from database.models import (
     AutomationScheduleState,
     RuleExecutionState,
     StoppedAdSet,
+    TelegramUser,
 )
 from core.audit import build_audit_event
 from meta_api.client import MetaClient
@@ -149,6 +150,7 @@ class MonitoringWorker:
         state = AutomationScheduleState(
             state_key=state_key,
             owner_id=str(account.owner_id or ""),
+            owner_user_id=account.owner_user_id,
             account_id=str(account.account_id),
             rule_key=rule_key,
             last_checked_at=0.0,
@@ -188,6 +190,7 @@ class MonitoringWorker:
             state = RuleExecutionState(
                 execution_key=execution_key,
                 owner_id=str(account.owner_id or ""),
+                owner_user_id=account.owner_user_id,
                 account_id=str(account.account_id),
                 adset_id=str(evaluation.adset_id),
                 rule_key=rule_key,
@@ -234,6 +237,7 @@ class MonitoringWorker:
             return False, "cooldown", state
 
         state.owner_id = str(account.owner_id or "")
+        state.owner_user_id = account.owner_user_id
         state.status = "PENDING"
         state.correlation_id = self._current_cycle_id
         state.last_attempt_at = now
@@ -361,6 +365,23 @@ class MonitoringWorker:
             result = await session.execute(stmt)
             accounts = result.scalars().all()
 
+            owner_user_ids = {
+                account.owner_user_id
+                for account in accounts
+                if account.owner_user_id is not None
+            }
+            owner_chat_ids = {}
+            if owner_user_ids:
+                owner_rows = (
+                    await session.execute(
+                        select(TelegramUser).where(TelegramUser.id.in_(owner_user_ids))
+                    )
+                ).scalars().all()
+                owner_chat_ids = {
+                    owner.id: str(owner.telegram_id or "")
+                    for owner in owner_rows
+                }
+
             settings_result = await session.execute(select(AppSettings).limit(1))
             app_settings = settings_result.scalar_one_or_none()
             default_interval = self._interval_minutes(
@@ -369,6 +390,7 @@ class MonitoringWorker:
             )
 
             for acc in accounts:
+                notification_target = owner_chat_ids.get(acc.owner_user_id) or acc.owner_id
                 now = self._clock()
                 active_rules = self._load_rules(acc.active_rules)
                 due_rule_entries = []
@@ -442,7 +464,7 @@ class MonitoringWorker:
                                     event_type="ACCOUNT_ISSUE",
                                     account_name=acc.name,
                                     account_id=acc.account_id,
-                                    target_chat_id=acc.owner_id,
+                                    target_chat_id=notification_target,
                                     local_time=status_label
                                 )
                             continue
@@ -465,7 +487,7 @@ class MonitoringWorker:
                                 event_type="TOKEN_EXPIRED",
                                 account_name=acc.name,
                                 account_id=acc.account_id,
-                                target_chat_id=acc.owner_id
+                                target_chat_id=notification_target
                             )
                         continue
 
@@ -541,7 +563,7 @@ class MonitoringWorker:
                                 event_type="DAY_START",
                                 account_name=acc.name,
                                 account_id=acc.account_id,
-                                target_chat_id=acc.owner_id,
+                                target_chat_id=notification_target,
                                 timezone_name=acc.timezone_name,
                                 local_time=f"{time_str} ({acc.timezone_name})",
                                 active_count=len(active_adsets),
@@ -684,7 +706,7 @@ class MonitoringWorker:
                                         eval_result=eval_res,
                                         account_name=acc.name,
                                         account_id=acc.account_id,
-                                        target_chat_id=acc.owner_id,
+                                        target_chat_id=notification_target,
                                         audit_event_id=audit_event_id,
                                     )
                             except Exception as e:
@@ -733,7 +755,7 @@ class MonitoringWorker:
                                     eval_result=eval_res,
                                     account_name=acc.name,
                                     account_id=acc.account_id,
-                                    target_chat_id=acc.owner_id
+                                    target_chat_id=notification_target
                                 )
 
                         # ПРЕДЛОЖЕНИЕ ВКЛЮЧИТЬ (долет)
@@ -763,7 +785,7 @@ class MonitoringWorker:
                                     eval_result=eval_res,
                                     account_name=acc.name,
                                     account_id=acc.account_id,
-                                    target_chat_id=acc.owner_id
+                                    target_chat_id=notification_target
                                 )
 
                         # АВТО-ВКЛЮЧЕНИЕ
@@ -808,7 +830,7 @@ class MonitoringWorker:
                                         eval_result=eval_res,
                                         account_name=acc.name,
                                         account_id=acc.account_id,
-                                        target_chat_id=acc.owner_id,
+                                        target_chat_id=notification_target,
                                         audit_event_id=audit_event_id,
                                     )
                             except Exception as e:
@@ -859,7 +881,7 @@ class MonitoringWorker:
                                         eval_result=eval_res,
                                         account_name=acc.name,
                                         account_id=acc.account_id,
-                                        target_chat_id=acc.owner_id,
+                                        target_chat_id=notification_target,
                                         old_budget=current_budget,
                                         new_budget=new_budget,
                                         audit_event_id=audit_event_id,
@@ -912,7 +934,7 @@ class MonitoringWorker:
                                         eval_result=eval_res,
                                         account_name=acc.name,
                                         account_id=acc.account_id,
-                                        target_chat_id=acc.owner_id,
+                                        target_chat_id=notification_target,
                                         old_budget=current_budget,
                                         new_budget=new_budget,
                                         audit_event_id=audit_event_id,
