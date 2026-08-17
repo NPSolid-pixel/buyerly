@@ -17,6 +17,19 @@ class TestSecretRedaction(unittest.TestCase):
         self.assertIn("access_token=[REDACTED]", result)
         self.assertIn("limit=100", result)
 
+    def test_redacts_meta_appsecret_proof_in_url(self):
+        proof = "a" * 64
+        message = (
+            "GET https://graph.facebook.com/v26.0/act_1"
+            f"?access_token=token&appsecret_proof={proof}&limit=100"
+        )
+
+        result = redact_secrets(message)
+
+        self.assertNotIn(proof, result)
+        self.assertIn("appsecret_proof=[REDACTED]", result)
+        self.assertIn("limit=100", result)
+
     def test_redacts_bearer_telegram_and_github_tokens(self):
         telegram_token = "1234567890:AAExampleTelegramSecret_123456789"
         github_token = "github_pat_example12345678901234567890"
