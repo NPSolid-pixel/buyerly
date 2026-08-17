@@ -2043,12 +2043,12 @@ async def dismiss_adset(adset_id: str, user: TelegramUser = Depends(get_current_
         session.add(
             build_audit_event(
                 account=account,
-                event_type="DISMISS_STOPPED",
+                event_type="HIDE_STOPPED_NOTIFICATION",
                 status="SUCCESS",
                 correlation_id=uuid.uuid4().hex,
                 category="MANUAL_ACTION",
-                action="KEEP_PAUSED",
-                message="Остановленный ad set оставлен выключенным пользователем.",
+                action="HIDE_NOTIFICATION",
+                message="Карточка выполненной остановки скрыта пользователем. Ad set остался выключенным.",
                 before_state={"status": "PAUSED", "is_resolved": False},
                 after_state={"status": "PAUSED", "is_resolved": True},
                 actor_type="user",
@@ -2058,4 +2058,4 @@ async def dismiss_adset(adset_id: str, user: TelegramUser = Depends(get_current_
             )
         )
         await session.commit()
-        return {"success": True, "message": "Оставлен выключенным."}
+        return {"success": True, "message": "Карточка скрыта. Ad set остался выключенным."}

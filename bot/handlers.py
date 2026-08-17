@@ -1,6 +1,8 @@
 import json
 import logging
 import re
+import time
+import uuid
 from typing import List
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart, StateFilter
@@ -10,6 +12,7 @@ from aiogram.types import Message, CallbackQuery
 from sqlalchemy import select, delete
 
 from core.config import settings
+from core.audit import build_audit_event
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, AppSettings, TelegramUser
 from meta_api.client import MetaClient
@@ -858,6 +861,8 @@ async def cb_reject_user(callback: CallbackQuery):
 async def cb_reactivate(callback: CallbackQuery):
     _, account_id, adset_id = callback.data.split(":")
     user_id = str(callback.from_user.id)
+    action_started = time.perf_counter()
+    correlation_id = uuid.uuid4().hex
 
     async with async_session_maker() as session:
         acc_res = await session.execute(select(Account).where(Account.account_id == account_id))
@@ -881,17 +886,64 @@ async def cb_reactivate(callback: CallbackQuery):
                 access_token=account.access_token,
                 status="ACTIVE"
             )
-
-            stopped_entry.is_resolved = True
-            await session.commit()
-
-            await callback.answer("✅ Адсет успешно включен!")
-            new_text = callback.message.text + "\n\n🟢 <b>СТАТУС: Включен пользователем через Telegram ✅</b>"
-            await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")
-
         except Exception as e:
             logger.error(f"Error reactivating adset {adset_id}: {e}")
-            await callback.answer(f"❌ Ошибка Meta API: {e}", show_alert=True)
+            session.add(
+                build_audit_event(
+                    account=account,
+                    event_type="MANUAL_REACTIVATE",
+                    status="ERROR",
+                    correlation_id=correlation_id,
+                    category="MANUAL_ACTION",
+                    action="REACTIVATE_ADSET",
+                    message=str(e),
+                    before_state={"status": "PAUSED", "is_resolved": False},
+                    after_state={"status": "PAUSED", "is_resolved": False},
+                    duration_ms=(time.perf_counter() - action_started) * 1000,
+                    actor_type="telegram_user",
+                    actor_id=user_id,
+                    adset_id=adset_id,
+                    adset_name=stopped_entry.adset_name,
+                )
+            )
+            try:
+                await session.commit()
+            except Exception as audit_error:
+                await session.rollback()
+                logger.error("Failed to persist Telegram reactivation error: %s", audit_error)
+            await callback.answer("❌ Meta не смогла включить ad set. Подробности сохранены в логах.", show_alert=True)
+            return
+
+        stopped_entry.is_resolved = True
+        session.add(
+            build_audit_event(
+                account=account,
+                event_type="MANUAL_REACTIVATE",
+                status="SUCCESS",
+                correlation_id=correlation_id,
+                category="MANUAL_ACTION",
+                action="REACTIVATE_ADSET",
+                message="Ad set включён пользователем через Telegram.",
+                before_state={"status": "PAUSED", "is_resolved": False},
+                after_state={"status": "ACTIVE", "is_resolved": True},
+                duration_ms=(time.perf_counter() - action_started) * 1000,
+                actor_type="telegram_user",
+                actor_id=user_id,
+                adset_id=adset_id,
+                adset_name=stopped_entry.adset_name,
+            )
+        )
+        try:
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            logger.error("Meta activated adset %s but Telegram audit commit failed: %s", adset_id, e)
+            await callback.answer("⚠️ Meta включила ad set, но Buyerly не сохранил локальный статус.", show_alert=True)
+            return
+
+    await callback.answer("✅ Ad set успешно включён!")
+    new_text = callback.message.text + "\n\n🟢 <b>СТАТУС: Включён пользователем через Telegram ✅</b>"
+    await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")
 
 
 @router.callback_query(F.data.startswith("dismiss:"))
@@ -917,10 +969,27 @@ async def cb_dismiss(callback: CallbackQuery):
             await callback.answer("⛔️ Нет доступа к этой записи.", show_alert=True)
             return
         stopped_entry.is_resolved = True
+        session.add(
+            build_audit_event(
+                account=account,
+                event_type="HIDE_STOPPED_NOTIFICATION",
+                status="SUCCESS",
+                correlation_id=uuid.uuid4().hex,
+                category="MANUAL_ACTION",
+                action="HIDE_NOTIFICATION",
+                message="Карточка выполненной остановки скрыта через Telegram.",
+                before_state={"status": "PAUSED", "is_resolved": False},
+                after_state={"status": "PAUSED", "is_resolved": True},
+                actor_type="telegram_user",
+                actor_id=user_id,
+                adset_id=adset_id,
+                adset_name=stopped_entry.adset_name,
+            )
+        )
         await session.commit()
 
-    await callback.answer("Оставлен выключенным.")
-    new_text = callback.message.text + "\n\n⚪ <b>СТАТУС: Оставлен выключенным пользователем ❌</b>"
+    await callback.answer("Карточка скрыта.")
+    new_text = callback.message.text + "\n\n⚪ <b>Карточка скрыта. Ad set остался выключенным.</b>"
     await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")
 
 
@@ -928,6 +997,8 @@ async def cb_dismiss(callback: CallbackQuery):
 async def cb_pause_adset(callback: CallbackQuery):
     _, account_id, adset_id = callback.data.split(":")
     user_id = str(callback.from_user.id)
+    action_started = time.perf_counter()
+    correlation_id = uuid.uuid4().hex
 
     async with async_session_maker() as session:
         acc_res = await session.execute(select(Account).where(Account.account_id == account_id))
@@ -943,11 +1014,58 @@ async def cb_pause_adset(callback: CallbackQuery):
                 access_token=account.access_token,
                 status="PAUSED"
             )
-
-            await callback.answer("🛑 Адсет успешно остановлен!")
-            new_text = callback.message.text + "\n\n🔴 <b>СТАТУС: Остановлен вручную по алерту 🛑</b>"
-            await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")
-
         except Exception as e:
             logger.error(f"Error pausing adset {adset_id}: {e}")
-            await callback.answer(f"❌ Ошибка Meta API: {e}", show_alert=True)
+            session.add(
+                build_audit_event(
+                    account=account,
+                    event_type="MANUAL_PAUSE",
+                    status="ERROR",
+                    correlation_id=correlation_id,
+                    category="MANUAL_ACTION",
+                    action="PAUSE_ADSET",
+                    message=str(e),
+                    before_state={"status": "ACTIVE"},
+                    after_state={"status": "ACTIVE"},
+                    duration_ms=(time.perf_counter() - action_started) * 1000,
+                    actor_type="telegram_user",
+                    actor_id=user_id,
+                    adset_id=adset_id,
+                )
+            )
+            try:
+                await session.commit()
+            except Exception as audit_error:
+                await session.rollback()
+                logger.error("Failed to persist Telegram pause error: %s", audit_error)
+            await callback.answer("❌ Meta не смогла остановить ad set. Подробности сохранены в логах.", show_alert=True)
+            return
+
+        session.add(
+            build_audit_event(
+                account=account,
+                event_type="MANUAL_PAUSE",
+                status="SUCCESS",
+                correlation_id=correlation_id,
+                category="MANUAL_ACTION",
+                action="PAUSE_ADSET",
+                message="Ad set остановлен пользователем через Telegram.",
+                before_state={"status": "ACTIVE"},
+                after_state={"status": "PAUSED"},
+                duration_ms=(time.perf_counter() - action_started) * 1000,
+                actor_type="telegram_user",
+                actor_id=user_id,
+                adset_id=adset_id,
+            )
+        )
+        try:
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            logger.error("Meta paused adset %s but Telegram audit commit failed: %s", adset_id, e)
+            await callback.answer("⚠️ Meta остановила ad set, но Buyerly не сохранил историю.", show_alert=True)
+            return
+
+    await callback.answer("🛑 Ad set успешно остановлен!")
+    new_text = callback.message.text + "\n\n🔴 <b>СТАТУС: Остановлен вручную по алерту 🛑</b>"
+    await callback.message.edit_text(new_text, reply_markup=None, parse_mode="HTML")

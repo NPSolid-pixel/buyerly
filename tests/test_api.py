@@ -959,12 +959,13 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         async with self.test_session_maker() as session:
             audit_event = (
                 await session.execute(
-                    select(AuditEvent).where(AuditEvent.event_type == "DISMISS_STOPPED")
+                    select(AuditEvent).where(AuditEvent.event_type == "HIDE_STOPPED_NOTIFICATION")
                 )
             ).scalar_one()
             self.assertEqual(audit_event.actor_type, "user")
             self.assertEqual(audit_event.actor_id, "8634201356")
             self.assertEqual(audit_event.adset_id, "admin_adset_1")
+            self.assertEqual(audit_event.action, "HIDE_NOTIFICATION")
 
     async def test_audit_history_is_owner_isolated_filterable_and_paginated(self):
         async with self.test_session_maker() as session:

@@ -2406,20 +2406,27 @@
     ACCOUNT_ISSUE: 'Проблема кабинета',
     TOKEN_EXPIRED: 'Проблема токена',
     DAY_START: 'Начало дня',
-    DISMISS_STOPPED: 'Решение подтверждено',
+    HIDE_STOPPED_NOTIFICATION: 'Карточка остановки скрыта',
+    MANUAL_PAUSE: 'Ad set остановлен вручную',
+    RULE_ACTION_PENDING: 'Действие зафиксировано',
+    RULE_ACTION_RECONCILED: 'Действие сверено с Meta',
     RULE_ACTION: 'Действие правила'
   };
 
   const auditStatusLabels = {
-    SUCCESS: 'Успешно',
+    SUCCESS: 'Выполнено',
     ERROR: 'Ошибка',
+    SKIPPED: 'Пропущено',
+    REVERTED: 'Отменено',
     WARNING: 'Внимание',
     INFO: 'Информация'
   };
 
   function auditStatusBadge(status) {
     const normalized = (status || 'INFO').toUpperCase();
-    const modifier = ['SUCCESS', 'ERROR', 'WARNING'].includes(normalized) ? normalized.toLowerCase() : 'info';
+    const modifier = ['SUCCESS', 'ERROR', 'WARNING'].includes(normalized)
+      ? normalized.toLowerCase()
+      : normalized === 'SKIPPED' ? 'warning' : 'info';
     return `<span class="log-status log-status-${modifier}"><span class="status-dot dot-${modifier === 'error' ? 'danger' : modifier}"></span>${auditStatusLabels[normalized] || escapeHtml(normalized)}</span>`;
   }
 
@@ -2502,6 +2509,7 @@
     document.getElementById('logsTotalCount').textContent = data.total || 0;
     document.getElementById('logsSuccessCount').textContent = counts.SUCCESS || 0;
     document.getElementById('logsErrorCount').textContent = counts.ERROR || 0;
+    document.getElementById('logsSkippedCount').textContent = counts.SKIPPED || 0;
     document.getElementById('logsPageLabel').textContent = `Страница ${state.auditPage} из ${state.auditTotalPages}`;
     document.getElementById('btnLogsPrev').disabled = state.auditPage <= 1;
     document.getElementById('btnLogsNext').disabled = state.auditPage >= state.auditTotalPages;
@@ -2572,7 +2580,6 @@
     banner?.classList.toggle('hidden', !hasRecords);
     if (countBadge) countBadge.textContent = records.length.toString();
     if (document.getElementById('logsAttentionCount')) document.getElementById('logsAttentionCount').textContent = records.length;
-    if (document.getElementById('logsStoppedCount')) document.getElementById('logsStoppedCount').textContent = records.length;
     if (!listEl) return;
 
     listEl.innerHTML = records.map(record => `
@@ -2584,8 +2591,8 @@
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
-          <button class="btn btn-primary btn-sm" onclick="window.reactivateAdset('${escapeHtml(record.adset_id)}')">Включить</button>
-          <button class="btn btn-secondary btn-sm" title="Подтвердить остановку" onclick="window.dismissAdset('${escapeHtml(record.adset_id)}')">Подтвердить</button>
+          <button class="btn btn-primary btn-sm" onclick="window.reactivateAdset('${escapeHtml(record.adset_id)}')">Включить обратно</button>
+          <button class="btn btn-secondary btn-sm" title="Скрыть карточку из списка" onclick="window.dismissAdset('${escapeHtml(record.adset_id)}')">Скрыть</button>
         </div>
       </div>`).join('');
   }
@@ -2620,7 +2627,7 @@
       await apiRequest(`/api/adsets/${adsetId}/dismiss`, { method: 'POST' });
       state.stoppedAdsets = state.stoppedAdsets.filter(item => item.adset_id !== adsetId);
       renderStoppedAdsets();
-      showToast('Остановка подтверждена', 'success');
+      showToast('Карточка скрыта. Ad set остался выключенным.', 'success');
       if (state.activeTab === 'logs') loadLogsTab(state.auditPage);
     } catch (err) {
       showToast(`Ошибка: ${err.message}`, 'error');

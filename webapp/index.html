@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.11.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.12.0">
 </head>
 
 <body>
@@ -474,8 +474,8 @@
         </details>
 
         <button id="logsAttentionBanner" class="logs-attention-banner hidden" type="button" onclick="window.switchTab('logs')">
-          <span><span class="status-dot dot-warning"></span><b id="logsAttentionCount">0</b> остановленных ad set требуют решения</span>
-          <span class="logs-attention-link">Открыть логи →</span>
+          <span><span class="status-dot dot-info"></span><b id="logsAttentionCount">0</b> выполненных остановок доступны в истории</span>
+          <span class="logs-attention-link">Открыть историю →</span>
         </button>
 
         <!-- Breakdown Table / Cards -->
@@ -549,18 +549,18 @@
 
         <div class="logs-stats-grid">
           <div class="logs-stat"><span>Всего событий</span><strong id="logsTotalCount">0</strong></div>
-          <div class="logs-stat logs-stat-success"><span>Успешных</span><strong id="logsSuccessCount">0</strong></div>
+          <div class="logs-stat logs-stat-success"><span>Выполнено</span><strong id="logsSuccessCount">0</strong></div>
           <div class="logs-stat logs-stat-error"><span>С ошибкой</span><strong id="logsErrorCount">0</strong></div>
-          <div class="logs-stat logs-stat-warning"><span>Ждут решения</span><strong id="logsStoppedCount">0</strong></div>
+          <div class="logs-stat logs-stat-warning"><span>Пропущено</span><strong id="logsSkippedCount">0</strong></div>
         </div>
 
         <section id="logsStoppedSection" class="logs-attention-section hidden">
           <div class="logs-section-title-row">
             <div>
-              <span class="eyebrow">Нужна проверка</span>
-              <h3>Остановленные ad set <span id="stoppedCountBadge" class="label-badge">0</span></h3>
+              <span class="eyebrow">Выполненные действия</span>
+              <h3>Недавние остановки <span id="stoppedCountBadge" class="label-badge">0</span></h3>
             </div>
-            <p>Можно вернуть в работу или скрыть из списка, если остановка корректна.</p>
+            <p>Остановка уже выполнена в Meta. При необходимости включите ad set обратно или скройте карточку.</p>
           </div>
           <div id="stoppedAdsetsList" class="stopped-adsets-list"></div>
         </section>
@@ -579,8 +579,10 @@
             </select>
             <select id="logsStatusFilter" class="logs-filter-select" aria-label="Статус события">
               <option value="">Все статусы</option>
-              <option value="SUCCESS">Успешно</option>
+              <option value="SUCCESS">Выполнено</option>
               <option value="ERROR">Ошибка</option>
+              <option value="SKIPPED">Пропущено</option>
+              <option value="REVERTED">Отменено</option>
               <option value="WARNING">Внимание</option>
               <option value="INFO">Информация</option>
             </select>
@@ -1205,6 +1207,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.11.0"></script>
+  <script src="/static/js/app.js?v=9.12.0"></script>
 </body>
 </html>
