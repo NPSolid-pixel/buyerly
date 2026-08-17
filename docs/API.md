@@ -42,9 +42,10 @@ Production: `https://smattrades.com`.
 
 | Метод и путь | Тело | Назначение |
 |---|---|---|
-| `GET /api/accounts` | — | список доступных кабинетов, их Meta/monitoring/rules state, валюта и назначения |
+| `GET /api/accounts` | — | список кабинетов, тип подключения, внутренние пометки, Meta/rules state и последние сохранённые метрики `today` |
 | `POST /api/accounts/parse-raw` | `raw_text` | разбирает текстовый экспорт в `account_id` и `parsed_name`, ничего не сохраняет |
 | `POST /api/accounts/batch-add` | `accounts[]`, `batch_name?`, `access_token` | проверяет кабинеты через Meta и добавляет/обновляет их |
+| `PATCH /api/accounts/{account_id}/profile` | `custom_name`, `note` | сохраняет внутреннее название до 120 символов и заметку до 500 символов, не меняя имя в Meta |
 | `DELETE /api/accounts/{account_id}` | — | удаляет доступный пользователю кабинет из Buyerly |
 | `POST /api/accounts/{account_id}/assign-rule` | `preset_id` | назначает один пресет и включает исполнение правил кабинета |
 | `POST /api/accounts/{account_id}/assign-rule-group/{group_id}` | — | атомарно назначает всю группу, уже назначенные пресеты пропускает |
@@ -64,6 +65,8 @@ Production: `https://smattrades.com`.
 ```
 
 Импорт кабинета никогда не включает автоматику и не назначает правила автоматически. Валюта и часовой пояс берутся из Meta. Если Meta не вернула валюту, сохраняется `UNKNOWN`, а денежные действия блокируются до успешного уточнения.
+
+В `GET /api/accounts` поле `connection_type` равно `facebook_login` для кабинета, связанного с зашифрованным OAuth-подключением, и `system_user` для ручного резервного подключения. `custom_name` и `note` принадлежат Buyerly и не перезаписываются очередным импортом данных Meta. `latest_metrics` берётся из последнего успешного сохранённого snapshot периода `today`; если сводка ещё не загружалась или кабинет появился позже снимка, поле равно `null`. Открытие списка кабинетов не создаёт новый запрос в Meta.
 
 ## Подключение Meta через Facebook Login for Business
 

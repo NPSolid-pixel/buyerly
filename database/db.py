@@ -492,6 +492,39 @@ async def migrate_meta_connection_contract(conn) -> bool:
     return True
 
 
+async def migrate_account_profile_contract(conn) -> bool:
+    """Add owner-editable labels without overloading the Meta account name."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "accounts" not in table_names:
+        return False
+    columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"] for column in inspect(sync_conn).get_columns("accounts")
+        }
+    )
+    changed = False
+    if "custom_name" not in columns:
+        await conn.execute(
+            text(
+                "ALTER TABLE accounts ADD COLUMN custom_name VARCHAR "
+                "NOT NULL DEFAULT ''"
+            )
+        )
+        changed = True
+    if "note" not in columns:
+        await conn.execute(
+            text(
+                "ALTER TABLE accounts ADD COLUMN note TEXT "
+                "NOT NULL DEFAULT ''"
+            )
+        )
+        changed = True
+    return changed
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -511,6 +544,8 @@ async def init_schema():
             logger.info("Added the account-local day boundary contract.")
         if await migrate_meta_connection_contract(conn):
             logger.info("Added encrypted Meta connection links to accounts.")
+        if await migrate_account_profile_contract(conn):
+            logger.info("Added editable Buyerly account names and notes.")
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:
             logger.info(
@@ -536,6 +571,8 @@ async def init_schema():
             "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT '🟢 Активен (ACTIVE)';",
             "ALTER TABLE accounts ADD COLUMN currency VARCHAR DEFAULT 'UNKNOWN';",
             "ALTER TABLE accounts ADD COLUMN last_day_start_date VARCHAR DEFAULT '';",
+            "ALTER TABLE accounts ADD COLUMN custom_name VARCHAR DEFAULT '';",
+            "ALTER TABLE accounts ADD COLUMN note TEXT DEFAULT '';",
             "ALTER TABLE accounts ADD COLUMN preset_id INTEGER;",
             "ALTER TABLE accounts ADD COLUMN preset_name VARCHAR DEFAULT '';",
             "ALTER TABLE accounts ADD COLUMN rule_action VARCHAR DEFAULT 'turn_off';",

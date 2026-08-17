@@ -334,7 +334,101 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(data), 1)
             self.assertEqual(data[0]["account_id"], "act_1018756607700064")
             self.assertEqual(data[0]["name"], "Швеция 1")
+            self.assertEqual(data[0]["custom_name"], "")
+            self.assertEqual(data[0]["note"], "")
+            self.assertEqual(data[0]["connection_type"], "system_user")
+            self.assertIsNone(data[0]["latest_metrics"])
             self.assertEqual(data[0]["active_rules"], [])
+
+    async def test_account_profile_and_latest_saved_metrics_are_owner_isolated(self):
+        async with self.test_session_maker() as session:
+            buyer = (
+                await session.execute(
+                    select(TelegramUser).where(TelegramUser.telegram_id == "8948797431")
+                )
+            ).scalar_one()
+            account = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_1018756607700064")
+                )
+            ).scalar_one()
+            account.owner_user_id = buyer.id
+            account.meta_connection_id = 77
+            session.add(
+                SummarySnapshot(
+                    owner_id="8948797431",
+                    owner_user_id=buyer.id,
+                    period="today",
+                    payload=json.dumps(
+                        {
+                            "period": "today",
+                            "generated_at": "2026-08-18T08:15:00+00:00",
+                            "accounts": [
+                                {
+                                    "account_id": account.account_id,
+                                    "data_status": "synced",
+                                    "data_status_label": "Метрики получены",
+                                    "spend": 123.45,
+                                    "impressions": 9000,
+                                    "clicks": 210,
+                                    "leads": 17,
+                                    "registrations": 6,
+                                    "purchases": 2,
+                                }
+                            ],
+                        }
+                    ),
+                )
+            )
+            session.add(
+                Account(
+                    account_id="act_999999999",
+                    name="Foreign",
+                    owner_id="8634201356",
+                    timezone_name="UTC",
+                    currency="USD",
+                )
+            )
+            await session.commit()
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            accounts = await client.get("/api/accounts", headers=headers)
+            updated = await client.patch(
+                "/api/accounts/act_1018756607700064/profile",
+                headers=headers,
+                json={"custom_name": "  NL · основной  ", "note": "  Льётся NL, новый оффер  "},
+            )
+            forbidden = await client.patch(
+                "/api/accounts/act_999999999/profile",
+                headers=headers,
+                json={"custom_name": "Hijack", "note": ""},
+            )
+            invalid = await client.patch(
+                "/api/accounts/act_1018756607700064/profile",
+                headers=headers,
+                json={"custom_name": "x" * 121, "note": ""},
+            )
+
+        self.assertEqual(accounts.status_code, 200)
+        item = accounts.json()[0]
+        self.assertEqual(item["connection_type"], "facebook_login")
+        self.assertEqual(item["latest_metrics"]["spend"], 123.45)
+        self.assertEqual(item["latest_metrics"]["leads"], 17)
+        self.assertEqual(item["latest_metrics"]["registrations"], 6)
+        self.assertEqual(item["latest_metrics"]["purchases"], 2)
+        self.assertEqual(item["latest_metrics"]["generated_at"], "2026-08-18T08:15:00+00:00")
+        self.assertTrue(item["latest_metrics"]["saved_at"])
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["custom_name"], "NL · основной")
+        self.assertEqual(updated.json()["note"], "Льётся NL, новый оффер")
+        self.assertEqual(forbidden.status_code, 404)
+        self.assertEqual(invalid.status_code, 422)
 
     async def test_toggle_rules_and_presets(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
@@ -648,6 +742,60 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(imported.rules_enabled)
             self.assertEqual(imported.active_rules, "[]")
             self.assertEqual(imported.currency, "EUR")
+
+    async def test_manual_reimport_marks_existing_account_as_system_user(self):
+        user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
+        init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)
+        headers = {"Authorization": f"tma {init_data}"}
+        account_id = "act_1018756607700064"
+
+        async with self.test_session_maker() as session:
+            existing = (
+                await session.execute(
+                    select(Account).where(Account.account_id == account_id)
+                )
+            ).scalar_one()
+            existing.meta_connection_id = 77
+            await session.commit()
+
+        meta_account = {
+            "timezone_name": "Europe/Stockholm",
+            "name": "Reconnected account",
+            "account_status": 1,
+            "status_label": "Активен",
+            "currency": "EUR",
+        }
+        payload = {
+            "accounts": [{"account_id": account_id, "name": "Manual source"}],
+            "batch_name": "-",
+            "access_token": "replacement_system_user_token",
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_account_info",
+            new=AsyncMock(return_value=meta_account),
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/accounts/batch-add",
+                    headers=headers,
+                    json=payload,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["success_count"], 1)
+
+        async with self.test_session_maker() as session:
+            reconnected = (
+                await session.execute(
+                    select(Account).where(Account.account_id == account_id)
+                )
+            ).scalar_one()
+            self.assertIsNone(reconnected.meta_connection_id)
+            self.assertEqual(reconnected.access_token, "replacement_system_user_token")
+            self.assertEqual(reconnected.currency, "EUR")
 
     async def test_batch_import_rejects_account_without_supported_meta_timezone(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}

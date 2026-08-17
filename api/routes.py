@@ -216,10 +216,28 @@ class ApplyPresetRequest(BaseModel):
 
     preset_id: int = Field(gt=0)
 
+
+class AccountLatestMetrics(BaseModel):
+    period: Literal["today"] = "today"
+    generated_at: str = ""
+    saved_at: str = ""
+    data_status: Literal["synced", "blocked", "error"]
+    data_status_label: str = ""
+    spend: Optional[float] = None
+    impressions: int = 0
+    clicks: int = 0
+    leads: int = 0
+    registrations: int = 0
+    purchases: int = 0
+
+
 class AccountItem(BaseModel):
     id: int
     account_id: str
     name: str
+    custom_name: str
+    note: str
+    connection_type: Literal["facebook_login", "system_user"]
     owner_id: str
     batch_name: str
     timezone_name: str
@@ -229,7 +247,16 @@ class AccountItem(BaseModel):
     rules_enabled: bool
     is_active: bool
     active_rules: List[Dict[str, Any]] = Field(default_factory=list)
+    latest_metrics: Optional[AccountLatestMetrics] = None
     created_at: str
+
+
+class AccountProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    custom_name: str = Field(default="", max_length=120)
+    note: str = Field(default="", max_length=500)
+
 
 class ParseRawRequest(BaseModel):
     raw_text: str
@@ -502,6 +529,52 @@ def _summary_snapshot_reference(
         "total_regs": payload.get("total_regs", 0),
         "total_purchases": payload.get("total_purchases", 0),
     }
+
+
+def _latest_account_metrics_by_id(summary: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Extract a compact, backwards-compatible account view from a saved summary."""
+
+    if not isinstance(summary, dict):
+        return {}
+    generated_at = str(summary.get("generated_at") or "")
+    snapshot = summary.get("snapshot") if isinstance(summary.get("snapshot"), dict) else {}
+    saved_at = str(snapshot.get("saved_at") or "")
+    rows = summary.get("accounts") if isinstance(summary.get("accounts"), list) else []
+    result: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        account_id = str(row.get("account_id") or "").strip()
+        if not account_id:
+            continue
+        raw_status = str(row.get("data_status") or "synced")
+        data_status = raw_status if raw_status in {"synced", "blocked", "error"} else "error"
+
+        def safe_int(key: str) -> int:
+            try:
+                return max(0, int(float(row.get(key) or 0)))
+            except (TypeError, ValueError):
+                return 0
+
+        spend: Optional[float]
+        try:
+            spend = round(float(row.get("spend")), 2) if row.get("spend") is not None else None
+        except (TypeError, ValueError):
+            spend = None
+        result[account_id] = {
+            "period": "today",
+            "generated_at": generated_at,
+            "saved_at": saved_at,
+            "data_status": data_status,
+            "data_status_label": str(row.get("data_status_label") or ""),
+            "spend": spend,
+            "impressions": safe_int("impressions"),
+            "clicks": safe_int("clicks"),
+            "leads": safe_int("leads"),
+            "registrations": safe_int("registrations"),
+            "purchases": safe_int("purchases"),
+        }
+    return result
 
 
 async def _load_persisted_summary(
@@ -959,6 +1032,13 @@ async def get_me(user: TelegramUser = Depends(get_current_user)):
 async def list_accounts(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
         accounts = await get_user_accounts(session, user)
+        latest_summary = await _load_persisted_summary(
+            session,
+            owner_id=str(user.telegram_id or ""),
+            owner_user_id=user.id,
+            period="today",
+        )
+        latest_metrics = _latest_account_metrics_by_id(latest_summary)
         
         items = []
         for a in accounts:
@@ -968,6 +1048,11 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 id=a.id,
                 account_id=a.account_id,
                 name=a.name,
+                custom_name=a.custom_name or "",
+                note=a.note or "",
+                connection_type=(
+                    "facebook_login" if a.meta_connection_id else "system_user"
+                ),
                 owner_id=a.owner_id,
                 batch_name=a.batch_name or "",
                 timezone_name=a.timezone_name or "UTC",
@@ -977,6 +1062,7 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 rules_enabled=a.rules_enabled,
                 is_active=a.is_active,
                 active_rules=active_rules_list,
+                latest_metrics=latest_metrics.get(a.account_id),
                 created_at=a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else ""
             ))
         return items
@@ -1411,6 +1497,33 @@ async def toggle_rules(account_id: str, user: TelegramUser = Depends(get_current
         }
 
 
+@router.patch("/accounts/{account_id}/profile")
+async def update_account_profile(
+    account_id: str,
+    payload: AccountProfileUpdateRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Update owner-only Buyerly labels without changing the Meta account name."""
+
+    async with async_session_maker() as session:
+        acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        stmt = select(Account).where(Account.account_id == acc_id)
+        if user.role != "admin":
+            stmt = stmt.where(owned_by(Account, user))
+        account = (await session.execute(stmt)).scalar_one_or_none()
+        if not account:
+            raise HTTPException(status_code=404, detail="Кабинет не найден.")
+
+        account.custom_name = payload.custom_name.strip()
+        account.note = payload.note.strip()
+        await session.commit()
+        return {
+            "account_id": account.account_id,
+            "custom_name": account.custom_name,
+            "note": account.note,
+            "message": "Название и заметка сохранены",
+        }
+
 
 @router.delete("/accounts/{account_id}")
 async def delete_account(account_id: str, user: TelegramUser = Depends(get_current_user)):
@@ -1482,6 +1595,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                         existing.last_day_start_date = ""
                     existing.name = display_name
                     existing.access_token = token
+                    existing.meta_connection_id = None
                     existing.timezone_name = timezone_name
                     existing.currency = currency
                     existing.owner_id = owner_id

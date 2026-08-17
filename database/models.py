@@ -218,6 +218,18 @@ class Account(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     account_id = Column(String, unique=True, nullable=False, index=True, doc="Facebook Ad Account ID (act_...)")
     name = Column(String, nullable=False, doc="Понятное название кабинета")
+    custom_name = Column(
+        String,
+        default="",
+        nullable=False,
+        doc="Внутреннее название кабинета в Buyerly; не перезаписывается данными Meta",
+    )
+    note = Column(
+        Text,
+        default="",
+        nullable=False,
+        doc="Редактируемая внутренняя заметка владельца о кабинете",
+    )
     access_token = Column(String, nullable=True, default="", doc="Legacy manual User/System User Access Token")
     meta_connection_id = Column(
         Integer,

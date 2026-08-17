@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from database.db import (
+    migrate_account_profile_contract,
     migrate_account_day_boundary_contract,
     migrate_account_currency_contract,
     migrate_audit_undo_contract,
@@ -161,6 +162,48 @@ class TestSQLiteToPostgresConversion(unittest.TestCase):
         self.assertEqual(rows[0]["rules_enabled"], True)
         self.assertIsInstance(rows[0]["created_at"], datetime)
         self.assertIsNone(rows[0]["created_at"].tzinfo)
+
+
+class TestAccountProfileContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE accounts ("
+                    "id INTEGER PRIMARY KEY, name VARCHAR NOT NULL)"
+                )
+            )
+            await conn.execute(
+                text("INSERT INTO accounts (id, name) VALUES (1, 'Meta name')")
+            )
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+
+    async def test_adds_editable_fields_without_rewriting_existing_name(self):
+        async with self.engine.begin() as conn:
+            first_changed = await migrate_account_profile_contract(conn)
+            second_changed = await migrate_account_profile_contract(conn)
+            columns = {
+                row[1]
+                for row in (
+                    await conn.execute(text("PRAGMA table_info(accounts)"))
+                ).all()
+            }
+            row = (
+                await conn.execute(
+                    text("SELECT name, custom_name, note FROM accounts WHERE id = 1")
+                )
+            ).mappings().one()
+
+        self.assertTrue(first_changed)
+        self.assertFalse(second_changed)
+        self.assertIn("custom_name", columns)
+        self.assertIn("note", columns)
+        self.assertEqual(row["name"], "Meta name")
+        self.assertEqual(row["custom_name"], "")
+        self.assertEqual(row["note"], "")
 
 
 class TestRuleMetricContractMigration(unittest.IsolatedAsyncioTestCase):
