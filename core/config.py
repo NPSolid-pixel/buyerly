@@ -10,6 +10,24 @@ class Settings(BaseSettings):
     DEFAULT_POLL_INTERVAL_MINUTES: int = Field(default=5, description="Monitoring interval in minutes")
     ADMIN_CHAT_ID: str = Field(default="", description="Default Telegram Chat ID for alerts")
     WEBAPP_URL: str = Field(default="", description="Public HTTPS URL for Telegram Web App")
+    META_GRAPH_VERSION: str = Field(
+        default="v26.0",
+        description="Pinned Meta Graph API version (for example v26.0)",
+    )
+    META_APP_ID: str = Field(default="", description="Meta application ID")
+    META_APP_SECRET: str = Field(default="", description="Meta application secret")
+    META_LOGIN_CONFIG_ID: str = Field(
+        default="",
+        description="Facebook Login for Business configuration ID",
+    )
+    META_OAUTH_REDIRECT_URI: str = Field(
+        default="",
+        description="Exact HTTPS callback registered in Meta",
+    )
+    META_TOKEN_ENCRYPTION_KEY: str = Field(
+        default="",
+        description="URL-safe base64 key used to encrypt Meta access tokens at rest",
+    )
     API_PORT: int = Field(default=8080, description="Web API and static files port")
     API_HOST: str = Field(default="0.0.0.0", description="Web API host")
     SERVE_STATIC: bool = Field(default=True, description="Serve the bundled web app from FastAPI in local/legacy mode")

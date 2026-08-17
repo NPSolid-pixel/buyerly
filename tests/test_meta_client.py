@@ -15,6 +15,15 @@ class FakeResponse:
 
 
 class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
+    async def test_graph_api_version_is_configurable_and_validated(self):
+        client = MetaClient(graph_version="v25.0")
+
+        self.assertEqual(client.graph_version, "v25.0")
+        self.assertEqual(client.base_url, "https://graph.facebook.com/v25.0")
+
+        with self.assertRaises(ValueError):
+            MetaClient(graph_version="latest")
+
     async def test_account_info_normalizes_legacy_meta_timezone(self):
         client = MetaClient()
         client._request_with_retry = AsyncMock(

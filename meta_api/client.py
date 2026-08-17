@@ -2,10 +2,12 @@ import logging
 import json
 import asyncio
 import random
+import re
 import httpx
 from typing import Optional, List, Dict, Any
 
 from core.currency import from_meta_budget_units, normalize_currency, to_meta_budget_units
+from core.config import settings
 from core.timezones import canonical_timezone_name
 
 logger = logging.getLogger(__name__)
@@ -27,17 +29,22 @@ ACCOUNT_SUMMARY_FIELDS = (
 
 class MetaClient:
     """
-    Асинхронный клиент для работы с Meta Marketing API (Graph API v20.0)
+    Асинхронный клиент для работы с Meta Marketing API.
     с поддержкой:
       1. Экспоненциального Backoff и умных повторов (2s -> 4s -> 8s) при 429/5xx/Network Error.
       2. Парсинга заголовка X-Business-Use-Case-Usage и предупреждения о расходе квоты >80%.
       3. Канонической дедупликации метрик (Лиды, Реги, Покупки).
     """
 
-    BASE_URL = "https://graph.facebook.com/v20.0"
+    GRAPH_VERSION_PATTERN = re.compile(r"^v\d+\.\d+$")
 
-    def __init__(self, timeout: float = 15.0):
+    def __init__(self, timeout: float = 15.0, graph_version: Optional[str] = None):
         self.timeout = timeout
+        requested_version = str(graph_version or settings.META_GRAPH_VERSION).strip()
+        if not self.GRAPH_VERSION_PATTERN.fullmatch(requested_version):
+            raise ValueError("META_GRAPH_VERSION must look like v26.0")
+        self.graph_version = requested_version
+        self.base_url = f"https://graph.facebook.com/{self.graph_version}"
 
     @staticmethod
     def _safe_int(value: Any) -> int:
@@ -317,7 +324,7 @@ class MetaClient:
         Получает информацию о рекламном кабинете (таймзона, имя, статус, валюта).
         """
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
-        url = f"{self.BASE_URL}/{acc_id}"
+        url = f"{self.base_url}/{acc_id}"
         params = {
             "fields": "id,name,timezone_name,currency,account_status,disable_reason",
             "access_token": access_token
@@ -346,7 +353,7 @@ class MetaClient:
         """
 
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
-        insights_url = f"{self.BASE_URL}/{acc_id}/insights"
+        insights_url = f"{self.base_url}/{acc_id}/insights"
         rows = await self._fetch_paginated_data(
             insights_url,
             {
@@ -380,7 +387,7 @@ class MetaClient:
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
 
         # 1. Получаем список всех адсетов и их текущие статусы
-        adsets_url = f"{self.BASE_URL}/{acc_id}/adsets"
+        adsets_url = f"{self.base_url}/{acc_id}/adsets"
         adsets_params = {
             "fields": "id,name,status,effective_status,daily_budget",
             "limit": 100,
@@ -393,7 +400,7 @@ class MetaClient:
         )
 
         # 2. Получаем Insights за указанный период
-        insights_url = f"{self.BASE_URL}/{acc_id}/insights"
+        insights_url = f"{self.base_url}/{acc_id}/insights"
         insights_params = {
             "level": "adset",
             "fields": "adset_id,adset_name,spend,impressions,clicks,cpc,ctr,actions,cost_per_action_type",
@@ -459,7 +466,7 @@ class MetaClient:
         if status not in ["PAUSED", "ACTIVE"]:
             raise ValueError(f"Invalid status: {status}. Must be 'PAUSED' or 'ACTIVE'.")
 
-        url = f"{self.BASE_URL}/{adset_id}"
+        url = f"{self.base_url}/{adset_id}"
         payload = {
             "status": status,
             "access_token": access_token
@@ -483,7 +490,7 @@ class MetaClient:
     ) -> Dict[str, Any]:
         """Read the live state used by guarded action reversal checks."""
 
-        url = f"{self.BASE_URL}/{adset_id}"
+        url = f"{self.base_url}/{adset_id}"
         response = await self._request_with_retry(
             "GET",
             url,
@@ -517,7 +524,7 @@ class MetaClient:
         """
         new_budget_units = to_meta_budget_units(new_daily_budget_dollars, currency)
 
-        url = f"{self.BASE_URL}/{adset_id}"
+        url = f"{self.base_url}/{adset_id}"
         payload = {
             "daily_budget": str(new_budget_units),
             "access_token": access_token
