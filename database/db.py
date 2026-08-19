@@ -561,6 +561,105 @@ async def migrate_automation_settings_contract(conn) -> list[str]:
     return added
 
 
+async def migrate_workspaces_contract(conn) -> int:
+    """Ensure workspaces table exists and backfill a default workspace for each user."""
+    from datetime import datetime, timezone
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "workspaces" not in table_names or "telegram_users" not in table_names:
+        return 0
+
+    user_columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"] for column in inspect(sync_conn).get_columns("telegram_users")
+        }
+    )
+    if "active_workspace_id" not in user_columns:
+        await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN active_workspace_id INTEGER"))
+
+    for tbl in ("rule_presets", "rule_groups", "account_groups", "accounts", "meta_connections", "summary_snapshots", "audit_events"):
+        if tbl in table_names:
+            cols = await conn.run_sync(
+                lambda sync_conn, name=tbl: {column["name"] for column in inspect(sync_conn).get_columns(name)}
+            )
+            if "workspace_id" not in cols:
+                await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN workspace_id INTEGER"))
+                await conn.execute(text(f"CREATE INDEX IF NOT EXISTS ix_{tbl}_workspace_id ON {tbl} (workspace_id)"))
+
+    users = (await conn.execute(text("SELECT id, username FROM telegram_users"))).mappings().all()
+    created_workspaces = 0
+    for u in users:
+        u_id = u["id"]
+        has_membership = (await conn.execute(
+            text("SELECT workspace_id FROM workspace_members WHERE user_id = :uid LIMIT 1"),
+            {"uid": u_id}
+        )).scalar()
+
+        if not has_membership:
+            ws_name = "Buyerly"
+            ws_slug = "buyerly"
+            existing_slug = (await conn.execute(
+                text("SELECT id FROM workspaces WHERE slug = :slug"),
+                {"slug": ws_slug}
+            )).scalar()
+            if existing_slug:
+                ws_slug = f"buyerly-{u_id}"
+
+            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+            if conn.dialect.name == "postgresql":
+                res = await conn.execute(
+                    text(
+                        "INSERT INTO workspaces (name, slug, badge_text, badge_color, owner_user_id, created_at, updated_at) "
+                        "VALUES (:name, :slug, :badge_text, :badge_color, :owner_user_id, :now, :now) RETURNING id"
+                    ),
+                    {"name": ws_name, "slug": ws_slug, "badge_text": "B", "badge_color": "#F5A300", "owner_user_id": u_id, "now": now_dt}
+                )
+                ws_id = res.scalar()
+            else:
+                await conn.execute(
+                    text(
+                        "INSERT INTO workspaces (name, slug, badge_text, badge_color, owner_user_id, created_at, updated_at) "
+                        "VALUES (:name, :slug, :badge_text, :badge_color, :owner_user_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                    ),
+                    {"name": ws_name, "slug": ws_slug, "badge_text": "B", "badge_color": "#F5A300", "owner_user_id": u_id}
+                )
+                ws_id = (await conn.execute(text("SELECT last_insert_rowid()"))).scalar()
+
+            if conn.dialect.name == "postgresql":
+                await conn.execute(
+                    text("INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (:ws_id, :u_id, 'owner', :now)"),
+                    {"ws_id": ws_id, "u_id": u_id, "now": now_dt}
+                )
+            else:
+                await conn.execute(
+                    text("INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (:ws_id, :u_id, 'owner', CURRENT_TIMESTAMP)"),
+                    {"ws_id": ws_id, "u_id": u_id}
+                )
+
+            await conn.execute(
+                text("UPDATE telegram_users SET active_workspace_id = :ws_id WHERE id = :u_id"),
+                {"ws_id": ws_id, "u_id": u_id}
+            )
+            created_workspaces += 1
+            has_membership = ws_id
+
+        await conn.execute(
+            text("UPDATE telegram_users SET active_workspace_id = :ws_id WHERE id = :u_id AND active_workspace_id IS NULL"),
+            {"ws_id": has_membership, "u_id": u_id}
+        )
+
+        for tbl in ("rule_presets", "rule_groups", "account_groups", "accounts", "meta_connections", "summary_snapshots", "audit_events"):
+            if tbl in table_names:
+                await conn.execute(
+                    text(f"UPDATE {tbl} SET workspace_id = :ws_id WHERE owner_user_id = :u_id AND workspace_id IS NULL"),
+                    {"ws_id": has_membership, "u_id": u_id}
+                )
+
+    return created_workspaces
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -588,6 +687,9 @@ async def init_schema():
                 "Added automation polling controls: %s",
                 ", ".join(automation_settings_added),
             )
+        migrated_workspaces = await migrate_workspaces_contract(conn)
+        if migrated_workspaces:
+            logger.info("Backfilled default workspace for %s user(s).", migrated_workspaces)
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:
             logger.info(

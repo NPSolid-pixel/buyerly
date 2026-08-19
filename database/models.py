@@ -22,10 +22,54 @@ class TelegramUser(Base):
     auth_token = Column(String, unique=True, nullable=True, index=True, doc="Постоянный токен авторизации веб-интерфейса")
     role = Column(String, default="admin", nullable=False, doc="'admin' или 'buyer'")
     is_approved = Column(Boolean, default=True, nullable=False, doc="Одобрен ли доступ")
+    active_workspace_id = Column(
+        Integer,
+        ForeignKey(
+            "workspaces.id",
+            use_alter=True,
+            name="fk_telegram_users_active_workspace",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+        doc="ID активного воркспейса",
+    )
     created_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
     def __repr__(self):
         return f"<TelegramUser(username='{self.username}', role='{self.role}', approved={self.is_approved})>"
+
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False, doc="Название воркспейса (e.g. 'Buyerly', 'Canada Traffic')")
+    slug = Column(String, unique=True, nullable=False, index=True, doc="URL slug (e.g. 'buyerly', 'canada-traffic')")
+    badge_text = Column(String, default="B", nullable=False, doc="Символ или буква бейджа")
+    badge_color = Column(String, default="#F5A300", nullable=False, doc="Цвет бейджа (#F5A300, #7C3AED, etc.)")
+    owner_user_id = Column(Integer, ForeignKey("telegram_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
+
+    def __repr__(self):
+        return f"<Workspace(id={self.id}, name='{self.name}', slug='{self.slug}')>"
+
+
+class WorkspaceMember(Base):
+    __tablename__ = "workspace_members"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_workspace_member_user"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("telegram_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String, default="owner", nullable=False, doc="'owner', 'admin', 'buyer', 'viewer'")
+    joined_at = Column(DateTime, default=utcnow_naive, nullable=False)
+
+    def __repr__(self):
+        return f"<WorkspaceMember(workspace_id={self.workspace_id}, user_id={self.user_id}, role='{self.role}')>"
 
 
 
@@ -108,6 +152,7 @@ class RulePreset(Base):
     __tablename__ = "rule_presets"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True, doc="Legacy-метка владельца для совместимости")
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPL выше порога')")
@@ -132,6 +177,7 @@ class RuleGroup(Base):
     __tablename__ = "rule_groups"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
@@ -195,6 +241,7 @@ class MetaConnection(Base):
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(
         Integer,
@@ -280,6 +327,7 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     account_id = Column(String, unique=True, nullable=False, index=True, doc="Facebook Ad Account ID (act_...)")
     name = Column(String, nullable=False, doc="Понятное название кабинета")
     custom_name = Column(
@@ -338,6 +386,7 @@ class AccountGroup(Base):
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
@@ -381,6 +430,7 @@ class SummarySnapshot(Base):
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     period = Column(String, nullable=False, index=True)
@@ -454,6 +504,7 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, default="", nullable=False, index=True)
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     actor_type = Column(String, default="system", nullable=False, index=True)

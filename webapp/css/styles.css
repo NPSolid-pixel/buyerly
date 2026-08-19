@@ -336,10 +336,10 @@ code, .mono {
   position: absolute;
   top: 50px;
   left: 10px;
-  width: 230px;
+  width: 250px;
   background: var(--bg-surface);
   border-radius: 10px;
-  box-shadow: var(--shadow-dropdown);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05);
   padding: 6px;
   z-index: 1000;
   display: none;
@@ -358,11 +358,48 @@ code, .mono {
   color: var(--text-primary);
   cursor: pointer;
   transition: background var(--transition-fast);
+  user-select: none;
 }
 .dropdown-item:hover { background-color: var(--bg-hover); }
-.dropdown-item-left { display: flex; align-items: center; gap: 9px; }
-.dropdown-item-left svg { width: 15px; height: 15px; color: var(--text-secondary); }
+.dropdown-item.active { font-weight: 600; }
+.dropdown-item-left { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.dropdown-item-left span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dropdown-item-left svg { width: 15px; height: 15px; color: var(--text-secondary); flex-shrink: 0; }
+.dropdown-check-icon { width: 14px; height: 14px; color: var(--brand-accent); flex-shrink: 0; }
 .dropdown-divider { height: 1px; background-color: var(--border-subtle); margin: 4px 0; }
+
+.slug-preview-box {
+  padding: 8px 12px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.color-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+.color-swatch.active {
+  border-color: #000;
+  box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px rgba(0, 0, 0, 0.4);
+}
 
 /* ==========================================================
    MAIN CONTENT WRAPPER & TOP HEADER

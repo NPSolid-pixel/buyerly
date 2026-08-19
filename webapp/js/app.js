@@ -85,6 +85,10 @@
   // Application State
   const state = {
     user: null,
+    workspaces: [],
+    activeWorkspace: null,
+    newWorkspaceSelectedColor: '#F5A300',
+    editWorkspaceSelectedColor: '#F5A300',
     accounts: [],
     accountGroups: [],
     accountGroupFilter: 'all',
@@ -247,21 +251,55 @@
   }
 
   // ==========================================================
-  // TAB NAVIGATION
+  // TAB NAVIGATION & ROUTING
   // ==========================================================
   function normalizeAppPath(pathname = '/') {
     const path = String(pathname || '/').replace(/\/+$/, '');
     return path || '/';
   }
 
+  function parsePathLocation(pathname = window.location.pathname) {
+    const raw = normalizeAppPath(pathname);
+    const trimmed = raw.replace(/^\/+|\/+$/g, '');
+    if (!trimmed) {
+      return { workspaceSlug: '', tab: 'home' };
+    }
+    const parts = trimmed.split('/');
+    if (parts.length >= 2) {
+      const slug = parts[0];
+      const tabCandidate = parts[1];
+      const tab = Object.hasOwn(TAB_ROUTES, tabCandidate) ? tabCandidate : 'home';
+      return { workspaceSlug: slug, tab: tab };
+    }
+    if (parts.length === 1) {
+      const candidate = parts[0];
+      if (Object.hasOwn(TAB_ROUTES, candidate)) {
+        return { workspaceSlug: '', tab: candidate };
+      }
+      if (ROUTE_TABS['/' + candidate] || LEGACY_ROUTE_TABS['/' + candidate]) {
+        return { workspaceSlug: '', tab: ROUTE_TABS['/' + candidate] || LEGACY_ROUTE_TABS['/' + candidate] };
+      }
+      return { workspaceSlug: candidate, tab: 'home' };
+    }
+    return { workspaceSlug: '', tab: 'home' };
+  }
+
   function tabFromLocation(pathname = window.location.pathname) {
-    const path = normalizeAppPath(pathname);
-    return ROUTE_TABS[path] || LEGACY_ROUTE_TABS[path] || 'home';
+    const parsed = parsePathLocation(pathname);
+    return parsed.tab;
+  }
+
+  function workspaceSlugFromLocation(pathname = window.location.pathname) {
+    const parsed = parsePathLocation(pathname);
+    return parsed.workspaceSlug;
   }
 
   function isKnownAppPath(pathname = window.location.pathname) {
     const path = normalizeAppPath(pathname);
-    return Boolean(ROUTE_TABS[path] || LEGACY_ROUTE_TABS[path]);
+    if (path === '/' || path === '/sign-in' || path === '/login') return true;
+    if (ROUTE_TABS[path] || LEGACY_ROUTE_TABS[path]) return true;
+    const parsed = parsePathLocation(pathname);
+    return Boolean(parsed.tab && Object.hasOwn(TAB_ROUTES, parsed.tab));
   }
 
   function rememberReturnRoute(pathname = window.location.pathname) {
@@ -283,11 +321,13 @@
 
   function syncBrowserRoute(tabName, historyMode = 'push') {
     if (historyMode === 'none') return;
-    const route = TAB_ROUTES[tabName] || TAB_ROUTES.accounts;
+    const tab = Object.hasOwn(TAB_ROUTES, tabName) ? tabName : 'home';
+    const slug = (state.activeWorkspace && state.activeWorkspace.slug) ? state.activeWorkspace.slug : 'buyerly';
+    const route = `/${slug}/${tab}`;
     const currentPath = normalizeAppPath(window.location.pathname);
     const method = historyMode === 'replace' || currentPath === route ? 'replaceState' : 'pushState';
     try {
-      window.history[method]({ tab: tabName }, '', route);
+      window.history[method]({ tab: tab, workspace: slug }, '', route);
     } catch (e) {}
   }
 
@@ -349,6 +389,283 @@
       activeSection.scrollTo({ top: 0, behavior: options.scrollBehavior || 'smooth' });
     }
     window.scrollTo({ top: 0, behavior: options.scrollBehavior || 'smooth' });
+  };
+
+  // ==========================================================
+  // WORKSPACE MANAGEMENT
+  // ==========================================================
+  function renderWorkspacesDropdown() {
+    const badgeEl = document.getElementById('currentWorkspaceBadge');
+    const nameEl = document.getElementById('currentWorkspaceName');
+    const listEl = document.getElementById('workspaceDropdownList');
+
+    const activeWs = state.activeWorkspace;
+    if (activeWs) {
+      if (badgeEl) {
+        badgeEl.textContent = activeWs.badge_text || (activeWs.name ? activeWs.name.charAt(0).toUpperCase() : 'B');
+        badgeEl.style.backgroundColor = activeWs.badge_color || '#F5A300';
+      }
+      if (nameEl) {
+        nameEl.innerHTML = `${escapeHtml(activeWs.name)} <svg fill="none" viewBox="0 0 16 16" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6l4 4 4-4"/></svg>`;
+      }
+    }
+
+    if (listEl && state.workspaces) {
+      listEl.innerHTML = state.workspaces.map(w => {
+        const isActive = activeWs && (activeWs.id === w.id || activeWs.slug === w.slug);
+        const bText = w.badge_text || (w.name ? w.name.charAt(0).toUpperCase() : 'B');
+        const bColor = w.badge_color || '#F5A300';
+        return `
+          <div class="dropdown-item ${isActive ? 'active' : ''}" onclick="window.switchWorkspace(${w.id});">
+            <div class="dropdown-item-left">
+              <div class="workspace-badge" style="width:20px;height:20px;font-size:11px;background-color:${escapeHtml(bColor)};">${escapeHtml(bText)}</div>
+              <span style="${isActive ? 'font-weight:600;' : ''}">${escapeHtml(w.name)}</span>
+            </div>
+            ${isActive ? '<svg class="dropdown-check-icon" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>' : ''}
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  window.toggleWorkspaceDropdown = function (event) {
+    if (event) event.stopPropagation();
+    const dropdown = document.getElementById('workspaceDropdown');
+    if (!dropdown) return;
+    const isShowing = dropdown.classList.contains('show');
+    if (isShowing) {
+      dropdown.classList.remove('show');
+    } else {
+      dropdown.classList.add('show');
+      renderWorkspacesDropdown();
+      const closeHandler = function (e) {
+        if (!dropdown.contains(e.target) && !document.getElementById('workspaceBtn')?.contains(e.target)) {
+          dropdown.classList.remove('show');
+          document.removeEventListener('click', closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closeHandler), 10);
+    }
+  };
+
+  window.closeWorkspaceDropdown = function () {
+    const dropdown = document.getElementById('workspaceDropdown');
+    if (dropdown) dropdown.classList.remove('show');
+  };
+
+  window.switchWorkspace = async function (workspaceId) {
+    window.closeWorkspaceDropdown();
+    try {
+      showLoading();
+      const res = await apiRequest('/api/workspaces/switch', {
+        method: 'POST',
+        body: JSON.stringify({ workspace_id: workspaceId })
+      });
+      state.activeWorkspace = res.active_workspace;
+      state.workspaces = res.workspaces || state.workspaces;
+      renderWorkspacesDropdown();
+      syncBrowserRoute(state.activeTab, 'push');
+      showToast(`Воркспейс: ${state.activeWorkspace.name}`);
+
+      // Refresh data for new active workspace
+      await Promise.allSettled([
+        fetchAccounts(),
+        fetchRulePresets(),
+        fetchRuleGroups(),
+        fetchAccountGroups(),
+        fetchSummary(true),
+        fetchLogs(true)
+      ]);
+    } catch (e) {
+      showToast(e.message || 'Ошибка переключения воркспейса', 'error');
+    } finally {
+      hideLoading();
+    }
+  };
+
+  window.openNewWorkspaceModal = function () {
+    window.closeWorkspaceDropdown();
+    const input = document.getElementById('newWorkspaceNameInput');
+    if (input) input.value = '';
+    state.newWorkspaceSelectedColor = '#F5A300';
+    document.querySelectorAll('#newWorkspaceColorPicker .color-swatch').forEach(sw => {
+      sw.classList.toggle('active', sw.dataset.color === '#F5A300');
+    });
+    window.updateNewWorkspaceSlugPreview();
+    window.openModal('modalNewWorkspace');
+    setTimeout(() => input?.focus(), 150);
+  };
+
+  window.updateNewWorkspaceSlugPreview = function () {
+    const input = document.getElementById('newWorkspaceNameInput');
+    const preview = document.getElementById('newWorkspaceSlugPreview');
+    const val = input ? input.value : '';
+    const slug = slugifyText(val) || 'your-workspace';
+    if (preview) preview.textContent = slug;
+  };
+
+  window.selectWorkspaceColor = function (el, type) {
+    const color = el?.dataset?.color || '#F5A300';
+    const containerId = type === 'edit' ? 'editWorkspaceColorPicker' : 'newWorkspaceColorPicker';
+    document.querySelectorAll(`#${containerId} .color-swatch`).forEach(sw => {
+      sw.classList.toggle('active', sw === el);
+    });
+    if (type === 'edit') {
+      state.editWorkspaceSelectedColor = color;
+    } else {
+      state.newWorkspaceSelectedColor = color;
+    }
+  };
+
+  window.submitCreateWorkspace = async function () {
+    const input = document.getElementById('newWorkspaceNameInput');
+    const name = input ? input.value.trim() : '';
+    if (!name) {
+      showToast('Введите название воркспейса', 'error');
+      input?.focus();
+      return;
+    }
+
+    const btn = document.getElementById('btnCreateWorkspaceSubmit');
+    if (btn) btn.disabled = true;
+
+    try {
+      const created = await apiRequest('/api/workspaces', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name,
+          badge_color: state.newWorkspaceSelectedColor || '#F5A300'
+        })
+      });
+
+      window.closeModal('modalNewWorkspace');
+      state.activeWorkspace = created;
+      const workspacesList = await apiRequest('/api/workspaces');
+      state.workspaces = workspacesList;
+      renderWorkspacesDropdown();
+      syncBrowserRoute('home', 'push');
+      window.switchTab('home');
+      showToast(`Воркспейс "${created.name}" создан!`);
+
+      // Refresh accounts & rules (will be empty in new workspace)
+      await Promise.allSettled([
+        fetchAccounts(),
+        fetchRulePresets(),
+        fetchRuleGroups(),
+        fetchAccountGroups(),
+        fetchSummary(true),
+        fetchLogs(true)
+      ]);
+    } catch (e) {
+      showToast(e.message || 'Ошибка создания воркспейса', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
+
+  window.openWorkspaceSettings = function () {
+    window.closeWorkspaceDropdown();
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    const input = document.getElementById('editWorkspaceNameInput');
+    if (input) input.value = ws.name || '';
+    state.editWorkspaceSelectedColor = ws.badge_color || '#F5A300';
+
+    document.querySelectorAll('#editWorkspaceColorPicker .color-swatch').forEach(sw => {
+      sw.classList.toggle('active', sw.dataset.color === (ws.badge_color || '#F5A300'));
+    });
+
+    const deleteBtn = document.getElementById('btnDeleteCurrentWorkspace');
+    if (deleteBtn) {
+      deleteBtn.style.display = (state.workspaces && state.workspaces.length > 1) ? 'inline-flex' : 'none';
+    }
+
+    window.openModal('modalWorkspaceSettings');
+  };
+
+  window.submitSaveWorkspaceSettings = async function () {
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    const input = document.getElementById('editWorkspaceNameInput');
+    const name = input ? input.value.trim() : '';
+    if (!name) {
+      showToast('Название не может быть пустым', 'error');
+      input?.focus();
+      return;
+    }
+
+    const btn = document.getElementById('btnSaveWorkspaceSettings');
+    if (btn) btn.disabled = true;
+
+    try {
+      const updated = await apiRequest(`/api/workspaces/${ws.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: name,
+          badge_color: state.editWorkspaceSelectedColor || '#F5A300'
+        })
+      });
+
+      window.closeModal('modalWorkspaceSettings');
+      state.activeWorkspace = updated;
+      const workspacesList = await apiRequest('/api/workspaces');
+      state.workspaces = workspacesList;
+      renderWorkspacesDropdown();
+      showToast('Настройки воркспейса сохранены');
+    } catch (e) {
+      showToast(e.message || 'Ошибка сохранения настроек', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
+
+  window.submitDeleteCurrentWorkspace = async function () {
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    if (!confirm(`Вы действительно хотите удалить воркспейс "${ws.name}"?`)) {
+      return;
+    }
+
+    const btn = document.getElementById('btnDeleteCurrentWorkspace');
+    if (btn) btn.disabled = true;
+
+    try {
+      const res = await apiRequest(`/api/workspaces/${ws.id}`, {
+        method: 'DELETE'
+      });
+
+      window.closeModal('modalWorkspaceSettings');
+      showToast('Воркспейс удален');
+
+      // Reload workspaces and switch
+      const workspacesList = await apiRequest('/api/workspaces');
+      state.workspaces = workspacesList;
+      state.activeWorkspace = workspacesList.find(w => w.is_active) || workspacesList[0];
+      renderWorkspacesDropdown();
+      syncBrowserRoute('home', 'push');
+      window.switchTab('home');
+
+      await Promise.allSettled([
+        fetchAccounts(),
+        fetchRulePresets(),
+        fetchRuleGroups(),
+        fetchAccountGroups(),
+        fetchSummary(true),
+        fetchLogs(true)
+      ]);
+    } catch (e) {
+      showToast(e.message || 'Ошибка удаления воркспейса', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
+
+  window.openAccountSettings = function () {
+    window.closeWorkspaceDropdown();
+    window.switchTab('settings');
   };
 
   // ==========================================================
@@ -4491,24 +4808,45 @@
       }
 
       if (user) {
+        state.workspaces = user.workspaces || [];
+        state.activeWorkspace = user.active_workspace || (state.workspaces.length ? state.workspaces[0] : null);
+        renderWorkspacesDropdown();
+
         const uName = document.getElementById('userName');
         const uAvatar = document.getElementById('userAvatar');
         if (uName) uName.textContent = user.full_name || user.username || 'Медиабайер';
         if (uAvatar) uAvatar.textContent = (user.full_name || user.username || 'B').charAt(0).toUpperCase();
+
+        const currentPath = normalizeAppPath(window.location.pathname);
+        const isLoginPath = currentPath === '/sign-in' || currentPath === '/login';
+        const initialPath = isLoginPath ? consumeReturnRoute() : currentPath;
+        const targetSlug = workspaceSlugFromLocation(initialPath);
+
+        if (targetSlug && state.workspaces && state.activeWorkspace && state.activeWorkspace.slug !== targetSlug) {
+          const matchWs = state.workspaces.find(w => w.slug === targetSlug);
+          if (matchWs) {
+            try {
+              const swRes = await apiRequest('/api/workspaces/switch', {
+                method: 'POST',
+                body: JSON.stringify({ workspace_id: matchWs.id })
+              });
+              state.activeWorkspace = swRes.active_workspace;
+              state.workspaces = swRes.workspaces || state.workspaces;
+              renderWorkspacesDropdown();
+            } catch (e) {}
+          }
+        }
+
+        const initialTab = tabFromLocation(initialPath || TAB_ROUTES.home);
+
+        // Restore the requested page only after authentication succeeds.
+        startSummaryAutoRefresh();
+        window.switchTab(initialTab, {
+          historyMode: 'replace',
+          haptic: false,
+          scrollBehavior: 'auto'
+        });
       }
-
-      const currentPath = normalizeAppPath(window.location.pathname);
-      const isLoginPath = currentPath === '/sign-in' || currentPath === '/login';
-      const initialPath = isLoginPath ? consumeReturnRoute() : currentPath;
-      const initialTab = tabFromLocation(initialPath || TAB_ROUTES.home);
-
-      // Restore the requested page only after authentication succeeds.
-      startSummaryAutoRefresh();
-      window.switchTab(initialTab, {
-        historyMode: 'replace',
-        haptic: false,
-        scrollBehavior: 'auto'
-      });
     } catch (e) {
       console.warn("Unauthorized / access locked:", e);
       rememberReturnRoute();

@@ -423,3 +423,46 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('будет создано новое правило', select_contract)
         self.assertIn("state.ruleBuilderMode = 'create'", self.script)
         self.assertIn("state.ruleBuilderMode = 'edit'", self.script)
+
+    def test_workspace_switcher_and_modals_contract(self):
+        for contract in (
+            'id="workspaceBtn"',
+            'id="currentWorkspaceBadge"',
+            'id="currentWorkspaceName"',
+            'id="workspaceDropdown"',
+            'id="workspaceDropdownList"',
+            '+ New workspace',
+            'Account settings',
+            'Workspace settings',
+            'Invite team members',
+            'Apps and integrations',
+            'id="modalNewWorkspace"',
+            'id="modalWorkspaceSettings"',
+            'id="newWorkspaceNameInput"',
+            'id="newWorkspaceSlugPreview"',
+            'id="editWorkspaceNameInput"',
+            'id="btnDeleteCurrentWorkspace"',
+        ):
+            self.assertIn(contract, self.index)
+
+        for script_contract in (
+            'renderWorkspacesDropdown',
+            'window.toggleWorkspaceDropdown',
+            'window.switchWorkspace',
+            'window.openNewWorkspaceModal',
+            'window.submitCreateWorkspace',
+            'window.openWorkspaceSettings',
+            'window.submitSaveWorkspaceSettings',
+            'window.submitDeleteCurrentWorkspace',
+            '/api/workspaces/switch',
+            '/api/workspaces',
+        ):
+            self.assertIn(script_contract, self.script)
+
+        for style_contract in (
+            '.workspace-dropdown',
+            '.slug-preview-box',
+            '.color-picker-row',
+            '.color-swatch',
+        ):
+            self.assertIn(style_contract, self.styles)

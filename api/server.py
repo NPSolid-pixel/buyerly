@@ -100,7 +100,15 @@ def create_app() -> FastAPI:
         @app.get("/logs")
         @app.get("/add-accounts")
         @app.get("/settings")
-        async def serve_index():
+        @app.get("/{workspace_slug}/home")
+        @app.get("/{workspace_slug}/accounts")
+        @app.get("/{workspace_slug}/rules")
+        @app.get("/{workspace_slug}/summary")
+        @app.get("/{workspace_slug}/logs")
+        @app.get("/{workspace_slug}/add-accounts")
+        @app.get("/{workspace_slug}/settings")
+        @app.get("/{workspace_slug}")
+        async def serve_index(workspace_slug: str = ""):
             index_path = os.path.join(webapp_dir, "index.html")
             if os.path.exists(index_path):
                 return FileResponse(index_path, headers={

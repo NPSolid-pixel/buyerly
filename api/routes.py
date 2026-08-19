@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
-from sqlalchemy import select, delete, func, or_, update
+from sqlalchemy import select, delete, func, or_, and_, update
 
 from core.audit import build_audit_event
 from core.action_undo import (
@@ -38,6 +38,8 @@ from database.models import (
     StoppedAdSet,
     AppSettings,
     TelegramUser,
+    Workspace,
+    WorkspaceMember,
     EventLog,
     RulePreset,
     RuleGroup,
@@ -129,12 +131,40 @@ SUMMARY_DEFAULT_COLUMN_WIDTHS = {
 # ----------------------------------------------------
 # Pydantic Schemas
 # ----------------------------------------------------
+class WorkspaceItem(BaseModel):
+    id: int
+    name: str
+    slug: str
+    badge_text: str
+    badge_color: str
+    role: str
+    is_active: bool
+    accounts_count: int = 0
+    members_count: int = 1
+
+class CreateWorkspaceRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    slug: Optional[str] = Field(None, max_length=60)
+    badge_color: Optional[str] = Field("#F5A300", max_length=30)
+    badge_text: Optional[str] = Field(None, max_length=5)
+
+class UpdateWorkspaceRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=60)
+    badge_color: Optional[str] = Field(None, max_length=30)
+    badge_text: Optional[str] = Field(None, max_length=5)
+
+class SwitchWorkspaceRequest(BaseModel):
+    workspace_id: Optional[int] = None
+    slug: Optional[str] = None
+
 class UserProfileResponse(BaseModel):
-    telegram_id: str
+    telegram_id: Optional[str] = None
     username: str
     full_name: str
     role: str
     is_approved: bool
+    active_workspace: Optional[WorkspaceItem] = None
+    workspaces: List[WorkspaceItem] = Field(default_factory=list)
 
 class LoginRequest(BaseModel):
     username: str
@@ -340,11 +370,139 @@ class AnalyticsViewPreferenceRequest(BaseModel):
 
 
 # ----------------------------------------------------
+# Workspaces Helpers & Scoping
+# ----------------------------------------------------
+import re
+
+def slugify(text: str) -> str:
+    """Generate a clean URL slug from name."""
+    text = text.lower().strip()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[\s_-]+', '-', text)
+    text = re.sub(r'^-+|-+$', '', text)
+    return text or "workspace"
+
+
+async def get_user_workspace(
+    session,
+    user: TelegramUser,
+    workspace_id: Optional[int] = None,
+    slug: Optional[str] = None
+) -> Optional[Workspace]:
+    """Resolve the active workspace for the user, verifying membership."""
+    if slug:
+        ws = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
+        if ws:
+            member = (await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == ws.id,
+                    WorkspaceMember.user_id == user.id
+                )
+            )).scalar_one_or_none()
+            if member or user.role == "admin":
+                return ws
+
+    if workspace_id:
+        member = (await session.execute(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == workspace_id,
+                WorkspaceMember.user_id == user.id
+            )
+        )).scalar_one_or_none()
+        if member or user.role == "admin":
+            return (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+
+    if user.active_workspace_id:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == user.active_workspace_id))).scalar_one_or_none()
+        if ws:
+            return ws
+
+    # Fallback to first membership
+    first_member = (await session.execute(
+        select(WorkspaceMember).where(WorkspaceMember.user_id == user.id).limit(1)
+    )).scalar_one_or_none()
+    if first_member:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == first_member.workspace_id))).scalar_one_or_none()
+        if ws:
+            user.active_workspace_id = ws.id
+            await session.commit()
+            return ws
+
+    # Create default workspace if user has none
+    ws_slug = "buyerly"
+    existing = (await session.execute(select(Workspace).where(Workspace.slug == ws_slug))).scalar_one_or_none()
+    if existing:
+        ws_slug = f"buyerly-{user.id}"
+
+    ws = Workspace(
+        name="Buyerly",
+        slug=ws_slug,
+        badge_text="B",
+        badge_color="#F5A300",
+        owner_user_id=user.id
+    )
+    session.add(ws)
+    await session.flush()
+
+    member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
+    session.add(member)
+    user.active_workspace_id = ws.id
+    await session.commit()
+    return ws
+
+
+async def get_user_workspaces_list(session, user: TelegramUser) -> List[WorkspaceItem]:
+    """Return all workspaces accessible to the user with live stats."""
+    active_ws = await get_user_workspace(session, user)
+    active_id = active_ws.id if active_ws else None
+
+    rows = (await session.execute(
+        select(Workspace, WorkspaceMember.role)
+        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+        .where(WorkspaceMember.user_id == user.id)
+        .order_by(Workspace.id.asc())
+    )).all()
+
+    items = []
+    for ws, role in rows:
+        acc_count = (await session.execute(
+            select(func.count()).select_from(Account).where(Account.workspace_id == ws.id)
+        )).scalar_one() or 0
+        mem_count = (await session.execute(
+            select(func.count()).select_from(WorkspaceMember).where(WorkspaceMember.workspace_id == ws.id)
+        )).scalar_one() or 1
+
+        items.append(WorkspaceItem(
+            id=ws.id,
+            name=ws.name,
+            slug=ws.slug,
+            badge_text=ws.badge_text or ws.name[:1].upper(),
+            badge_color=ws.badge_color or "#F5A300",
+            role=role or "owner",
+            is_active=(ws.id == active_id),
+            accounts_count=int(acc_count),
+            members_count=int(mem_count),
+        ))
+    return items
+
+
+# ----------------------------------------------------
 # Helper to filter user accounts
 # ----------------------------------------------------
-async def get_user_accounts(session, user: TelegramUser) -> List[Account]:
-    if user.role == "admin":
+async def get_user_accounts(session, user: TelegramUser, workspace_id: Optional[int] = None) -> List[Account]:
+    if user.role == "admin" and not workspace_id:
         stmt = select(Account).order_by(Account.id.desc())
+        res = await session.execute(stmt)
+        return res.scalars().all()
+
+    ws = await get_user_workspace(session, user, workspace_id=workspace_id)
+    if ws:
+        stmt = select(Account).where(
+            or_(
+                Account.workspace_id == ws.id,
+                and_(Account.workspace_id.is_(None), owned_by(Account, user))
+            )
+        ).order_by(Account.id.desc())
     else:
         stmt = select(Account).where(owned_by(Account, user)).order_by(Account.id.desc())
     res = await session.execute(stmt)
@@ -1205,13 +1363,163 @@ async def logout_user(user: TelegramUser = Depends(get_current_user)):
 
 @router.get("/me", response_model=UserProfileResponse)
 async def get_me(user: TelegramUser = Depends(get_current_user)):
-    return UserProfileResponse(
-        telegram_id=user.telegram_id,
-        username=user.username or "",
-        full_name=user.full_name or "",
-        role=user.role,
-        is_approved=user.is_approved
-    )
+    async with async_session_maker() as session:
+        workspaces = await get_user_workspaces_list(session, user)
+        active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
+        return UserProfileResponse(
+            telegram_id=user.telegram_id,
+            username=user.username or "",
+            full_name=user.full_name or "",
+            role=user.role,
+            is_approved=user.is_approved,
+            active_workspace=active_ws,
+            workspaces=workspaces
+        )
+
+
+# ----------------------------------------------------
+# Workspace Endpoints
+# ----------------------------------------------------
+@router.get("/workspaces", response_model=List[WorkspaceItem])
+async def list_workspaces(user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        return await get_user_workspaces_list(session, user)
+
+
+@router.post("/workspaces", response_model=WorkspaceItem)
+async def create_workspace(req: CreateWorkspaceRequest, user: TelegramUser = Depends(get_current_user)):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Название воркспейса обязательно")
+    
+    slug = slugify(req.slug.strip()) if req.slug else slugify(name)
+    badge_color = req.badge_color or "#F5A300"
+    badge_text = req.badge_text.strip() if req.badge_text else name[:1].upper()
+
+    async with async_session_maker() as session:
+        existing = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
+        if existing:
+            slug = f"{slug}-{uuid.uuid4().hex[:6]}"
+
+        ws = Workspace(
+            name=name,
+            slug=slug,
+            badge_text=badge_text,
+            badge_color=badge_color,
+            owner_user_id=user.id
+        )
+        session.add(ws)
+        await session.flush()
+
+        member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
+        session.add(member)
+
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.active_workspace_id = ws.id
+        await session.commit()
+
+        return WorkspaceItem(
+            id=ws.id,
+            name=ws.name,
+            slug=ws.slug,
+            badge_text=ws.badge_text,
+            badge_color=ws.badge_color,
+            role="owner",
+            is_active=True,
+            accounts_count=0,
+            members_count=1
+        )
+
+
+@router.get("/workspaces/current", response_model=WorkspaceItem)
+async def get_current_workspace_info(user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        workspaces = await get_user_workspaces_list(session, user)
+        active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
+        if not active_ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+        return active_ws
+
+
+@router.post("/workspaces/switch")
+async def switch_workspace(req: SwitchWorkspaceRequest, user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        target_ws = None
+        if req.workspace_id:
+            target_ws = (await session.execute(select(Workspace).where(Workspace.id == req.workspace_id))).scalar_one_or_none()
+        elif req.slug:
+            target_ws = (await session.execute(select(Workspace).where(Workspace.slug == req.slug))).scalar_one_or_none()
+
+        if not target_ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        member = (await session.execute(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == target_ws.id,
+                WorkspaceMember.user_id == user.id
+            )
+        )).scalar_one_or_none()
+        if not member and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.active_workspace_id = target_ws.id
+        await session.commit()
+
+        workspaces = await get_user_workspaces_list(session, user)
+        active_ws = next((w for w in workspaces if w.id == target_ws.id), None)
+        return {"status": "ok", "active_workspace": active_ws}
+
+
+@router.patch("/workspaces/{workspace_id}", response_model=WorkspaceItem)
+async def update_workspace(workspace_id: int, req: UpdateWorkspaceRequest, user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        member = (await session.execute(
+            select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws.id, WorkspaceMember.user_id == user.id)
+        )).scalar_one_or_none()
+        if not member or member.role not in ("owner", "admin"):
+            raise HTTPException(status_code=403, detail="Недостаточно прав для редактирования воркспейса")
+
+        if req.name and req.name.strip():
+            ws.name = req.name.strip()
+        if req.badge_color and req.badge_color.strip():
+            ws.badge_color = req.badge_color.strip()
+        if req.badge_text and req.badge_text.strip():
+            ws.badge_text = req.badge_text.strip()
+
+        await session.commit()
+        workspaces = await get_user_workspaces_list(session, user)
+        return next((w for w in workspaces if w.id == ws.id), None)
+
+
+@router.delete("/workspaces/{workspace_id}")
+async def delete_workspace(workspace_id: int, user: TelegramUser = Depends(get_current_user)):
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+        if ws.owner_user_id != user.id and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Только владелец может удалить воркспейс")
+
+        other_member = (await session.execute(
+            select(WorkspaceMember)
+            .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)
+            .where(WorkspaceMember.user_id == user.id, WorkspaceMember.workspace_id != workspace_id)
+            .limit(1)
+        )).scalar_one_or_none()
+        if not other_member:
+            raise HTTPException(status_code=400, detail="Нельзя удалить единственный воркспейс")
+
+        await session.execute(delete(WorkspaceMember).where(WorkspaceMember.workspace_id == workspace_id))
+        await session.execute(delete(Workspace).where(Workspace.id == workspace_id))
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.active_workspace_id = other_member.workspace_id
+        await session.commit()
+        return {"status": "ok", "message": "Воркспейс удалён", "next_workspace_id": other_member.workspace_id}
 
 
 @router.get("/accounts", response_model=List[AccountItem])
@@ -1283,7 +1591,9 @@ async def create_account_group(
             raise HTTPException(status_code=409, detail="Группа с таким названием уже существует")
 
         accounts = await _validate_account_group_members(session, user, payload.account_ids)
+        ws = await get_user_workspace(session, user)
         group = AccountGroup(
+            workspace_id=ws.id if ws else None,
             owner_id=str(user.telegram_id or ""),
             owner_user_id=user.id,
             name=name,
@@ -1384,7 +1694,9 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
     async with async_session_maker() as session:
         condition_payloads = _validated_condition_payloads(payload.conditions)
         conds_json = json.dumps(condition_payloads)
+        ws = await get_user_workspace(session, user)
         preset = RulePreset(
+            workspace_id=ws.id if ws else None,
             owner_id=user.telegram_id,
             owner_user_id=user.id,
             name=payload.name.strip() or "Новое правило",
@@ -1526,7 +1838,9 @@ async def create_rule_group(
     async with async_session_maker() as session:
         presets = await _get_owned_presets(session, user, payload.preset_ids)
         _ensure_compatible_presets(presets)
+        ws = await get_user_workspace(session, user)
         group = RuleGroup(
+            workspace_id=ws.id if ws else None,
             owner_id=user.telegram_id,
             owner_user_id=user.id,
             name=_clean_rule_group_name(payload.name),
@@ -1895,6 +2209,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                 res = await session.execute(select(Account).where(Account.account_id == acc_id))
                 existing = res.scalar_one_or_none()
 
+                ws = await get_user_workspace(session, user)
                 if existing:
                     if existing.timezone_name != timezone_name:
                         existing.last_day_start_date = ""
@@ -1905,12 +2220,14 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                     existing.currency = currency
                     existing.owner_id = owner_id
                     existing.owner_user_id = user.id
+                    existing.workspace_id = ws.id if ws else existing.workspace_id
                     existing.batch_name = batch_name if batch_name != "-" else ""
                     existing.account_status = status_code
                     existing.status_label = status_label
                     existing.is_active = True
                 else:
                     new_acc = Account(
+                        workspace_id=ws.id if ws else None,
                         account_id=acc_id,
                         name=display_name,
                         access_token=token,

@@ -34,9 +34,20 @@ Production: `https://buyerly.app`.
 | `POST /api/auth/change-password` | `old_password`, `new_password` | меняет пароль; минимум 8 символов |
 | `POST /api/auth/update-profile` | `full_name?`, `telegram_id?` | обновляет профиль и адрес Telegram-доставки |
 | `POST /api/auth/logout` | — | ротирует web token |
-| `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `role`, `is_approved` |
+| `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `role`, `is_approved`, `active_workspace`, `workspaces` |
 
 Изменение `telegram_id` не меняет внутреннего владельца данных: кабинеты, правила, сводки и история продолжают принадлежать тому же `telegram_users.id`.
+
+## Воркспейсы (Workspaces)
+
+| Метод и путь | Тело | Назначение |
+|---|---|---|
+| `GET /api/workspaces` | — | список всех доступных пользователю воркспейсов |
+| `POST /api/workspaces` | `name`, `slug?`, `badge_color?`, `badge_text?` | создаёт новый воркспейс и делает его активным |
+| `GET /api/workspaces/current` | — | данные текущего активного воркспейса |
+| `POST /api/workspaces/switch` | `workspace_id?`, `slug?` | переключает активный воркспейс пользователя |
+| `PATCH /api/workspaces/{workspace_id}` | `name?`, `badge_color?`, `badge_text?` | обновляет настройки и оформление воркспейса |
+| `DELETE /api/workspaces/{workspace_id}` | — | удаляет воркспейс (доступно владельцу при наличии других воркспейсов) |
 
 ## Кабинеты
 
