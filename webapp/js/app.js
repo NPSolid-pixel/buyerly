@@ -501,96 +501,107 @@
 
     if (filtered.length === 0) {
       listEl.innerHTML = '';
-      emptyEl.classList.remove('hidden');
+      if (emptyEl) emptyEl.classList.remove('hidden');
       return;
     }
 
-    emptyEl.classList.add('hidden');
-    listEl.innerHTML = filtered.map(acc => {
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    const rowsHtml = filtered.map(acc => {
       const metaState = getAccountMetaState(acc);
       const activeRules = Array.isArray(acc.active_rules) ? acc.active_rules : [];
-      const automationState = activeRules.length === 0
-        ? { key: 'empty', label: 'Не настроена' }
-        : (acc.rules_enabled ? { key: 'active', label: 'Включена' } : { key: 'paused', label: 'На паузе' });
-      const actionLabels = {
-        turn_off: 'Стоп', notify_only: 'Пуш', turn_on: 'Старт',
-        increase_budget: '+Бюджет', decrease_budget: '-Бюджет'
-      };
-      const visibleRules = activeRules.slice(0, 2);
-      const moreCount = Math.max(0, activeRules.length - visibleRules.length);
       const displayName = accountDisplayName(acc);
-      const connectionState = getAccountConnectionState(acc);
-      const sourceName = String(acc.custom_name || '').trim() && acc.name !== displayName
-        ? `<span class="card-source-name">Meta: ${escapeHtml(acc.name)}</span>`
-        : '';
       const noteText = String(acc.note || '').trim();
+      const rawSpend = acc.today_spend || (acc.insights && acc.insights.spend) || 0;
+      const spendVal = formatCurrency(rawSpend, acc.currency || 'USD');
+      const leadsVal = acc.today_leads !== undefined ? acc.today_leads : (acc.insights?.leads !== undefined ? acc.insights.leads : '—');
+      const cplVal = acc.today_cpl !== undefined ? formatCurrency(acc.today_cpl, acc.currency || 'USD') : (acc.insights?.cpl !== undefined ? formatCurrency(acc.insights.cpl, acc.currency || 'USD') : '—');
+      
+      const metaPillClass = metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red');
+      const autoPillClass = acc.rules_enabled ? 'green' : 'amber';
+      const autoPillText = acc.rules_enabled ? 'Включена' : 'На паузе';
 
       return `
-        <article class="account-card ${metaState.key !== 'active' ? 'account-disabled' : ''}" id="card-${escapeHtml(acc.account_id)}">
-          <div class="card-header-row">
-            <div class="card-title-area">
-              <span class="card-title">${escapeHtml(displayName)}</span>
-              ${sourceName}
-              <div class="card-subtitle-row">
-                <button class="card-id-copy mono" type="button" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Скопировать ID">
-                  ${escapeHtml(acc.account_id)}
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                </button>
-                <span class="card-tz mono">${escapeHtml(acc.timezone_name || 'UTC')}</span>
-                <span class="card-tz mono">${escapeHtml(acc.currency || 'UNKNOWN')}</span>
+        <tr id="row-${escapeHtml(acc.account_id)}" class="attio-row">
+          <td style="min-width: 240px;">
+            <div class="cell-account-box">
+              <span style="font-size: 15px;">🏛️</span>
+              <div>
+                <div class="account-text-name">${escapeHtml(displayName)}</div>
+                <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID" style="cursor:pointer;">
+                  ${escapeHtml(acc.account_id)} · <span class="mono">${escapeHtml(acc.currency || 'USD')}</span>
+                </div>
               </div>
             </div>
-            <div class="account-card-head-actions">
-              <span class="account-connection-badge ${connectionState.key}" title="${escapeHtml(connectionState.detail)}">${escapeHtml(connectionState.label)}</span>
-              <button class="account-more-button" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')">Подробнее</button>
+          </td>
+          <td>
+            <span class="status-pill ${metaPillClass}">
+              <span class="status-dot"></span>
+              ${escapeHtml(metaState.label)}
+            </span>
+          </td>
+          <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis;">
+            <span style="color: ${noteText ? 'var(--text-primary)' : 'var(--text-muted)'}; font-size: 12px;">
+              ${escapeHtml(noteText || '—')}
+            </span>
+          </td>
+          <td>
+            <span class="num-bold">${escapeHtml(spendVal)}</span>
+          </td>
+          <td>
+            <span class="num-bold">${escapeHtml(String(leadsVal))}</span>
+          </td>
+          <td>
+            <span>${escapeHtml(String(cplVal))}</span>
+          </td>
+          <td>
+            <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules('${escapeHtml(acc.account_id)}', ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit;" title="Нажмите, чтобы переключить автоматику">
+              <span class="status-dot"></span>
+              ${autoPillText}
+            </button>
+          </td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="status-pill ${activeRules.length > 0 ? 'green' : 'amber'}" style="font-size: 11px;">
+                ${activeRules.length > 0 ? `${activeRules.length} ${pluralize(activeRules.length, 'правило', 'правила', 'правил')}` : 'Без правил'}
+              </span>
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAssignRuleModal('${escapeHtml(acc.account_id)}')" style="padding: 2px 7px; font-size: 11px;">
+                Настроить
+              </button>
             </div>
-          </div>
-
-          <div class="account-note-preview ${noteText ? '' : 'empty'}">
-            <div><span>Внутренняя заметка</span><p>${escapeHtml(noteText || 'Добавьте гео, оффер или рабочий комментарий')}</p></div>
-            <button type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" aria-label="Изменить название и заметку">${noteText || acc.custom_name ? 'Изменить' : 'Добавить'}</button>
-          </div>
-
-          <div class="account-group-tags" aria-label="Группы кабинета">
-            ${renderAccountGroupTags(acc, { empty: true })}
-            <button class="account-group-tag add" type="button" onclick="window.openAccountGroupForAccount('${escapeHtml(acc.account_id)}')">+ Группа</button>
-          </div>
-
-          ${renderAccountLatestMetrics(acc)}
-
-          <div class="account-state-grid">
-            <div class="account-state-item">
-              <span>Статус Meta</span>
-              <b class="account-meta-state ${metaState.key}"><span class="status-dot dot-${metaState.dot}"></span>${metaState.label}</b>
+          </td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" title="Изменить заметку и название" style="padding: 2px 6px;">✏️</button>
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')" title="Подробнее" style="padding: 2px 7px; font-size: 11px;">Инфо</button>
             </div>
-            <div class="account-state-item">
-              <span>Автоматика</span>
-              <b class="automation-state ${automationState.key}">${automationState.label}</b>
-            </div>
-            <div class="account-state-item">
-              <span>Правила</span>
-              <b>${activeRules.length}</b>
-            </div>
-          </div>
-
-          <div class="account-rules-preview ${activeRules.length ? '' : 'empty'}">
-            ${activeRules.length ? visibleRules.map(rule => `
-              <span><b>${escapeHtml(actionLabels[rule.action] || 'Правило')}</b> · ${escapeHtml(rule.name || `#${rule.preset_id}`)}</span>
-            `).join('') + (moreCount ? `<span class="account-rules-more">+ ещё ${moreCount}</span>` : '') : '<span>Правила ещё не назначены</span>'}
-          </div>
-
-          <div class="account-card-footer">
-            <button class="btn btn-secondary btn-sm" type="button" onclick="window.openAssignRuleModal('${escapeHtml(acc.account_id)}')">Управлять правилами</button>
-            <div class="automation-master-control">
-              <span>${acc.rules_enabled ? 'Автоматика работает' : 'Автоматика выключена'}</span>
-              <label class="switch" title="Включить или выключить автоматику">
-                <input type="checkbox" ${acc.rules_enabled ? 'checked' : ''} onchange="window.toggleRules('${escapeHtml(acc.account_id)}', this.checked)">
-                <span class="slider round"></span>
-              </label>
-            </div>
-          </div>
-        </article>`;
+          </td>
+        </tr>
+      `;
     }).join('');
+
+    listEl.innerHTML = `
+      <div class="table-viewport" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: var(--shadow-sm); overflow: auto;">
+        <table class="attio-grid">
+          <thead>
+            <tr>
+              <th style="width: 240px;"><div class="grid-th-left"><span>Кабинет</span></div></th>
+              <th style="width: 130px;"><div class="grid-th-left"><span>Статус Meta</span></div></th>
+              <th style="width: 180px;"><div class="grid-th-left"><span>Заметка</span></div></th>
+              <th style="width: 120px;"><div class="grid-th-left"><span>Spend</span></div></th>
+              <th style="width: 80px;"><div class="grid-th-left"><span>Лиды</span></div></th>
+              <th style="width: 90px;"><div class="grid-th-left"><span>CPL</span></div></th>
+              <th style="width: 130px;"><div class="grid-th-left"><span>Автоматика</span></div></th>
+              <th style="width: 160px;"><div class="grid-th-left"><span>Правила</span></div></th>
+              <th style="width: 120px;"><div class="grid-th-left"><span>Действия</span></div></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
   }
 
   function getAccountMetaState(account) {

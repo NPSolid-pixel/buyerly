@@ -5246,6 +5246,35 @@ select:-webkit-autofill {
 
 .attio-shell-body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --bg-canvas: #FBFBFB;
+  --bg-surface: #FFFFFF;
+  --bg-hover: #F6F7F7;
+  --bg-active: #EEEFF1;
+  --border-subtle: #EEEFF1;
+  --border-strong: #E6E7EA;
+  --border-table: #F1F2F3;
+  --text-primary: #101112;
+  --text-secondary: #505155;
+  --text-muted: #898A8D;
+  --text-disabled: #A2A4A7;
+  --brand-accent: #F5A300;
+  --brand-accent-hover: #CF8300;
+  --brand-accent-light: #FFF3CC;
+  --pill-green-bg: #E0FCED;
+  --pill-green-text: #007D53;
+  --pill-amber-bg: #FFF3CC;
+  --pill-amber-text: #874D00;
+  --pill-red-bg: #FFEBEB;
+  --pill-red-text: #BA2525;
+  --tg-bg: #FBFBFB;
+  --tg-sec-bg: #F6F7F7;
+  --tg-card-bg: #FFFFFF;
+  --tg-card-hover: #F6F7F7;
+  --tg-text: #101112;
+  --tg-hint: #6B7280;
+  --tg-link: #F5A300;
+  --tg-btn: #F5A300;
+  --tg-btn-text: #FFFFFF;
   background-color: var(--bg-canvas);
   color: var(--text-primary);
   height: 100vh;
@@ -5253,6 +5282,46 @@ select:-webkit-autofill {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Attio Component Overrides */
+.attio-shell-body .accounts-page-header h2 { color: var(--text-primary); font-size: 20px; font-weight: 700; }
+.attio-shell-body .accounts-page-header .eyebrow { color: var(--brand-accent-hover); font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.attio-shell-body .account-groups-panel { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: var(--shadow-sm); }
+.attio-shell-body .account-groups-panel-head h3 { color: var(--text-primary); font-size: 13px; font-weight: 600; }
+.attio-shell-body .account-group-filter { background: var(--bg-canvas); border: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.attio-shell-body .account-group-filter.active { background: var(--brand-accent-light); border-color: var(--brand-accent); color: var(--brand-accent-hover); font-weight: 600; }
+.attio-shell-body .toolbar .search-box input { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--text-primary); }
+.attio-shell-body .toolbar .search-box input:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 2px rgba(245,163,0,0.15); }
+.attio-shell-body .chip { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--text-secondary); font-size: 12px; }
+.attio-shell-body .chip:hover { background: var(--bg-hover); color: var(--text-primary); }
+.attio-shell-body .chip.active { background: var(--bg-active); border-color: var(--brand-accent); color: var(--text-primary); font-weight: 600; }
+.attio-shell-body .chip-count { background: var(--bg-hover); color: var(--text-secondary); }
+.attio-shell-body .btn-primary { background: var(--brand-accent); border-color: var(--brand-accent); color: #FFF; font-weight: 600; }
+.attio-shell-body .btn-primary:hover { background: var(--brand-accent-hover); border-color: var(--brand-accent-hover); }
+.attio-shell-body .btn-secondary { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--text-primary); font-weight: 500; }
+.attio-shell-body .btn-secondary:hover { background: var(--bg-hover); }
+.attio-shell-body .form-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); color: var(--text-primary); }
+.attio-shell-body .form-control { background: var(--bg-surface); border: 1px solid var(--border-strong); color: var(--text-primary); }
+.attio-shell-body .form-control:focus { border-color: var(--brand-accent); }
+.attio-shell-body .modal-card, .attio-shell-body .bottom-sheet { background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-subtle); }
+.attio-shell-body .rules-tab-header h2 { color: var(--text-primary); }
+.attio-shell-body .stat-pill { background: var(--bg-surface); border: 1px solid var(--border-subtle); color: var(--text-secondary); }
+
+/* Attio Table Grid */
+.attio-shell-body .attio-grid { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--bg-surface); }
+.attio-shell-body .attio-grid th { background: var(--bg-canvas); padding: 8px 12px; font-size: 11px; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); border-right: 1px solid var(--border-subtle); text-align: left; white-space: nowrap; position: sticky; top: 0; z-index: 5; user-select: none; }
+.attio-shell-body .attio-grid td { padding: 9px 12px; border-bottom: 1px solid var(--border-table); border-right: 1px solid var(--border-table); white-space: nowrap; color: var(--text-primary); vertical-align: middle; font-variant-numeric: tabular-nums; background: var(--bg-surface); }
+.attio-shell-body .attio-grid tr:hover td { background-color: var(--bg-hover); }
+.attio-shell-body .cell-account-box { display: flex; align-items: center; gap: 8px; }
+.attio-shell-body .account-text-name { font-weight: 600; color: var(--text-primary); font-size: 13px; }
+.attio-shell-body .account-text-id { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+.attio-shell-body .status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; line-height: 1; }
+.attio-shell-body .status-pill.green { background: var(--pill-green-bg); color: var(--pill-green-text); }
+.attio-shell-body .status-pill.amber { background: var(--pill-amber-bg); color: var(--pill-amber-text); }
+.attio-shell-body .status-pill.red { background: var(--pill-red-bg); color: var(--pill-red-text); }
+.attio-shell-body .status-dot { width: 6px; height: 6px; border-radius: 50%; background-color: currentColor; }
+.attio-shell-body .num-bold { font-weight: 600; color: var(--text-primary); }
+
 
 /* ================= SIDEBAR ================= */
 .sidebar {
