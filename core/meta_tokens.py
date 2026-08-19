@@ -1,5 +1,6 @@
 """Encryption and resolution helpers for Meta access tokens."""
 
+from typing import Any, Dict, Optional
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,16 +41,26 @@ def decrypt_meta_token(encrypted_token: str) -> str:
         raise MetaTokenError("Stored Meta access token cannot be decrypted") from exc
 
 
-async def resolve_account_access_token(session: AsyncSession, account) -> str:
+async def resolve_account_access_token(
+    session: AsyncSession,
+    account,
+    connection_cache: Optional[Dict[int, Any]] = None,
+) -> str:
     """Resolve OAuth tokens by connection while preserving legacy manual imports."""
 
     if account.meta_connection_id:
-        from database.models import MetaConnection
+        connection = None
+        if connection_cache is not None:
+            connection = connection_cache.get(account.meta_connection_id)
+        if connection is None:
+            from database.models import MetaConnection
 
-        result = await session.execute(
-            select(MetaConnection).where(MetaConnection.id == account.meta_connection_id)
-        )
-        connection = result.scalar_one_or_none()
+            result = await session.execute(
+                select(MetaConnection).where(MetaConnection.id == account.meta_connection_id)
+            )
+            connection = result.scalar_one_or_none()
+            if connection_cache is not None and connection is not None:
+                connection_cache[account.meta_connection_id] = connection
         if not connection:
             raise MetaTokenError("Meta connection was not found")
         if connection.status != "active":
