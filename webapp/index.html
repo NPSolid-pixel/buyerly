@@ -137,21 +137,21 @@
         <li><div class="nav-item nav-tab" data-tab="logs" id="navLogs" onclick="window.switchTab('logs');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Логи</span></div></li>
       </ul>
 
-      <!-- Section: Аккаунты -->
+      <!-- Section: Аккаунты Facebook -->
       <div class="nav-section-header">
         <div class="nav-section-title">
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          <span>Аккаунты</span>
+          <span>Facebook Аккаунты</span>
         </div>
-        <div class="nav-section-add-btn" title="Добавить аккаунт" onclick="window.switchTab('add');">+</div>
+        <div class="nav-section-add-btn" title="Подключить Facebook" onclick="window.switchTab('add');">+</div>
       </div>
-      <div class="list-item nav-tab" data-tab="accounts" id="navAccounts" onclick="window.switchTab('accounts');">
+      <div class="list-item nav-tab" data-tab="fb_accounts" id="navFbAccounts" onclick="window.switchTab('fb_accounts');">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        <span>Facebook Аккаунты</span>
-        <span class="list-count" id="sidebarAccountsCount">0</span>
+        <span>Все аккаунты</span>
+        <span class="list-count" id="sidebarFbAccountsCount">0</span>
       </div>
 
-      <!-- Section: Рекламные кабинеты -->
+      <!-- Section: Рекламные кабинеты (Lists) -->
       <div class="nav-section-header">
         <div class="nav-section-title">
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -160,17 +160,14 @@
         <div class="nav-section-add-btn" title="Создать новую группу" onclick="window.openCreateAccountGroup();">+</div>
       </div>
 
-      <!-- Все кабинеты (fixed) -->
-      <div class="list-item nav-tab" data-tab="accounts" id="navGroupAll" onclick="window.switchTab('accounts');">
+      <!-- Все кабинеты (pinned All list) -->
+      <div class="list-item nav-tab" data-tab="accounts" data-group-filter="all" id="navGroupAll" onclick="window.switchAccountGroup('all');">
         <span class="list-flag">📋</span>
         <span>Все кабинеты</span>
         <span class="list-count" id="sidebarTotalCount">0</span>
       </div>
-      <!-- Нидерланды / Группа -->
-      <div class="list-item nav-tab" data-tab="accounts" id="navGroupNL" onclick="window.switchTab('accounts');">
-        <span class="list-flag" id="sidebarGroupFlag">🇳🇱</span>
-        <span id="sidebarGroupName">Нидерланды</span>
-      </div>
+      <!-- Dynamic account groups list container (e.g. CANADA, Нидерланды) -->
+      <div id="sidebarAccountGroupsContainer"></div>
     </aside>
 
     <!-- ================= MAIN CONTENT ================= -->
@@ -226,19 +223,87 @@
       </section>
 
       <!-- ============================================== -->
-      <!-- TAB 1: МОИ КАБИНЕТЫ (ACCOUNTS) -->
+      <!-- TAB: FACEBOOK АККАУНТЫ (FB ACCOUNTS / PROFILES) -->
+      <!-- ============================================== -->
+      <section id="tab-fb_accounts" class="tab-content">
+        <div class="accounts-page-header">
+          <div>
+            <span class="eyebrow">Подключения</span>
+            <h2>Facebook Аккаунты</h2>
+            <p>Материнские профили, личные кабинеты, бизнес-менеджеры и статусы токенов.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" onclick="window.switchTab('add')">
+              Добавить по токену
+            </button>
+            <button class="btn btn-primary" onclick="window.startMetaOAuthFlow()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              + Подключить Facebook
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="toolbar">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="fbAccountSearchInput" placeholder="Поиск по имени, ID профиля..." autocomplete="off">
+          </div>
+          <div class="filter-chips">
+            <button class="chip active" data-fb-filter="all" onclick="window.setFbFilter('all')">Все <span class="chip-count" id="fbCountAll">0</span></button>
+            <button class="chip" data-fb-filter="active" onclick="window.setFbFilter('active')"><span class="status-dot dot-success"></span>Активные <span class="chip-count" id="fbCountActive">0</span></button>
+            <button class="chip" data-fb-filter="issue" onclick="window.setFbFilter('issue')"><span class="status-dot dot-danger"></span>Требуют внимания <span class="chip-count" id="fbCountIssue">0</span></button>
+          </div>
+        </div>
+
+        <!-- FB Accounts Table Container -->
+        <div class="fb-accounts-table-container">
+          <table class="fb-accounts-table" id="fbAccountsTable">
+            <thead>
+              <tr>
+                <th style="width: 280px;">Имя / Профиль</th>
+                <th style="width: 220px;">Личный кабинет</th>
+                <th style="width: 220px;">Бизнес-менеджеры</th>
+                <th style="width: 110px;">Страницы</th>
+                <th style="width: 140px;">Общий расход</th>
+                <th style="width: 130px;">Токен</th>
+                <th style="width: 120px; text-align: right;">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="fbAccountsTableBody">
+              <!-- Dynamically populated by renderFacebookAccounts() -->
+            </tbody>
+          </table>
+          <div id="fbAccountsEmptyState" class="empty-state hidden">
+            <div class="empty-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <h3>Нет подключенных Facebook аккаунтов</h3>
+            <p>Подключите профиль через Facebook Login for Business или вручную с помощью маркера доступа.</p>
+            <button class="btn btn-primary" onclick="window.switchTab('add')">+ Подключить аккаунт</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- TAB: РЕКЛАМНЫЕ КАБИНЕТЫ (ACCOUNTS / LISTS) -->
       <!-- ============================================== -->
       <section id="tab-accounts" class="tab-content">
         <div class="accounts-page-header">
           <div>
-            <span class="eyebrow">Рабочее пространство</span>
-            <h2>Рекламные кабинеты</h2>
-            <p>Статус Meta, автоматика и назначенные правила — отдельно и без скрытых состояний.</p>
+            <span class="eyebrow" id="accountsPageEyebrow">Рабочее пространство</span>
+            <h2 id="accountsPageTitle">Рекламные кабинеты</h2>
+            <p id="accountsPageSubtitle">Статус Meta, автоматика и назначенные правила — отдельно и без скрытых состояний.</p>
           </div>
-          <button class="btn btn-primary" onclick="window.switchTab('add')">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Добавить кабинеты
-          </button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button id="btnGroupSettings" class="btn btn-secondary hidden" type="button" onclick="window.openEditCurrentGroup()">
+              ⚙️ Настройки группы
+            </button>
+            <button class="btn btn-primary" onclick="window.switchTab('add')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Добавить кабинеты
+            </button>
+          </div>
         </div>
 
         <section class="account-groups-panel" aria-labelledby="accountGroupsTitle">
@@ -266,6 +331,37 @@
             <button class="chip" data-filter="active"><span class="status-dot dot-success"></span>Активные <span class="chip-count" id="countActive">0</span></button>
             <button class="chip" data-filter="rules"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>С правилами <span class="chip-count" id="countRules">0</span></button>
             <button class="chip" data-filter="issue"><span class="status-dot dot-danger"></span>Проблемные <span class="chip-count" id="countIssue">0</span></button>
+          </div>
+        </div>
+
+        <!-- Floating Bulk Action Bar (Attio Style) -->
+        <div id="accountBulkActionBar" class="floating-action-bar hidden">
+          <div class="floating-action-left">
+            <span class="selected-badge"><span id="bulkSelectedCount">1</span> выбрано</span>
+            <button class="btn-icon-clear" title="Снять выбор" onclick="window.clearAccountSelection()">&times;</button>
+          </div>
+          <div class="floating-action-divider"></div>
+          <div class="floating-action-buttons">
+            <div class="relative-dropdown-container">
+              <button class="btn btn-secondary btn-sm" type="button" onclick="window.toggleBulkGroupDropdown(event)">
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                Добавить в группу
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div id="bulkGroupDropdown" class="floating-dropdown-menu hidden">
+                <div id="bulkGroupDropdownList"></div>
+                <div class="dropdown-divider"></div>
+                <div class="dropdown-item" onclick="window.openCreateGroupWithSelected()">+ Новая группа...</div>
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="window.openBulkAssignRules()">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              Назначить правила
+            </button>
+            <button class="btn btn-danger-subtle btn-sm" type="button" onclick="window.bulkDeleteSelectedAccounts()">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              Удалить
+            </button>
           </div>
         </div>
 

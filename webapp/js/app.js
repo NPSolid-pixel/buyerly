@@ -56,6 +56,7 @@
   const SUMMARY_COLUMN_MAX_WIDTH = 420;
   const TAB_ROUTES = Object.freeze({
     home: '/home',
+    fb_accounts: '/facebook-accounts',
     accounts: '/accounts',
     rules: '/rules',
     summary: '/summary',
@@ -69,7 +70,8 @@
   const LEGACY_ROUTE_TABS = Object.freeze({ '/': 'home', '/dashboard': 'home' });
   const TAB_PAGE_TITLES = Object.freeze({
     home: 'Home — Buyerly',
-    accounts: 'Мои кабинеты — Buyerly',
+    fb_accounts: 'Facebook Аккаунты — Buyerly',
+    accounts: 'Все кабинеты — Buyerly',
     rules: 'Правила — Buyerly',
     summary: 'Сводка — Buyerly',
     logs: 'Логи — Buyerly',
@@ -89,6 +91,10 @@
     activeWorkspace: null,
     newWorkspaceSelectedColor: '#F5A300',
     editWorkspaceSelectedColor: '#F5A300',
+    selectedAccounts: new Set(),
+    fbConnections: [],
+    fbFilter: 'all',
+    fbSearchQuery: '',
     accounts: [],
     accountGroups: [],
     accountGroupFilter: 'all',
@@ -331,26 +337,47 @@
     } catch (e) {}
   }
 
+  window.updateSidebarActiveState = function () {
+    const tabName = state.activeTab;
+    document.querySelectorAll('.nav-tab, .mobile-nav-item, .nav-item, .list-item').forEach(btn => {
+      let isActive = false;
+      if (btn.dataset.tab === tabName) {
+        if (tabName === 'accounts') {
+          const groupFilter = btn.dataset.groupFilter;
+          if (groupFilter !== undefined) {
+            isActive = String(groupFilter) === String(state.accountGroupFilter || 'all');
+          } else {
+            isActive = (state.accountGroupFilter === 'all');
+          }
+        } else {
+          isActive = true;
+        }
+      }
+      btn.classList.toggle('active', isActive);
+      if (isActive) btn.setAttribute('aria-current', 'page');
+      else btn.removeAttribute('aria-current');
+    });
+  };
+
   window.switchTab = function (requestedTab, options = {}) {
     const tabName = Object.hasOwn(TAB_ROUTES, requestedTab) ? requestedTab : 'accounts';
     state.activeTab = tabName;
+    if (tabName !== 'accounts') {
+      state.accountGroupFilter = 'all';
+    }
     if (options.haptic !== false) haptic('selection');
     syncBrowserRoute(tabName, options.historyMode || 'push');
     document.title = TAB_PAGE_TITLES[tabName] || 'Buyerly — AI Media Buyer';
 
     // Update active tab buttons (Desktop & Mobile & Sidebar)
-    document.querySelectorAll('.nav-tab, .mobile-nav-item, .nav-item, .list-item').forEach(btn => {
-      const isActive = btn.dataset.tab === tabName;
-      btn.classList.toggle('active', isActive);
-      if (isActive) btn.setAttribute('aria-current', 'page');
-      else btn.removeAttribute('aria-current');
-    });
+    window.updateSidebarActiveState();
 
     // Update Header Breadcrumbs
     const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
     if (breadcrumbArea) {
       const titles = {
         home: '<span style="font-size:14px;margin-right:6px;">🏠</span><span>Home</span>',
+        fb_accounts: '<span style="font-size:14px;margin-right:6px;">👤</span><span>Facebook Аккаунты</span>',
         accounts: '<span style="font-size:14px;margin-right:6px;">📋</span><span>Все кабинеты</span>',
         rules: '<span style="font-size:14px;margin-right:6px;">🛡️</span><span>Правила</span>',
         summary: '<span style="font-size:14px;margin-right:6px;">📊</span><span>Сводка</span>',
@@ -369,6 +396,8 @@
     // Auto-fetch data on tab switch
     if (tabName === 'home') {
       updateHomeGreeting();
+    } else if (tabName === 'fb_accounts') {
+      loadFacebookAccounts();
     } else if (tabName === 'accounts') {
       loadAccounts();
     } else if (tabName === 'rules') {
@@ -660,7 +689,6 @@
     window.closeWorkspaceDropdown();
     window.switchTab('settings');
   };
-
   // ==========================================================
   // TAB: HOME (ГЛАВНАЯ)
   // ==========================================================
@@ -676,7 +704,7 @@
   }
 
   // ==========================================================
-  // TAB 1: ACCOUNTS (МОИ КАБИНЕТЫ)
+  // TAB 1: ACCOUNTS (МОИ КАБИНЕТЫ & СПИСКИ)
   // ==========================================================
   async function loadAccounts() {
     const listEl = document.getElementById('accountsList');
@@ -693,9 +721,11 @@
         state.accountGroupFilter = 'all';
       }
       renderAccountGroups();
+      renderSidebarAccountGroups();
+      updateAccountsPageHeader();
       renderAccounts();
     } catch (err) {
-      listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
+      if (listEl) listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
     }
   }
 
@@ -725,12 +755,72 @@
     if (!container) return;
     const buttons = state.accountGroups.map(group => (
       `<span class="account-group-filter-wrap">
-        <button type="button" class="account-group-filter ${state.accountGroupFilter === String(group.id) ? 'active' : ''}" data-account-group-filter="${group.id}" title="${escapeHtml(group.description || '')}"><span>${escapeHtml(group.name)}</span><b>${group.accounts_count || 0}</b></button>
+        <button type="button" class="account-group-filter ${state.accountGroupFilter === String(group.id) ? 'active' : ''}" data-account-group-filter="${group.id}" onclick="window.switchAccountGroup('${group.id}')" title="${escapeHtml(group.description || '')}"><span>${escapeHtml(group.name)}</span><b>${group.accounts_count || 0}</b></button>
         <button type="button" class="account-group-edit" onclick="window.openAccountGroupEditor(${group.id})" aria-label="Изменить группу ${escapeHtml(group.name)}" title="Изменить состав группы">✎</button>
       </span>`
     ));
     container.innerHTML = buttons.join('');
   }
+
+  function renderSidebarAccountGroups() {
+    const container = document.getElementById('sidebarAccountGroupsContainer');
+    if (!container) return;
+    if (!state.accountGroups || state.accountGroups.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+    const html = state.accountGroups.map(group => {
+      const isActive = state.activeTab === 'accounts' && String(state.accountGroupFilter) === String(group.id);
+      return `
+        <div class="list-item nav-tab ${isActive ? 'active' : ''}" data-tab="accounts" data-group-filter="${group.id}" id="navGroup-${group.id}" onclick="window.switchAccountGroup('${group.id}');">
+          <span class="list-flag">📂</span>
+          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${escapeHtml(group.name)}</span>
+          <span class="list-count">${group.accounts_count || 0}</span>
+        </div>
+      `;
+    }).join('');
+    container.innerHTML = html;
+  }
+
+  window.switchAccountGroup = function (groupId) {
+    state.accountGroupFilter = String(groupId);
+    state.activeTab = 'accounts';
+    window.switchTab('accounts', { historyMode: 'none' });
+    updateAccountsPageHeader();
+    renderAccounts();
+    window.updateSidebarActiveState();
+  };
+
+  function updateAccountsPageHeader() {
+    const eyebrow = document.getElementById('accountsPageEyebrow');
+    const title = document.getElementById('accountsPageTitle');
+    const subtitle = document.getElementById('accountsPageSubtitle');
+    const btnSettings = document.getElementById('btnGroupSettings');
+
+    if (state.accountGroupFilter === 'all') {
+      if (eyebrow) eyebrow.textContent = 'Рабочее пространство';
+      if (title) title.textContent = 'Рекламные кабинеты';
+      if (subtitle) subtitle.textContent = 'Статус Meta, автоматика и назначенные правила — отдельно и без скрытых состояний.';
+      if (btnSettings) btnSettings.classList.add('hidden');
+    } else {
+      const group = (state.accountGroups || []).find(g => String(g.id) === String(state.accountGroupFilter));
+      if (group) {
+        if (eyebrow) eyebrow.textContent = `Группа кабинетов (${group.accounts_count || 0} шт.)`;
+        if (title) title.textContent = `📂 ${group.name}`;
+        if (subtitle) subtitle.textContent = group.description || 'Кабинеты, входящие в эту группу.';
+        if (btnSettings) {
+          btnSettings.classList.remove('hidden');
+          btnSettings.onclick = () => window.openAccountGroupEditor(group.id);
+        }
+      }
+    }
+  }
+
+  window.openEditCurrentGroup = function () {
+    if (state.accountGroupFilter !== 'all') {
+      window.openAccountGroupEditor(parseInt(state.accountGroupFilter, 10));
+    }
+  };
 
   function getAccountConnectionState(account) {
     return account?.connection_type === 'facebook_login'
@@ -797,19 +887,203 @@
     return many;
   }
 
+  // ==========================================================
+  // BULK ACTIONS & ATTIO FLOATING BAR
+  // ==========================================================
+  window.toggleAccountSelection = function (accountId, isChecked) {
+    if (isChecked) {
+      state.selectedAccounts.add(accountId);
+    } else {
+      state.selectedAccounts.delete(accountId);
+    }
+    updateBulkActionBar();
+  };
+
+  window.toggleSelectAllAccounts = function (isChecked) {
+    const query = state.searchQuery.toLowerCase().trim();
+    const filtered = state.accounts.filter(acc => {
+      const searchText = [acc.name, acc.custom_name, acc.note, acc.account_id].filter(Boolean).join(' ').toLowerCase();
+      if (query && !searchText.includes(query)) return false;
+      if (state.accountGroupFilter !== 'all' && !(acc.group_ids || []).map(String).includes(state.accountGroupFilter)) return false;
+      if (state.filter === 'active') return acc.account_status === 1 && acc.is_active;
+      if (state.filter === 'rules') return acc.rules_enabled;
+      if (state.filter === 'issue') return acc.account_status !== 1 || !acc.is_active;
+      return true;
+    });
+
+    if (isChecked) {
+      filtered.forEach(acc => state.selectedAccounts.add(acc.account_id));
+    } else {
+      state.selectedAccounts.clear();
+    }
+    
+    document.querySelectorAll('.attio-row-checkbox').forEach(cb => {
+      cb.checked = isChecked;
+    });
+    updateBulkActionBar();
+  };
+
+  window.clearAccountSelection = function () {
+    state.selectedAccounts.clear();
+    document.querySelectorAll('.attio-row-checkbox, #selectAllAccountsCheckbox').forEach(cb => {
+      cb.checked = false;
+    });
+    updateBulkActionBar();
+  };
+
+  function updateBulkActionBar() {
+    const bar = document.getElementById('accountBulkActionBar');
+    const countEl = document.getElementById('bulkSelectedCount');
+    const selectAllCb = document.getElementById('selectAllAccountsCheckbox');
+    if (!bar) return;
+
+    const count = state.selectedAccounts.size;
+    if (count > 0) {
+      if (countEl) countEl.textContent = count;
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+      window.closeBulkGroupDropdown();
+    }
+
+    if (selectAllCb) {
+      const filteredCount = state.accounts.length;
+      selectAllCb.checked = (filteredCount > 0 && count >= filteredCount);
+    }
+  }
+
+  window.toggleBulkGroupDropdown = function (event) {
+    if (event) event.stopPropagation();
+    const dropdown = document.getElementById('bulkGroupDropdown');
+    if (!dropdown) return;
+    const isShowing = !dropdown.classList.contains('hidden');
+    if (isShowing) {
+      dropdown.classList.add('hidden');
+    } else {
+      renderBulkGroupDropdownList();
+      dropdown.classList.remove('hidden');
+      const closeHandler = (e) => {
+        if (!dropdown.contains(e.target)) {
+          dropdown.classList.add('hidden');
+          document.removeEventListener('click', closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closeHandler), 10);
+    }
+  };
+
+  window.closeBulkGroupDropdown = function () {
+    const dropdown = document.getElementById('bulkGroupDropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+  };
+
+  function renderBulkGroupDropdownList() {
+    const listEl = document.getElementById('bulkGroupDropdownList');
+    if (!listEl) return;
+    if (!state.accountGroups || state.accountGroups.length === 0) {
+      listEl.innerHTML = '<div style="padding: 6px 10px; font-size: 12px; color: var(--text-muted);">Нет созданных групп</div>';
+      return;
+    }
+    listEl.innerHTML = state.accountGroups.map(group => `
+      <div class="dropdown-item" onclick="window.assignSelectedAccountsToGroup(${group.id});">
+        <div class="dropdown-item-left">
+          <span>📂</span>
+          <span>${escapeHtml(group.name)}</span>
+        </div>
+        <span class="list-count" style="font-size: 11px;">${group.accounts_count || 0}</span>
+      </div>
+    `).join('');
+  }
+
+  window.assignSelectedAccountsToGroup = async function (groupId) {
+    window.closeBulkGroupDropdown();
+    const selectedIds = Array.from(state.selectedAccounts);
+    if (!selectedIds.length) return;
+
+    const group = state.accountGroups.find(g => g.id === groupId);
+    if (!group) return;
+
+    try {
+      showLoading();
+      const accountsInWorkspace = state.accounts || [];
+      const matchingAccountDbIds = accountsInWorkspace
+        .filter(acc => selectedIds.includes(acc.account_id) || selectedIds.includes(String(acc.id)))
+        .map(acc => acc.id);
+
+      const existingMemberIds = (group.account_ids || []);
+      const combined = Array.from(new Set([...existingMemberIds, ...matchingAccountDbIds]));
+
+      await apiRequest(`/api/account-groups/${groupId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: group.name,
+          description: group.description || '',
+          account_ids: combined
+        })
+      });
+
+      showToast(`Кабинеты добавлены в группу "${group.name}"`, 'success');
+      window.clearAccountSelection();
+      await loadAccounts();
+    } catch (e) {
+      showToast(e.message || 'Ошибка добавления в группу', 'error');
+    } finally {
+      hideLoading();
+    }
+  };
+
+  window.openCreateGroupWithSelected = function () {
+    window.closeBulkGroupDropdown();
+    const selectedAccountDbIds = (state.accounts || [])
+      .filter(acc => state.selectedAccounts.has(acc.account_id))
+      .map(acc => acc.id);
+    window.openCreateAccountGroup();
+    if (selectedAccountDbIds.length) {
+      renderAccountGroupMemberOptions(selectedAccountDbIds);
+    }
+  };
+
+  window.openBulkAssignRules = function () {
+    const selected = Array.from(state.selectedAccounts);
+    if (!selected.length) return;
+    window.openAssignRuleModal(selected[0]);
+  };
+
+  window.bulkDeleteSelectedAccounts = async function () {
+    const selected = Array.from(state.selectedAccounts);
+    if (!selected.length) return;
+    if (!confirm(`Удалить выбранные рекламные кабинеты (${selected.length} шт.)?`)) return;
+
+    try {
+      showLoading();
+      for (const accId of selected) {
+        await apiRequest(`/api/accounts/${accId}`, { method: 'DELETE' }).catch(() => {});
+      }
+      showToast(`Удалено ${selected.length} кабинетов`, 'success');
+      window.clearAccountSelection();
+      await loadAccounts();
+    } catch (e) {
+      showToast(e.message || 'Ошибка удаления кабинетов', 'error');
+    } finally {
+      hideLoading();
+    }
+  };
+
+  // ==========================================================
+  // RENDER ACCOUNTS (ALL OR FILTERED BY GROUP)
+  // ==========================================================
   function renderAccounts() {
     const listEl = document.getElementById('accountsList');
     const emptyEl = document.getElementById('accountsEmptyState');
     const query = state.searchQuery.toLowerCase().trim();
 
-    // Filter by search and chips
+    // Filter by search, chips, and group
     const filtered = state.accounts.filter(acc => {
       const searchText = [acc.name, acc.custom_name, acc.note, acc.account_id]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
-      const matchSearch = !query || 
-        searchText.includes(query);
+      const matchSearch = !query || searchText.includes(query);
 
       if (!matchSearch) return false;
       if (state.accountGroupFilter !== 'all' && !(acc.group_ids || []).map(String).includes(state.accountGroupFilter)) return false;
@@ -826,18 +1100,20 @@
     const activeCount = state.accounts.filter(a => a.account_status === 1 && a.is_active).length;
     const issueCount = state.accounts.filter(a => a.account_status !== 1 || !a.is_active).length;
 
-    document.getElementById('countAll').textContent = totalCount;
-    document.getElementById('countActive').textContent = activeCount;
-    document.getElementById('countRules').textContent = rulesCount;
-    document.getElementById('countIssue').textContent = issueCount;
-
+    const elCountAll = document.getElementById('countAll');
+    const elCountActive = document.getElementById('countActive');
+    const elCountRules = document.getElementById('countRules');
+    const elCountIssue = document.getElementById('countIssue');
     const sbTotal = document.getElementById('sidebarTotalCount');
-    const sbAccounts = document.getElementById('sidebarAccountsCount');
+
+    if (elCountAll) elCountAll.textContent = totalCount;
+    if (elCountActive) elCountActive.textContent = activeCount;
+    if (elCountRules) elCountRules.textContent = rulesCount;
+    if (elCountIssue) elCountIssue.textContent = issueCount;
     if (sbTotal) sbTotal.textContent = totalCount;
-    if (sbAccounts) sbAccounts.textContent = totalCount;
 
     if (filtered.length === 0) {
-      listEl.innerHTML = '';
+      if (listEl) listEl.innerHTML = '';
       if (emptyEl) emptyEl.classList.remove('hidden');
       return;
     }
@@ -857,9 +1133,13 @@
       const metaPillClass = metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red');
       const autoPillClass = acc.rules_enabled ? 'green' : 'amber';
       const autoPillText = acc.rules_enabled ? 'Включена' : 'На паузе';
+      const isSelected = state.selectedAccounts.has(acc.account_id);
 
       return `
         <tr id="row-${escapeHtml(acc.account_id)}" class="attio-row">
+          <td style="width: 36px; text-align: center;">
+            <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)">
+          </td>
           <td style="min-width: 240px;">
             <div class="cell-account-box">
               <span style="font-size: 15px;">🏛️</span>
@@ -917,29 +1197,212 @@
       `;
     }).join('');
 
-    listEl.innerHTML = `
-      <div class="table-viewport" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: var(--shadow-sm); overflow: auto;">
-        <table class="attio-grid">
-          <thead>
-            <tr>
-              <th style="width: 240px;"><div class="grid-th-left"><span>Кабинет</span></div></th>
-              <th style="width: 130px;"><div class="grid-th-left"><span>Статус Meta</span></div></th>
-              <th style="width: 180px;"><div class="grid-th-left"><span>Заметка</span></div></th>
-              <th style="width: 120px;"><div class="grid-th-left"><span>Spend</span></div></th>
-              <th style="width: 80px;"><div class="grid-th-left"><span>Лиды</span></div></th>
-              <th style="width: 90px;"><div class="grid-th-left"><span>CPL</span></div></th>
-              <th style="width: 130px;"><div class="grid-th-left"><span>Автоматика</span></div></th>
-              <th style="width: 160px;"><div class="grid-th-left"><span>Правила</span></div></th>
-              <th style="width: 120px;"><div class="grid-th-left"><span>Действия</span></div></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-      </div>
-    `;
+    if (listEl) {
+      listEl.innerHTML = `
+        <div class="table-viewport" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: var(--shadow-sm); overflow: auto;">
+          <table class="attio-grid">
+            <thead>
+              <tr>
+                <th style="width: 36px; text-align: center;"><input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" onchange="window.toggleSelectAllAccounts(this.checked)"></th>
+                <th style="width: 240px;"><div class="grid-th-left"><span>Кабинет</span></div></th>
+                <th style="width: 130px;"><div class="grid-th-left"><span>Статус Meta</span></div></th>
+                <th style="width: 180px;"><div class="grid-th-left"><span>Заметка</span></div></th>
+                <th style="width: 120px;"><div class="grid-th-left"><span>Spend</span></div></th>
+                <th style="width: 80px;"><div class="grid-th-left"><span>Лиды</span></div></th>
+                <th style="width: 90px;"><div class="grid-th-left"><span>CPL</span></div></th>
+                <th style="width: 130px;"><div class="grid-th-left"><span>Автоматика</span></div></th>
+                <th style="width: 160px;"><div class="grid-th-left"><span>Правила</span></div></th>
+                <th style="width: 120px;"><div class="grid-th-left"><span>Действия</span></div></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+    updateBulkActionBar();
   }
+
+  // ==========================================================
+  // TAB: FACEBOOK ACCOUNTS (PROFILES, BMS, TOKENS - PHOTO 2)
+  // ==========================================================
+  async function loadFacebookAccounts() {
+    const tableBody = document.getElementById('fbAccountsTableBody');
+    const emptyEl = document.getElementById('fbAccountsEmptyState');
+    if (!tableBody) return;
+    
+    try {
+      const [connections, accounts] = await Promise.all([
+        apiRequest('/api/meta/connections').catch(() => []),
+        state.accounts.length ? Promise.resolve(state.accounts) : apiRequest('/api/accounts').catch(() => [])
+      ]);
+      
+      state.fbConnections = connections || [];
+      if (accounts && accounts.length) {
+        state.accounts = accounts;
+      }
+      renderFacebookAccounts();
+    } catch (e) {
+      console.error('Error loading facebook accounts:', e);
+      if (emptyEl) emptyEl.classList.remove('hidden');
+    }
+  }
+
+  window.setFbFilter = function (filter) {
+    state.fbFilter = filter;
+    document.querySelectorAll('[data-fb-filter]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.fbFilter === filter);
+    });
+    renderFacebookAccounts();
+  };
+
+  function renderFacebookAccounts() {
+    const tableBody = document.getElementById('fbAccountsTableBody');
+    const emptyEl = document.getElementById('fbAccountsEmptyState');
+    if (!tableBody) return;
+
+    const query = (document.getElementById('fbAccountSearchInput')?.value || '').toLowerCase().trim();
+    const connections = state.fbConnections || [];
+
+    // Filter connections
+    const filtered = connections.filter(conn => {
+      const name = (conn.provider_user_name || '').toLowerCase();
+      const uid = (conn.provider_user_id || '').toLowerCase();
+      const matchSearch = !query || name.includes(query) || uid.includes(query);
+      if (!matchSearch) return false;
+      
+      if (state.fbFilter === 'active') return conn.status === 'active';
+      if (state.fbFilter === 'issue') return conn.status !== 'active';
+      return true;
+    });
+
+    // Update counters
+    const totalCount = connections.length;
+    const activeCount = connections.filter(c => c.status === 'active').length;
+    const issueCount = connections.filter(c => c.status !== 'active').length;
+
+    const elTotal = document.getElementById('fbCountAll');
+    const elActive = document.getElementById('fbCountActive');
+    const elIssue = document.getElementById('fbCountIssue');
+    const elSidebarCount = document.getElementById('sidebarFbAccountsCount');
+
+    if (elTotal) elTotal.textContent = totalCount;
+    if (elActive) elActive.textContent = activeCount;
+    if (elIssue) elIssue.textContent = issueCount;
+    if (elSidebarCount) elSidebarCount.textContent = totalCount;
+
+    if (filtered.length === 0) {
+      tableBody.innerHTML = '';
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    const html = filtered.map(conn => {
+      const name = conn.provider_user_name || 'Facebook User';
+      const initial = name.charAt(0).toUpperCase();
+      const uid = conn.provider_user_id || '—';
+      
+      const linkedAccounts = state.accounts || [];
+      const rkCount = linkedAccounts.length;
+      
+      let totalSpend = 0;
+      linkedAccounts.forEach(acc => {
+        const sp = acc.today_spend || acc.insights?.spend || 0;
+        totalSpend += (typeof sp === 'number' ? sp : 0);
+      });
+      const spendFormatted = totalSpend > 0 ? `$${totalSpend.toFixed(2)}` : '$0.00';
+
+      const isTokenActive = conn.status === 'active';
+      const tokenClass = isTokenActive ? 'active' : 'issue';
+      const tokenText = isTokenActive ? 'Активен' : 'Требует внимания';
+
+      return `
+        <tr>
+          <td>
+            <div class="fb-profile-cell">
+              <div class="fb-avatar">${escapeHtml(initial)}</div>
+              <div class="fb-profile-info">
+                <div class="fb-name-row">
+                  <span class="fb-profile-name">${escapeHtml(name)}</span>
+                  <span class="fb-rk-badge">${rkCount} рк</span>
+                </div>
+                <div class="fb-profile-sub">${escapeHtml(uid)}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div style="font-weight: 500; font-size: 13px; color: var(--text-primary);">${escapeHtml(name)}</div>
+            <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px;">
+              ID: ${escapeHtml(uid)}
+            </div>
+            <div style="margin-top: 4px;">
+              <span class="status-pill green" style="font-size: 10px; padding: 1px 6px;">ACTIVE · USD</span>
+            </div>
+          </td>
+          <td>
+            <div>
+              <span class="fb-bm-chip">${escapeHtml(name)} <b style="color: var(--text-muted); font-size: 10px; margin-left: 2px;">${rkCount} рк</b></span>
+            </div>
+          </td>
+          <td>
+            <span style="font-weight: 500; color: var(--text-muted);">—</span>
+          </td>
+          <td>
+            <span style="font-weight: 700; font-size: 13px; color: var(--text-primary);">${escapeHtml(spendFormatted)}</span>
+          </td>
+          <td>
+            <span class="token-chip ${tokenClass}">
+              <span class="status-dot ${isTokenActive ? 'dot-success' : 'dot-danger'}"></span>
+              ${tokenText}
+            </span>
+          </td>
+          <td style="text-align: right;">
+            <div style="display: inline-flex; align-items: center; gap: 4px;">
+              <button class="btn btn-secondary btn-xs" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты" style="padding: 3px 6px;">🔄</button>
+              <button class="btn btn-secondary btn-xs" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение" style="padding: 3px 6px; color: #BA2525;">✕</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    tableBody.innerHTML = html;
+  }
+
+  window.discoverMetaConnectionAssets = async function (connectionId) {
+    try {
+      showLoading();
+      await discoverMetaAssets(connectionId);
+      showToast('Кабинеты синхронизированы', 'success');
+      await loadAccounts();
+    } catch (e) {
+      showToast(e.message || 'Ошибка синхронизации', 'error');
+    } finally {
+      hideLoading();
+    }
+  };
+
+  window.deleteMetaConnectionPrompt = async function (connectionId) {
+    if (!confirm('Отключить этот профиль Facebook? Все привязанные токены будут удалены.')) return;
+    try {
+      showLoading();
+      await apiRequest(`/api/meta/connections/${connectionId}`, { method: 'DELETE' });
+      showToast('Подключение Facebook удалено', 'success');
+      await loadFacebookAccounts();
+    } catch (e) {
+      showToast(e.message || 'Ошибка удаления', 'error');
+    } finally {
+      hideLoading();
+    }
+  };
+
+  window.startMetaOAuthFlow = function () {
+    window.switchTab('add');
+  };
 
   function getAccountMetaState(account) {
     if (!account.is_active) return { key: 'inactive', label: 'Выключен в Buyerly', dot: 'muted' };

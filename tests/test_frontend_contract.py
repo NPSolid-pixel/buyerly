@@ -466,3 +466,42 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.color-swatch',
         ):
             self.assertIn(style_contract, self.styles)
+
+    def test_fb_accounts_and_attio_lists_contract(self):
+        for contract in (
+            'data-tab="fb_accounts"',
+            'id="navFbAccounts"',
+            'id="sidebarFbAccountsCount"',
+            'id="navGroupAll"',
+            'id="sidebarAccountGroupsContainer"',
+            'id="tab-fb_accounts"',
+            'id="fbAccountsTable"',
+            'id="accountBulkActionBar"',
+            'id="bulkSelectedCount"',
+            'id="bulkGroupDropdown"',
+        ):
+            self.assertIn(contract, self.index)
+
+        for script_contract in (
+            "fb_accounts: '/facebook-accounts'",
+            'loadFacebookAccounts',
+            'renderFacebookAccounts',
+            'renderSidebarAccountGroups',
+            'window.switchAccountGroup',
+            'window.toggleAccountSelection',
+            'window.toggleSelectAllAccounts',
+            'window.clearAccountSelection',
+            'window.toggleBulkGroupDropdown',
+            'window.assignSelectedAccountsToGroup',
+        ):
+            self.assertIn(script_contract, self.script)
+
+        for style_contract in (
+            '.floating-action-bar',
+            '.selected-badge',
+            '.fb-accounts-table',
+            '.fb-profile-cell',
+            '.token-chip',
+        ):
+            self.assertIn(style_contract, self.styles)
+
