@@ -3064,9 +3064,11 @@ input[type=number] {
 .input-password-wrapper {
   position: relative;
   display: flex;
+  width: 100%;
 }
 
 .input-password-wrapper input {
+  width: 100%;
   padding-right: 40px;
 }
 
@@ -4229,6 +4231,8 @@ input[type=number] {
 }
 
 .login-form .form-control {
+  width: 100%;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
@@ -4247,6 +4251,30 @@ input[type=number] {
 
 .login-form .form-control::placeholder {
   color: rgba(255, 255, 255, 0.25);
+}
+
+/* Chrome / Safari / Edge autofill dark theme override */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #1b1c22 inset !important;
+  -webkit-text-fill-color: #f1f1f3 !important;
+  caret-color: #f1f1f3 !important;
+  transition: background-color 5000s ease-in-out 0s;
+  border-radius: inherit;
+}
+
+.login-form .form-control:-webkit-autofill,
+.login-form .form-control:-webkit-autofill:hover,
+.login-form .form-control:-webkit-autofill:focus,
+.login-form .form-control:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #1e2029 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
 }
 
 .login-form .btn-primary {
