@@ -32,7 +32,7 @@ class TestLegalPageFiles(unittest.TestCase):
             content = (PROJECT_ROOT / "webapp" / filename).read_text(encoding="utf-8")
             for text in required_text:
                 self.assertIn(text, content)
-            self.assertIn("raysmalaldis@santiago2017.com", content)
+            self.assertIn("contact@buyerly.app", content)
             self.assertNotIn("fonts.googleapis.com", content)
 
 
