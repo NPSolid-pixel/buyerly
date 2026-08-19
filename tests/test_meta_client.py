@@ -289,6 +289,79 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
             await client._respect_usage_limit(priority="normal")
         await client._respect_usage_limit(priority="critical")
 
+    async def test_dead_archived_adsets_with_zero_activity_are_skipped(self):
+        client = MetaClient()
+        client._fetch_paginated_data = AsyncMock(
+            side_effect=[
+                [
+                    {
+                        "id": "adset_active",
+                        "name": "Active Set",
+                        "status": "ACTIVE",
+                        "effective_status": "ACTIVE",
+                        "daily_budget": "1000",
+                    },
+                    {
+                        "id": "adset_dead_archived",
+                        "name": "Old Archived Set",
+                        "status": "ARCHIVED",
+                        "effective_status": "ARCHIVED",
+                        "daily_budget": "0",
+                    },
+                    {
+                        "id": "adset_dead_deleted",
+                        "name": "Old Deleted Set",
+                        "status": "DELETED",
+                        "effective_status": "DELETED",
+                        "daily_budget": "0",
+                    },
+                ],
+                [{"adset_id": "adset_active", "spend": "15.5", "impressions": "100", "clicks": "5"}],
+            ]
+        )
+
+        results = await client.get_adsets_insights("act_1", "token", "today", currency="USD")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["adset_id"], "adset_active")
+        self.assertEqual(results[0]["spend"], 15.5)
+
+    async def test_archived_adset_with_spend_is_preserved(self):
+        client = MetaClient()
+        client._fetch_paginated_data = AsyncMock(
+            side_effect=[
+                [
+                    {
+                        "id": "adset_archived_today",
+                        "name": "Archived Today",
+                        "status": "ARCHIVED",
+                        "effective_status": "ARCHIVED",
+                        "daily_budget": "5000",
+                    },
+                ],
+                [{"adset_id": "adset_archived_today", "spend": "42.0", "impressions": "500", "clicks": "20"}],
+            ]
+        )
+
+        results = await client.get_adsets_insights("act_1", "token", "today", currency="USD")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["adset_id"], "adset_archived_today")
+        self.assertEqual(results[0]["spend"], 42.0)
+
+    async def test_orphan_insights_without_adset_inventory_are_included(self):
+        client = MetaClient()
+        client._fetch_paginated_data = AsyncMock(
+            side_effect=[
+                [],  # Empty adsets inventory
+                [{"adset_id": "orphan_adset_99", "adset_name": "Deleted Midday", "spend": "25.0", "impressions": "300"}],
+            ]
+        )
+
+        results = await client.get_adsets_insights("act_1", "token", "today", currency="USD")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["adset_id"], "orphan_adset_99")
+        self.assertEqual(results[0]["adset_name"], "Deleted Midday")
+        self.assertEqual(results[0]["spend"], 25.0)
+
 
 if __name__ == "__main__":
     unittest.main()
