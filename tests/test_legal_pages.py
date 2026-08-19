@@ -20,6 +20,9 @@ class TestLegalPageFiles(unittest.TestCase):
         self.assertIn("^/(privacy|terms|data-deletion)/?$", nginx)
         for route in ("/privacy", "/terms", "/data-deletion"):
             self.assertIn(f'href="{route}"', index)
+        self.assertIn("Individual Entrepreneur Artem Petruchenko", index)
+        self.assertIn("305879234", index)
+        self.assertIn("contact@buyerly.app", index)
 
     def test_documents_identify_purpose_contact_and_deletion_process(self):
         documents = {

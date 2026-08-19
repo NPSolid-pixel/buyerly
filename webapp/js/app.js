@@ -296,13 +296,27 @@
     syncBrowserRoute(tabName, options.historyMode || 'push');
     document.title = TAB_PAGE_TITLES[tabName] || 'Buyerly — AI Media Buyer';
 
-    // Update active tab buttons (Desktop & Mobile)
-    document.querySelectorAll('.nav-tab, .mobile-nav-item').forEach(btn => {
+    // Update active tab buttons (Desktop & Mobile & Sidebar)
+    document.querySelectorAll('.nav-tab, .mobile-nav-item, .nav-item, .list-item').forEach(btn => {
       const isActive = btn.dataset.tab === tabName;
       btn.classList.toggle('active', isActive);
       if (isActive) btn.setAttribute('aria-current', 'page');
       else btn.removeAttribute('aria-current');
     });
+
+    // Update Header Breadcrumbs
+    const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
+    if (breadcrumbArea) {
+      const titles = {
+        accounts: '<span style="font-size:14px;margin-right:6px;">📋</span><span>Все кабинеты</span>',
+        rules: '<span style="font-size:14px;margin-right:6px;">🛡️</span><span>Правила</span>',
+        summary: '<span style="font-size:14px;margin-right:6px;">📊</span><span>Сводка</span>',
+        logs: '<span style="font-size:14px;margin-right:6px;">📜</span><span>Логи</span>',
+        add: '<span style="font-size:14px;margin-right:6px;">➕</span><span>Добавить кабинеты</span>',
+        settings: '<span style="font-size:14px;margin-right:6px;">⚙️</span><span>Настройки</span>'
+      };
+      breadcrumbArea.innerHTML = `<div class="breadcrumb-title">${titles[tabName] || 'Buyerly'}</div>`;
+    }
 
     // Show active tab section
     document.querySelectorAll('.tab-content').forEach(section => {
@@ -324,7 +338,11 @@
       loadSettings();
     }
 
-    // Scroll to top
+    // Scroll to top of tab content
+    const activeSection = document.getElementById(`tab-${tabName}`);
+    if (activeSection) {
+      activeSection.scrollTo({ top: 0, behavior: options.scrollBehavior || 'smooth' });
+    }
     window.scrollTo({ top: 0, behavior: options.scrollBehavior || 'smooth' });
   };
 
@@ -474,6 +492,11 @@
     document.getElementById('countActive').textContent = activeCount;
     document.getElementById('countRules').textContent = rulesCount;
     document.getElementById('countIssue').textContent = issueCount;
+
+    const sbTotal = document.getElementById('sidebarTotalCount');
+    const sbAccounts = document.getElementById('sidebarAccountsCount');
+    if (sbTotal) sbTotal.textContent = totalCount;
+    if (sbAccounts) sbAccounts.textContent = totalCount;
 
 
     if (filtered.length === 0) {
@@ -4385,6 +4408,7 @@
     setupLogicToggle();
     setupRuleBuilderPreview();
     setupModalListeners();
+    setupSidebarListeners();
 
     try {
       window.Telegram?.WebApp?.ready();
@@ -4563,6 +4587,48 @@
         }
       });
     });
+  }
+
+  function setupSidebarListeners() {
+    const mainSidebar = document.getElementById('mainSidebar');
+    const collapseSidebarBtn = document.getElementById('collapseSidebarBtn');
+    const expandSidebarBtn = document.getElementById('expandSidebarBtn');
+    const workspaceBtn = document.getElementById('workspaceBtn');
+    const workspaceDropdown = document.getElementById('workspaceDropdown');
+
+    function toggleSidebar() {
+      if (!mainSidebar) return;
+      mainSidebar.classList.toggle('collapsed');
+      if (expandSidebarBtn) {
+        expandSidebarBtn.classList.toggle('show', mainSidebar.classList.contains('collapsed'));
+      }
+    }
+
+    if (collapseSidebarBtn) collapseSidebarBtn.addEventListener('click', toggleSidebar);
+    if (expandSidebarBtn) expandSidebarBtn.addEventListener('click', toggleSidebar);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === '.') {
+        e.preventDefault();
+        toggleSidebar();
+      }
+      if (e.ctrlKey && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        document.getElementById('accountSearchInput')?.focus();
+      }
+    });
+
+    if (workspaceBtn && workspaceDropdown) {
+      workspaceBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        workspaceDropdown.classList.toggle('show');
+      });
+      document.addEventListener('click', (e) => {
+        if (!workspaceDropdown.contains(e.target) && !workspaceBtn.contains(e.target)) {
+          workspaceDropdown.classList.remove('show');
+        }
+      });
+    }
   }
 
   window.logoutUser = async function () {
