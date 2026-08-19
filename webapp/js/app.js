@@ -376,15 +376,12 @@
   function renderAccountGroups() {
     const container = document.getElementById('accountGroupsBar');
     if (!container) return;
-    const buttons = [
-      `<button type="button" class="account-group-filter ${state.accountGroupFilter === 'all' ? 'active' : ''}" data-account-group-filter="all"><span>Все кабинеты</span><b>${state.accounts.length}</b></button>`,
-      ...state.accountGroups.map(group => (
-        `<span class="account-group-filter-wrap">
-          <button type="button" class="account-group-filter ${state.accountGroupFilter === String(group.id) ? 'active' : ''}" data-account-group-filter="${group.id}" title="${escapeHtml(group.description || '')}"><span>${escapeHtml(group.name)}</span><b>${group.accounts_count || 0}</b></button>
-          <button type="button" class="account-group-edit" onclick="window.openAccountGroupEditor(${group.id})" aria-label="Изменить группу ${escapeHtml(group.name)}" title="Изменить состав группы">✎</button>
-        </span>`
-      ))
-    ];
+    const buttons = state.accountGroups.map(group => (
+      `<span class="account-group-filter-wrap">
+        <button type="button" class="account-group-filter ${state.accountGroupFilter === String(group.id) ? 'active' : ''}" data-account-group-filter="${group.id}" title="${escapeHtml(group.description || '')}"><span>${escapeHtml(group.name)}</span><b>${group.accounts_count || 0}</b></button>
+        <button type="button" class="account-group-edit" onclick="window.openAccountGroupEditor(${group.id})" aria-label="Изменить группу ${escapeHtml(group.name)}" title="Изменить состав группы">✎</button>
+      </span>`
+    ));
     container.innerHTML = buttons.join('');
   }
 
@@ -2244,8 +2241,7 @@
 
   function renderSummaryGroupSelector() {
     const select = document.getElementById('summaryAccountGroupSelect');
-    const label = document.getElementById('summaryGroupScopeLabel');
-    if (!select || !label) return;
+    if (!select) return;
     const selectedId = state.summaryView.filters.group_id || 'all';
     const selectedExists = selectedId === 'all' || state.accountGroups.some(group => String(group.id) === selectedId);
     if (!selectedExists) state.summaryView.filters.group_id = 'all';
@@ -2255,10 +2251,6 @@
       ...state.accountGroups.map(group => `<option value="${group.id}">${escapeHtml(group.name)} (${group.accounts_count || 0})</option>`)
     ].join('');
     select.value = activeId;
-    const group = state.accountGroups.find(item => String(item.id) === activeId);
-    label.textContent = group
-      ? `${group.accounts_count || 0} кабинетов · переключение без нового запроса в Meta`
-      : `Все подключённые кабинеты · ${state.accounts.length}`;
   }
 
   function renderSummaryTableHeader() {
@@ -4184,6 +4176,10 @@
       document.querySelectorAll('.chip[data-filter]').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       state.filter = chip.dataset.filter;
+      if (chip.dataset.filter === 'all') {
+        state.accountGroupFilter = 'all';
+        renderAccountGroups();
+      }
       renderAccounts();
     });
   });
@@ -4191,7 +4187,8 @@
   document.getElementById('accountGroupsBar')?.addEventListener('click', event => {
     const button = event.target.closest('[data-account-group-filter]');
     if (!button) return;
-    state.accountGroupFilter = button.dataset.accountGroupFilter || 'all';
+    const targetFilter = button.dataset.accountGroupFilter;
+    state.accountGroupFilter = state.accountGroupFilter === targetFilter ? 'all' : (targetFilter || 'all');
     renderAccountGroups();
     renderAccounts();
   });

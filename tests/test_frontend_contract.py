@@ -290,11 +290,11 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="modalAccountGroup"',
             'id="accountGroupMembers"',
             'id="summaryAccountGroupSelect"',
-            'id="summaryGroupScopeLabel"',
             'data-summary-column="custom_name"',
             'data-summary-column="note"',
         ):
             self.assertIn(contract, self.index + self.script)
+        self.assertNotIn('id="summaryGroupScopeLabel"', self.index)
 
         for contract in (
             "apiRequest('/api/account-groups')",

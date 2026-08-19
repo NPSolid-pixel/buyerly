@@ -511,8 +511,8 @@ code, .mono {
 }
 
 .account-groups-panel-head h3 { margin: 1px 0 2px; font-size: 13px; }
-.account-groups-panel-head p { color: var(--tg-hint); font-size: 10px; line-height: 1.45; }
 .account-groups-bar { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+.account-groups-bar:empty { display: none; }
 .account-groups-bar::-webkit-scrollbar { display: none; }
 
 .account-group-filter {
@@ -1536,16 +1536,17 @@ input:checked + .slider:before {
 }
 
 .summary-scope-control {
-  display: grid;
-  grid-template-columns: auto minmax(150px, 220px);
+  display: inline-flex;
   align-items: center;
-  gap: 3px 8px;
+  gap: 8px;
   min-width: 0;
 }
 
-.summary-scope-control label { color: var(--tg-hint); font-size: 10px; font-weight: 600; }
+.summary-scope-control label { color: var(--tg-hint); font-size: 10px; font-weight: 600; white-space: nowrap; }
 .summary-scope-control select {
   min-height: 30px;
+  min-width: 150px;
+  max-width: 220px;
   padding: 5px 28px 5px 8px;
   color: var(--tg-text);
   background: var(--tg-sec-bg);
@@ -1554,7 +1555,6 @@ input:checked + .slider:before {
   font: inherit;
   font-size: 11px;
 }
-.summary-scope-control > span { grid-column: 1 / -1; color: var(--tg-hint); font-size: 9px; }
 
 .summary-note-cell { max-width: 280px; color: var(--tg-hint); font-size: 10px; line-height: 1.4; white-space: normal; }
 .summary-custom-name-cell { color: var(--tg-text); font-weight: 600; }
@@ -2149,9 +2149,8 @@ input:checked + .slider:before {
   .summary-page-header h2 { font-size: 18px; }
   .summary-page-header .btn-fetch-summary span { display: none; }
   .summary-toolbar { align-items: flex-start; flex-direction: column; }
-  .summary-scope-control { width: 100%; grid-template-columns: 1fr; }
-  .summary-scope-control select { width: 100%; }
-  .summary-scope-control > span { grid-column: auto; }
+  .summary-scope-control { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .summary-scope-control select { flex: 1; min-width: 0; max-width: none; }
   .summary-toolbar .period-switcher { width: 100%; }
   .summary-toolbar .period-btn { padding: 7px 4px; font-size: 10px; }
   .kpi-primary-grid {
@@ -3065,9 +3064,11 @@ input[type=number] {
 .input-password-wrapper {
   position: relative;
   display: flex;
+  width: 100%;
 }
 
 .input-password-wrapper input {
+  width: 100%;
   padding-right: 40px;
 }
 
@@ -4230,6 +4231,8 @@ input[type=number] {
 }
 
 .login-form .form-control {
+  width: 100%;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
@@ -4248,6 +4251,30 @@ input[type=number] {
 
 .login-form .form-control::placeholder {
   color: rgba(255, 255, 255, 0.25);
+}
+
+/* Chrome / Safari / Edge autofill dark theme override */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #1b1c22 inset !important;
+  -webkit-text-fill-color: #f1f1f3 !important;
+  caret-color: #f1f1f3 !important;
+  transition: background-color 5000s ease-in-out 0s;
+  border-radius: inherit;
+}
+
+.login-form .form-control:-webkit-autofill,
+.login-form .form-control:-webkit-autofill:hover,
+.login-form .form-control:-webkit-autofill:focus,
+.login-form .form-control:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #1e2029 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
 }
 
 .login-form .btn-primary {
