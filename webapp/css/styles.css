@@ -490,7 +490,7 @@ code, .mono {
 .home-canvas {
   display: flex;
   justify-content: center;
-  padding-top: 48px;
+  padding-top: 56px;
   width: 100%;
 }
 
@@ -499,31 +499,33 @@ code, .mono {
   max-width: 680px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
 }
 
 .greeting-title {
-  font-size: 26px;
-  font-weight: 700;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 24px;
   color: var(--text-primary);
-  letter-spacing: -0.03em;
-  margin-bottom: 2px;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
 }
 
 .ai-prompt-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
-  padding: 16px 18px 12px 18px;
+  position: relative;
+  background-color: #FFFFFF;
+  border-radius: 14px;
+  box-shadow: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px inset, rgba(0, 0, 0, 0.04) 0px 12px 30px 0px;
+  cursor: text;
+  transition: box-shadow 140ms ease-in;
+  padding: 12px 14px 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  transition: all var(--transition-normal);
+  gap: 10px;
 }
 .ai-prompt-card:focus-within {
-  border-color: var(--brand-accent);
-  box-shadow: 0 0 0 3px rgba(245, 163, 0, 0.15), 0 4px 20px -2px rgba(0, 0, 0, 0.06);
+  box-shadow: rgba(245, 163, 0, 0.35) 0px 0px 0px 1.5px inset, rgba(0, 0, 0, 0.04) 0px 12px 30px 0px;
+  transition: box-shadow 80ms ease-in;
 }
 
 .prompt-textarea {
@@ -531,70 +533,75 @@ code, .mono {
   border: none;
   background: transparent;
   outline: none;
-  font-family: inherit;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   resize: none;
-  min-height: 84px;
-  line-height: 1.5;
+  min-height: 76px;
+  line-height: 22px;
+  padding: 0;
+  margin: 0;
 }
 .prompt-textarea::placeholder {
-  color: var(--text-muted);
+  color: rgba(0, 0, 0, 0.4);
 }
 
 .prompt-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-subtle);
+  padding-top: 8px;
 }
 
 .model-selector-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 10px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
+  height: 28px;
+  padding: 0 9px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   user-select: none;
   transition: all var(--transition-fast);
 }
 .model-selector-pill:hover {
-  background: var(--bg-active);
-  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .prompt-actions-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .icon-action-btn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
+  color: rgba(0, 0, 0, 0.45);
+  background: transparent;
+  border: none;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 .icon-action-btn:hover {
-  background: var(--bg-hover);
+  background: rgba(0, 0, 0, 0.04);
   color: var(--text-primary);
 }
 
 .send-btn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
   background: var(--brand-accent);
   color: #FFF;
@@ -603,8 +610,8 @@ code, .mono {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: 0 1px 3px rgba(245, 163, 0, 0.3);
+  transition: background-color 100ms ease;
+  box-shadow: inset 0px 0px 0px 1px rgba(0, 0, 0, 0.06), 0px 2px 4px -2px rgba(245, 163, 0, 0.12), 0px 3px 6px -2px rgba(245, 163, 0, 0.08);
 }
 .send-btn:hover {
   background: var(--brand-accent-hover);
