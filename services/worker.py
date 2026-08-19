@@ -12,6 +12,10 @@ from core.runtime import configure_logging
 from scheduler.worker import MonitoringWorker
 
 
+async def _touch_heartbeat() -> None:
+    Path("/tmp/buyerly-worker-heartbeat").touch()
+
+
 async def main() -> None:
     logger = configure_logging("worker")
     if not settings.BOT_TOKEN:
@@ -29,7 +33,20 @@ async def main() -> None:
         telegram_notifier=notifier.send_alert
     )
 
+    heartbeat_file = Path("/tmp/buyerly-worker-heartbeat")
+    heartbeat_file.touch()
+    Path("/tmp/buyerly-worker-ready").touch()
+
     scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        _touch_heartbeat,
+        "interval",
+        seconds=10,
+        id="heartbeat_job",
+        next_run_time=datetime.now(timezone.utc),
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.add_job(
         monitoring_worker.run_cycle,
         "interval",
@@ -49,7 +66,6 @@ async def main() -> None:
         coalesce=True,
     )
     scheduler.start()
-    Path("/tmp/buyerly-worker-ready").touch()
     logger.info(
         "Monitoring and account day-boundary workers started with one-minute dispatch ticks"
     )
@@ -66,6 +82,8 @@ async def main() -> None:
         await stop_event.wait()
     finally:
         scheduler.shutdown(wait=False)
+        heartbeat_file.unlink(missing_ok=True)
+        Path("/tmp/buyerly-worker-ready").unlink(missing_ok=True)
         await monitoring_worker.meta_client.aclose()
         await day_boundary_worker.meta_client.aclose()
         await bot.session.close()
