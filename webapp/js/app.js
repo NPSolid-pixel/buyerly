@@ -436,15 +436,8 @@
     if (isShowing) {
       dropdown.classList.remove('show');
     } else {
-      dropdown.classList.add('show');
       renderWorkspacesDropdown();
-      const closeHandler = function (e) {
-        if (!dropdown.contains(e.target) && !document.getElementById('workspaceBtn')?.contains(e.target)) {
-          dropdown.classList.remove('show');
-          document.removeEventListener('click', closeHandler);
-        }
-      };
-      setTimeout(() => document.addEventListener('click', closeHandler), 10);
+      dropdown.classList.add('show');
     }
   };
 
@@ -4996,8 +4989,7 @@
 
     if (workspaceBtn && workspaceDropdown) {
       workspaceBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        workspaceDropdown.classList.toggle('show');
+        window.toggleWorkspaceDropdown(e);
       });
       document.addEventListener('click', (e) => {
         if (!workspaceDropdown.contains(e.target) && !workspaceBtn.contains(e.target)) {
