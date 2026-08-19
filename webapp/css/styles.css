@@ -511,8 +511,8 @@ code, .mono {
 }
 
 .account-groups-panel-head h3 { margin: 1px 0 2px; font-size: 13px; }
-.account-groups-panel-head p { color: var(--tg-hint); font-size: 10px; line-height: 1.45; }
 .account-groups-bar { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+.account-groups-bar:empty { display: none; }
 .account-groups-bar::-webkit-scrollbar { display: none; }
 
 .account-group-filter {
