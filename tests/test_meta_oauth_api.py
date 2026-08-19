@@ -44,9 +44,9 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
         settings.META_APP_ID = "906676569173031"
         settings.META_APP_SECRET = "test-app-secret"
         settings.META_LOGIN_CONFIG_ID = "config-123"
-        settings.META_OAUTH_REDIRECT_URI = "https://smattrades.com/api/meta/oauth/callback"
+        settings.META_OAUTH_REDIRECT_URI = "https://buyerly.app/api/meta/oauth/callback"
         settings.META_TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode("ascii")
-        settings.WEBAPP_URL = "https://smattrades.com"
+        settings.WEBAPP_URL = "https://buyerly.app"
 
         async with self.sessions() as session:
             user = TelegramUser(

@@ -4,7 +4,7 @@
 
 ## Базовый адрес и авторизация
 
-Production: `https://smattrades.com`.
+Production: `https://buyerly.app`.
 
 Кроме входа и healthcheck, каждый `/api/*` endpoint требует один из способов авторизации:
 
@@ -239,7 +239,7 @@ View payload принимает `view_mode` (`all`, `overview`, `delivery`, `tra
 Пример безопасного чтения профиля:
 
 ```bash
-curl -fsS https://smattrades.com/api/me \
+curl -fsS https://buyerly.app/api/me \
   -H 'Authorization: Bearer WEB_TOKEN_PLACEHOLDER'
 ```
 

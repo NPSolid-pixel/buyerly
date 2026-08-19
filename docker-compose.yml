@@ -6,7 +6,7 @@ x-app: &app
   environment: &app-environment
     APP_VERSION: ${APP_VERSION:-local}
     DATABASE_URL: postgresql+asyncpg://buyerly:${POSTGRES_PASSWORD:-buyerly-local-change-me}@db:5432/buyerly
-    WEBAPP_URL: ${WEBAPP_URL:-https://smattrades.com}
+    WEBAPP_URL: ${WEBAPP_URL:-https://buyerly.app}
     TZ: UTC
   volumes:
     - ./logs:/app/logs
@@ -123,7 +123,7 @@ services:
     environment:
       APP_VERSION: ${APP_VERSION:-local}
       DATABASE_URL: sqlite+aiosqlite:////app/data/mediabuyer.db
-      WEBAPP_URL: ${WEBAPP_URL:-https://smattrades.com}
+      WEBAPP_URL: ${WEBAPP_URL:-https://buyerly.app}
       TZ: UTC
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3).read()"]

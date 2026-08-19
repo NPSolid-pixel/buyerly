@@ -39,7 +39,7 @@ class TestDeployContract(unittest.TestCase):
 
     def test_production_mini_app_has_https_url(self):
         self.assertIn(
-            "WEBAPP_URL: ${WEBAPP_URL:-https://smattrades.com}",
+            "WEBAPP_URL: ${WEBAPP_URL:-https://buyerly.app}",
             self.compose,
         )
 

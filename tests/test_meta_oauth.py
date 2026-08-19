@@ -20,7 +20,7 @@ class TestMetaOAuthClient(unittest.IsolatedAsyncioTestCase):
         self.client = MetaOAuthClient(
             app_id="906676569173031",
             app_secret="app-secret",
-            redirect_uri="https://smattrades.com/api/meta/oauth/callback",
+            redirect_uri="https://buyerly.app/api/meta/oauth/callback",
             graph_version="v26.0",
             login_config_id="config-123",
         )
@@ -36,7 +36,7 @@ class TestMetaOAuthClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query["state"], ["one-time-state"])
         self.assertEqual(
             query["redirect_uri"],
-            ["https://smattrades.com/api/meta/oauth/callback"],
+            ["https://buyerly.app/api/meta/oauth/callback"],
         )
 
     async def test_debug_token_rejects_a_token_for_another_app(self):

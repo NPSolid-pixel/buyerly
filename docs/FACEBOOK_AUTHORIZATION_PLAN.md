@@ -12,13 +12,13 @@
 
 Backend, база и интерфейс AUTH-01…AUTH-04 выпущены в production. Buyerly умеет начать официальный Facebook Login for Business, безопасно принять callback, зашифровать token, найти все доступные через `/me/adaccounts` кабинеты, сгруппировать их по Business Manager и импортировать выбранные без автоматического включения правил.
 
-В production заданы Graph API `v26.0`, App ID, App Secret, Login Configuration ID, callback `https://smattrades.com/api/meta/oauth/callback` и отдельный ключ шифрования. Значение App Secret хранится только в серверном окружении и не попадает в Git, документацию или frontend. Meta подтвердила пару App ID/App Secret через server-side client credentials; OAuth URL, публичный callback и внутренняя диагностика конфигурации также проверены.
+В production заданы Graph API `v26.0`, App ID, App Secret, Login Configuration ID, callback `https://buyerly.app/api/meta/oauth/callback` и отдельный ключ шифрования. Значение App Secret хранится только в серверном окружении и не попадает в Git, документацию или frontend. Meta подтвердила пару App ID/App Secret через server-side client credentials; OAuth URL, публичный callback и внутренняя диагностика конфигурации также проверены.
 
 Точные действия в Meta Dashboard для первого теста:
 
 1. Configuration ID установлен в production. При первом реальном входе проверить фактически выданные scopes `ads_read`, `ads_management` и `business_management` через сохранённую диагностику token.
-2. `[выполнено]` В `Valid OAuth Redirect URIs` добавлен точный адрес `https://smattrades.com/api/meta/oauth/callback`; Web OAuth, HTTPS и Strict Mode включены.
-3. `[выполнено]` В `App settings → Basic` добавлен App Domain `smattrades.com`.
+2. `[выполнено]` В `Valid OAuth Redirect URIs` добавлен точный адрес `https://buyerly.app/api/meta/oauth/callback`; Web OAuth, HTTPS и Strict Mode включены.
+3. `[выполнено]` В `App settings → Basic` добавлен App Domain `buyerly.app`.
 4. `[выполнено]` App Secret введён напрямую в production `.env`; API, bot, worker, web и PostgreSQL после перезапуска здоровы.
 5. `[следующий шаг]` Провести пилот на Facebook-профиле с ролью в приложении. Обычные внешние профили проверять после Advanced Access/Access Verification, если этого потребует Dashboard.
 
@@ -68,10 +68,10 @@ System User Token не удаляется в первом релизе. Он о�
 - [ ] Состояние Business Verification.
 - [ ] Состояние проверки домена Buyerly.
 - [ ] Заменить рабочее название `API COTROL`, добавить иконку и категорию; contact email заполнен.
-- [x] App Domain `smattrades.com` добавлен.
-- [x] Выпустить собственную Privacy Policy Buyerly: `https://smattrades.com/privacy`.
-- [x] Выпустить собственные Terms of Service Buyerly: `https://smattrades.com/terms`.
-- [x] Выпустить Data Deletion Instructions Buyerly: `https://smattrades.com/data-deletion`.
+- [x] App Domain `buyerly.app` добавлен.
+- [x] Выпустить собственную Privacy Policy Buyerly: `https://buyerly.app/privacy`.
+- [x] Выпустить собственные Terms of Service Buyerly: `https://buyerly.app/terms`.
+- [x] Выпустить Data Deletion Instructions Buyerly: `https://buyerly.app/data-deletion`.
 - [ ] Указать три собственные ссылки в `App settings → Basic` вместо временных ссылок Facebook.
 - [ ] Deauthorize callback, если он доступен в выбранном use case.
 
@@ -83,7 +83,7 @@ System User Token не удаляется в первом релизе. Он о�
 - [x] Configuration ID production-входа создан и установлен на сервере.
 - [ ] Какой тип token выдаёт конфигурация.
 - [ ] Какие разрешения выбраны внутри конфигурации.
-- [x] Exact Valid OAuth Redirect URI `https://smattrades.com/api/meta/oauth/callback` добавлен.
+- [x] Exact Valid OAuth Redirect URI `https://buyerly.app/api/meta/oauth/callback` добавлен.
 - [ ] Отдельный redirect URI для локального или staging-теста.
 - [x] Client OAuth Login, Web OAuth Login, Enforce HTTPS и Strict Mode включены.
 - [ ] Как Meta показывает повторное согласие и частично выданные разрешения.
