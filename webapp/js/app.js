@@ -459,6 +459,15 @@
       </div>`;
   }
 
+  function pluralize(n, one, few, many) {
+    const abs = Math.abs(n) % 100;
+    const rem = abs % 10;
+    if (abs > 10 && abs < 20) return many;
+    if (rem > 1 && rem < 5) return few;
+    if (rem === 1) return one;
+    return many;
+  }
+
   function renderAccounts() {
     const listEl = document.getElementById('accountsList');
     const emptyEl = document.getElementById('accountsEmptyState');
@@ -498,7 +507,6 @@
     if (sbTotal) sbTotal.textContent = totalCount;
     if (sbAccounts) sbAccounts.textContent = totalCount;
 
-
     if (filtered.length === 0) {
       listEl.innerHTML = '';
       if (emptyEl) emptyEl.classList.remove('hidden');
@@ -513,9 +521,9 @@
       const displayName = accountDisplayName(acc);
       const noteText = String(acc.note || '').trim();
       const rawSpend = acc.today_spend || (acc.insights && acc.insights.spend) || 0;
-      const spendVal = formatCurrency(rawSpend, acc.currency || 'USD');
+      const spendVal = formatMoneyOrDash(rawSpend, acc.currency || 'USD');
       const leadsVal = acc.today_leads !== undefined ? acc.today_leads : (acc.insights?.leads !== undefined ? acc.insights.leads : '—');
-      const cplVal = acc.today_cpl !== undefined ? formatCurrency(acc.today_cpl, acc.currency || 'USD') : (acc.insights?.cpl !== undefined ? formatCurrency(acc.insights.cpl, acc.currency || 'USD') : '—');
+      const cplVal = acc.today_cpl !== undefined ? formatMoneyOrDash(acc.today_cpl, acc.currency || 'USD') : (acc.insights?.cpl !== undefined ? formatMoneyOrDash(acc.insights.cpl, acc.currency || 'USD') : '—');
       
       const metaPillClass = metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red');
       const autoPillClass = acc.rules_enabled ? 'green' : 'amber';
