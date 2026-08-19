@@ -2244,8 +2244,7 @@
 
   function renderSummaryGroupSelector() {
     const select = document.getElementById('summaryAccountGroupSelect');
-    const label = document.getElementById('summaryGroupScopeLabel');
-    if (!select || !label) return;
+    if (!select) return;
     const selectedId = state.summaryView.filters.group_id || 'all';
     const selectedExists = selectedId === 'all' || state.accountGroups.some(group => String(group.id) === selectedId);
     if (!selectedExists) state.summaryView.filters.group_id = 'all';
@@ -2255,10 +2254,6 @@
       ...state.accountGroups.map(group => `<option value="${group.id}">${escapeHtml(group.name)} (${group.accounts_count || 0})</option>`)
     ].join('');
     select.value = activeId;
-    const group = state.accountGroups.find(item => String(item.id) === activeId);
-    label.textContent = group
-      ? `${group.accounts_count || 0} кабинетов · переключение без нового запроса в Meta`
-      : `Все подключённые кабинеты · ${state.accounts.length}`;
   }
 
   function renderSummaryTableHeader() {

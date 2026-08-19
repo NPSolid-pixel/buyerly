@@ -1536,16 +1536,17 @@ input:checked + .slider:before {
 }
 
 .summary-scope-control {
-  display: grid;
-  grid-template-columns: auto minmax(150px, 220px);
+  display: inline-flex;
   align-items: center;
-  gap: 3px 8px;
+  gap: 8px;
   min-width: 0;
 }
 
-.summary-scope-control label { color: var(--tg-hint); font-size: 10px; font-weight: 600; }
+.summary-scope-control label { color: var(--tg-hint); font-size: 10px; font-weight: 600; white-space: nowrap; }
 .summary-scope-control select {
   min-height: 30px;
+  min-width: 150px;
+  max-width: 220px;
   padding: 5px 28px 5px 8px;
   color: var(--tg-text);
   background: var(--tg-sec-bg);
@@ -1554,7 +1555,6 @@ input:checked + .slider:before {
   font: inherit;
   font-size: 11px;
 }
-.summary-scope-control > span { grid-column: 1 / -1; color: var(--tg-hint); font-size: 9px; }
 
 .summary-note-cell { max-width: 280px; color: var(--tg-hint); font-size: 10px; line-height: 1.4; white-space: normal; }
 .summary-custom-name-cell { color: var(--tg-text); font-weight: 600; }
@@ -2149,9 +2149,8 @@ input:checked + .slider:before {
   .summary-page-header h2 { font-size: 18px; }
   .summary-page-header .btn-fetch-summary span { display: none; }
   .summary-toolbar { align-items: flex-start; flex-direction: column; }
-  .summary-scope-control { width: 100%; grid-template-columns: 1fr; }
-  .summary-scope-control select { width: 100%; }
-  .summary-scope-control > span { grid-column: auto; }
+  .summary-scope-control { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .summary-scope-control select { flex: 1; min-width: 0; max-width: none; }
   .summary-toolbar .period-switcher { width: 100%; }
   .summary-toolbar .period-btn { padding: 7px 4px; font-size: 10px; }
   .kpi-primary-grid {
