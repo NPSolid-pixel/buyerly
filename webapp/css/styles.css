@@ -485,6 +485,132 @@ code, .mono {
 }
 
 /* ==========================================================
+   TAB: HOME (ATTIO CANVAS & AI PROMPT CARD)
+   ========================================================== */
+.home-canvas {
+  display: flex;
+  justify-content: center;
+  padding-top: 48px;
+  width: 100%;
+}
+
+.home-content-box {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.greeting-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  margin-bottom: 2px;
+}
+
+.ai-prompt-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  padding: 16px 18px 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: all var(--transition-normal);
+}
+.ai-prompt-card:focus-within {
+  border-color: var(--brand-accent);
+  box-shadow: 0 0 0 3px rgba(245, 163, 0, 0.15), 0 4px 20px -2px rgba(0, 0, 0, 0.06);
+}
+
+.prompt-textarea {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  resize: none;
+  min-height: 84px;
+  line-height: 1.5;
+}
+.prompt-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.prompt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.model-selector-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+.model-selector-pill:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.prompt-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-action-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.icon-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.send-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: var(--brand-accent);
+  color: #FFF;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(245, 163, 0, 0.3);
+}
+.send-btn:hover {
+  background: var(--brand-accent-hover);
+}
+
+/* ==========================================================
    BUTTONS & COMMON UI ELEMENTS
    ========================================================== */
 .btn {

@@ -55,6 +55,7 @@
   const SUMMARY_COLUMN_MIN_WIDTH = 72;
   const SUMMARY_COLUMN_MAX_WIDTH = 420;
   const TAB_ROUTES = Object.freeze({
+    home: '/home',
     accounts: '/accounts',
     rules: '/rules',
     summary: '/summary',
@@ -65,8 +66,9 @@
   const ROUTE_TABS = Object.freeze(Object.fromEntries(
     Object.entries(TAB_ROUTES).map(([tab, route]) => [route, tab])
   ));
-  const LEGACY_ROUTE_TABS = Object.freeze({ '/': 'accounts', '/dashboard': 'summary' });
+  const LEGACY_ROUTE_TABS = Object.freeze({ '/': 'home', '/dashboard': 'home' });
   const TAB_PAGE_TITLES = Object.freeze({
+    home: 'Home — Buyerly',
     accounts: 'Мои кабинеты — Buyerly',
     rules: 'Правила — Buyerly',
     summary: 'Сводка — Buyerly',
@@ -254,7 +256,7 @@
 
   function tabFromLocation(pathname = window.location.pathname) {
     const path = normalizeAppPath(pathname);
-    return ROUTE_TABS[path] || LEGACY_ROUTE_TABS[path] || 'accounts';
+    return ROUTE_TABS[path] || LEGACY_ROUTE_TABS[path] || 'home';
   }
 
   function isKnownAppPath(pathname = window.location.pathname) {
@@ -308,6 +310,7 @@
     const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
     if (breadcrumbArea) {
       const titles = {
+        home: '<span style="font-size:14px;margin-right:6px;">🏠</span><span>Home</span>',
         accounts: '<span style="font-size:14px;margin-right:6px;">📋</span><span>Все кабинеты</span>',
         rules: '<span style="font-size:14px;margin-right:6px;">🛡️</span><span>Правила</span>',
         summary: '<span style="font-size:14px;margin-right:6px;">📊</span><span>Сводка</span>',
@@ -324,7 +327,9 @@
     });
 
     // Auto-fetch data on tab switch
-    if (tabName === 'accounts') {
+    if (tabName === 'home') {
+      updateHomeGreeting();
+    } else if (tabName === 'accounts') {
       loadAccounts();
     } else if (tabName === 'rules') {
       loadRulesTab();
@@ -345,6 +350,20 @@
     }
     window.scrollTo({ top: 0, behavior: options.scrollBehavior || 'smooth' });
   };
+
+  // ==========================================================
+  // TAB: HOME (ГЛАВНАЯ)
+  // ==========================================================
+  function updateHomeGreeting() {
+    const el = document.getElementById('homeGreetingTitle');
+    if (!el) return;
+    const hour = new Date().getHours();
+    let greeting = 'Good morning';
+    if (hour >= 12 && hour < 18) greeting = 'Good afternoon';
+    else if (hour >= 18 || hour < 5) greeting = 'Good evening';
+    const name = state.user?.username || state.user?.full_name || 'Buyerly';
+    el.textContent = `${greeting}, ${name}.`;
+  }
 
   // ==========================================================
   // TAB 1: ACCOUNTS (МОИ КАБИНЕТЫ)
@@ -4481,7 +4500,7 @@
       const currentPath = normalizeAppPath(window.location.pathname);
       const isLoginPath = currentPath === '/sign-in' || currentPath === '/login';
       const initialPath = isLoginPath ? consumeReturnRoute() : currentPath;
-      const initialTab = tabFromLocation(initialPath || TAB_ROUTES.accounts);
+      const initialTab = tabFromLocation(initialPath || TAB_ROUTES.home);
 
       // Restore the requested page only after authentication succeeds.
       startSummaryAutoRefresh();

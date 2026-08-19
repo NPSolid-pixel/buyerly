@@ -92,6 +92,7 @@ def create_app() -> FastAPI:
         @app.get("/")
         @app.get("/sign-in")
         @app.get("/login")
+        @app.get("/home")
         @app.get("/dashboard")
         @app.get("/accounts")
         @app.get("/rules")
