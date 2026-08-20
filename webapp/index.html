@@ -162,7 +162,7 @@
 
       <!-- Все кабинеты (pinned All list) -->
       <div class="list-item nav-tab" data-tab="accounts" data-group-filter="all" id="navGroupAll" onclick="window.switchAccountGroup('all');">
-        <span class="list-flag">📋</span>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
         <span>Все кабинеты</span>
         <span class="list-count" id="sidebarTotalCount">0</span>
       </div>
@@ -297,7 +297,8 @@
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
             <button id="btnGroupSettings" class="btn btn-secondary hidden" type="button" onclick="window.openEditCurrentGroup()">
-              ⚙️ Настройки группы
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              Настройки группы
             </button>
             <button class="btn btn-primary" onclick="window.switchTab('add')">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1220,11 +1221,11 @@
             <div class="form-group" style="margin-bottom: 12px;">
               <label for="ruleActionSelect">Действие (Action):</label>
               <select id="ruleActionSelect" class="form-select dark-select">
-                <option value="turn_off">🔴 Turn off ad sets (Выключить адсеты)</option>
-                <option value="notify_only">🔔 Send notification only (Только прислать пуш)</option>
-                <option value="turn_on">🟢 Turn on ad sets (Включить адсеты)</option>
-                <option value="increase_budget">📈 Increase daily budget (Увеличить бюджет)</option>
-                <option value="decrease_budget">📉 Decrease daily budget (Уменьшить бюджет)</option>
+                <option value="turn_off">Turn off ad sets (Выключить адсеты)</option>
+                <option value="notify_only">Send notification only (Только прислать пуш)</option>
+                <option value="turn_on">Turn on ad sets (Включить адсеты)</option>
+                <option value="increase_budget">Increase daily budget (Увеличить бюджет)</option>
+                <option value="decrease_budget">Decrease daily budget (Уменьшить бюджет)</option>
               </select>
             </div>
 
@@ -1345,7 +1346,7 @@
                 </label>
                 <div class="settings-toggle-text">
                   <span class="settings-field-label">Уведомление в Telegram</span>
-                  <span class="tg-status-subtext">🟢 Бот подключен (@buyerly_bot)</span>
+                  <span class="tg-status-subtext"><span class="status-dot dot-success" style="display:inline-block; margin-right:4px;"></span>Бот подключен (@buyerly_bot)</span>
                 </div>
               </div>
             </div>

@@ -376,14 +376,14 @@
     const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
     if (breadcrumbArea) {
       const titles = {
-        home: '<span style="font-size:14px;margin-right:6px;">🏠</span><span>Home</span>',
-        fb_accounts: '<span style="font-size:14px;margin-right:6px;">👤</span><span>Facebook Аккаунты</span>',
-        accounts: '<span style="font-size:14px;margin-right:6px;">📋</span><span>Все кабинеты</span>',
-        rules: '<span style="font-size:14px;margin-right:6px;">🛡️</span><span>Правила</span>',
-        summary: '<span style="font-size:14px;margin-right:6px;">📊</span><span>Сводка</span>',
-        logs: '<span style="font-size:14px;margin-right:6px;">📜</span><span>Логи</span>',
-        add: '<span style="font-size:14px;margin-right:6px;">➕</span><span>Добавить кабинеты</span>',
-        settings: '<span style="font-size:14px;margin-right:6px;">⚙️</span><span>Настройки</span>'
+        home: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Home</span>',
+        fb_accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Facebook Аккаунты</span>',
+        accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Все кабинеты</span>',
+        rules: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span>',
+        summary: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Сводка</span>',
+        logs: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Логи</span>',
+        add: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v16m8-8H4"/></svg><span>Добавить кабинеты</span>',
+        settings: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Настройки</span>'
       };
       breadcrumbArea.innerHTML = `<div class="breadcrumb-title">${titles[tabName] || 'Buyerly'}</div>`;
     }
@@ -756,7 +756,7 @@
     const buttons = state.accountGroups.map(group => (
       `<span class="account-group-filter-wrap">
         <button type="button" class="account-group-filter ${state.accountGroupFilter === String(group.id) ? 'active' : ''}" data-account-group-filter="${group.id}" onclick="window.switchAccountGroup('${group.id}')" title="${escapeHtml(group.description || '')}"><span>${escapeHtml(group.name)}</span><b>${group.accounts_count || 0}</b></button>
-        <button type="button" class="account-group-edit" onclick="window.openAccountGroupEditor(${group.id})" aria-label="Изменить группу ${escapeHtml(group.name)}" title="Изменить состав группы">✎</button>
+        <button type="button" class="account-group-edit" onclick="window.openAccountGroupEditor(${group.id})" aria-label="Изменить группу ${escapeHtml(group.name)}" title="Изменить состав группы"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
       </span>`
     ));
     container.innerHTML = buttons.join('');
@@ -773,7 +773,7 @@
       const isActive = state.activeTab === 'accounts' && String(state.accountGroupFilter) === String(group.id);
       return `
         <div class="list-item nav-tab ${isActive ? 'active' : ''}" data-tab="accounts" data-group-filter="${group.id}" id="navGroup-${group.id}" onclick="window.switchAccountGroup('${group.id}');">
-          <span class="list-flag">📂</span>
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${escapeHtml(group.name)}</span>
           <span class="list-count">${group.accounts_count || 0}</span>
         </div>
@@ -806,7 +806,7 @@
       const group = (state.accountGroups || []).find(g => String(g.id) === String(state.accountGroupFilter));
       if (group) {
         if (eyebrow) eyebrow.textContent = `Группа кабинетов (${group.accounts_count || 0} шт.)`;
-        if (title) title.textContent = `📂 ${group.name}`;
+        if (title) title.textContent = group.name;
         if (subtitle) subtitle.textContent = group.description || 'Кабинеты, входящие в эту группу.';
         if (btnSettings) {
           btnSettings.classList.remove('hidden');
@@ -987,7 +987,7 @@
     listEl.innerHTML = state.accountGroups.map(group => `
       <div class="dropdown-item" onclick="window.assignSelectedAccountsToGroup(${group.id});">
         <div class="dropdown-item-left">
-          <span>📂</span>
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           <span>${escapeHtml(group.name)}</span>
         </div>
         <span class="list-count" style="font-size: 11px;">${group.accounts_count || 0}</span>
@@ -1142,7 +1142,7 @@
           </td>
           <td style="min-width: 240px;">
             <div class="cell-account-box">
-              <span style="font-size: 15px;">🏛️</span>
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:var(--text-muted); flex-shrink: 0;"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="1.8"/><path d="M3 9h18M9 21V9" stroke-width="1.8"/></svg>
               <div>
                 <div class="account-text-name">${escapeHtml(displayName)}</div>
                 <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID" style="cursor:pointer;">
@@ -1189,7 +1189,7 @@
           </td>
           <td>
             <div style="display: flex; align-items: center; gap: 4px;">
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" title="Изменить заметку и название" style="padding: 2px 6px;">✏️</button>
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" title="Изменить заметку и название" style="padding: 2px 6px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
               <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')" title="Подробнее" style="padding: 2px 7px; font-size: 11px;">Инфо</button>
             </div>
           </td>
@@ -1362,8 +1362,8 @@
           </td>
           <td style="text-align: right;">
             <div style="display: inline-flex; align-items: center; gap: 4px;">
-              <button class="btn btn-secondary btn-xs" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты" style="padding: 3px 6px;">🔄</button>
-              <button class="btn btn-secondary btn-xs" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение" style="padding: 3px 6px; color: #BA2525;">✕</button>
+              <button class="btn btn-secondary btn-xs" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты" style="padding: 3px 6px;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
+              <button class="btn btn-secondary btn-xs" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение" style="padding: 3px 6px; color: #BA2525;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
           </td>
         </tr>
@@ -1715,11 +1715,11 @@
     emptyEl.classList.add('hidden');
 
     const actionBadgeMap = {
-      'turn_off': { label: '🔴 Выключить адсеты', class: 'rule-action-turn_off' },
-      'notify_only': { label: '🔔 Только уведомление', class: 'rule-action-notify_only' },
-      'turn_on': { label: '🟢 Включить адсеты', class: 'rule-action-turn_on' },
-      'increase_budget': { label: '📈 Увеличить бюджет', class: 'rule-action-increase_budget' },
-      'decrease_budget': { label: '📉 Уменьшить бюджет', class: 'rule-action-decrease_budget' }
+      'turn_off': { label: 'Выключить адсеты', class: 'rule-action-turn_off' },
+      'notify_only': { label: 'Только уведомление', class: 'rule-action-notify_only' },
+      'turn_on': { label: 'Включить адсеты', class: 'rule-action-turn_on' },
+      'increase_budget': { label: 'Увеличить бюджет', class: 'rule-action-increase_budget' },
+      'decrease_budget': { label: 'Уменьшить бюджет', class: 'rule-action-decrease_budget' }
     };
 
     container.innerHTML = state.presets.map(p => {
@@ -1765,7 +1765,7 @@
       if (p.action === 'increase_budget' || p.action === 'decrease_budget') {
         const sign = p.action === 'increase_budget' ? '+' : '-';
         const cap = p.budget_max_daily > 0 ? ` · Макс: ${p.budget_max_daily} в валюте кабинета/день` : '';
-        budgetInfoHtml = `<div style="font-size:11.5px; color:var(--tg-link); font-weight:600;">💰 Шаг: ${sign}${p.budget_change_percent || 20}%${cap}</div>`;
+        budgetInfoHtml = `<div style="font-size:11.5px; color:var(--tg-link); font-weight:600;">Шаг: ${sign}${p.budget_change_percent || 20}%${cap}</div>`;
       }
 
       return `
@@ -1774,9 +1774,9 @@
             <div>
               <div class="rule-card-title">${escapeHtml(p.name)}</div>
               <div class="rule-card-meta">
-                <span>⏱ Проверка: ${p.check_interval_minutes || 5} мин</span>
+                <span>Проверка: ${p.check_interval_minutes || 5} мин</span>
                 <span>·</span>
-                <span>⏸ Пауза: ${p.cooldown_minutes ? p.cooldown_minutes + ' мин' : 'нет'}</span>
+                <span>Пауза: ${p.cooldown_minutes ? p.cooldown_minutes + ' мин' : 'нет'}</span>
               </div>
             </div>
             <span class="rule-action-badge ${act.class}">${act.label}</span>
@@ -1798,7 +1798,7 @@
           </div>
 
           <div class="rule-card-footer">
-            <span style="font-size:11px; color:var(--tg-hint);">🔔 ${p.notify_tg !== false ? 'Уведомления ВКЛ' : 'Без пушей'}</span>
+            <span style="font-size:11px; color:var(--tg-hint);">${p.notify_tg !== false ? 'Уведомления ВКЛ' : 'Без пушей'}</span>
             <div class="rule-card-actions">
               <button class="btn-rule-action" onclick="window.editPresetFromTab(${p.id})">Редактировать</button>
               <button class="btn-rule-action danger" onclick="window.deletePresetDirectly(${p.id})">Удалить</button>
@@ -2039,7 +2039,7 @@
         return `
           <div class="assign-group-item ${complete ? 'complete' : ''}">
             <div class="assign-group-copy">
-              <b>${complete ? '✓ ' : ''}${escapeHtml(group.name)}</b>
+              <b>${complete ? '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>' : ''}${escapeHtml(group.name)}</b>
               <small>${escapeHtml(detail)}</small>
             </div>
             <button class="btn ${complete ? 'btn-secondary' : 'btn-primary'} btn-sm" ${complete ? 'disabled' : ''} onclick="window.pickRuleGroupForAccount(${group.id})">
@@ -2058,11 +2058,11 @@
       `;
     } else {
       const actionBadgeMap = {
-        'turn_off': '🔴 Стоп',
-        'notify_only': '🔔 Пуш',
-        'turn_on': '🟢 Старт',
-        'increase_budget': '📈 +Бюджет',
-        'decrease_budget': '📉 -Бюджет'
+        'turn_off': 'Стоп',
+        'notify_only': 'Пуш',
+        'turn_on': 'Старт',
+        'increase_budget': '+Бюджет',
+        'decrease_budget': '-Бюджет'
       };
 
       listEl.innerHTML = state.presets.map(p => {
@@ -2072,7 +2072,7 @@
         return `
           <div class="assign-preset-item ${isCurrent ? 'active' : ''}" onclick="window.${isCurrent ? 'detachRuleFromCurrentAccount' : 'pickRuleForAccount'}(${p.id})">
             <div class="assign-preset-info">
-              <div class="assign-preset-title">${isCurrent ? '✓ ' : ''}${escapeHtml(p.name)}</div>
+              <div class="assign-preset-title">${isCurrent ? '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>' : ''}${escapeHtml(p.name)}</div>
               <div class="assign-preset-sub">${actLabel} · ${condCount} условий · каждые ${p.check_interval_minutes || 5}м</div>
             </div>
             <button class="btn btn-secondary btn-sm" style="pointer-events:none;">
@@ -2163,7 +2163,7 @@
 
     listEl.innerHTML = state.presets.map(p => {
       const isSelected = selectedId === p.id;
-      const actionBadge = p.action === 'turn_off' ? '🔴 Стоп' : (p.action === 'notify_only' ? '🔔 Пуш' : '🟢 Старт');
+      const actionBadge = p.action === 'turn_off' ? 'Стоп' : (p.action === 'notify_only' ? 'Пуш' : (p.action === 'turn_on' ? 'Старт' : (p.action === 'increase_budget' ? '+Бюджет' : '-Бюджет')));
       return `
         <div class="preset-chip-item ${isSelected ? 'active' : ''}" onclick="window.selectPreset(${p.id})" title="${state.ruleBuilderMode === 'edit' ? 'Перейти к редактированию правила' : 'Использовать параметры как шаблон нового правила'}">
           <span class="preset-chip-badge">${actionBadge}</span>
@@ -2462,8 +2462,8 @@
       : '';
     detailsElement.textContent = `Проверять каждые ${interval} мин. Пауза после срабатывания: ${cooldown ? `${cooldown} мин` : 'нет'}. Telegram: ${notify ? 'да' : 'нет'}.${protection}`;
     messagesElement.innerHTML = [
-      ...validation.errors.map(message => `<div class="rule-validation-message error">⛔ ${escapeHtml(message)}</div>`),
-      ...validation.warnings.map(message => `<div class="rule-validation-message warning">⚠️ ${escapeHtml(message)}</div>`)
+      ...validation.errors.map(message => `<div class="rule-validation-message error"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>${escapeHtml(message)}</div>`),
+      ...validation.warnings.map(message => `<div class="rule-validation-message warning"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>${escapeHtml(message)}</div>`)
     ].join('');
 
     const saveButton = document.getElementById('btnSaveLimits');
