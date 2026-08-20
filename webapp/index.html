@@ -552,6 +552,28 @@
           </div>
         </div>
 
+        <!-- Floating Bulk Actions Bar (Attio Style) -->
+        <div id="rulesBulkActionsBar" class="rules-bulk-bar hidden">
+          <div class="rules-bulk-bar-inner">
+            <button type="button" class="rules-bulk-selected-pill" onclick="window.clearRuleSelection()" title="Снять выделение">
+              <span id="rulesBulkCount" class="rules-bulk-count-badge">1</span>
+              <span>Selected</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <div class="rules-bulk-divider"></div>
+            <div class="rules-bulk-actions">
+              <button type="button" class="rules-bulk-btn" onclick="window.openBulkMoveModal(event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                <span>В группу</span>
+              </button>
+              <button type="button" class="rules-bulk-btn danger" onclick="window.bulkDeleteSelectedRules()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <span>Удалить</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Contract elements maintained for backward compatibility -->
         <div id="rulesCardsContainer" class="rules-cards-grid hidden"></div>
         <div id="singleRulesHeading" class="rules-section-heading hidden"></div>

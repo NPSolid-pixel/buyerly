@@ -191,6 +191,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.openAddColumnPopover',
             'window.toggleGroupCollapse',
             'window.selectGroupColor',
+            'window.toggleSelectRule',
+            'window.clearRuleSelection',
+            'window.bulkDeleteSelectedRules',
         ):
             self.assertIn(script_contract, self.script)
 
@@ -206,6 +209,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.rules-add-column-btn',
             '.rule-action-badge',
             '.rule-meta-tag',
+            '.rule-avatar-checkbox',
+            '.rules-bulk-bar',
             '.attio-popover',
             '.choose-rule-card',
             '.color-swatch',

@@ -1927,27 +1927,24 @@ input:checked + .slider:before { transform: translateX(16px); }
 
 /* Kanban Column */
 .rules-column {
-  width: 270px;
-  min-width: 270px;
-  max-width: 270px;
+  width: 268px;
+  min-width: 268px;
+  max-width: 268px;
   flex-shrink: 0;
-  background: rgba(0, 0, 0, 0.025);
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  border-radius: 14px;
+  background: #F6F7F7;
+  border: none;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
-}
-.rules-column:hover {
-  border-color: rgba(0, 0, 0, 0.08);
+  gap: 4px;
+  padding: 8px;
+  transition: background var(--transition-fast);
 }
 .rules-column-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
+  padding: 4px 6px;
   height: 36px;
   background: transparent;
   border-radius: 10px;
@@ -1981,9 +1978,9 @@ input:checked + .slider:before { transform: translateX(16px); }
 .dot-gray, .swatch-gray { background: #9CA3AF; }
 
 .rules-column-title {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #101112;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2017,7 +2014,7 @@ input:checked + .slider:before { transform: translateX(16px); }
 }
 .rules-column-btn:hover {
   background: rgba(0, 0, 0, 0.06);
-  color: var(--text-primary);
+  color: #101112;
 }
 
 .rules-column-body {
@@ -2049,13 +2046,13 @@ input:checked + .slider:before { transform: translateX(16px); }
 /* Add Group Column Button (Attio dashed square [ + ]) */
 .rules-add-column-btn, .rules-add-column-card {
   appearance: none;
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
   flex-shrink: 0;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 16px;
   background: transparent;
   color: var(--text-muted);
   display: flex;
@@ -2076,22 +2073,27 @@ input:checked + .slider:before { transform: translateX(16px); }
 
 /* Attio Kanban Rule Card */
 .rule-card, .rules-kanban-card {
-  background: var(--bg-surface);
+  background: #FFFFFF;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  padding: 8px 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(28, 40, 64, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  cursor: pointer;
+  gap: 8px;
+  cursor: grab;
   user-select: none;
   transition: all 0.15s ease;
 }
 .rule-card:hover, .rules-kanban-card:hover {
-  border-color: rgba(0, 0, 0, 0.16);
+  border-color: rgba(0, 0, 0, 0.15);
   box-shadow: 0 3px 6px -1px rgba(0, 0, 0, 0.07);
   transform: translateY(-1px);
+}
+.rule-card.selected, .rules-kanban-card.selected {
+  border-color: rgba(245, 163, 0, 0.6);
+  background: rgba(245, 163, 0, 0.02);
+  box-shadow: 0 0 0 1px #F5A300, 0 2px 6px rgba(245, 163, 0, 0.12);
 }
 .rule-card.dragging, .rules-kanban-card.dragging {
   opacity: 0.45;
@@ -2108,29 +2110,62 @@ input:checked + .slider:before { transform: translateX(16px); }
 .rule-card-title-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   flex: 1;
 }
-.rule-card-icon {
+
+/* Avatar / Checkbox Circle in Card */
+.rule-avatar-checkbox {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: 50%;
+  background: #F8F9FA;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+  position: relative;
+}
+.rule-avatar-checkbox .rule-avatar-circle {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  background: rgba(0, 0, 0, 0.04);
 }
+.rule-avatar-checkbox .rule-hover-check {
+  display: none;
+}
+.rule-avatar-checkbox:hover {
+  background: #F5A300;
+  border-color: #F5A300;
+  color: #FFFFFF;
+}
+.rule-avatar-checkbox:hover .rule-avatar-circle {
+  display: none;
+}
+.rule-avatar-checkbox:hover .rule-hover-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rule-avatar-checkbox.selected {
+  background: #F5A300;
+  border-color: #F5A300;
+  color: #FFFFFF;
+}
+
 .rule-card-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  color: #101112;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 /* Action Badges */
@@ -2174,22 +2209,36 @@ input:checked + .slider:before { transform: translateX(16px); }
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 11.5px;
+  color: #898A8D;
   padding-top: 0;
   border-top: none;
 }
 .rule-card-meta-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+}
+.rule-attio-icon-btn {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #898A8D;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+.rule-attio-icon-btn:hover {
+  color: #101112;
+  background: rgba(0, 0, 0, 0.05);
 }
 .rule-meta-tag {
   display: inline-flex;
   align-items: center;
   gap: 3.5px;
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 11.5px;
+  color: #898A8D;
 }
 .rule-card-meta-right {
   display: flex;
@@ -2207,6 +2256,95 @@ input:checked + .slider:before { transform: translateX(16px); }
 .rule-link-badge.active {
   color: var(--accent-primary);
   font-weight: 600;
+}
+
+/* Floating Bulk Actions Bar (Attio Style) */
+.rules-bulk-bar {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rules-bulk-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 16px);
+  display: none;
+}
+.rules-bulk-bar-inner {
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px -6px rgba(28, 40, 64, 0.15), 0 18px 88px -4px rgba(28, 40, 64, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+.rules-bulk-selected-pill {
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #101112;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.rules-bulk-selected-pill:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.rules-bulk-count-badge {
+  background: #F5A300;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rules-bulk-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.1);
+}
+.rules-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rules-bulk-btn {
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #101112;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.rules-bulk-btn:hover {
+  background: #F6F7F7;
+  border-color: rgba(0, 0, 0, 0.15);
+}
+.rules-bulk-btn.danger:hover {
+  background: #FEE2E2;
+  color: #EF4444;
+  border-color: #FCA5A5;
 }
 
 /* Rule Group Choice & Legacy Classes */

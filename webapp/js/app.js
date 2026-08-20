@@ -118,6 +118,7 @@
     ruleGroups: [],
     collapsedRuleGroups: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_rule_groups') || '[]')),
     ruleGroupColors: JSON.parse(localStorage.getItem('buyerly_rule_group_colors') || '{}'),
+    selectedRuleIds: new Set(),
     chooseRuleTargetGroupId: null,
     chooseRuleSelectedIndex: 0,
     chooseRuleFilteredList: [],
@@ -2099,8 +2100,10 @@
       ? ` ${p.action === 'increase_budget' ? '+' : '-'}${p.budget_change_percent || 20}%`
       : '';
 
+    const isSelected = state.selectedRuleIds && state.selectedRuleIds.has(p.id);
+
     return `
-      <div class="rules-kanban-card rule-card"
+      <div class="rules-kanban-card rule-card ${isSelected ? 'selected' : ''}"
            draggable="true"
            data-preset-id="${p.id}"
            data-group-id="${groupId !== null ? groupId : ''}"
@@ -2109,9 +2112,18 @@
            onclick="window.editPresetFromTab(${p.id})">
         <div class="rule-card-top">
           <div class="rule-card-title-wrap">
-            <span class="rule-card-icon">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            </span>
+            <div class="rule-avatar-checkbox ${isSelected ? 'selected' : ''}" onclick="event.stopPropagation(); window.toggleSelectRule(${p.id})" title="${isSelected ? 'Снять выделение' : 'Выбрать правило'}">
+              ${isSelected ? `
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><polyline points="20 6 9 17 4 12"/></svg>
+              ` : `
+                <span class="rule-avatar-circle">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </span>
+                <span class="rule-hover-check">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+              `}
+            </div>
             <div class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
           </div>
           <span class="rule-action-badge ${act.class}">${act.label}${stepInfo}</span>
@@ -2119,19 +2131,109 @@
         
         <div class="rule-card-meta-bar">
           <div class="rule-card-meta-left">
-            <span class="rule-meta-tag" title="Условия правила"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> ${condList.length} усл.</span>
-            <span class="rule-meta-tag" title="Интервал проверки"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${p.check_interval_minutes || 5}м</span>
+            <span class="rule-attio-icon-btn" title="Документация и условия"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+            <span class="rule-attio-icon-btn" title="Условия (${condList.length})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+            <span class="rule-attio-icon-btn" title="Логи и уведомления"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
           </div>
           <div class="rule-card-meta-right">
-            <span class="rule-link-badge ${linkedCount > 0 ? 'active' : 'inactive'}" title="Привязано кабинетов">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-              ${linkedCount}
+            <span class="rule-meta-tag" title="Интервал проверки">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              ${p.check_interval_minutes || 5}м
             </span>
+            ${linkedCount > 0 ? `<span class="rule-link-badge active" title="Привязано кабинетов">🔗 ${linkedCount}</span>` : ''}
           </div>
         </div>
       </div>
     `;
   }
+
+  window.toggleSelectRule = function(ruleId) {
+    if (!state.selectedRuleIds) state.selectedRuleIds = new Set();
+    if (state.selectedRuleIds.has(ruleId)) {
+      state.selectedRuleIds.delete(ruleId);
+    } else {
+      state.selectedRuleIds.add(ruleId);
+    }
+    updateRulesBulkActionsBar();
+    renderRulesTab();
+  };
+
+  window.clearRuleSelection = function() {
+    if (state.selectedRuleIds) state.selectedRuleIds.clear();
+    updateRulesBulkActionsBar();
+    renderRulesTab();
+  };
+
+  function updateRulesBulkActionsBar() {
+    const bar = document.getElementById('rulesBulkActionsBar');
+    const countEl = document.getElementById('rulesBulkCount');
+    const count = state.selectedRuleIds ? state.selectedRuleIds.size : 0;
+    if (!bar) return;
+    if (count > 0) {
+      if (countEl) countEl.textContent = count;
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+    }
+  }
+
+  window.bulkDeleteSelectedRules = async function() {
+    const count = state.selectedRuleIds ? state.selectedRuleIds.size : 0;
+    if (count === 0) return;
+    if (!confirm(`Удалить выбранные правила (${count} шт.)?`)) return;
+
+    const idsToDelete = [...state.selectedRuleIds];
+    showGlobalLoading(`Удаление правил (${count})...`);
+    try {
+      for (const id of idsToDelete) {
+        await apiFetch(`/api/rules/presets/${id}`, { method: 'DELETE' });
+      }
+      state.selectedRuleIds.clear();
+      updateRulesBulkActionsBar();
+      await loadRulePresets();
+      await loadRuleGroups();
+      renderRulesTab();
+      showNotification(`Успешно удалено правил: ${count}`, 'success');
+    } catch (err) {
+      showNotification(`Ошибка удаления: ${err.message}`, 'error');
+    } finally {
+      hideGlobalLoading();
+    }
+  };
+
+  window.openBulkMoveModal = async function(event) {
+    const count = state.selectedRuleIds ? state.selectedRuleIds.size : 0;
+    if (count === 0) return;
+
+    const groupOptions = state.ruleGroups.map((g, i) => `${i + 1}. ${g.name}`).join('\n');
+    const choice = prompt(`Переместить ${count} правил в группу:\n0. Без группы\n${groupOptions}\n\nВведите номер группы:`);
+    if (choice === null) return;
+    const num = parseInt(choice.trim(), 10);
+    if (isNaN(num) || num < 0 || num > state.ruleGroups.length) {
+      showNotification('Неверный выбор группы', 'error');
+      return;
+    }
+
+    const targetGroup = num === 0 ? null : state.ruleGroups[num - 1];
+    const targetGroupId = targetGroup ? targetGroup.id : null;
+
+    showGlobalLoading('Перемещение правил...');
+    try {
+      for (const ruleId of state.selectedRuleIds) {
+        await window.movePresetToGroup(ruleId, targetGroupId);
+      }
+      state.selectedRuleIds.clear();
+      updateRulesBulkActionsBar();
+      await loadRuleGroups();
+      await loadRulePresets();
+      renderRulesTab();
+      showNotification(`Правила перемещены в группу «${targetGroup ? targetGroup.name : 'Без группы'}»`, 'success');
+    } catch (err) {
+      showNotification(`Ошибка перемещения: ${err.message}`, 'error');
+    } finally {
+      hideGlobalLoading();
+    }
+  };
 
   function renderRulesTab() {
     const boardContainer = document.getElementById('ruleGroupsContainer');
@@ -2140,6 +2242,8 @@
     const groupsCountEl = document.getElementById('rulesGroupsCount');
     const linkedCountEl = document.getElementById('rulesLinkedAccsCount');
     if (!boardContainer || !emptyEl) return;
+
+    updateRulesBulkActionsBar();
 
     const totalPresets = state.presets.length;
     let linkedAccountsCount = 0;
