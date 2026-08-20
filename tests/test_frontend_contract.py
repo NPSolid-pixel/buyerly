@@ -493,6 +493,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.clearAccountSelection',
             'window.toggleBulkGroupDropdown',
             'window.assignSelectedAccountsToGroup',
+            'window.toggleSidebarSection',
+            'applySidebarSectionsCollapsedState',
         ):
             self.assertIn(script_contract, self.script)
 
@@ -502,6 +504,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.fb-accounts-table',
             '.fb-profile-cell',
             '.token-chip',
+            '.nav-section-chevron',
+            '.nav-section-content',
         ):
             self.assertIn(style_contract, self.styles)
 

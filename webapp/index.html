@@ -138,36 +138,47 @@
       </ul>
 
       <!-- Section: Аккаунты Facebook -->
-      <div class="nav-section-header">
+      <div class="nav-section-header" id="headerFbSection" onclick="window.toggleSidebarSection('fb_accounts')">
         <div class="nav-section-title">
-          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          <svg class="nav-section-chevron" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           <span>Facebook Аккаунты</span>
         </div>
-        <div class="nav-section-add-btn" title="Подключить Facebook" onclick="window.switchTab('add');">+</div>
+        <div class="nav-section-actions">
+          <div class="nav-section-add-btn" title="Подключить Facebook" onclick="event.stopPropagation(); window.switchTab('add');">+</div>
+        </div>
       </div>
-      <div class="list-item nav-tab" data-tab="fb_accounts" id="navFbAccounts" onclick="window.switchTab('fb_accounts');">
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        <span>Все аккаунты</span>
-        <span class="list-count" id="sidebarFbAccountsCount">0</span>
+      <div id="sidebarFbAccountsList" class="nav-section-content">
+        <div class="list-item nav-tab" data-tab="fb_accounts" id="navFbAccounts" onclick="window.switchTab('fb_accounts');">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span>Все аккаунты</span>
+          <span class="list-count" id="sidebarFbAccountsCount">0</span>
+        </div>
       </div>
 
       <!-- Section: Рекламные кабинеты (Lists) -->
-      <div class="nav-section-header">
+      <div class="nav-section-header" id="headerAccountsSection" onclick="window.toggleSidebarSection('accounts')">
         <div class="nav-section-title">
-          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          <span>Рекламные кабинеты</span>
+          <svg class="nav-section-chevron" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          <span>Lists</span>
         </div>
-        <div class="nav-section-add-btn" title="Создать новую группу" onclick="window.openCreateAccountGroup();">+</div>
+        <div class="nav-section-actions">
+          <div class="nav-section-action-btn" title="Настройки списков" onclick="event.stopPropagation(); window.openEditCurrentGroup();">
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <div class="nav-section-add-btn" title="Создать новую группу" onclick="event.stopPropagation(); window.openCreateAccountGroup();">+</div>
+        </div>
       </div>
 
-      <!-- Все кабинеты (pinned All list) -->
-      <div class="list-item nav-tab" data-tab="accounts" data-group-filter="all" id="navGroupAll" onclick="window.switchAccountGroup('all');">
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-        <span>Все кабинеты</span>
-        <span class="list-count" id="sidebarTotalCount">0</span>
+      <div id="sidebarAccountsListContainer" class="nav-section-content">
+        <!-- Все кабинеты (pinned All list) -->
+        <div class="list-item nav-tab" data-tab="accounts" data-group-filter="all" id="navGroupAll" onclick="window.switchAccountGroup('all');">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          <span>All</span>
+          <span class="list-count" id="sidebarTotalCount">0</span>
+        </div>
+        <!-- Dynamic account groups list container (e.g. CANADA, Нидерланды) -->
+        <div id="sidebarAccountGroupsContainer"></div>
       </div>
-      <!-- Dynamic account groups list container (e.g. CANADA, Нидерланды) -->
-      <div id="sidebarAccountGroupsContainer"></div>
     </aside>
 
     <!-- ================= MAIN CONTENT ================= -->

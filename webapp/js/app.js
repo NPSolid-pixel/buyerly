@@ -91,6 +91,7 @@
     activeWorkspace: null,
     newWorkspaceSelectedColor: '#F5A300',
     editWorkspaceSelectedColor: '#F5A300',
+    collapsedSections: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_sections') || '[]')),
     selectedAccounts: new Set(),
     fbConnections: [],
     fbFilter: 'all',
@@ -358,6 +359,33 @@
       else btn.removeAttribute('aria-current');
     });
   };
+
+  window.toggleSidebarSection = function (sectionKey) {
+    if (state.collapsedSections.has(sectionKey)) {
+      state.collapsedSections.delete(sectionKey);
+    } else {
+      state.collapsedSections.add(sectionKey);
+    }
+    try {
+      localStorage.setItem('buyerly_collapsed_sections', JSON.stringify(Array.from(state.collapsedSections)));
+    } catch (e) {}
+    applySidebarSectionsCollapsedState();
+  };
+
+  function applySidebarSectionsCollapsedState() {
+    const isFbCollapsed = state.collapsedSections.has('fb_accounts');
+    const isAccountsCollapsed = state.collapsedSections.has('accounts');
+
+    const headerFb = document.getElementById('headerFbSection');
+    const listFb = document.getElementById('sidebarFbAccountsList');
+    if (headerFb) headerFb.classList.toggle('collapsed', isFbCollapsed);
+    if (listFb) listFb.classList.toggle('collapsed', isFbCollapsed);
+
+    const headerAccounts = document.getElementById('headerAccountsSection');
+    const listAccounts = document.getElementById('sidebarAccountsListContainer');
+    if (headerAccounts) headerAccounts.classList.toggle('collapsed', isAccountsCollapsed);
+    if (listAccounts) listAccounts.classList.toggle('collapsed', isAccountsCollapsed);
+  }
 
   window.switchTab = function (requestedTab, options = {}) {
     const tabName = Object.hasOwn(TAB_ROUTES, requestedTab) ? requestedTab : 'accounts';
@@ -5460,6 +5488,8 @@
         }
       });
     }
+
+    applySidebarSectionsCollapsedState();
   }
 
   window.logoutUser = async function () {
