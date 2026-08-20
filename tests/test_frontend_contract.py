@@ -161,11 +161,6 @@ class TestFrontendRuleContract(unittest.TestCase):
 
     def test_rules_kanban_board_contract(self):
         for contract in (
-            'id="rulesSearchInput"',
-            'id="rulesActionFilter"',
-            'id="rulesActiveCount"',
-            'id="rulesGroupsCount"',
-            'id="rulesLinkedAccsCount"',
             'id="modalChooseRule"',
             'id="chooseRuleSearchInput"',
             'id="chooseRuleList"',
@@ -178,7 +173,6 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="newColumnColorPalette"',
             'id="ruleGroupSelect"',
             'rules-kanban-board',
-            'rules-toolbar',
         ):
             self.assertIn(contract, self.index)
 

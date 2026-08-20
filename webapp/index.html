@@ -529,58 +529,20 @@
       <!-- ============================================== -->
       <!-- TAB: ПРАВИЛА (RULES & PRESETS - ATTIO KANBAN BOARD) -->
       <!-- ============================================== -->
+      <!-- TAB: ПРАВИЛА (RULES & PRESETS - ATTIO KANBAN BOARD) -->
+      <!-- ============================================== -->
       <section id="tab-rules" class="tab-content">
         <!-- Rules Header & Actions -->
         <div class="rules-tab-header">
           <div class="rules-header-info">
-            <div class="breadcrumb-trail">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              <span>Правила</span>
-            </div>
             <h2>Правила мониторинга кампаний</h2>
           </div>
           <div class="rules-header-actions">
-            <button class="btn btn-secondary" type="button" onclick="window.openCreateRuleGroup()">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="3"/></svg>
-              <span>Новая группа</span>
-            </button>
             <button class="btn btn-primary btn-add-rule-main" type="button" onclick="window.openCreateRuleFromTab()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>Новое правило</span>
             </button>
           </div>
-        </div>
-
-        <!-- Rules Attio Toolbar: Search, Filters & Counters -->
-        <div class="rules-toolbar">
-          <div class="rules-toolbar-left">
-            <div class="rules-search-wrap">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input type="text" id="rulesSearchInput" class="rules-search-input" placeholder="Поиск правил..." oninput="window.onRulesFilterChange()">
-            </div>
-            <div class="rules-filter-select-wrap">
-              <select id="rulesActionFilter" class="rules-filter-select" onchange="window.onRulesFilterChange()">
-                <option value="all">Все действия</option>
-                <option value="turn_off">Стоп (выключение)</option>
-                <option value="notify_only">Только пуш</option>
-                <option value="turn_on">Старт</option>
-                <option value="increase_budget">+Бюджет</option>
-                <option value="decrease_budget">-Бюджет</option>
-              </select>
-            </div>
-          </div>
-          <div class="rules-toolbar-right">
-            <div class="rules-stats-bar" id="rulesStatsBar">
-              <div class="stat-pill"><span class="status-dot dot-success"></span> <span id="rulesActiveCount">0</span> правил</div>
-              <div class="stat-pill"><span id="rulesGroupsCount">0</span> групп</div>
-              <div class="stat-pill"><span id="rulesLinkedAccsCount">0</span> привязанных каб.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Rules Notice Bar -->
-        <div class="rules-examples-note">
-          <b>Совет:</b> Перетаскивайте карточки правил мышкой между колонками-группами. Кликните на карточку, чтобы отредактировать правило в поп-апе.
         </div>
 
         <!-- Kanban Board: Groups as Columns & Rules as Cards -->

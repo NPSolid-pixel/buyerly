@@ -2234,9 +2234,6 @@
               <button class="rules-column-btn" title="Добавить правило в группу" onclick="window.openChooseRuleModal(${group.id})">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
-              <button class="rules-column-btn" title="Опции группы" onclick="window.openGroupMenuPopover(event, ${group.id})">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-              </button>
             </div>
           </div>
           <div class="rules-column-body"
