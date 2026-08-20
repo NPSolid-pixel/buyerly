@@ -8,6 +8,17 @@
 
 ---
 
+## 🌟 Официальный логотип: «Infinity B Loop» (Бело-жёлто-оранжевая палитра)
+* **Файлы:** [`buyerly_logo_badge.svg`](file:///home/hiurano/Projects/ai-mediabuyer/webapp/icons/buyerly_logo_badge.svg) / [`buyerly_logo_trans.svg`](file:///home/hiurano/Projects/ai-mediabuyer/webapp/icons/buyerly_logo_trans.svg) / [`favicon.svg`](file:///home/hiurano/Projects/ai-mediabuyer/webapp/icons/favicon.svg)
+* **Смысл:** Непрерывный цикл масштабирования и автооптимизации рекламных кампаний в форме буквы «b».
+* **Цветовая палитра:**
+  - Верхняя контрастная петля: Чистый Белый `#FFFFFF`
+  - Основной стебель и петля: Плавный градиент от Солнечного Жёлтого `#FFD000` через Янтарный `#FF8A00` к Пламенному Оранжевому `#FF5100`
+  - Ободок бейджа: Тёплый золотисто-янтарный `#FF9F1C` с мягким свечением
+* **Стиль:** Премиальный хай-тек финтех/эдтех, идеально сочетающийся со стилем Attio и тёплым акцентом платформы (`--brand-accent: #F5A300`).
+
+---
+
 ## 🎨 Концепт 1: «Neural B & Growth» (Буква B + Рост + AI Импульс)
 * **Файлы:** [`logo_concept_1_app.svg`](file:///var/home/hiurano/Projects/ai/ai-mediabuyer/webapp/icons/logo_concept_1_app.svg) / [`logo_concept_1_icon.svg`](file:///var/home/hiurano/Projects/ai/ai-mediabuyer/webapp/icons/logo_concept_1_icon.svg)
 * **Смысл:** Монограмма «B» из двух технологичных слоев (AdSets / Кампании) с интегрированным вектором восходящего масштабирования и центральным нейро-узлом принятия решений.

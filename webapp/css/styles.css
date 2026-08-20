@@ -2539,6 +2539,16 @@ input:checked + .slider:before { transform: translateX(16px); }
   gap: 12px;
   margin-bottom: 8px;
 }
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #111216;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
 .login-title { font-size: 20px; font-weight: 700; color: var(--text-primary); }
 .login-subtitle { font-size: 12px; color: var(--text-muted); }
 .login-lead-desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }

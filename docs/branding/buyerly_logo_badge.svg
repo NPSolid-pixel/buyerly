@@ -1,22 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <linearGradient id="buyerly_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#17181D" />
-      <stop offset="100%" stop-color="#0D0E11" />
+      <stop offset="0%" stop-color="#18191E" />
+      <stop offset="100%" stop-color="#0E0F12" />
+    </linearGradient>
+    <linearGradient id="buyerly_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD000" />
+      <stop offset="50%" stop-color="#FF8A00" />
+      <stop offset="100%" stop-color="#FF5100" />
     </linearGradient>
   </defs>
 
   <!-- Background Circle Badge -->
   <circle cx="256" cy="256" r="236" fill="url(#buyerly_bg)" />
-  <circle cx="256" cy="256" r="234" fill="none" stroke="#9B8CFF" stroke-opacity="0.25" stroke-width="2" />
+  <circle cx="256" cy="256" r="234" fill="none" stroke="#FF9F1C" stroke-opacity="0.28" stroke-width="2" />
 
   <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Back Depth Loop -->
+    <!-- Back Depth Loop: Crisp White -->
     <path d="M 256 280 C 315 280, 370 240, 370 185 C 370 130, 315 95, 256 95 C 197 95, 142 140, 142 205" 
-          stroke="#A998FF" stroke-width="56" />
+          stroke="#FFFFFF" stroke-width="56" />
 
-    <!-- Foreground Loop & 'b' Stem -->
+    <!-- Foreground Loop & 'b' Stem: Yellow-to-Orange Gradient -->
     <path d="M 142 95 L 142 320 C 142 375, 197 417, 256 417 C 315 417, 370 375, 370 320 C 370 265, 315 225, 256 225 C 197 225, 142 265, 142 320" 
-          stroke="#7969ED" stroke-width="56" />
+          stroke="url(#buyerly_grad)" stroke-width="56" />
   </g>
 </svg>
