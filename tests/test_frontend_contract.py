@@ -532,3 +532,63 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertIn(style_contract, self.styles)
 
+    def test_search_and_notifications_contract(self):
+        for contract in (
+            'id="sidebarSearchBox"',
+            'id="sidebarNotificationsBtn"',
+            'id="notificationsPopover"',
+            'id="notificationsTabPaneNotifications"',
+            'id="notificationsTabPaneRequests"',
+            'id="quickSearchModal"',
+            'id="quickSearchInput"',
+            'id="quickSearchResults"',
+            'Уведомления (0)',
+            'Запросы (0)',
+            'Нет уведомлений',
+            'Нет запросов',
+            'Поиск по разделам, аккаунтам и правилам...',
+            'Навигация',
+            'Выбрать',
+            'Закрыть',
+        ):
+            self.assertIn(contract, self.index)
+
+        # Confirm pure search without Ask Attio or Quick actions
+        for forbidden in ('Ask Attio', 'ask attio', 'Quick Action', 'quick action'):
+            self.assertNotIn(forbidden, self.index + self.script)
+
+        for script_contract in (
+            'window.openQuickSearchModal',
+            'window.closeQuickSearchModal',
+            'window.clearQuickSearchInput',
+            'window.selectQuickSearchResult',
+            'window.toggleNotificationsPopover',
+            'window.switchNotificationsTab',
+            'getQuickSearchEntities',
+            'renderQuickSearchResults',
+            'setupQuickSearchListeners',
+            'quickSearchSelectedIndex',
+        ):
+            self.assertIn(script_contract, self.script)
+
+        for style_contract in (
+            '.sidebar-search-row',
+            '.sidebar-notifications-btn',
+            '.notifications-popover',
+            '.notifications-tabs',
+            '.notifications-tab-btn',
+            '.notifications-bell-art',
+            '.notifications-grid-backdrop',
+            '.quick-search-overlay',
+            '.quick-search-dialog',
+            '.quick-search-header',
+            '.quick-search-input',
+            '.quick-search-results',
+            '.quick-search-item',
+            '.quick-search-item.is-selected',
+            '.quick-search-footer',
+            '.quick-search-kbd',
+        ):
+            self.assertIn(style_contract, self.styles)
+
+

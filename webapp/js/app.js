@@ -5472,11 +5472,466 @@
     document.getElementById(id)?.addEventListener('change', () => loadLogsTab(1));
   });
 
-  let logsSearchTimer;
-  document.getElementById('logsSearchInput')?.addEventListener('input', () => {
-    window.clearTimeout(logsSearchTimer);
-    logsSearchTimer = window.setTimeout(() => loadLogsTab(1), 350);
-  });
+  // ==========================================================
+  // NOTIFICATIONS POPOVER MODULE (ATTIO STYLE)
+  // ==========================================================
+  window.toggleNotificationsPopover = function (e) {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const popover = document.getElementById('notificationsPopover');
+    const btn = document.getElementById('sidebarNotificationsBtn');
+    if (!popover) return;
+    const isHidden = popover.classList.contains('hidden');
+    if (isHidden) {
+      window.closeQuickSearchModal();
+      popover.classList.remove('hidden');
+      btn?.classList.add('active');
+    } else {
+      popover.classList.add('hidden');
+      btn?.classList.remove('active');
+    }
+  };
+
+  window.switchNotificationsTab = function (tabName) {
+    const tabBtns = document.querySelectorAll('.notifications-tab-btn');
+    tabBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    const paneNotifications = document.getElementById('notificationsTabPaneNotifications');
+    const paneRequests = document.getElementById('notificationsTabPaneRequests');
+    if (paneNotifications) paneNotifications.classList.toggle('hidden', tabName !== 'notifications');
+    if (paneRequests) paneRequests.classList.toggle('hidden', tabName !== 'requests');
+  };
+
+  // ==========================================================
+  // GLOBAL QUICK SEARCH / COMMAND PALETTE MODULE (ATTIO STYLE)
+  // ==========================================================
+  let quickSearchSelectedIndex = 0;
+  let quickSearchResultsList = [];
+
+  function highlightMatches(text, query) {
+    if (!query || !text) return escapeHtml(text || '');
+    const cleanText = String(text);
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+    const parts = cleanText.split(regex);
+    return parts.map((part) => {
+      if (part.toLowerCase() === query.toLowerCase()) {
+        return `<mark>${escapeHtml(part)}</mark>`;
+      }
+      return escapeHtml(part);
+    }).join('');
+  }
+
+  function getQuickSearchEntities(query) {
+    const q = (query || '').trim().toLowerCase();
+    const sections = [];
+
+    // 1. Navigation Sections
+    const navItems = [
+      {
+        id: 'nav_home',
+        title: 'Главная',
+        subtitle: 'Главная панель и сводка показателей',
+        badge: 'Раздел',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>',
+        keywords: ['главная', 'home', 'дашборд', 'dashboard', 'сводка', 'метрики'],
+        action: () => window.switchTab('home')
+      },
+      {
+        id: 'nav_accounts',
+        title: 'Все рекламные кабинеты',
+        subtitle: 'Управление рекламными аккаунтами Meta Ads',
+        badge: 'Раздел',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+        keywords: ['кабинеты', 'аккаунты', 'accounts', 'кампании', 'рекламные'],
+        action: () => window.switchTab('accounts')
+      },
+      {
+        id: 'nav_fb_accounts',
+        title: 'Facebook Аккаунты',
+        subtitle: 'Подключенные профили Facebook и Business Managers',
+        badge: 'Раздел',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+        keywords: ['facebook', 'fb', 'профили', 'бм', 'bm', 'соцсети'],
+        action: () => window.switchTab('fb_accounts')
+      },
+      {
+        id: 'nav_rules',
+        title: 'Правила автостопа и лимитов',
+        subtitle: 'Настройка автоматических правил и контроль рисков',
+        badge: 'Правила',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
+        keywords: ['правила', 'rules', 'автостоп', 'лимиты', 'автоматизация'],
+        action: () => window.switchTab('rules')
+      },
+      {
+        id: 'nav_summary',
+        title: 'Сводная таблица аналитики',
+        subtitle: 'Показатели расхода, лидов, кликов и конверсий',
+        badge: 'Раздел',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>',
+        keywords: ['сводка', 'summary', 'статистика', 'аналитика', 'таблица', 'расход'],
+        action: () => window.switchTab('summary')
+      },
+      {
+        id: 'nav_logs',
+        title: 'Логи и журнал событий',
+        subtitle: 'История аудита, остановки адсетов и системные события',
+        badge: 'Раздел',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>',
+        keywords: ['логи', 'logs', 'история', 'аудит', 'события', 'журнал'],
+        action: () => window.switchTab('logs')
+      },
+      {
+        id: 'nav_add',
+        title: 'Подключить Facebook аккаунты',
+        subtitle: 'Meta OAuth подключение и импорт кабинетов',
+        badge: 'Раздел',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+        keywords: ['добавить', 'подключить', 'oauth', 'meta', 'импорт', 'add'],
+        action: () => window.switchTab('add')
+      },
+      {
+        id: 'nav_workspace_settings',
+        title: 'Настройки воркспейса',
+        subtitle: 'Интервалы опроса, лимиты и управление воркспейсом',
+        badge: 'Настройки',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+        keywords: ['настройки', 'воркспейс', 'workspace', 'settings', 'интервалы'],
+        action: () => window.openWorkspaceSettings()
+      },
+      {
+        id: 'nav_account_settings',
+        title: 'Настройки аккаунта',
+        subtitle: 'Профиль пользователя и параметры безопасности',
+        badge: 'Настройки',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>',
+        keywords: ['профиль', 'пароль', 'пользователь', 'user', 'account'],
+        action: () => window.openAccountSettings()
+      },
+      {
+        id: 'nav_new_workspace',
+        title: 'Создать новый воркспейс',
+        subtitle: 'Добавление отдельного рабочего пространства',
+        badge: 'Действие',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>',
+        keywords: ['новый воркспейс', 'создать', 'create workspace'],
+        action: () => window.openCreateWorkspacePage()
+      }
+    ];
+
+    const matchedNav = navItems.filter(item => {
+      if (!q) return true;
+      return item.title.toLowerCase().includes(q) ||
+        item.subtitle.toLowerCase().includes(q) ||
+        item.keywords.some(k => k.includes(q));
+    });
+
+    if (matchedNav.length > 0) {
+      sections.push({
+        title: 'Разделы',
+        items: matchedNav.slice(0, q ? 6 : 8)
+      });
+    }
+
+    // 2. Ad Accounts (state.accounts)
+    if (state.accounts && state.accounts.length > 0) {
+      const matchedAccounts = state.accounts.filter(acc => {
+        if (!q) return false;
+        const name = (acc.name || '').toLowerCase();
+        const customName = (acc.custom_name || '').toLowerCase();
+        const accId = String(acc.account_id || '').toLowerCase();
+        const note = (acc.note || '').toLowerCase();
+        return name.includes(q) || customName.includes(q) || accId.includes(q) || note.includes(q);
+      }).map(acc => {
+        const title = acc.custom_name ? `${acc.custom_name} (${acc.name})` : (acc.name || `act_${acc.account_id}`);
+        const subtitle = `ID: ${acc.account_id}` + (acc.note ? ` • ${acc.note}` : '') + (acc.currency ? ` • ${acc.currency}` : '');
+        const isActive = String(acc.account_status) === '1';
+        const badge = isActive ? 'Активен' : 'Отключен';
+        return {
+          id: `acc_${acc.account_id}`,
+          title: title,
+          subtitle: subtitle,
+          badge: badge,
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+          action: () => {
+            window.openAccountDetails(acc.account_id);
+          }
+        };
+      });
+
+      if (matchedAccounts.length > 0) {
+        sections.push({
+          title: 'Рекламные аккаунты',
+          items: matchedAccounts.slice(0, 8)
+        });
+      }
+    }
+
+    // 3. Facebook Connections (state.fbAccounts / state.metaOAuth.connections)
+    const fbList = (state.fbAccounts && state.fbAccounts.length > 0)
+      ? state.fbAccounts
+      : ((state.metaOAuth && state.metaOAuth.connections) || []);
+
+    if (fbList && fbList.length > 0) {
+      const matchedFb = fbList.filter(fb => {
+        if (!q) return false;
+        const name = (fb.name || fb.fb_user_name || '').toLowerCase();
+        const id = String(fb.id || fb.fb_user_id || '').toLowerCase();
+        return name.includes(q) || id.includes(q);
+      }).map(fb => {
+        const name = fb.name || fb.fb_user_name || `FB User ${fb.id || fb.fb_user_id}`;
+        const subtitle = `ID: ${fb.id || fb.fb_user_id}` + (fb.accounts_count ? ` • ${fb.accounts_count} кабинетов` : '');
+        return {
+          id: `fb_${fb.id || fb.fb_user_id}`,
+          title: name,
+          subtitle: subtitle,
+          badge: 'Facebook',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+          action: () => window.switchTab('fb_accounts')
+        };
+      });
+
+      if (matchedFb.length > 0) {
+        sections.push({
+          title: 'Facebook Профили',
+          items: matchedFb.slice(0, 5)
+        });
+      }
+    }
+
+    // 4. Presets & Rules (state.presets)
+    if (state.presets && state.presets.length > 0) {
+      const matchedPresets = state.presets.filter(p => {
+        if (!q) return false;
+        const title = (p.title || p.name || '').toLowerCase();
+        const conditions = Array.isArray(p.conditions) ? p.conditions.map(c => JSON.stringify(c)).join(' ').toLowerCase() : '';
+        return title.includes(q) || conditions.includes(q);
+      }).map(p => {
+        return {
+          id: `rule_${p.id}`,
+          title: p.title || p.name || 'Правило без названия',
+          subtitle: `Действие: ${p.action || 'автостоп'} • Условий: ${(p.conditions || []).length}`,
+          badge: 'Правило',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
+          action: () => {
+            window.switchTab('rules');
+          }
+        };
+      });
+
+      if (matchedPresets.length > 0) {
+        sections.push({
+          title: 'Правила',
+          items: matchedPresets.slice(0, 5)
+        });
+      }
+    }
+
+    // 5. Account Groups / Lists (state.accountGroups)
+    if (state.accountGroups && state.accountGroups.length > 0) {
+      const matchedGroups = state.accountGroups.filter(g => {
+        if (!q) return false;
+        const name = (g.name || '').toLowerCase();
+        const desc = (g.description || '').toLowerCase();
+        return name.includes(q) || desc.includes(q);
+      }).map(g => {
+        const count = Array.isArray(g.account_ids) ? g.account_ids.length : 0;
+        return {
+          id: `group_${g.id}`,
+          title: g.name || 'Список',
+          subtitle: `${count} кабинетов` + (g.description ? ` • ${g.description}` : ''),
+          badge: 'Список',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>',
+          action: () => {
+            window.switchTab('accounts');
+            state.accountGroupFilter = String(g.id);
+            renderAccountGroups();
+            renderAccounts();
+          }
+        };
+      });
+
+      if (matchedGroups.length > 0) {
+        sections.push({
+          title: 'Списки',
+          items: matchedGroups.slice(0, 5)
+        });
+      }
+    }
+
+    return sections;
+  }
+
+  function renderQuickSearchResults(query) {
+    const container = document.getElementById('quickSearchResults');
+    if (!container) return;
+    const q = (query || '').trim();
+    const sections = getQuickSearchEntities(q);
+
+    quickSearchResultsList = [];
+    let html = '';
+
+    if (sections.length === 0) {
+      html = `
+        <div class="quick-search-empty">
+          <svg class="quick-search-empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <div class="quick-search-empty-title">Ничего не найдено</div>
+          <div class="quick-search-empty-desc">По запросу «${escapeHtml(q)}» ничего не найдено. Проверьте правильность написания.</div>
+        </div>
+      `;
+      container.innerHTML = html;
+      return;
+    }
+
+    sections.forEach((section) => {
+      html += `
+        <div class="quick-search-section">
+          <div class="quick-search-section-header">${escapeHtml(section.title)}</div>
+      `;
+      section.items.forEach((item) => {
+        const globalIndex = quickSearchResultsList.length;
+        quickSearchResultsList.push(item);
+        const isSelected = globalIndex === quickSearchSelectedIndex;
+
+        html += `
+          <div class="quick-search-item ${isSelected ? 'is-selected' : ''}" data-index="${globalIndex}" onclick="window.selectQuickSearchResult(${globalIndex});">
+            <div class="quick-search-item-left">
+              <div class="quick-search-item-icon">${item.icon}</div>
+              <div class="quick-search-item-info">
+                <div class="quick-search-item-title">${highlightMatches(item.title, q)}</div>
+                <div class="quick-search-item-subtitle">${highlightMatches(item.subtitle, q)}</div>
+              </div>
+            </div>
+            <div class="quick-search-item-right">
+              ${item.badge ? `<span class="quick-search-item-badge">${escapeHtml(item.badge)}</span>` : ''}
+              <span class="quick-search-item-enter"><kbd class="quick-search-kbd">↵</kbd></span>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+    });
+
+    container.innerHTML = html;
+    updateQuickSearchSelectionHighlight();
+  }
+
+  function updateQuickSearchSelectionHighlight() {
+    const items = document.querySelectorAll('.quick-search-item');
+    items.forEach((el) => {
+      const idx = parseInt(el.dataset.index, 10);
+      el.classList.toggle('is-selected', idx === quickSearchSelectedIndex);
+    });
+    const selectedEl = document.querySelector(`.quick-search-item[data-index="${quickSearchSelectedIndex}"]`);
+    if (selectedEl) {
+      selectedEl.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  window.selectQuickSearchResult = function (index) {
+    const item = quickSearchResultsList[index];
+    if (item && typeof item.action === 'function') {
+      window.closeQuickSearchModal();
+      item.action();
+    }
+  };
+
+  window.openQuickSearchModal = function () {
+    const modal = document.getElementById('quickSearchModal');
+    const input = document.getElementById('quickSearchInput');
+    const clearBtn = document.getElementById('quickSearchClearBtn');
+    const popover = document.getElementById('notificationsPopover');
+    const notifBtn = document.getElementById('sidebarNotificationsBtn');
+    if (popover) popover.classList.add('hidden');
+    if (notifBtn) notifBtn.classList.remove('active');
+
+    if (!modal || !input) return;
+    modal.classList.remove('hidden');
+    input.value = '';
+    if (clearBtn) clearBtn.classList.add('hidden');
+    quickSearchSelectedIndex = 0;
+    renderQuickSearchResults('');
+    setTimeout(() => input.focus(), 30);
+  };
+
+  window.closeQuickSearchModal = function () {
+    const modal = document.getElementById('quickSearchModal');
+    if (modal) modal.classList.add('hidden');
+  };
+
+  window.clearQuickSearchInput = function () {
+    const input = document.getElementById('quickSearchInput');
+    const clearBtn = document.getElementById('quickSearchClearBtn');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+    if (clearBtn) clearBtn.classList.add('hidden');
+    quickSearchSelectedIndex = 0;
+    renderQuickSearchResults('');
+  };
+
+  function setupQuickSearchListeners() {
+    const input = document.getElementById('quickSearchInput');
+    const clearBtn = document.getElementById('quickSearchClearBtn');
+
+    input?.addEventListener('input', (e) => {
+      const val = e.target.value;
+      if (clearBtn) clearBtn.classList.toggle('hidden', !val);
+      quickSearchSelectedIndex = 0;
+      renderQuickSearchResults(val);
+    });
+
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (quickSearchResultsList.length > 0) {
+          quickSearchSelectedIndex = (quickSearchSelectedIndex + 1) % quickSearchResultsList.length;
+          updateQuickSearchSelectionHighlight();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (quickSearchResultsList.length > 0) {
+          quickSearchSelectedIndex = (quickSearchSelectedIndex - 1 + quickSearchResultsList.length) % quickSearchResultsList.length;
+          updateQuickSearchSelectionHighlight();
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (quickSearchResultsList.length > 0 && quickSearchSelectedIndex >= 0) {
+          window.selectQuickSearchResult(quickSearchSelectedIndex);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        window.closeQuickSearchModal();
+      }
+    });
+
+    // Close notifications on outside click
+    document.addEventListener('click', (e) => {
+      const popover = document.getElementById('notificationsPopover');
+      const btn = document.getElementById('sidebarNotificationsBtn');
+      if (popover && !popover.classList.contains('hidden')) {
+        if (!popover.contains(e.target) && !btn?.contains(e.target)) {
+          popover.classList.add('hidden');
+          btn?.classList.remove('active');
+        }
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const popover = document.getElementById('notificationsPopover');
+        const notifBtn = document.getElementById('sidebarNotificationsBtn');
+        if (popover && !popover.classList.contains('hidden')) {
+          popover.classList.add('hidden');
+          notifBtn?.classList.remove('active');
+        }
+      }
+    });
+  }
 
   function escapeHtml(text) {
     if (!text) return '';
@@ -5497,6 +5952,7 @@
     setupRuleBuilderPreview();
     setupModalListeners();
     setupSidebarListeners();
+    setupQuickSearchListeners();
 
     try {
       window.Telegram?.WebApp?.ready();
@@ -5721,9 +6177,9 @@
         e.preventDefault();
         toggleSidebar();
       }
-      if (e.ctrlKey && (e.key === 'k' || e.key === 'K')) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
-        document.getElementById('accountSearchInput')?.focus();
+        window.openQuickSearchModal();
       }
     });
 

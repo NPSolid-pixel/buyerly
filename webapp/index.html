@@ -184,9 +184,58 @@
         </div>
       </div>
 
-      <div class="search-box" onclick="document.getElementById('accountSearchInput')?.focus();">
-        <div class="search-left"><svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><span>Поиск...</span></div>
-        <div class="search-shortcut">CTRL K</div>
+      <div class="sidebar-search-row">
+        <div class="search-box" id="sidebarSearchBox" onclick="window.openQuickSearchModal();">
+          <div class="search-left"><svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg><span>Поиск...</span></div>
+          <div class="search-shortcut">CTRL K</div>
+        </div>
+        <button type="button" class="sidebar-notifications-btn" id="sidebarNotificationsBtn" onclick="window.toggleNotificationsPopover(event);" title="Уведомления">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 12h-6l-2 3h-4l-2-3H2v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6z"/>
+            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Notifications Popover (Attio Style) -->
+      <div id="notificationsPopover" class="notifications-popover hidden" onclick="event.stopPropagation();">
+        <div class="notifications-header">
+          <h2 class="notifications-title">Уведомления</h2>
+          <div class="notifications-tabs">
+            <button type="button" class="notifications-tab-btn active" data-tab="notifications" onclick="window.switchNotificationsTab('notifications')">Уведомления (0)</button>
+            <button type="button" class="notifications-tab-btn" data-tab="requests" onclick="window.switchNotificationsTab('requests')">Запросы (0)</button>
+          </div>
+        </div>
+        
+        <div id="notificationsTabPaneNotifications" class="notifications-tab-pane">
+          <div class="notifications-empty-state">
+            <div class="notifications-bell-art">
+              <div class="notifications-grid-backdrop"></div>
+              <svg class="notifications-bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+            </div>
+            <h3 class="notifications-empty-title">Нет уведомлений</h3>
+            <p class="notifications-empty-desc">Здесь будут отображаться важные обновления и упоминания.</p>
+            <button type="button" class="btn btn-secondary btn-sm notifications-settings-btn" onclick="window.openWorkspaceSettings(); window.toggleNotificationsPopover();">Настройки</button>
+          </div>
+        </div>
+
+        <div id="notificationsTabPaneRequests" class="notifications-tab-pane hidden">
+          <div class="notifications-empty-state">
+            <div class="notifications-bell-art">
+              <div class="notifications-grid-backdrop"></div>
+              <svg class="notifications-bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+            </div>
+            <h3 class="notifications-empty-title">Нет запросов</h3>
+            <p class="notifications-empty-desc">Здесь будут отображаться запросы от других пользователей.</p>
+            <button type="button" class="btn btn-secondary btn-sm notifications-settings-btn" onclick="window.openWorkspaceSettings(); window.toggleNotificationsPopover();">Настройки</button>
+          </div>
+        </div>
       </div>
 
       <ul class="nav-list">
@@ -1801,6 +1850,35 @@
         <span>Добавить</span>
       </button>
     </nav>
+
+    <!-- Global Quick Search / Command Palette Modal (Attio Style) -->
+    <div id="quickSearchModal" class="quick-search-overlay hidden" onclick="if(event.target === this) window.closeQuickSearchModal();">
+      <div class="quick-search-dialog" role="dialog" aria-modal="true" aria-label="Поиск по сайту">
+        <div class="quick-search-header">
+          <svg class="quick-search-icon" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input type="text" id="quickSearchInput" class="quick-search-input" placeholder="Поиск по разделам, аккаунтам и правилам..." autocomplete="off" spellcheck="false">
+          <button type="button" id="quickSearchClearBtn" class="quick-search-clear-btn hidden" title="Очистить поиск" onclick="window.clearQuickSearchInput();">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div id="quickSearchResults" class="quick-search-results">
+          <!-- Dynamically populated categories and items -->
+        </div>
+
+        <div class="quick-search-footer">
+          <div class="quick-search-footer-shortcuts">
+            <span class="quick-search-shortcut-item"><kbd class="quick-search-kbd">↑</kbd><kbd class="quick-search-kbd">↓</kbd> Навигация</span>
+            <span class="quick-search-shortcut-item"><kbd class="quick-search-kbd">↵</kbd> Выбрать</span>
+            <span class="quick-search-shortcut-item"><kbd class="quick-search-kbd">ESC</kbd> Закрыть</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div id="toastContainer" class="toast-container"></div>
   </div>
