@@ -436,6 +436,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'Workspace settings',
             'Invite team members',
             'id="createWorkspaceScreen"',
+            'id="createWsLogoFileInput"',
+            'id="createWsLogoBadge"',
             'id="createWsNameInput"',
             'id="createWsSlugInput"',
             'id="btnCreateWsSubmit"',
@@ -447,6 +449,7 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         self.assertNotIn('Apps and integrations', self.index)
         self.assertNotIn('+ + New workspace', self.index)
+        self.assertNotIn('id="pageWorkspaceColorPicker"', self.index)
 
         for script_contract in (
             'renderWorkspacesDropdown',
@@ -454,6 +457,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.switchWorkspace',
             'window.openCreateWorkspacePage',
             'window.closeCreateWorkspacePage',
+            'window.handleWorkspaceLogoUpload',
             'window.submitCreateWorkspaceFromPage',
             'window.openWorkspaceSettings',
             'window.submitSaveWorkspaceSettings',
@@ -468,6 +472,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.ws-create-screen-wrapper',
             '.ws-create-card-container',
             '.ws-logo-avatar',
+            '.ws-logo-upload-overlay',
             '.btn-ws-continue',
             '.color-picker-row',
             '.color-swatch',

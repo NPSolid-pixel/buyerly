@@ -89,8 +89,15 @@
       <h2 class="ws-create-title">Создайте свой воркспейс</h2>
 
       <div class="ws-create-logo-row">
-        <div class="ws-logo-avatar" id="createWsLogoBadge" style="background: #F5A300;">
-          <span id="createWsBadgeLetter">W</span>
+        <div class="ws-logo-avatar-wrapper">
+          <input type="file" id="createWsLogoFileInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display: none;" onchange="window.handleWorkspaceLogoUpload(event)">
+          <div class="ws-logo-avatar" id="createWsLogoBadge" title="Загрузить логотип" onclick="document.getElementById('createWsLogoFileInput').click()">
+            <span id="createWsBadgeLetter">W</span>
+            <img id="createWsLogoImg" class="ws-logo-uploaded-img hidden" alt="Workspace Logo">
+            <div class="ws-logo-upload-overlay" title="Загрузить логотип">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
+          </div>
         </div>
         <div class="ws-logo-meta">
           <div class="ws-logo-title">Логотип воркспейса</div>
@@ -103,24 +110,11 @@
         <input type="text" id="createWsNameInput" class="form-control ws-input-lg" placeholder="Введите название воркспейса..." maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitCreateWorkspaceFromPage();}">
       </div>
 
-      <div class="form-group" style="margin-bottom: 20px;">
+      <div class="form-group" style="margin-bottom: 24px;">
         <label class="form-label" for="createWsSlugInput">Адрес воркспейса</label>
         <div class="ws-slug-input-wrapper">
           <span class="ws-slug-prefix">buyerly.app/</span>
           <input type="text" id="createWsSlugInput" class="form-control ws-slug-input" placeholder="my-workspace" maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitCreateWorkspaceFromPage();}">
-        </div>
-      </div>
-
-      <div class="form-group" style="margin-bottom: 24px;">
-        <label class="form-label">Цвет бейджа</label>
-        <div class="color-picker-row" id="pageWorkspaceColorPicker">
-          <div class="color-swatch active" data-color="#F5A300" style="background:#F5A300;" onclick="window.selectPageWorkspaceColor(this);"></div>
-          <div class="color-swatch" data-color="#7C3AED" style="background:#7C3AED;" onclick="window.selectPageWorkspaceColor(this);"></div>
-          <div class="color-swatch" data-color="#2563EB" style="background:#2563EB;" onclick="window.selectPageWorkspaceColor(this);"></div>
-          <div class="color-swatch" data-color="#059669" style="background:#059669;" onclick="window.selectPageWorkspaceColor(this);"></div>
-          <div class="color-swatch" data-color="#DB2777" style="background:#DB2777;" onclick="window.selectPageWorkspaceColor(this);"></div>
-          <div class="color-swatch" data-color="#DC2626" style="background:#DC2626;" onclick="window.selectPageWorkspaceColor(this);"></div>
-          <div class="color-swatch" data-color="#374151" style="background:#374151;" onclick="window.selectPageWorkspaceColor(this);"></div>
         </div>
       </div>
 

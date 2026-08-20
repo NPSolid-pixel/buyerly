@@ -557,20 +557,54 @@
     if (nameInput) nameInput.value = '';
     if (slugInput) slugInput.value = '';
 
-    state.pageWorkspaceSelectedColor = '#F5A300';
-    const logoBadge = document.getElementById('createWsLogoBadge');
-    if (logoBadge) {
-      logoBadge.style.backgroundColor = '#F5A300';
+    state.pageWorkspaceLogoDataUrl = null;
+    const fileInput = document.getElementById('createWsLogoFileInput');
+    if (fileInput) fileInput.value = '';
+
+    const img = document.getElementById('createWsLogoImg');
+    if (img) {
+      img.src = '';
+      img.classList.add('hidden');
     }
+
     const badgeLetter = document.getElementById('createWsBadgeLetter');
     if (badgeLetter) {
+      badgeLetter.style.display = 'block';
       badgeLetter.textContent = 'W';
     }
-    document.querySelectorAll('#pageWorkspaceColorPicker .color-swatch').forEach(sw => {
-      sw.classList.toggle('active', sw.dataset.color === '#F5A300');
-    });
 
     setTimeout(() => nameInput?.focus(), 150);
+  };
+
+  window.handleWorkspaceLogoUpload = function (event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Размер файла не должен превышать 10 МБ', 'error');
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const dataUrl = e.target.result;
+      state.pageWorkspaceLogoDataUrl = dataUrl;
+      const img = document.getElementById('createWsLogoImg');
+      const letter = document.getElementById('createWsBadgeLetter');
+      if (img) {
+        img.src = dataUrl;
+        img.classList.remove('hidden');
+      }
+      if (letter) {
+        letter.style.display = 'none';
+      }
+      showToast('Логотип загружен');
+    };
+    reader.onerror = function () {
+      showToast('Ошибка чтения файла изображения', 'error');
+    };
+    reader.readAsDataURL(file);
   };
 
   window.closeCreateWorkspacePage = function () {
@@ -585,18 +619,6 @@
     }
     if (state.activeTab) {
       window.switchTab(state.activeTab, { historyMode: 'none', haptic: false });
-    }
-  };
-
-  window.selectPageWorkspaceColor = function (el) {
-    const color = el?.dataset?.color || '#F5A300';
-    state.pageWorkspaceSelectedColor = color;
-    document.querySelectorAll('#pageWorkspaceColorPicker .color-swatch').forEach(sw => {
-      sw.classList.toggle('active', sw === el);
-    });
-    const logoBadge = document.getElementById('createWsLogoBadge');
-    if (logoBadge) {
-      logoBadge.style.backgroundColor = color;
     }
   };
 
@@ -617,7 +639,7 @@
         method: 'POST',
         body: JSON.stringify({
           name: name,
-          badge_color: state.pageWorkspaceSelectedColor || '#F5A300'
+          badge_color: '#F5A300'
         })
       });
 
