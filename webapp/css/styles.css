@@ -273,7 +273,7 @@ body.is-sidebar-resizing .sidebar {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.workspace-name svg { width: 14px; height: 14px; color: var(--text-muted); flex-shrink: 0; }
+.workspace-name svg { width: 14px; height: 14px; color: #71757E; flex-shrink: 0; }
 
 .collapse-btn {
   width: 24px;
@@ -282,7 +282,7 @@ body.is-sidebar-resizing .sidebar {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  color: var(--text-muted);
+  color: #71757E;
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -349,9 +349,17 @@ body.is-sidebar-resizing .sidebar {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: #6B707B;
   min-width: 0;
   overflow: hidden;
+}
+.search-left svg {
+  color: #6B707B;
+  transition: color var(--transition-fast);
+}
+.sidebar-search-row .search-box:hover .search-left,
+.sidebar-search-row .search-box:hover .search-left svg {
+  color: var(--text-primary);
 }
 .search-left span {
   white-space: nowrap;
@@ -361,7 +369,7 @@ body.is-sidebar-resizing .sidebar {
 .search-shortcut {
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: #71757E;
   background: var(--bg-hover);
   padding: 2px 5px;
   border-radius: 4px;
@@ -533,14 +541,15 @@ body.is-sidebar-resizing .sidebar {
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   transition: all var(--transition-fast);
   min-width: 0;
 }
 .nav-item:hover { background-color: var(--bg-hover); color: var(--text-primary); }
 .nav-item.active { background-color: var(--bg-active); color: var(--text-primary); font-weight: 600; }
-.nav-item svg { width: 16px; height: 16px; color: var(--text-secondary); flex-shrink: 0; }
+.nav-item svg { width: 16px; height: 16px; color: #4B5563; flex-shrink: 0; transition: color var(--transition-fast); }
+.nav-item:hover svg { color: var(--text-primary); }
 .nav-item.active svg { color: var(--text-primary); }
 .nav-item span {
   white-space: nowrap;
@@ -557,7 +566,7 @@ body.is-sidebar-resizing .sidebar {
   padding: 10px 8px 5px 8px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-muted);
+  color: #5A5E66;
   user-select: none;
   cursor: pointer;
   border-radius: 6px;
@@ -591,8 +600,12 @@ body.is-sidebar-resizing .sidebar {
   display: inline-block;
   transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   transform: rotate(0deg);
-  color: var(--text-muted);
+  color: #6B707B;
   flex-shrink: 0;
+}
+
+.nav-section-header:hover .nav-section-chevron {
+  color: var(--text-primary);
 }
 
 .nav-section-header.collapsed .nav-section-chevron {
@@ -614,7 +627,7 @@ body.is-sidebar-resizing .sidebar {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
+  color: #6B707B;
   cursor: pointer;
   line-height: 1;
   transition: background var(--transition-fast), color var(--transition-fast);
@@ -727,7 +740,7 @@ body.is-sidebar-resizing .sidebar {
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   transition: all var(--transition-fast);
   user-select: none;
@@ -746,7 +759,15 @@ body.is-sidebar-resizing .sidebar {
   box-shadow: inset 0 -2px 0 0 #D97706;
 }
 .list-item svg {
+  width: 14px;
+  height: 14px;
+  color: #4B5563;
   flex-shrink: 0;
+  transition: color var(--transition-fast);
+}
+.list-item:hover svg,
+.list-item.active svg {
+  color: var(--text-primary);
 }
 .list-item > span:not(.list-count):not(.list-flag) {
   white-space: nowrap;
@@ -758,7 +779,7 @@ body.is-sidebar-resizing .sidebar {
 .list-flag { font-size: 14px; line-height: 1; flex-shrink: 0; }
 .list-count {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #71757E;
   margin-left: auto;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
@@ -769,6 +790,11 @@ body.is-sidebar-resizing .sidebar {
   align-items: center;
   justify-content: center;
   text-align: center;
+  transition: color var(--transition-fast);
+}
+.list-item.active .list-count {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 /* Workspace Dropdown */

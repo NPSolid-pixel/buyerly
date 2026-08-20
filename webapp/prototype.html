@@ -78,18 +78,19 @@
     .search-shortcut { font-size: 10px; font-weight: 600; color: var(--text-muted); background: var(--bg-hover); padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border-subtle); }
 
     .nav-list { display: flex; flex-direction: column; gap: 2px; list-style: none; }
-    .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.15s ease; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text-primary); cursor: pointer; transition: all 0.15s ease; }
     .nav-item:hover { background-color: var(--bg-hover); color: var(--text-primary); }
     .nav-item.active { background-color: var(--bg-active); color: var(--text-primary); font-weight: 600; }
-    .nav-item svg { width: 16px; height: 16px; color: var(--text-secondary); flex-shrink: 0; }
-    .nav-item.active svg { color: var(--text-primary); }
+    .nav-item svg { width: 16px; height: 16px; color: #4B5563; flex-shrink: 0; }
+    .nav-item:hover svg, .nav-item.active svg { color: var(--text-primary); }
 
-    .nav-section-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 10px 6px 10px; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+    .nav-section-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 10px 6px 10px; font-size: 12px; font-weight: 500; color: #5A5E66; cursor: pointer; }
+    .nav-section-header:hover { color: var(--text-primary); }
     .nav-section-title { display: flex; align-items: center; gap: 5px; }
-    .nav-section-add-btn { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; font-size: 14px; }
+    .nav-section-add-btn { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #6B707B; cursor: pointer; font-size: 14px; }
     .nav-section-add-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-    .list-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.12s; }
+    .list-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text-primary); cursor: pointer; transition: all 0.12s; }
     .list-item:hover { background-color: var(--bg-hover); color: var(--text-primary); }
     .list-item.active { background-color: var(--bg-active); color: var(--text-primary); font-weight: 600; }
     .list-flag { font-size: 15px; line-height: 1; }

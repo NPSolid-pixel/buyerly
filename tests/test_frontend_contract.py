@@ -624,5 +624,11 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertIn(contract, self.script + self.index)
 
+        # Verify sidebar typography and contrast hierarchy (Attio style)
+        self.assertIn('color: #5A5E66;', self.styles)
+        self.assertIn('.list-item.active .list-count', self.styles)
+        self.assertIn('.nav-item.active svg', self.styles)
+        self.assertIn('.list-item.active svg', self.styles)
+
 
 
