@@ -2087,28 +2087,6 @@
     };
     const act = actionBadgeMap[p.action] || { label: p.action, class: '' };
     const condList = p.conditions || [];
-    const metricLabels = {
-      'spend': 'Спенд', 'cpl': 'CPL', 'cpreg': 'CPReg', 'cpp': 'CPP',
-      'legacy_cpa': 'CPA', 'leads': 'Лиды', 'registrations': 'Реги',
-      'purchases': 'Покупки', 'ctr': 'CTR', 'cpc': 'CPC'
-    };
-    const opLabels = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
-
-    const chipsHtml = condList.map(c => {
-      const mLabel = metricLabels[c.metric] || c.metric;
-      const op = opLabels[c.operator] || c.operator;
-      const unit = (c.metric === 'leads' || c.metric === 'registrations' || c.metric === 'purchases') ? ' шт' : (c.metric === 'ctr' ? '%' : ' вал.');
-      const valStr = `${Number(c.value || 0)}${unit}`;
-      return `<span class="rule-cond-chip"><b>${escapeHtml(mLabel)}</b> ${op} ${escapeHtml(valStr)}</span>`;
-    }).join('');
-
-    const plainSummary = buildPlainRuleTextFromValues(
-      p.action,
-      p.condition_logic || 'and',
-      condList,
-      p.budget_change_percent || 0,
-      p.budget_max_daily || 0
-    );
 
     let linkedCount = 0;
     (state.accounts || []).forEach(acc => {
@@ -2130,32 +2108,25 @@
            ondragend="window.onRuleDragEnd(event)"
            onclick="window.editPresetFromTab(${p.id})">
         <div class="rule-card-top">
-          <div class="rule-card-title">${escapeHtml(p.name)}</div>
+          <div class="rule-card-title-wrap">
+            <span class="rule-card-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </span>
+            <div class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+          </div>
           <span class="rule-action-badge ${act.class}">${act.label}${stepInfo}</span>
         </div>
         
-        <div class="rule-conditions-compact">
-          ${chipsHtml || '<span class="text-hint" style="font-size:11px;">Без условий</span>'}
-        </div>
-
-        <div class="rule-card-plain-summary">
-          <span>Простым языком</span>
-          <p>${escapeHtml(plainSummary)}</p>
-        </div>
-
         <div class="rule-card-meta-bar">
           <div class="rule-card-meta-left">
-            <span>⏱ ${p.check_interval_minutes || 5}м</span>
-            <span>·</span>
-            <span>⏳ ${p.cooldown_minutes ? p.cooldown_minutes + 'м' : 'нет'}</span>
-            <span>·</span>
-            <span>${p.notify_tg !== false ? '🔔' : '🔕'}</span>
+            <span class="rule-meta-tag" title="Условия правила"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> ${condList.length} усл.</span>
+            <span class="rule-meta-tag" title="Интервал проверки"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${p.check_interval_minutes || 5}м</span>
           </div>
           <div class="rule-card-meta-right">
-            <span class="rule-link-badge ${linkedCount > 0 ? 'active' : 'inactive'}">🔗 ${linkedCount} каб.</span>
-            <button class="rules-column-btn" title="Удалить правило" onclick="event.stopPropagation(); window.deletePresetDirectly(${p.id})">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
+            <span class="rule-link-badge ${linkedCount > 0 ? 'active' : 'inactive'}" title="Привязано кабинетов">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              ${linkedCount}
+            </span>
           </div>
         </div>
       </div>
@@ -2225,7 +2196,7 @@
       return `
         <div class="rules-column" data-group-id="${group.id}">
           <div class="rules-column-header">
-            <div class="rules-column-title-wrap" style="cursor: pointer;" onclick="window.openGroupMenuPopover(event, ${group.id})" title="Настройки группы">
+            <div class="rules-column-title-wrap" onclick="window.openGroupMenuPopover(event, ${group.id})" title="Настройки группы">
               <span class="rules-column-dot ${dotColor}"></span>
               <span class="rules-column-title" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
               <span class="rules-column-count">${presetsInGroup.length}</span>
@@ -2240,13 +2211,7 @@
                ondragover="window.onRuleColumnDragOver(event)"
                ondragleave="window.onRuleColumnDragLeave(event)"
                ondrop="window.onRuleColumnDrop(event, ${group.id})">
-            ${cardsHtml || '<div class="rules-column-empty">Перетащите сюда правило или нажмите «+»</div>'}
-          </div>
-          <div class="rules-column-footer">
-            <button class="rules-column-add-btn" type="button" onclick="window.openChooseRuleModal(${group.id})">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              <span>Добавить правило</span>
-            </button>
+            ${cardsHtml || '<div class="rules-column-empty">Нет правил</div>'}
           </div>
         </div>
       `;
@@ -2280,22 +2245,15 @@
                ondrop="window.onRuleColumnDrop(event, null)">
             ${ungroupedCardsHtml || '<div class="rules-column-empty">Нет одиночных правил</div>'}
           </div>
-          <div class="rules-column-footer">
-            <button class="rules-column-add-btn" type="button" onclick="window.openChooseRuleModal(null)">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              <span>Новое правило</span>
-            </button>
-          </div>
         </div>
       `;
     }
 
-    // 3. Add Group Column Card (Attio + Column button)
+    // 3. Add Group Column Button (Attio dashed square [ + ])
     const addGroupColumnCard = `
-      <div class="rules-add-column-card" onclick="window.openAddColumnPopover(event)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-        <span>Новая группа</span>
-      </div>
+      <button class="rules-add-column-btn" type="button" onclick="window.openAddColumnPopover(event)" title="Добавить группу правил">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </button>
     `;
 
     boardContainer.innerHTML = groupColumnsHtml + ungroupedColumnHtml + addGroupColumnCard;
