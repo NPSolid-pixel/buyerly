@@ -519,6 +519,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             self.assertIn(script_contract, self.script)
 
         self.assertIn('id="btnGroupShare"', self.index)
+        for sort_label in ('По релевантности', 'Недавние', 'По алфавиту', 'Кастомные', 'Сортировка'):
+            self.assertIn(sort_label, self.index)
 
         for style_contract in (
             '.floating-action-bar',

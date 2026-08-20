@@ -554,11 +554,9 @@ body.is-sidebar-resizing .sidebar {
   align-items: center;
   justify-content: space-between;
   padding: 12px 8px 6px 8px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   user-select: none;
   cursor: pointer;
   border-radius: 6px;
@@ -654,6 +652,8 @@ body.is-sidebar-resizing .sidebar {
   padding: 6px;
   z-index: 100;
   animation: fadeInDropdown 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .sort-menu-header {
@@ -662,6 +662,8 @@ body.is-sidebar-resizing .sidebar {
   color: var(--text-muted);
   padding: 4px 8px 6px 8px;
   user-select: none;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .sort-menu-item {
@@ -676,6 +678,8 @@ body.is-sidebar-resizing .sidebar {
   cursor: pointer;
   transition: background var(--transition-fast);
   user-select: none;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .sort-menu-item:hover {
