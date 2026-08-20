@@ -154,7 +154,7 @@ code, .mono {
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  padding: 12px 10px;
+  padding: 8px 8px 12px 8px;
   flex-shrink: 0;
   position: relative;
   user-select: none;
@@ -224,19 +224,20 @@ body.is-sidebar-resizing .sidebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
+  padding: 2px 2px;
+  margin-bottom: 2px;
   border-radius: 8px;
   position: relative;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .workspace-info-btn {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 3px 5px;
   border-radius: 6px;
   transition: background var(--transition-fast);
   min-width: 0;
@@ -316,7 +317,7 @@ body.is-sidebar-resizing .sidebar {
 
 /* Sidebar Search Row & Notifications */
 .sidebar-search-row {
-  margin: 10px 0 10px 0;
+  margin: 6px 0 8px 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -527,8 +528,8 @@ body.is-sidebar-resizing .sidebar {
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
+  gap: 8px;
+  padding: 6px 8px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
@@ -553,7 +554,7 @@ body.is-sidebar-resizing .sidebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 8px 6px 8px;
+  padding: 10px 8px 5px 8px;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
@@ -722,7 +723,7 @@ body.is-sidebar-resizing .sidebar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 5px 8px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
@@ -755,13 +756,26 @@ body.is-sidebar-resizing .sidebar {
   min-width: 0;
 }
 .list-flag { font-size: 14px; line-height: 1; flex-shrink: 0; }
-.list-count { font-size: 11px; color: var(--text-muted); margin-left: auto; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.list-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
 
 /* Workspace Dropdown */
 .workspace-dropdown {
   position: absolute;
-  top: 50px;
-  left: 10px;
+  top: 42px;
+  left: 8px;
   width: 250px;
   background: var(--bg-surface);
   border-radius: 10px;
