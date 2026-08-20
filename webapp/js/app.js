@@ -535,17 +535,119 @@
     }
   };
 
-  window.openNewWorkspaceModal = function () {
+  window.openCreateWorkspacePage = function () {
     window.closeWorkspaceDropdown();
-    const input = document.getElementById('newWorkspaceNameInput');
-    if (input) input.value = '';
-    state.newWorkspaceSelectedColor = '#F5A300';
-    document.querySelectorAll('#newWorkspaceColorPicker .color-swatch').forEach(sw => {
+    const appEl = document.getElementById('app');
+    const wsScreen = document.getElementById('createWorkspaceScreen');
+    const loginScreen = document.getElementById('loginScreen');
+    if (loginScreen) {
+      loginScreen.style.display = 'none';
+      loginScreen.classList.add('hidden');
+    }
+    if (appEl) {
+      appEl.style.display = 'none';
+    }
+    if (wsScreen) {
+      wsScreen.style.display = 'flex';
+      wsScreen.classList.remove('hidden');
+    }
+
+    const nameInput = document.getElementById('createWsNameInput');
+    const slugInput = document.getElementById('createWsSlugInput');
+    if (nameInput) nameInput.value = '';
+    if (slugInput) slugInput.value = '';
+
+    state.pageWorkspaceSelectedColor = '#F5A300';
+    const logoBadge = document.getElementById('createWsLogoBadge');
+    if (logoBadge) {
+      logoBadge.style.backgroundColor = '#F5A300';
+    }
+    const badgeLetter = document.getElementById('createWsBadgeLetter');
+    if (badgeLetter) {
+      badgeLetter.textContent = 'W';
+    }
+    document.querySelectorAll('#pageWorkspaceColorPicker .color-swatch').forEach(sw => {
       sw.classList.toggle('active', sw.dataset.color === '#F5A300');
     });
-    window.updateNewWorkspaceSlugPreview();
-    window.openModal('modalNewWorkspace');
-    setTimeout(() => input?.focus(), 150);
+
+    setTimeout(() => nameInput?.focus(), 150);
+  };
+
+  window.closeCreateWorkspacePage = function () {
+    const wsScreen = document.getElementById('createWorkspaceScreen');
+    const appEl = document.getElementById('app');
+    if (wsScreen) {
+      wsScreen.style.display = 'none';
+      wsScreen.classList.add('hidden');
+    }
+    if (appEl) {
+      appEl.style.display = 'flex';
+    }
+    if (state.activeTab) {
+      window.switchTab(state.activeTab, { historyMode: 'none', haptic: false });
+    }
+  };
+
+  window.selectPageWorkspaceColor = function (el) {
+    const color = el?.dataset?.color || '#F5A300';
+    state.pageWorkspaceSelectedColor = color;
+    document.querySelectorAll('#pageWorkspaceColorPicker .color-swatch').forEach(sw => {
+      sw.classList.toggle('active', sw === el);
+    });
+    const logoBadge = document.getElementById('createWsLogoBadge');
+    if (logoBadge) {
+      logoBadge.style.backgroundColor = color;
+    }
+  };
+
+  window.submitCreateWorkspaceFromPage = async function () {
+    const nameInput = document.getElementById('createWsNameInput');
+    const name = nameInput ? nameInput.value.trim() : '';
+    if (!name) {
+      showToast('Введите название воркспейса', 'error');
+      nameInput?.focus();
+      return;
+    }
+
+    const btn = document.getElementById('btnCreateWsSubmit');
+    if (btn) btn.disabled = true;
+
+    try {
+      const created = await apiRequest('/api/workspaces', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name,
+          badge_color: state.pageWorkspaceSelectedColor || '#F5A300'
+        })
+      });
+
+      window.closeCreateWorkspacePage();
+      state.activeWorkspace = created;
+      const workspacesList = await apiRequest('/api/workspaces');
+      state.workspaces = workspacesList;
+      renderWorkspacesDropdown();
+      syncBrowserRoute('home', 'push');
+      window.switchTab('home');
+      showToast(`Воркспейс "${created.name}" создан!`);
+
+      // Refresh accounts & rules (will be empty in new workspace)
+      await Promise.allSettled([
+        fetchAccounts(),
+        fetchRulePresets(),
+        fetchRuleGroups(),
+        fetchAccountGroups(),
+        fetchSummary(true),
+        fetchLogs(true)
+      ]);
+    } catch (e) {
+      showToast(e.message || 'Ошибка создания воркспейса', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
+
+  window.openNewWorkspaceModal = function () {
+    window.openCreateWorkspacePage();
   };
 
   window.updateNewWorkspaceSlugPreview = function () {
@@ -570,49 +672,7 @@
   };
 
   window.submitCreateWorkspace = async function () {
-    const input = document.getElementById('newWorkspaceNameInput');
-    const name = input ? input.value.trim() : '';
-    if (!name) {
-      showToast('Введите название воркспейса', 'error');
-      input?.focus();
-      return;
-    }
-
-    const btn = document.getElementById('btnCreateWorkspaceSubmit');
-    if (btn) btn.disabled = true;
-
-    try {
-      const created = await apiRequest('/api/workspaces', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: name,
-          badge_color: state.newWorkspaceSelectedColor || '#F5A300'
-        })
-      });
-
-      window.closeModal('modalNewWorkspace');
-      state.activeWorkspace = created;
-      const workspacesList = await apiRequest('/api/workspaces');
-      state.workspaces = workspacesList;
-      renderWorkspacesDropdown();
-      syncBrowserRoute('home', 'push');
-      window.switchTab('home');
-      showToast(`Воркспейс "${created.name}" создан!`);
-
-      // Refresh accounts & rules (will be empty in new workspace)
-      await Promise.allSettled([
-        fetchAccounts(),
-        fetchRulePresets(),
-        fetchRuleGroups(),
-        fetchAccountGroups(),
-        fetchSummary(true),
-        fetchLogs(true)
-      ]);
-    } catch (e) {
-      showToast(e.message || 'Ошибка создания воркспейса', 'error');
-    } finally {
-      if (btn) btn.disabled = false;
-    }
+    return window.submitCreateWorkspaceFromPage();
   };
 
   window.openWorkspaceSettings = function () {

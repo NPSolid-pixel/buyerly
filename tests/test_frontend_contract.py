@@ -431,26 +431,30 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="currentWorkspaceName"',
             'id="workspaceDropdown"',
             'id="workspaceDropdownList"',
-            '+ New workspace',
+            'Новый воркспейс',
             'Account settings',
             'Workspace settings',
             'Invite team members',
-            'Apps and integrations',
-            'id="modalNewWorkspace"',
+            'id="createWorkspaceScreen"',
+            'id="createWsNameInput"',
+            'id="createWsSlugInput"',
+            'id="btnCreateWsSubmit"',
             'id="modalWorkspaceSettings"',
-            'id="newWorkspaceNameInput"',
-            'id="newWorkspaceSlugPreview"',
             'id="editWorkspaceNameInput"',
             'id="btnDeleteCurrentWorkspace"',
         ):
             self.assertIn(contract, self.index)
 
+        self.assertNotIn('Apps and integrations', self.index)
+        self.assertNotIn('+ + New workspace', self.index)
+
         for script_contract in (
             'renderWorkspacesDropdown',
             'window.toggleWorkspaceDropdown',
             'window.switchWorkspace',
-            'window.openNewWorkspaceModal',
-            'window.submitCreateWorkspace',
+            'window.openCreateWorkspacePage',
+            'window.closeCreateWorkspacePage',
+            'window.submitCreateWorkspaceFromPage',
             'window.openWorkspaceSettings',
             'window.submitSaveWorkspaceSettings',
             'window.submitDeleteCurrentWorkspace',
@@ -461,7 +465,10 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         for style_contract in (
             '.workspace-dropdown',
-            '.slug-preview-box',
+            '.ws-create-screen-wrapper',
+            '.ws-create-card-container',
+            '.ws-logo-avatar',
+            '.btn-ws-continue',
             '.color-picker-row',
             '.color-swatch',
         ):
