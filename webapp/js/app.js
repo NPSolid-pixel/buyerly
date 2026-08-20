@@ -586,12 +586,10 @@
 
       // Refresh data for new active workspace
       await Promise.allSettled([
-        fetchAccounts(),
-        fetchRulePresets(),
-        fetchRuleGroups(),
-        fetchAccountGroups(),
-        fetchSummary(true),
-        fetchLogs(true)
+        loadAccounts(),
+        loadFacebookAccounts(),
+        loadPresets(),
+        loadRuleGroups()
       ]);
     } catch (e) {
       showToast(e.message || 'Ошибка переключения воркспейса', 'error');
@@ -719,12 +717,10 @@
 
       // Refresh accounts & rules (will be empty in new workspace)
       await Promise.allSettled([
-        fetchAccounts(),
-        fetchRulePresets(),
-        fetchRuleGroups(),
-        fetchAccountGroups(),
-        fetchSummary(true),
-        fetchLogs(true)
+        loadAccounts(),
+        loadFacebookAccounts(),
+        loadPresets(),
+        loadRuleGroups()
       ]);
     } catch (e) {
       showToast(e.message || 'Ошибка создания воркспейса', 'error');
@@ -848,12 +844,10 @@
       window.switchTab('home');
 
       await Promise.allSettled([
-        fetchAccounts(),
-        fetchRulePresets(),
-        fetchRuleGroups(),
-        fetchAccountGroups(),
-        fetchSummary(true),
-        fetchLogs(true)
+        loadAccounts(),
+        loadFacebookAccounts(),
+        loadPresets(),
+        loadRuleGroups()
       ]);
     } catch (e) {
       showToast(e.message || 'Ошибка удаления воркспейса', 'error');
@@ -883,35 +877,50 @@
   // ==========================================================
   // TAB 1: ACCOUNTS (МОИ КАБИНЕТЫ & СПИСКИ)
   // ==========================================================
+  let loadAccountsInFlightPromise = null;
+
   async function loadAccounts() {
     const listEl = document.getElementById('accountsList');
     const emptyEl = document.getElementById('accountsEmptyState');
 
-    try {
-      const [accounts, groups] = await Promise.all([
-        apiRequest('/api/accounts'),
-        apiRequest('/api/account-groups')
-      ]);
-      state.accounts = accounts;
-      state.accountGroups = groups;
-      if (state.accountGroupFilter !== 'all') {
-        const matched = groups.find(group => 
-          String(group.id) === state.accountGroupFilter || 
-          String(group.name || '').toLowerCase() === state.accountGroupFilter.toLowerCase()
-        );
-        if (matched) {
-          state.accountGroupFilter = String(matched.id);
-        } else {
-          state.accountGroupFilter = 'all';
-        }
-      }
-      renderAccountGroups();
-      renderSidebarAccountGroups();
-      updateAccountsPageHeader();
-      renderAccounts();
-    } catch (err) {
-      if (listEl) listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
+    if (loadAccountsInFlightPromise) {
+      return loadAccountsInFlightPromise;
     }
+
+    loadAccountsInFlightPromise = (async () => {
+      try {
+        const [accounts, groups] = await Promise.all([
+          apiRequest('/api/accounts'),
+          apiRequest('/api/account-groups')
+        ]);
+        state.accounts = accounts;
+        state.accountGroups = groups;
+        if (state.accountGroupFilter !== 'all') {
+          const matched = groups.find(group => 
+            String(group.id) === state.accountGroupFilter || 
+            String(group.name || '').toLowerCase() === state.accountGroupFilter.toLowerCase()
+          );
+          if (matched) {
+            state.accountGroupFilter = String(matched.id);
+          } else {
+            state.accountGroupFilter = 'all';
+          }
+        }
+        renderAccountGroups();
+        renderSidebarAccountGroups();
+        updateAccountsPageHeader();
+        renderAccounts();
+        return { accounts, groups };
+      } catch (err) {
+        if (listEl && state.activeTab === 'accounts') {
+          listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
+        }
+      } finally {
+        loadAccountsInFlightPromise = null;
+      }
+    })();
+
+    return loadAccountsInFlightPromise;
   }
 
   function accountDisplayName(account) {
@@ -5737,10 +5746,12 @@
       }
     }
 
-    // 3. Facebook Connections (state.fbAccounts / state.metaOAuth.connections)
-    const fbList = (state.fbAccounts && state.fbAccounts.length > 0)
-      ? state.fbAccounts
-      : ((state.metaOAuth && state.metaOAuth.connections) || []);
+    // 3. Facebook Connections (state.fbConnections / state.fbAccounts / state.metaOAuth.connections)
+    const fbList = (state.fbConnections && state.fbConnections.length > 0)
+      ? state.fbConnections
+      : (state.fbAccounts && state.fbAccounts.length > 0)
+        ? state.fbAccounts
+        : ((state.metaOAuth && state.metaOAuth.connections) || []);
 
     if (fbList && fbList.length > 0) {
       const matchedFb = fbList.filter(fb => {
@@ -6100,7 +6111,17 @@
 
         // Restore the requested page only after authentication succeeds.
         startSummaryAutoRefresh();
+
+        // Always load global workspace navigation data so sidebar groups, counters and quick search are immediately ready
+        const initDataPromise = Promise.allSettled([
+          loadAccounts(),
+          loadFacebookAccounts(),
+          loadPresets(),
+          loadRuleGroups()
+        ]);
+
         if (parsed.groupFilter && parsed.groupFilter !== 'all') {
+          await initDataPromise;
           window.switchAccountGroup(parsed.groupFilter, {
             historyMode: 'replace',
             haptic: false,

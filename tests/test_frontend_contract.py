@@ -604,4 +604,25 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertIn(style_contract, self.styles)
 
+    def test_sidebar_and_workspace_navigation_contract(self):
+        # Verify no undefined fetch helpers exist
+        for undefined_helper in (
+            'fetchAccounts()',
+            'fetchRulePresets()',
+            'fetchRuleGroups()',
+            'fetchAccountGroups()',
+        ):
+            self.assertNotIn(undefined_helper, self.script)
+
+        # Verify sidebar account groups and counters contract
+        for contract in (
+            'renderSidebarAccountGroups',
+            'loadAccountsInFlightPromise',
+            'sidebarAccountGroupsContainer',
+            'sidebarTotalCount',
+            'sidebarFbAccountsCount',
+        ):
+            self.assertIn(contract, self.script + self.index)
+
+
 
