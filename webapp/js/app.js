@@ -96,8 +96,6 @@
     accountGroupsCustomOrder: JSON.parse(localStorage.getItem('buyerly_groups_custom_order') || '[]'),
     selectedAccounts: new Set(),
     fbConnections: [],
-    fbFilter: 'all',
-    fbSearchQuery: '',
     accounts: [],
     accountGroups: [],
     accountGroupFilter: 'all',
@@ -1633,50 +1631,19 @@
     }
   }
 
-  window.setFbFilter = function (filter) {
-    state.fbFilter = filter;
-    document.querySelectorAll('[data-fb-filter]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.fbFilter === filter);
-    });
-    renderFacebookAccounts();
-  };
-
   function renderFacebookAccounts() {
     const tableBody = document.getElementById('fbAccountsTableBody');
     const emptyEl = document.getElementById('fbAccountsEmptyState');
     if (!tableBody) return;
 
-    const query = (document.getElementById('fbAccountSearchInput')?.value || '').toLowerCase().trim();
     const connections = state.fbConnections || [];
 
-    // Filter connections
-    const filtered = connections.filter(conn => {
-      const name = (conn.provider_user_name || '').toLowerCase();
-      const uid = (conn.provider_user_id || '').toLowerCase();
-      const matchSearch = !query || name.includes(query) || uid.includes(query);
-      if (!matchSearch) return false;
-      
-      if (state.fbFilter === 'active') return conn.status === 'active';
-      if (state.fbFilter === 'issue') return conn.status !== 'active';
-      return true;
-    });
-
-    // Update counters
+    // Update sidebar counter
     const totalCount = connections.length;
-    const activeCount = connections.filter(c => c.status === 'active').length;
-    const issueCount = connections.filter(c => c.status !== 'active').length;
-
-    const elTotal = document.getElementById('fbCountAll');
-    const elActive = document.getElementById('fbCountActive');
-    const elIssue = document.getElementById('fbCountIssue');
     const elSidebarCount = document.getElementById('sidebarFbAccountsCount');
-
-    if (elTotal) elTotal.textContent = totalCount;
-    if (elActive) elActive.textContent = activeCount;
-    if (elIssue) elIssue.textContent = issueCount;
     if (elSidebarCount) elSidebarCount.textContent = totalCount;
 
-    if (filtered.length === 0) {
+    if (connections.length === 0) {
       tableBody.innerHTML = '';
       if (emptyEl) emptyEl.classList.remove('hidden');
       return;
@@ -1684,7 +1651,7 @@
 
     if (emptyEl) emptyEl.classList.add('hidden');
 
-    const html = filtered.map(conn => {
+    const html = connections.map(conn => {
       const name = conn.provider_user_name || 'Facebook User';
       const initial = name.charAt(0).toUpperCase();
       const uid = conn.provider_user_id || '—';
@@ -1730,9 +1697,6 @@
             <div>
               <span class="fb-bm-chip">${escapeHtml(name)} <b style="color: var(--text-muted); font-size: 10px; margin-left: 2px;">${rkCount} рк</b></span>
             </div>
-          </td>
-          <td>
-            <span style="font-weight: 500; color: var(--text-muted);">—</span>
           </td>
           <td>
             <span style="font-weight: 700; font-size: 13px; color: var(--text-primary);">${escapeHtml(spendFormatted)}</span>

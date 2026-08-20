@@ -522,6 +522,14 @@ class TestFrontendRuleContract(unittest.TestCase):
         for sort_label in ('По релевантности', 'Недавние', 'По алфавиту', 'Кастомные', 'Сортировка'):
             self.assertIn(sort_label, self.index)
 
+        # FB Accounts tab cleanup assertions
+        self.assertNotIn('id="fbAccountSearchInput"', self.index)
+        self.assertNotIn('data-fb-filter', self.index)
+        self.assertNotIn('<th>Страницы</th>', self.index)
+        self.assertNotIn('>Страницы</th>', self.index)
+        self.assertIn('<span>Подключить Facebook</span>', self.index)
+        self.assertNotIn('+ +', self.index)
+
         for style_contract in (
             '.floating-action-bar',
             '.selected-badge',

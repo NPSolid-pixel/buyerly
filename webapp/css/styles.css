@@ -2649,7 +2649,7 @@ input:checked + .slider:before { transform: translateX(16px); }
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   overflow: hidden;
-  margin-top: 14px;
+  margin-top: 0;
 }
 .fb-accounts-table {
   width: 100%;
