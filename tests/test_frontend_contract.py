@@ -507,6 +507,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.toggleListsSortMenu',
             'window.setGroupsSortMode',
             'window.switchAccountGroup',
+            'window.copyCurrentGroupLink',
             'window.toggleAccountSelection',
             'window.toggleSelectAllAccounts',
             'window.clearAccountSelection',
@@ -516,6 +517,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'applySidebarSectionsCollapsedState',
         ):
             self.assertIn(script_contract, self.script)
+
+        self.assertIn('id="btnGroupShare"', self.index)
 
         for style_contract in (
             '.floating-action-bar',

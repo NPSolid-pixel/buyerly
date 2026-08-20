@@ -267,30 +267,77 @@
     return path || '/';
   }
 
-  function parsePathLocation(pathname = window.location.pathname) {
+  function parsePathLocation(pathname = window.location.pathname, search = window.location.search) {
     const raw = normalizeAppPath(pathname);
     const trimmed = raw.replace(/^\/+|\/+$/g, '');
-    if (!trimmed) {
-      return { workspaceSlug: '', tab: 'home' };
+    let groupFilter = 'all';
+
+    // Parse search parameters if provided e.g. ?group=1 or ?group_id=1
+    if (search) {
+      try {
+        const params = new URLSearchParams(search);
+        if (params.has('group')) groupFilter = params.get('group') || 'all';
+        else if (params.has('group_id')) groupFilter = params.get('group_id') || 'all';
+      } catch (e) {}
     }
+
+    if (!trimmed) {
+      return { workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
+    }
+
     const parts = trimmed.split('/');
+
+    // Paths with workspace slug e.g. /buyerly/groups/1 or /buyerly/accounts or /buyerly/collection/1
     if (parts.length >= 2) {
       const slug = parts[0];
-      const tabCandidate = parts[1];
-      const tab = Object.hasOwn(TAB_ROUTES, tabCandidate) ? tabCandidate : 'home';
-      return { workspaceSlug: slug, tab: tab };
+      const segment = parts[1];
+      const subSegment = parts[2] || '';
+
+      if (segment === 'groups' || segment === 'lists' || segment === 'collection') {
+        return { workspaceSlug: slug, tab: 'accounts', groupFilter: subSegment || groupFilter || 'all' };
+      }
+      if (segment === 'facebook-groups') {
+        return { workspaceSlug: slug, tab: 'fb_accounts', groupFilter: subSegment || groupFilter || 'all' };
+      }
+      if (segment === 'rule-groups') {
+        return { workspaceSlug: slug, tab: 'rules', groupFilter: subSegment || groupFilter || 'all' };
+      }
+      if (segment === 'chats') {
+        return { workspaceSlug: slug, tab: 'home', chatId: subSegment, groupFilter: 'all' };
+      }
+      if (segment === 'accounts' && subSegment) {
+        return { workspaceSlug: slug, tab: 'accounts', groupFilter: subSegment };
+      }
+
+      const tab = Object.hasOwn(TAB_ROUTES, segment) ? segment : 'home';
+      return { workspaceSlug: slug, tab: tab, groupFilter: groupFilter };
     }
+
+    // Paths without workspace slug e.g. /groups/1 or /accounts or /rules
     if (parts.length === 1) {
       const candidate = parts[0];
+      if (candidate === 'groups' || candidate === 'lists' || candidate === 'collection') {
+        return { workspaceSlug: '', tab: 'accounts', groupFilter: groupFilter };
+      }
+      if (candidate === 'facebook-groups') {
+        return { workspaceSlug: '', tab: 'fb_accounts', groupFilter: groupFilter };
+      }
+      if (candidate === 'rule-groups') {
+        return { workspaceSlug: '', tab: 'rules', groupFilter: groupFilter };
+      }
+      if (candidate === 'chats') {
+        return { workspaceSlug: '', tab: 'home', groupFilter: 'all' };
+      }
       if (Object.hasOwn(TAB_ROUTES, candidate)) {
-        return { workspaceSlug: '', tab: candidate };
+        return { workspaceSlug: '', tab: candidate, groupFilter: groupFilter };
       }
       if (ROUTE_TABS['/' + candidate] || LEGACY_ROUTE_TABS['/' + candidate]) {
-        return { workspaceSlug: '', tab: ROUTE_TABS['/' + candidate] || LEGACY_ROUTE_TABS['/' + candidate] };
+        return { workspaceSlug: '', tab: ROUTE_TABS['/' + candidate] || LEGACY_ROUTE_TABS['/' + candidate], groupFilter: groupFilter };
       }
-      return { workspaceSlug: candidate, tab: 'home' };
+      return { workspaceSlug: candidate, tab: 'home', groupFilter: groupFilter };
     }
-    return { workspaceSlug: '', tab: 'home' };
+
+    return { workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
   }
 
   function tabFromLocation(pathname = window.location.pathname) {
@@ -311,10 +358,10 @@
     return Boolean(parsed.tab && Object.hasOwn(TAB_ROUTES, parsed.tab));
   }
 
-  function rememberReturnRoute(pathname = window.location.pathname) {
+  function rememberReturnRoute(pathname = window.location.pathname, search = window.location.search) {
     if (!isKnownAppPath(pathname)) return;
     try {
-      sessionStorage.setItem('buyerly_return_route', TAB_ROUTES[tabFromLocation(pathname)]);
+      sessionStorage.setItem('buyerly_return_route', pathname + (search || ''));
     } catch (e) {}
   }
 
@@ -332,11 +379,16 @@
     if (historyMode === 'none') return;
     const tab = Object.hasOwn(TAB_ROUTES, tabName) ? tabName : 'home';
     const slug = (state.activeWorkspace && state.activeWorkspace.slug) ? state.activeWorkspace.slug : 'buyerly';
-    const route = `/${slug}/${tab}`;
+    let route = `/${slug}/${tab}`;
+
+    if (tab === 'accounts' && state.accountGroupFilter && state.accountGroupFilter !== 'all') {
+      route = `/${slug}/groups/${encodeURIComponent(state.accountGroupFilter)}`;
+    }
+
     const currentPath = normalizeAppPath(window.location.pathname);
     const method = historyMode === 'replace' || currentPath === route ? 'replaceState' : 'pushState';
     try {
-      window.history[method]({ tab: tab, workspace: slug }, '', route);
+      window.history[method]({ tab: tab, workspace: slug, groupFilter: state.accountGroupFilter || 'all' }, '', route);
     } catch (e) {}
   }
 
@@ -397,7 +449,6 @@
     }
     if (options.haptic !== false) haptic('selection');
     syncBrowserRoute(tabName, options.historyMode || 'push');
-    document.title = TAB_PAGE_TITLES[tabName] || 'Buyerly — AI Media Buyer';
 
     // Update active tab buttons (Desktop & Mobile & Sidebar)
     window.updateSidebarActiveState();
@@ -405,17 +456,33 @@
     // Update Header Breadcrumbs
     const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
     if (breadcrumbArea) {
-      const titles = {
-        home: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Home</span>',
-        fb_accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Facebook Аккаунты</span>',
-        accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Все кабинеты</span>',
-        rules: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span>',
-        summary: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Сводка</span>',
-        logs: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Логи</span>',
-        add: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v16m8-8H4"/></svg><span>Добавить кабинеты</span>',
-        settings: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Настройки</span>'
-      };
-      breadcrumbArea.innerHTML = `<div class="breadcrumb-title">${titles[tabName] || 'Buyerly'}</div>`;
+      if (tabName === 'accounts' && state.accountGroupFilter && state.accountGroupFilter !== 'all') {
+        const group = (state.accountGroups || []).find(g => 
+          String(g.id) === String(state.accountGroupFilter) || 
+          String(g.name || '').toLowerCase() === String(state.accountGroupFilter).toLowerCase()
+        );
+        const groupTitle = group ? escapeHtml(group.name) : 'Группа кабинетов';
+        breadcrumbArea.innerHTML = `
+          <div class="breadcrumb-title">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px; color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span>${groupTitle}</span>
+          </div>
+        `;
+        document.title = `${group ? group.name : 'Группа'} — Buyerly`;
+      } else {
+        const titles = {
+          home: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Home</span>',
+          fb_accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Facebook Аккаунты</span>',
+          accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Все кабинеты</span>',
+          rules: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span>',
+          summary: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Сводка</span>',
+          logs: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Логи</span>',
+          add: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v16m8-8H4"/></svg><span>Добавить кабинеты</span>',
+          settings: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Настройки</span>'
+        };
+        breadcrumbArea.innerHTML = `<div class="breadcrumb-title">${titles[tabName] || 'Buyerly'}</div>`;
+        document.title = TAB_PAGE_TITLES[tabName] || 'Buyerly — AI Media Buyer';
+      }
     }
 
     // Show active tab section
@@ -829,8 +896,16 @@
       ]);
       state.accounts = accounts;
       state.accountGroups = groups;
-      if (state.accountGroupFilter !== 'all' && !groups.some(group => String(group.id) === state.accountGroupFilter)) {
-        state.accountGroupFilter = 'all';
+      if (state.accountGroupFilter !== 'all') {
+        const matched = groups.find(group => 
+          String(group.id) === state.accountGroupFilter || 
+          String(group.name || '').toLowerCase() === state.accountGroupFilter.toLowerCase()
+        );
+        if (matched) {
+          state.accountGroupFilter = String(matched.id);
+        } else {
+          state.accountGroupFilter = 'all';
+        }
       }
       renderAccountGroups();
       renderSidebarAccountGroups();
@@ -1059,10 +1134,33 @@
     });
   }
 
-  window.switchAccountGroup = function (groupId) {
+  window.copyCurrentGroupLink = function () {
+    const slug = (state.activeWorkspace && state.activeWorkspace.slug) ? state.activeWorkspace.slug : 'buyerly';
+    const group = (state.accountGroups || []).find(g => 
+      String(g.id) === String(state.accountGroupFilter) || 
+      String(g.name || '').toLowerCase() === String(state.accountGroupFilter).toLowerCase()
+    );
+    const idOrSlug = group ? group.id : state.accountGroupFilter;
+    const url = `${window.location.origin}/${slug}/groups/${encodeURIComponent(idOrSlug)}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(() => {
+        showToast('Ссылка на группу скопирована', 'success');
+      }).catch(() => {
+        prompt('Ссылка на группу:', url);
+      });
+    } else {
+      prompt('Ссылка на группу:', url);
+    }
+  };
+
+  window.switchAccountGroup = function (groupId, options = {}) {
     state.accountGroupFilter = String(groupId);
     state.activeTab = 'accounts';
-    window.switchTab('accounts', { historyMode: 'none' });
+    window.switchTab('accounts', {
+      historyMode: options.historyMode || 'push',
+      haptic: options.haptic,
+      scrollBehavior: options.scrollBehavior
+    });
     updateAccountsPageHeader();
     renderAccounts();
     window.updateSidebarActiveState();
@@ -1073,14 +1171,19 @@
     const title = document.getElementById('accountsPageTitle');
     const subtitle = document.getElementById('accountsPageSubtitle');
     const btnSettings = document.getElementById('btnGroupSettings');
+    const btnShare = document.getElementById('btnGroupShare');
 
     if (state.accountGroupFilter === 'all') {
       if (eyebrow) eyebrow.textContent = 'Рабочее пространство';
       if (title) title.textContent = 'Рекламные кабинеты';
       if (subtitle) subtitle.textContent = 'Статус Meta, автоматика и назначенные правила — отдельно и без скрытых состояний.';
       if (btnSettings) btnSettings.classList.add('hidden');
+      if (btnShare) btnShare.classList.add('hidden');
     } else {
-      const group = (state.accountGroups || []).find(g => String(g.id) === String(state.accountGroupFilter));
+      const group = (state.accountGroups || []).find(g => 
+        String(g.id) === String(state.accountGroupFilter) || 
+        String(g.name || '').toLowerCase() === String(state.accountGroupFilter).toLowerCase()
+      );
       if (group) {
         if (eyebrow) eyebrow.textContent = `Группа кабинетов (${group.accounts_count || 0} шт.)`;
         if (title) title.textContent = group.name;
@@ -1088,6 +1191,9 @@
         if (btnSettings) {
           btnSettings.classList.remove('hidden');
           btnSettings.onclick = () => window.openAccountGroupEditor(group.id);
+        }
+        if (btnShare) {
+          btnShare.classList.remove('hidden');
         }
       }
     }
@@ -5299,9 +5405,8 @@
     const button = event.target.closest('[data-account-group-filter]');
     if (!button) return;
     const targetFilter = button.dataset.accountGroupFilter;
-    state.accountGroupFilter = state.accountGroupFilter === targetFilter ? 'all' : (targetFilter || 'all');
-    renderAccountGroups();
-    renderAccounts();
+    const nextFilter = state.accountGroupFilter === targetFilter ? 'all' : (targetFilter || 'all');
+    window.switchAccountGroup(nextFilter);
   });
 
   function rerenderSummaryForTableControls() {
@@ -5744,10 +5849,7 @@
           badge: 'Список',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>',
           action: () => {
-            window.switchTab('accounts');
-            state.accountGroupFilter = String(g.id);
-            renderAccountGroups();
-            renderAccounts();
+            window.switchAccountGroup(g.id);
           }
         };
       });
@@ -6008,8 +6110,9 @@
 
         const currentPath = normalizeAppPath(window.location.pathname);
         const isLoginPath = currentPath === '/sign-in' || currentPath === '/login';
-        const initialPath = isLoginPath ? consumeReturnRoute() : currentPath;
-        const targetSlug = workspaceSlugFromLocation(initialPath);
+        const initialPath = isLoginPath ? consumeReturnRoute() : (currentPath + window.location.search);
+        const parsed = parsePathLocation(initialPath);
+        const targetSlug = parsed.workspaceSlug;
 
         if (targetSlug && state.workspaces && state.activeWorkspace && state.activeWorkspace.slug !== targetSlug) {
           const matchWs = state.workspaces.find(w => w.slug === targetSlug);
@@ -6026,15 +6129,26 @@
           }
         }
 
-        const initialTab = tabFromLocation(initialPath || TAB_ROUTES.home);
+        const initialTab = parsed.tab || 'home';
+        if (parsed.groupFilter && parsed.groupFilter !== 'all') {
+          state.accountGroupFilter = String(parsed.groupFilter);
+        }
 
         // Restore the requested page only after authentication succeeds.
         startSummaryAutoRefresh();
-        window.switchTab(initialTab, {
-          historyMode: 'replace',
-          haptic: false,
-          scrollBehavior: 'auto'
-        });
+        if (parsed.groupFilter && parsed.groupFilter !== 'all') {
+          window.switchAccountGroup(parsed.groupFilter, {
+            historyMode: 'replace',
+            haptic: false,
+            scrollBehavior: 'auto'
+          });
+        } else {
+          window.switchTab(initialTab, {
+            historyMode: 'replace',
+            haptic: false,
+            scrollBehavior: 'auto'
+          });
+        }
       }
     } catch (e) {
       console.warn("Unauthorized / access locked:", e);
@@ -6310,13 +6424,25 @@
     }, 300);
   };
 
-  window.addEventListener('popstate', () => {
+  window.addEventListener('popstate', (event) => {
     if (!state.user) return;
-    window.switchTab(tabFromLocation(), {
-      historyMode: 'none',
-      haptic: false,
-      scrollBehavior: 'auto'
-    });
+    const stateObj = event?.state || {};
+    const parsed = parsePathLocation();
+    const groupFilter = stateObj.groupFilter !== undefined ? stateObj.groupFilter : parsed.groupFilter;
+
+    if (groupFilter && groupFilter !== 'all') {
+      window.switchAccountGroup(groupFilter, {
+        historyMode: 'none',
+        haptic: false,
+        scrollBehavior: 'auto'
+      });
+    } else {
+      window.switchTab(stateObj.tab || parsed.tab, {
+        historyMode: 'none',
+        haptic: false,
+        scrollBehavior: 'auto'
+      });
+    }
   });
 
   document.addEventListener('visibilitychange', () => {
