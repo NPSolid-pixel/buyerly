@@ -2039,20 +2039,131 @@
   });
 
   // ==========================================================
-  // TAB: RULES & PRESETS MANAGEMENT (PHOTO 2 & TAB LOGIC)
+  // TAB: RULES & PRESETS MANAGEMENT (ATTIO KANBAN BOARD)
   // ==========================================================
+  let draggedRuleInfo = null;
+
   async function loadRulesTab() {
     await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
     renderRulesTab();
   }
 
+  window.onRulesFilterChange = function () {
+    const searchInput = document.getElementById('rulesSearchInput');
+    const actionFilter = document.getElementById('rulesActionFilter');
+    state.rulesSearchQuery = (searchInput?.value || '').toLowerCase().trim();
+    state.rulesActionFilter = actionFilter?.value || 'all';
+    renderRulesTab();
+  };
+
+  function isPresetMatchingFilter(preset) {
+    const query = (state.rulesSearchQuery || '').toLowerCase();
+    const filter = state.rulesActionFilter || 'all';
+
+    if (filter !== 'all' && preset.action !== filter) {
+      return false;
+    }
+    if (query) {
+      const nameMatch = (preset.name || '').toLowerCase().includes(query);
+      const actionMatch = (preset.action || '').toLowerCase().includes(query);
+      const condMatch = (preset.conditions || []).some(c => (c.metric || '').toLowerCase().includes(query));
+      if (!nameMatch && !actionMatch && !condMatch) return false;
+    }
+    return true;
+  }
+
+  function buildKanbanRuleCard(p, groupId = null) {
+    const actionBadgeMap = {
+      'turn_off': { label: 'Стоп', class: 'rule-action-turn_off' },
+      'notify_only': { label: 'Пуш', class: 'rule-action-notify_only' },
+      'turn_on': { label: 'Старт', class: 'rule-action-turn_on' },
+      'increase_budget': { label: '+Бюджет', class: 'rule-action-increase_budget' },
+      'decrease_budget': { label: '-Бюджет', class: 'rule-action-decrease_budget' }
+    };
+    const act = actionBadgeMap[p.action] || { label: p.action, class: '' };
+    const condList = p.conditions || [];
+    const metricLabels = {
+      'spend': 'Спенд', 'cpl': 'CPL', 'cpreg': 'CPReg', 'cpp': 'CPP',
+      'legacy_cpa': 'CPA', 'leads': 'Лиды', 'registrations': 'Реги',
+      'purchases': 'Покупки', 'ctr': 'CTR', 'cpc': 'CPC'
+    };
+    const opLabels = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
+
+    const chipsHtml = condList.map(c => {
+      const mLabel = metricLabels[c.metric] || c.metric;
+      const op = opLabels[c.operator] || c.operator;
+      const unit = (c.metric === 'leads' || c.metric === 'registrations' || c.metric === 'purchases') ? ' шт' : (c.metric === 'ctr' ? '%' : ' вал.');
+      const valStr = `${Number(c.value || 0)}${unit}`;
+      return `<span class="rule-cond-chip"><b>${escapeHtml(mLabel)}</b> ${op} ${escapeHtml(valStr)}</span>`;
+    }).join('');
+
+    const plainSummary = buildPlainRuleTextFromValues(
+      p.action,
+      p.condition_logic || 'and',
+      condList,
+      p.budget_change_percent || 0,
+      p.budget_max_daily || 0
+    );
+
+    let linkedCount = 0;
+    (state.accounts || []).forEach(acc => {
+      if (acc.rules_enabled && (acc.active_rules || []).some(r => r.preset_id === p.id)) {
+        linkedCount++;
+      }
+    });
+
+    const stepInfo = (p.action === 'increase_budget' || p.action === 'decrease_budget')
+      ? ` ${p.action === 'increase_budget' ? '+' : '-'}${p.budget_change_percent || 20}%`
+      : '';
+
+    return `
+      <div class="rules-kanban-card rule-card"
+           draggable="true"
+           data-preset-id="${p.id}"
+           data-group-id="${groupId !== null ? groupId : ''}"
+           ondragstart="window.onRuleDragStart(event, ${p.id}, ${groupId !== null ? groupId : 'null'})"
+           ondragend="window.onRuleDragEnd(event)"
+           onclick="window.editPresetFromTab(${p.id})">
+        <div class="rule-card-top">
+          <div class="rule-card-title">${escapeHtml(p.name)}</div>
+          <span class="rule-action-badge ${act.class}">${act.label}${stepInfo}</span>
+        </div>
+        
+        <div class="rule-conditions-compact">
+          ${chipsHtml || '<span class="text-hint" style="font-size:11px;">Без условий</span>'}
+        </div>
+
+        <div class="rule-card-plain-summary">
+          <span>Простым языком</span>
+          <p>${escapeHtml(plainSummary)}</p>
+        </div>
+
+        <div class="rule-card-meta-bar">
+          <div class="rule-card-meta-left">
+            <span>⏱ ${p.check_interval_minutes || 5}м</span>
+            <span>·</span>
+            <span>⏳ ${p.cooldown_minutes ? p.cooldown_minutes + 'м' : 'нет'}</span>
+            <span>·</span>
+            <span>${p.notify_tg !== false ? '🔔' : '🔕'}</span>
+          </div>
+          <div class="rule-card-meta-right">
+            <span class="rule-link-badge ${linkedCount > 0 ? 'active' : 'inactive'}">🔗 ${linkedCount} каб.</span>
+            <button class="rules-column-btn" title="Удалить правило" onclick="event.stopPropagation(); window.deletePresetDirectly(${p.id})">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function renderRulesTab() {
-    const container = document.getElementById('rulesCardsContainer');
+    const boardContainer = document.getElementById('ruleGroupsContainer');
     const emptyEl = document.getElementById('rulesEmptyState');
     const activeCountEl = document.getElementById('rulesActiveCount');
     const groupsCountEl = document.getElementById('rulesGroupsCount');
     const linkedCountEl = document.getElementById('rulesLinkedAccsCount');
-    if (!container || !emptyEl) return;
+    if (!boardContainer || !emptyEl) return;
 
     const totalPresets = state.presets.length;
     let linkedAccountsCount = 0;
@@ -2065,110 +2176,218 @@
     if (activeCountEl) activeCountEl.textContent = totalPresets;
     if (groupsCountEl) groupsCountEl.textContent = state.ruleGroups.length;
     if (linkedCountEl) linkedCountEl.textContent = linkedAccountsCount;
-    renderRuleGroups();
 
-    if (totalPresets === 0) {
-      container.innerHTML = '';
+    if (totalPresets === 0 && state.ruleGroups.length === 0) {
+      boardContainer.innerHTML = '';
       emptyEl.classList.remove('hidden');
       return;
     }
 
     emptyEl.classList.add('hidden');
 
-    const actionBadgeMap = {
-      'turn_off': { label: 'Выключить адсеты', class: 'rule-action-turn_off' },
-      'notify_only': { label: 'Только уведомление', class: 'rule-action-notify_only' },
-      'turn_on': { label: 'Включить адсеты', class: 'rule-action-turn_on' },
-      'increase_budget': { label: 'Увеличить бюджет', class: 'rule-action-increase_budget' },
-      'decrease_budget': { label: 'Уменьшить бюджет', class: 'rule-action-decrease_budget' }
-    };
+    const dotColors = ['dot-amber', 'dot-blue', 'dot-green', 'dot-purple'];
+    const allGroupedPresetIds = new Set();
+    state.ruleGroups.forEach(g => {
+      (g.preset_ids || []).forEach(id => allGroupedPresetIds.add(id));
+    });
 
-    container.innerHTML = state.presets.map(p => {
-      const act = actionBadgeMap[p.action] || { label: p.action, class: '' };
-      const condList = p.conditions || [];
-      const logicText = p.condition_logic === 'or' ? 'Логика: OR (Любое)' : 'Логика: AND (Все)';
-      
-      const condsHtml = condList.map(c => {
-        const metricLabels = {
-          'spend': 'Спенд', 'cpl': 'CPL', 'cpreg': 'CPReg', 'cpp': 'CPP',
-          'legacy_cpa': 'Старый общий CPA',
-          'leads': 'Лиды', 'registrations': 'Реги', 'purchases': 'Покупки',
-          'ctr': 'CTR', 'cpc': 'CPC'
-        };
-        const mLabel = metricLabels[c.metric] || c.metric;
-        const op = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' }[c.operator] || c.operator;
-        const unit = (c.metric === 'leads' || c.metric === 'registrations' || c.metric === 'purchases') ? ' шт' : (c.metric === 'ctr' ? '%' : ' вал. кабинета');
-        const numericValue = Number(c.value || 0);
-        const valStr = `${numericValue}${unit}`;
-        const windowLabels = { 'today': 'Сегодня', 'yesterday': 'Вчера', 'last_3d': '3 дня', 'last_7d': '7 дней' };
-        const winStr = windowLabels[c.time_window || 'today'] || 'Сегодня';
+    // 1. Group Columns
+    const groupColumnsHtml = state.ruleGroups.map((group, idx) => {
+      const dotColor = dotColors[idx % dotColors.length];
+      const groupPresetIds = group.preset_ids || [];
+      const presetsInGroup = state.presets
+        .filter(p => groupPresetIds.includes(p.id))
+        .filter(isPresetMatchingFilter);
 
-        return `
-          <div class="rule-condition-chip">
-            <span class="rule-cond-bullet">•</span>
-            <span><b>${mLabel}</b> ${op} <b>${valStr}</b></span>
-            <span style="font-size:11px; color:var(--tg-hint);">(${winStr})</span>
-          </div>
-        `;
-      }).join('');
-      const legacyWarningHtml = condList.some(c => c.metric === 'legacy_cpa' || c.metric === 'cpa')
-        ? '<div class="rule-migration-warning">Правило выключено: замените старый общий CPA на CPL, CPReg или CPP.</div>'
-        : '';
-      const plainSummary = buildPlainRuleTextFromValues(
-        p.action,
-        p.condition_logic || 'and',
-        condList,
-        p.budget_change_percent || 0,
-        p.budget_max_daily || 0
-      );
-
-      let budgetInfoHtml = '';
-      if (p.action === 'increase_budget' || p.action === 'decrease_budget') {
-        const sign = p.action === 'increase_budget' ? '+' : '-';
-        const cap = p.budget_max_daily > 0 ? ` · Макс: ${p.budget_max_daily} в валюте кабинета/день` : '';
-        budgetInfoHtml = `<div style="font-size:11.5px; color:var(--tg-link); font-weight:600;">Шаг: ${sign}${p.budget_change_percent || 20}%${cap}</div>`;
-      }
+      const cardsHtml = presetsInGroup.map(p => buildKanbanRuleCard(p, group.id)).join('');
 
       return `
-        <div class="rule-item-card">
-          <div class="rule-card-top">
-            <div>
-              <div class="rule-card-title">${escapeHtml(p.name)}</div>
-              <div class="rule-card-meta">
-                <span>Проверка: ${p.check_interval_minutes || 5} мин</span>
-                <span>·</span>
-                <span>Пауза: ${p.cooldown_minutes ? p.cooldown_minutes + ' мин' : 'нет'}</span>
-              </div>
+        <div class="rules-column" data-group-id="${group.id}">
+          <div class="rules-column-header">
+            <div class="rules-column-title-wrap">
+              <span class="rules-column-dot ${dotColor}"></span>
+              <span class="rules-column-title" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
+              <span class="rules-column-count">${presetsInGroup.length}</span>
             </div>
-            <span class="rule-action-badge ${act.class}">${act.label}</span>
-          </div>
-
-          ${budgetInfoHtml}
-          ${legacyWarningHtml}
-
-          <div class="rule-conditions-list">
-            <div style="font-size:11px; font-weight:700; color:var(--tg-hint); text-transform:uppercase; margin-bottom:2px;">
-              ${logicText}
+            <div class="rules-column-actions">
+              <button class="rules-column-btn" title="Редактировать группу" onclick="window.editRuleGroup(${group.id})">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+              </button>
+              <button class="rules-column-btn" title="Удалить группу" onclick="window.deleteRuleGroup(${group.id})">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
             </div>
-            ${condsHtml || '<span style="font-size:12px; color:var(--tg-hint);">Без условий</span>'}
           </div>
-
-          <div class="rule-card-plain-summary">
-            <span>Простым языком</span>
-            <p>${escapeHtml(plainSummary)}</p>
+          <div class="rules-column-body"
+               ondragover="window.onRuleColumnDragOver(event)"
+               ondragleave="window.onRuleColumnDragLeave(event)"
+               ondrop="window.onRuleColumnDrop(event, ${group.id})">
+            ${cardsHtml || '<div class="rules-column-empty">Перетащите сюда правило или создайте новое</div>'}
           </div>
-
-          <div class="rule-card-footer">
-            <span style="font-size:11px; color:var(--tg-hint);">${p.notify_tg !== false ? 'Уведомления ВКЛ' : 'Без пушей'}</span>
-            <div class="rule-card-actions">
-              <button class="btn-rule-action" onclick="window.editPresetFromTab(${p.id})">Редактировать</button>
-              <button class="btn-rule-action danger" onclick="window.deletePresetDirectly(${p.id})">Удалить</button>
-            </div>
+          <div class="rules-column-footer">
+            <button class="rules-column-add-btn" type="button" onclick="window.openCreateRuleFromTab()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>Добавить правило</span>
+            </button>
           </div>
         </div>
       `;
     }).join('');
+
+    // 2. Ungrouped Rules Column ("Без группы")
+    const ungroupedPresets = state.presets
+      .filter(p => !allGroupedPresetIds.has(p.id))
+      .filter(isPresetMatchingFilter);
+
+    let ungroupedColumnHtml = '';
+    if (ungroupedPresets.length > 0 || state.ruleGroups.length === 0) {
+      const ungroupedCardsHtml = ungroupedPresets.map(p => buildKanbanRuleCard(p, null)).join('');
+      ungroupedColumnHtml = `
+        <div class="rules-column" data-group-id="ungrouped">
+          <div class="rules-column-header">
+            <div class="rules-column-title-wrap">
+              <span class="rules-column-dot dot-gray"></span>
+              <span class="rules-column-title">Без группы</span>
+              <span class="rules-column-count">${ungroupedPresets.length}</span>
+            </div>
+          </div>
+          <div class="rules-column-body"
+               ondragover="window.onRuleColumnDragOver(event)"
+               ondragleave="window.onRuleColumnDragLeave(event)"
+               ondrop="window.onRuleColumnDrop(event, null)">
+            ${ungroupedCardsHtml || '<div class="rules-column-empty">Нет одиночных правил</div>'}
+          </div>
+          <div class="rules-column-footer">
+            <button class="rules-column-add-btn" type="button" onclick="window.openCreateRuleFromTab()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>Новое правило</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // 3. Add Group Column Card (Attio + Column button)
+    const addGroupColumnCard = `
+      <div class="rules-add-column-card" onclick="window.openCreateRuleGroup()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>Новая группа</span>
+      </div>
+    `;
+
+    boardContainer.innerHTML = groupColumnsHtml + ungroupedColumnHtml + addGroupColumnCard;
   }
+
+  // Drag & Drop handlers for rules Kanban board
+  window.onRuleDragStart = function (event, presetId, sourceGroupId) {
+    draggedRuleInfo = {
+      presetId: Number(presetId),
+      sourceGroupId: sourceGroupId !== null ? Number(sourceGroupId) : null
+    };
+    try {
+      event.dataTransfer.setData('text/plain', JSON.stringify(draggedRuleInfo));
+      event.dataTransfer.effectAllowed = 'move';
+    } catch (e) {}
+    event.currentTarget.classList.add('dragging');
+  };
+
+  window.onRuleDragEnd = function (event) {
+    event.currentTarget.classList.remove('dragging');
+    draggedRuleInfo = null;
+    document.querySelectorAll('.rules-column-body').forEach(el => el.classList.remove('drop-target-active'));
+  };
+
+  window.onRuleColumnDragOver = function (event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const body = event.currentTarget.classList.contains('rules-column-body') ? event.currentTarget : event.currentTarget.querySelector('.rules-column-body');
+    if (body && !body.classList.contains('drop-target-active')) {
+      body.classList.add('drop-target-active');
+    }
+  };
+
+  window.onRuleColumnDragLeave = function (event) {
+    const body = event.currentTarget.classList.contains('rules-column-body') ? event.currentTarget : event.currentTarget.querySelector('.rules-column-body');
+    if (body && !body.contains(event.relatedTarget)) {
+      body.classList.remove('drop-target-active');
+    }
+  };
+
+  window.onRuleColumnDrop = async function (event, targetGroupId) {
+    event.preventDefault();
+    document.querySelectorAll('.rules-column-body').forEach(el => el.classList.remove('drop-target-active'));
+
+    let info = draggedRuleInfo;
+    if (!info) {
+      try {
+        const raw = event.dataTransfer.getData('text/plain');
+        if (raw) info = JSON.parse(raw);
+      } catch (e) {}
+    }
+    if (!info || !info.presetId) return;
+
+    const presetId = Number(info.presetId);
+    const sourceGroupId = info.sourceGroupId !== null ? Number(info.sourceGroupId) : null;
+    const targetId = targetGroupId !== null ? Number(targetGroupId) : null;
+
+    if (sourceGroupId === targetId) return;
+
+    await window.movePresetToGroup(presetId, sourceGroupId, targetId);
+  };
+
+  window.movePresetToGroup = async function (presetId, sourceGroupId, targetGroupId) {
+    const preset = state.presets.find(p => p.id === presetId);
+    const presetName = preset ? preset.name : `Правило #${presetId}`;
+
+    try {
+      if (sourceGroupId !== null) {
+        const srcGroup = state.ruleGroups.find(g => g.id === sourceGroupId);
+        if (srcGroup) {
+          const newPresetIds = (srcGroup.preset_ids || []).filter(id => id !== presetId);
+          await apiRequest(`/api/rule-groups/${sourceGroupId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              name: srcGroup.name,
+              description: srcGroup.description || '',
+              preset_ids: newPresetIds
+            })
+          });
+          srcGroup.preset_ids = newPresetIds;
+        }
+      }
+
+      if (targetGroupId !== null) {
+        const tgtGroup = state.ruleGroups.find(g => g.id === targetGroupId);
+        if (tgtGroup) {
+          const currentIds = tgtGroup.preset_ids || [];
+          if (!currentIds.includes(presetId)) {
+            const newPresetIds = [...currentIds, presetId];
+            await apiRequest(`/api/rule-groups/${targetGroupId}`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                name: tgtGroup.name,
+                description: tgtGroup.description || '',
+                preset_ids: newPresetIds
+              })
+            });
+            tgtGroup.preset_ids = newPresetIds;
+          }
+        }
+      }
+
+      const destName = targetGroupId !== null
+        ? `группу «${(state.ruleGroups.find(g => g.id === targetGroupId)?.name || 'Группа')}»`
+        : 'колонку «Без группы»';
+
+      showToast(`«${presetName}» перемещено в ${destName}`, 'success');
+      await loadRuleGroups();
+      renderRulesTab();
+    } catch (err) {
+      showToast(`Ошибка перемещения: ${err.message}`, 'error');
+      await loadRuleGroups();
+      renderRulesTab();
+    }
+  };
 
   async function loadRuleGroups() {
     try {
@@ -2180,54 +2399,8 @@
   }
 
   function renderRuleGroups() {
-    const section = document.getElementById('ruleGroupsSection');
-    const container = document.getElementById('ruleGroupsContainer');
-    const singleHeading = document.getElementById('singleRulesHeading');
-    if (!section || !container) return;
-
-    const hasGroups = state.ruleGroups.length > 0;
-    section.classList.toggle('hidden', !hasGroups);
-    singleHeading?.classList.toggle('hidden', !hasGroups || state.presets.length === 0);
-    if (!hasGroups) {
-      container.innerHTML = '';
-      return;
-    }
-
-    const actionLabels = {
-      turn_off: 'Стоп', notify_only: 'Пуш', turn_on: 'Старт',
-      increase_budget: '+Бюджет', decrease_budget: '-Бюджет'
-    };
-    container.innerHTML = state.ruleGroups.map(group => {
-      const presetIds = new Set(group.preset_ids || []);
-      const linkedAccounts = state.accounts.filter(account => {
-        if (!account.rules_enabled || presetIds.size === 0) return false;
-        const attached = new Set((account.active_rules || []).map(rule => rule.preset_id));
-        return [...presetIds].every(id => attached.has(id));
-      }).length;
-      const chips = (group.rules || []).map(rule => `
-        <span class="rule-group-rule-chip">
-          <span>${escapeHtml(actionLabels[rule.action] || rule.action)}</span>
-          <span>${escapeHtml(rule.name)}</span>
-        </span>`).join('');
-      return `
-        <article class="rule-group-card">
-          <div class="rule-group-card-head">
-            <div>
-              <div class="rule-group-card-title">${escapeHtml(group.name)}</div>
-              <div class="rule-group-card-description">${escapeHtml(group.description || 'Готовый набор автоматических действий')}</div>
-            </div>
-            <span class="rule-group-count">${(group.rules || []).length} правил</span>
-          </div>
-          <div class="rule-group-rule-stack">${chips || '<span class="text-hint">В группе пока нет доступных правил</span>'}</div>
-          <div class="rule-group-card-footer">
-            <span>Подключена к ${linkedAccounts} кабинетам</span>
-            <div class="rule-card-actions">
-              <button class="btn-rule-action" onclick="window.editRuleGroup(${group.id})">Изменить</button>
-              <button class="btn-rule-action danger" onclick="window.deleteRuleGroup(${group.id})">Удалить</button>
-            </div>
-          </div>
-        </article>`;
-    }).join('');
+    // Kept for backward compatibility and internal calls
+    renderRulesTab();
   }
 
   function renderRuleGroupChoices(selectedIds = []) {

@@ -527,59 +527,75 @@
       </section>
 
       <!-- ============================================== -->
-      <!-- TAB: ПРАВИЛА (RULES & PRESETS) -->
+      <!-- TAB: ПРАВИЛА (RULES & PRESETS - ATTIO KANBAN BOARD) -->
       <!-- ============================================== -->
       <section id="tab-rules" class="tab-content">
         <!-- Rules Header & Actions -->
         <div class="rules-tab-header">
           <div class="rules-header-info">
+            <div class="breadcrumb-trail">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span>Правила</span>
+            </div>
             <h2>Правила мониторинга кампаний</h2>
-            <p class="rules-header-desc">
-              Правила проверяются автоматически с настроенным интервалом. При выполнении условий выбранные действия выполняются автоматически.
-            </p>
           </div>
           <div class="rules-header-actions">
-            <button class="btn btn-secondary" onclick="window.openCreateRuleGroup()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="3"/></svg>
+            <button class="btn btn-secondary" type="button" onclick="window.openCreateRuleGroup()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="3"/></svg>
               <span>Новая группа</span>
             </button>
-            <button class="btn btn-primary btn-add-rule-main" onclick="window.openCreateRuleFromTab()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <button class="btn btn-primary btn-add-rule-main" type="button" onclick="window.openCreateRuleFromTab()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>Новое правило</span>
             </button>
           </div>
         </div>
 
-        <!-- Rules Stats Banner -->
-        <div class="rules-stats-bar" id="rulesStatsBar">
-          <div class="stat-pill"><span class="status-dot dot-success"></span> <span id="rulesActiveCount">0</span> правил в библиотеке</div>
-          <div class="stat-pill"><span id="rulesGroupsCount">0</span> групп</div>
-          <div class="stat-pill"><span id="rulesLinkedAccsCount">0</span> привязанных кабинетов</div>
-        </div>
-
-        <div class="rules-examples-note">
-          <b>Готовые примеры не включают автоматику сами.</b>
-          Отредактируйте пороги под свою воронку и назначьте правило или группу нужному кабинету вручную. Любой пример можно удалить — повторно он не появится.
-        </div>
-
-        <section id="ruleGroupsSection" class="rule-groups-section hidden">
-          <div class="rules-section-heading">
-            <div><span class="eyebrow">Наборы</span><h3>Группы правил</h3></div>
-            <p>Назначайте готовый сценарий кабинету одним действием.</p>
+        <!-- Rules Attio Toolbar: Search, Filters & Counters -->
+        <div class="rules-toolbar">
+          <div class="rules-toolbar-left">
+            <div class="rules-search-wrap">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input type="text" id="rulesSearchInput" class="rules-search-input" placeholder="Поиск правил..." oninput="window.onRulesFilterChange()">
+            </div>
+            <div class="rules-filter-select-wrap">
+              <select id="rulesActionFilter" class="rules-filter-select" onchange="window.onRulesFilterChange()">
+                <option value="all">Все действия</option>
+                <option value="turn_off">Стоп (выключение)</option>
+                <option value="notify_only">Только пуш</option>
+                <option value="turn_on">Старт</option>
+                <option value="increase_budget">+Бюджет</option>
+                <option value="decrease_budget">-Бюджет</option>
+              </select>
+            </div>
           </div>
-          <div id="ruleGroupsContainer" class="rule-groups-grid"></div>
-        </section>
-
-        <div id="singleRulesHeading" class="rules-section-heading hidden">
-          <div><span class="eyebrow">Библиотека</span><h3>Отдельные правила</h3></div>
+          <div class="rules-toolbar-right">
+            <div class="rules-stats-bar" id="rulesStatsBar">
+              <div class="stat-pill"><span class="status-dot dot-success"></span> <span id="rulesActiveCount">0</span> правил</div>
+              <div class="stat-pill"><span id="rulesGroupsCount">0</span> групп</div>
+              <div class="stat-pill"><span id="rulesLinkedAccsCount">0</span> привязанных каб.</div>
+            </div>
+          </div>
         </div>
 
-        <!-- Rules Cards List -->
-        <div id="rulesCardsContainer" class="rules-cards-grid">
-          <!-- Dynamically populated rules -->
+        <!-- Rules Notice Bar -->
+        <div class="rules-examples-note">
+          <b>Совет:</b> Перетаскивайте карточки правил мышкой между колонками-группами. Кликните на карточку, чтобы отредактировать правило в поп-апе.
         </div>
 
-        <!-- Rules Empty State (Photo 2 reference) -->
+        <!-- Kanban Board: Groups as Columns & Rules as Cards -->
+        <div class="rules-board-wrapper">
+          <div id="ruleGroupsContainer" class="rule-groups-grid rules-kanban-board">
+            <!-- Dynamically populated Kanban columns with rule cards inside -->
+          </div>
+        </div>
+
+        <!-- Contract elements maintained for backward compatibility -->
+        <div id="rulesCardsContainer" class="rules-cards-grid hidden"></div>
+        <div id="singleRulesHeading" class="rules-section-heading hidden"></div>
+        <section id="ruleGroupsSection" class="rule-groups-section hidden"></section>
+
+        <!-- Rules Empty State (when 0 rules created) -->
         <div id="rulesEmptyState" class="rules-empty-card hidden">
           <div class="bell-empty-icon">
             <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>

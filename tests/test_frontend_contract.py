@@ -159,6 +159,44 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('window.pickRuleGroupForAccount', self.script)
         self.assertIn('rule-groups-grid', self.styles)
 
+    def test_rules_kanban_board_contract(self):
+        for contract in (
+            'id="rulesSearchInput"',
+            'id="rulesActionFilter"',
+            'id="rulesActiveCount"',
+            'id="rulesGroupsCount"',
+            'id="rulesLinkedAccsCount"',
+            'rules-kanban-board',
+            'rules-toolbar',
+        ):
+            self.assertIn(contract, self.index)
+
+        for script_contract in (
+            'window.onRulesFilterChange',
+            'isPresetMatchingFilter',
+            'buildKanbanRuleCard',
+            'window.onRuleDragStart',
+            'window.onRuleDragEnd',
+            'window.onRuleColumnDragOver',
+            'window.onRuleColumnDragLeave',
+            'window.onRuleColumnDrop',
+            'window.movePresetToGroup',
+        ):
+            self.assertIn(script_contract, self.script)
+
+        for style_contract in (
+            '.rules-kanban-board',
+            '.rules-column',
+            '.rules-column-header',
+            '.rules-column-body',
+            '.rules-column-body.drop-target-active',
+            '.rules-kanban-card',
+            '.rules-add-column-card',
+            '.rule-action-badge',
+            '.rule-conditions-compact',
+        ):
+            self.assertIn(style_contract, self.styles)
+
     def test_summary_separates_funnel_metrics_and_data_sync(self):
         for contract in (
             'id="kpiLeads"',
