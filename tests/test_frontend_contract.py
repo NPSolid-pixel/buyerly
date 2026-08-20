@@ -432,9 +432,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="workspaceDropdown"',
             'id="workspaceDropdownList"',
             'Новый воркспейс',
-            'Account settings',
-            'Workspace settings',
-            'Invite team members',
+            'Настройки аккаунта',
+            'Настройки воркспейса',
+            'Пригласить участников',
             'id="createWorkspaceScreen"',
             'id="createWsLogoFileInput"',
             'id="createWsLogoBadge"',
@@ -447,9 +447,40 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertIn(contract, self.index)
 
-        self.assertNotIn('Apps and integrations', self.index)
-        self.assertNotIn('+ + New workspace', self.index)
-        self.assertNotIn('id="pageWorkspaceColorPicker"', self.index)
+        for obsolete in (
+            'Account settings',
+            'Workspace settings',
+            'Invite team members',
+            'Apps and integrations',
+            '+ + New workspace',
+            'id="pageWorkspaceColorPicker"',
+        ):
+            self.assertNotIn(obsolete, self.index)
+
+    def test_sidebar_user_profile_and_localization_contract(self):
+        for contract in (
+            'id="sidebarFooter"',
+            'id="userBadge"',
+            'id="userAvatar"',
+            'id="userName"',
+            'class="sidebar-user-card"',
+            'class="sidebar-user-avatar"',
+            'class="sidebar-user-name"',
+            'class="help-btn"',
+            '<span>Справка</span>',
+            'id="homeGreetingTitle"',
+            'Доброе утро, Buyerly.',
+        ):
+            self.assertIn(contract, self.index)
+
+        self.assertIn("home: 'Главная — Buyerly'", self.script)
+        self.assertIn('<span>Главная</span>', self.script)
+        self.assertIn("let greeting = 'Доброе утро';", self.script)
+        self.assertIn("greeting = 'Добрый день';", self.script)
+        self.assertIn("greeting = 'Добрый вечер';", self.script)
+        self.assertIn("greeting = 'Доброй ночи';", self.script)
+        self.assertIn('.sidebar-footer', self.styles)
+        self.assertIn('.sidebar-user-card', self.styles)
 
         for script_contract in (
             'renderWorkspacesDropdown',
