@@ -286,7 +286,7 @@ class TestFrontendRuleContract(unittest.TestCase):
 
     def test_account_groups_scope_the_whole_summary_and_keep_profile_columns_configurable(self):
         for contract in (
-            'id="accountGroupsBar"',
+            'id="sidebarAccountGroupsContainer"',
             'id="modalAccountGroup"',
             'id="accountGroupMembers"',
             'id="summaryAccountGroupSelect"',
