@@ -838,6 +838,16 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(group["preset_ids"], buyer_ids)
             self.assertEqual([rule["name"] for rule in group["rules"]], ["Stop no leads", "Notify high CPL"])
 
+            empty_created = await client.post(
+                "/api/rule-groups",
+                headers=buyer_headers,
+                json={"name": "Empty Stage", "preset_ids": []},
+            )
+            self.assertEqual(empty_created.status_code, 200)
+            self.assertEqual(empty_created.json()["name"], "Empty Stage")
+            self.assertEqual(empty_created.json()["preset_ids"], [])
+            self.assertEqual(empty_created.json()["rules"], [])
+
             group_id = group["id"]
             buyer_list = await client.get("/api/rule-groups", headers=buyer_headers)
             admin_list = await client.get("/api/rule-groups", headers=admin_headers)

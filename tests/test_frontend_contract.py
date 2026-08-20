@@ -166,6 +166,17 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="rulesActiveCount"',
             'id="rulesGroupsCount"',
             'id="rulesLinkedAccsCount"',
+            'id="modalChooseRule"',
+            'id="chooseRuleSearchInput"',
+            'id="chooseRuleList"',
+            'id="chooseRuleCreateBtn"',
+            'id="btnConfirmChooseRule"',
+            'id="ruleGroupMenuPopover"',
+            'id="ruleAddColumnPopover"',
+            'id="ruleGroupPopoverNameInput"',
+            'id="ruleGroupColorPalette"',
+            'id="newColumnColorPalette"',
+            'id="ruleGroupSelect"',
             'rules-kanban-board',
             'rules-toolbar',
         ):
@@ -181,12 +192,19 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.onRuleColumnDragLeave',
             'window.onRuleColumnDrop',
             'window.movePresetToGroup',
+            'window.openChooseRuleModal',
+            'window.openGroupMenuPopover',
+            'window.openAddColumnPopover',
+            'window.toggleGroupCollapse',
+            'window.selectGroupColor',
         ):
             self.assertIn(script_contract, self.script)
 
         for style_contract in (
             '.rules-kanban-board',
             '.rules-column',
+            '.rules-column.collapsed',
+            '.rules-column-collapsed-strip',
             '.rules-column-header',
             '.rules-column-body',
             '.rules-column-body.drop-target-active',
@@ -194,6 +212,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.rules-add-column-card',
             '.rule-action-badge',
             '.rule-conditions-compact',
+            '.attio-popover',
+            '.choose-rule-card',
+            '.color-swatch',
         ):
             self.assertIn(style_contract, self.styles)
 

@@ -116,6 +116,11 @@
     summaryViewLoaded: false,
     presets: [],
     ruleGroups: [],
+    collapsedRuleGroups: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_rule_groups') || '[]')),
+    ruleGroupColors: JSON.parse(localStorage.getItem('buyerly_rule_group_colors') || '{}'),
+    chooseRuleTargetGroupId: null,
+    chooseRuleSelectedIndex: 0,
+    chooseRuleFilteredList: [],
     activePresetId: null,
     templatePresetId: null,
     ruleBuilderMode: 'create',
@@ -2185,7 +2190,7 @@
 
     emptyEl.classList.add('hidden');
 
-    const dotColors = ['dot-amber', 'dot-blue', 'dot-green', 'dot-purple'];
+    const defaultDotColors = ['dot-purple', 'dot-blue', 'dot-emerald', 'dot-amber', 'dot-orange', 'dot-indigo', 'dot-rose'];
     const allGroupedPresetIds = new Set();
     state.ruleGroups.forEach(g => {
       (g.preset_ids || []).forEach(id => allGroupedPresetIds.add(id));
@@ -2193,28 +2198,44 @@
 
     // 1. Group Columns
     const groupColumnsHtml = state.ruleGroups.map((group, idx) => {
-      const dotColor = dotColors[idx % dotColors.length];
+      const savedColor = state.ruleGroupColors[group.id];
+      const dotColor = savedColor ? `dot-${savedColor}` : defaultDotColors[idx % defaultDotColors.length];
       const groupPresetIds = group.preset_ids || [];
-      const presetsInGroup = state.presets
-        .filter(p => groupPresetIds.includes(p.id))
+      const presetsInGroup = groupPresetIds
+        .map(id => state.presets.find(p => p.id === id))
+        .filter(Boolean)
         .filter(isPresetMatchingFilter);
+
+      const isCollapsed = state.collapsedRuleGroups.has(group.id);
+
+      if (isCollapsed) {
+        return `
+          <div class="rules-column collapsed" data-group-id="${group.id}" onclick="window.toggleGroupCollapse(${group.id})" title="Нажмите, чтобы развернуть колонку">
+            <div class="rules-column-collapsed-strip">
+              <span class="rules-column-collapsed-dot ${dotColor}"></span>
+              <span class="rules-column-collapsed-count">${presetsInGroup.length}</span>
+              <span class="rules-column-collapsed-title">${escapeHtml(group.name)}</span>
+            </div>
+          </div>
+        `;
+      }
 
       const cardsHtml = presetsInGroup.map(p => buildKanbanRuleCard(p, group.id)).join('');
 
       return `
         <div class="rules-column" data-group-id="${group.id}">
           <div class="rules-column-header">
-            <div class="rules-column-title-wrap">
+            <div class="rules-column-title-wrap" style="cursor: pointer;" onclick="window.openGroupMenuPopover(event, ${group.id})" title="Настройки группы">
               <span class="rules-column-dot ${dotColor}"></span>
               <span class="rules-column-title" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
               <span class="rules-column-count">${presetsInGroup.length}</span>
             </div>
             <div class="rules-column-actions">
-              <button class="rules-column-btn" title="Редактировать группу" onclick="window.editRuleGroup(${group.id})">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+              <button class="rules-column-btn" title="Добавить правило в группу" onclick="window.openChooseRuleModal(${group.id})">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
-              <button class="rules-column-btn" title="Удалить группу" onclick="window.deleteRuleGroup(${group.id})">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              <button class="rules-column-btn" title="Опции группы" onclick="window.openGroupMenuPopover(event, ${group.id})">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
               </button>
             </div>
           </div>
@@ -2222,10 +2243,10 @@
                ondragover="window.onRuleColumnDragOver(event)"
                ondragleave="window.onRuleColumnDragLeave(event)"
                ondrop="window.onRuleColumnDrop(event, ${group.id})">
-            ${cardsHtml || '<div class="rules-column-empty">Перетащите сюда правило или создайте новое</div>'}
+            ${cardsHtml || '<div class="rules-column-empty">Перетащите сюда правило или нажмите «+»</div>'}
           </div>
           <div class="rules-column-footer">
-            <button class="rules-column-add-btn" type="button" onclick="window.openCreateRuleFromTab()">
+            <button class="rules-column-add-btn" type="button" onclick="window.openChooseRuleModal(${group.id})">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               <span>Добавить правило</span>
             </button>
@@ -2250,6 +2271,11 @@
               <span class="rules-column-title">Без группы</span>
               <span class="rules-column-count">${ungroupedPresets.length}</span>
             </div>
+            <div class="rules-column-actions">
+              <button class="rules-column-btn" title="Добавить правило" onclick="window.openChooseRuleModal(null)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </button>
+            </div>
           </div>
           <div class="rules-column-body"
                ondragover="window.onRuleColumnDragOver(event)"
@@ -2258,7 +2284,7 @@
             ${ungroupedCardsHtml || '<div class="rules-column-empty">Нет одиночных правил</div>'}
           </div>
           <div class="rules-column-footer">
-            <button class="rules-column-add-btn" type="button" onclick="window.openCreateRuleFromTab()">
+            <button class="rules-column-add-btn" type="button" onclick="window.openChooseRuleModal(null)">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               <span>Новое правило</span>
             </button>
@@ -2269,7 +2295,7 @@
 
     // 3. Add Group Column Card (Attio + Column button)
     const addGroupColumnCard = `
-      <div class="rules-add-column-card" onclick="window.openCreateRuleGroup()">
+      <div class="rules-add-column-card" onclick="window.openAddColumnPopover(event)">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         <span>Новая группа</span>
       </div>
@@ -2277,6 +2303,375 @@
 
     boardContainer.innerHTML = groupColumnsHtml + ungroupedColumnHtml + addGroupColumnCard;
   }
+
+  // Group Collapse handler
+  window.toggleGroupCollapse = function (groupId) {
+    if (state.collapsedRuleGroups.has(groupId)) {
+      state.collapsedRuleGroups.delete(groupId);
+    } else {
+      state.collapsedRuleGroups.add(groupId);
+    }
+    localStorage.setItem('buyerly_collapsed_rule_groups', JSON.stringify([...state.collapsedRuleGroups]));
+    renderRulesTab();
+  };
+
+  // Group Menu Popover Logic
+  let activePopoverGroupId = null;
+  let activeNewColumnColor = 'purple';
+
+  window.openGroupMenuPopover = function (event, groupId) {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    const group = state.ruleGroups.find(g => g.id === groupId);
+    if (!group) return;
+
+    // Close any other open popovers
+    document.getElementById('ruleAddColumnPopover')?.classList.add('hidden');
+
+    activePopoverGroupId = groupId;
+    const popover = document.getElementById('ruleGroupMenuPopover');
+    const input = document.getElementById('ruleGroupPopoverNameInput');
+    const dot = document.getElementById('ruleGroupPopoverDot');
+    const collapseText = document.getElementById('popoverCollapseText');
+    const palette = document.getElementById('ruleGroupColorPalette');
+
+    if (!popover || !input || !dot) return;
+
+    palette?.classList.add('hidden');
+    input.value = group.name;
+
+    const currentColor = state.ruleGroupColors[groupId] || 'purple';
+    dot.className = `attio-popover-dot swatch-${currentColor}`;
+
+    if (collapseText) {
+      collapseText.textContent = state.collapsedRuleGroups.has(groupId) ? 'Развернуть колонку' : 'Свернуть колонку';
+    }
+
+    const target = event.currentTarget || event.target;
+    const rect = target.getBoundingClientRect();
+    popover.style.top = `${rect.bottom + window.scrollY + 6}px`;
+    popover.style.left = `${Math.max(10, Math.min(window.innerWidth - 265, rect.left + window.scrollX))}px`;
+    popover.classList.remove('hidden');
+
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 50);
+  };
+
+  window.saveGroupNameFromPopover = async function () {
+    if (!activePopoverGroupId) return;
+    const input = document.getElementById('ruleGroupPopoverNameInput');
+    const newName = input?.value.trim();
+    const group = state.ruleGroups.find(g => g.id === activePopoverGroupId);
+    if (!group || !newName || newName === group.name) return;
+
+    try {
+      await apiRequest(`/api/rule-groups/${activePopoverGroupId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: newName,
+          description: group.description || '',
+          preset_ids: group.preset_ids || []
+        })
+      });
+      group.name = newName;
+      renderRulesTab();
+    } catch (e) {
+      showToast(`Ошибка сохранения имени: ${e.message}`, 'error');
+    }
+  };
+
+  window.onGroupNameInputKeydown = function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      window.saveGroupNameFromPopover();
+      document.getElementById('ruleGroupMenuPopover')?.classList.add('hidden');
+    } else if (event.key === 'Escape') {
+      document.getElementById('ruleGroupMenuPopover')?.classList.add('hidden');
+    }
+  };
+
+  window.toggleGroupColorPalette = function (event) {
+    if (event) event.stopPropagation();
+    document.getElementById('ruleGroupColorPalette')?.classList.toggle('hidden');
+  };
+
+  window.selectGroupColor = function (colorName) {
+    if (!activePopoverGroupId) return;
+    state.ruleGroupColors[activePopoverGroupId] = colorName;
+    localStorage.setItem('buyerly_rule_group_colors', JSON.stringify(state.ruleGroupColors));
+    const dot = document.getElementById('ruleGroupPopoverDot');
+    if (dot) dot.className = `attio-popover-dot swatch-${colorName}`;
+    document.getElementById('ruleGroupColorPalette')?.classList.add('hidden');
+    renderRulesTab();
+  };
+
+  window.toggleCollapseCurrentGroup = function () {
+    if (!activePopoverGroupId) return;
+    window.toggleGroupCollapse(activePopoverGroupId);
+    document.getElementById('ruleGroupMenuPopover')?.classList.add('hidden');
+  };
+
+  window.deleteCurrentGroupFromPopover = async function () {
+    if (!activePopoverGroupId) return;
+    const id = activePopoverGroupId;
+    document.getElementById('ruleGroupMenuPopover')?.classList.add('hidden');
+    await window.deleteRuleGroup(id);
+  };
+
+  // Quick Add Column Popover Logic
+  window.openAddColumnPopover = function (event) {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    document.getElementById('ruleGroupMenuPopover')?.classList.add('hidden');
+
+    const popover = document.getElementById('ruleAddColumnPopover');
+    const input = document.getElementById('newColumnPopoverNameInput');
+    const dot = document.getElementById('newColumnPopoverDot');
+    const palette = document.getElementById('newColumnColorPalette');
+
+    if (!popover || !input || !dot) return;
+
+    activeNewColumnColor = 'purple';
+    dot.className = 'attio-popover-dot swatch-purple';
+    palette?.classList.add('hidden');
+    input.value = '';
+
+    const target = event.currentTarget || event.target;
+    const rect = target.getBoundingClientRect();
+    popover.style.top = `${rect.top + window.scrollY}px`;
+    popover.style.left = `${Math.max(10, Math.min(window.innerWidth - 265, rect.left + window.scrollX))}px`;
+    popover.classList.remove('hidden');
+
+    setTimeout(() => input.focus(), 50);
+  };
+
+  window.closeAddColumnPopover = function () {
+    document.getElementById('ruleAddColumnPopover')?.classList.add('hidden');
+  };
+
+  window.toggleNewColumnColorPalette = function (event) {
+    if (event) event.stopPropagation();
+    document.getElementById('newColumnColorPalette')?.classList.toggle('hidden');
+  };
+
+  window.selectNewColumnColor = function (colorName) {
+    activeNewColumnColor = colorName;
+    const dot = document.getElementById('newColumnPopoverDot');
+    if (dot) dot.className = `attio-popover-dot swatch-${colorName}`;
+    document.getElementById('newColumnColorPalette')?.classList.add('hidden');
+  };
+
+  window.onNewColumnNameKeydown = function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      window.submitNewColumnFromPopover();
+    } else if (event.key === 'Escape') {
+      window.closeAddColumnPopover();
+    }
+  };
+
+  window.submitNewColumnFromPopover = async function () {
+    const input = document.getElementById('newColumnPopoverNameInput');
+    const name = input?.value.trim();
+    if (!name) {
+      showToast('Введите название группы', 'error');
+      input?.focus();
+      return;
+    }
+    try {
+      const created = await apiRequest('/api/rule-groups', {
+        method: 'POST',
+        body: JSON.stringify({ name, description: '', preset_ids: [] })
+      });
+      if (created && created.id) {
+        state.ruleGroupColors[created.id] = activeNewColumnColor;
+        localStorage.setItem('buyerly_rule_group_colors', JSON.stringify(state.ruleGroupColors));
+      }
+      showToast(`Группа «${name}» создана`, 'success');
+      window.closeAddColumnPopover();
+      await loadRuleGroups();
+      renderRulesTab();
+    } catch (e) {
+      showToast(`Ошибка создания группы: ${e.message}`, 'error');
+    }
+  };
+
+  // Choose Rule Modal (Photo 4)
+  window.openChooseRuleModal = function (targetGroupId = null) {
+    haptic('selection');
+    state.chooseRuleTargetGroupId = targetGroupId !== null && targetGroupId !== undefined ? Number(targetGroupId) : null;
+    state.chooseRuleSelectedIndex = 0;
+
+    const group = targetGroupId !== null ? state.ruleGroups.find(g => g.id === Number(targetGroupId)) : null;
+    const badge = document.getElementById('chooseRuleTargetGroupBadge');
+    if (badge) {
+      if (group) {
+        badge.textContent = group.name;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    const searchInput = document.getElementById('chooseRuleSearchInput');
+    if (searchInput) searchInput.value = '';
+
+    window.renderChooseRuleList('');
+    window.openModal('modalChooseRule');
+    setTimeout(() => searchInput?.focus(), 50);
+  };
+
+  window.onChooseRuleSearchInput = function (query) {
+    window.renderChooseRuleList(query);
+  };
+
+  window.renderChooseRuleList = function (query = '') {
+    const container = document.getElementById('chooseRuleList');
+    if (!container) return;
+
+    const q = (query || '').toLowerCase().trim();
+    state.chooseRuleFilteredList = state.presets.filter(p => {
+      if (!q) return true;
+      const nameMatch = (p.name || '').toLowerCase().includes(q);
+      const actMatch = (p.action || '').toLowerCase().includes(q);
+      return nameMatch || actMatch;
+    });
+
+    if (state.chooseRuleSelectedIndex >= state.chooseRuleFilteredList.length) {
+      state.chooseRuleSelectedIndex = Math.max(0, state.chooseRuleFilteredList.length - 1);
+    }
+
+    const actionBadgeMap = {
+      'turn_off': { label: 'Стоп', class: 'rule-action-turn_off' },
+      'notify_only': { label: 'Пуш', class: 'rule-action-notify_only' },
+      'turn_on': { label: 'Старт', class: 'rule-action-turn_on' },
+      'increase_budget': { label: '+Бюджет', class: 'rule-action-increase_budget' },
+      'decrease_budget': { label: '-Бюджет', class: 'rule-action-decrease_budget' }
+    };
+
+    if (state.chooseRuleFilteredList.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center; padding: 18px 10px; color: var(--text-muted); font-size: 12.5px;">
+          Правил не найдено. Нажмите «Создать новое правило» ниже.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = state.chooseRuleFilteredList.map((preset, idx) => {
+      const act = actionBadgeMap[preset.action] || { label: preset.action, class: '' };
+      const isSelected = idx === state.chooseRuleSelectedIndex;
+
+      const parentGroups = state.ruleGroups.filter(g => (g.preset_ids || []).includes(preset.id));
+      const groupNames = parentGroups.map(g => g.name).join(', ');
+      const subInfo = groupNames ? `Группа: ${escapeHtml(groupNames)}` : 'Без группы';
+
+      return `
+        <div class="choose-rule-item ${isSelected ? 'selected' : ''}" data-index="${idx}" onclick="window.selectAndConfirmRule(${preset.id})">
+          <div class="choose-rule-item-left">
+            <div class="choose-rule-item-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </div>
+            <div class="choose-rule-item-info">
+              <span class="choose-rule-item-name">${escapeHtml(preset.name)}</span>
+              <span class="choose-rule-item-sub">${subInfo} · ${(preset.conditions || []).length} усл. · ${preset.check_interval_minutes || 5}м</span>
+            </div>
+          </div>
+          <div class="choose-rule-item-right">
+            <span class="rule-action-badge ${act.class}">${act.label}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  window.onChooseRuleKeydown = function (event) {
+    const list = state.chooseRuleFilteredList || [];
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (list.length > 0) {
+        state.chooseRuleSelectedIndex = (state.chooseRuleSelectedIndex + 1) % list.length;
+        window.renderChooseRuleList(document.getElementById('chooseRuleSearchInput')?.value || '');
+      }
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (list.length > 0) {
+        state.chooseRuleSelectedIndex = (state.chooseRuleSelectedIndex - 1 + list.length) % list.length;
+        window.renderChooseRuleList(document.getElementById('chooseRuleSearchInput')?.value || '');
+      }
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      window.confirmSelectedRuleChoice();
+    } else if (event.key === 'Escape') {
+      window.closeModal('modalChooseRule');
+    }
+  };
+
+  window.selectAndConfirmRule = async function (presetId) {
+    const targetGroupId = state.chooseRuleTargetGroupId;
+    window.closeModal('modalChooseRule');
+
+    if (targetGroupId !== null) {
+      const sourceGroup = state.ruleGroups.find(g => (g.preset_ids || []).includes(presetId));
+      const sourceGroupId = sourceGroup ? sourceGroup.id : null;
+      await window.movePresetToGroup(presetId, sourceGroupId, targetGroupId);
+    } else {
+      window.editPresetFromTab(presetId);
+    }
+  };
+
+  window.confirmSelectedRuleChoice = async function () {
+    const list = state.chooseRuleFilteredList || [];
+    if (list.length > 0 && list[state.chooseRuleSelectedIndex]) {
+      const chosenPreset = list[state.chooseRuleSelectedIndex];
+      await window.selectAndConfirmRule(chosenPreset.id);
+    } else {
+      window.openCreateRuleFromChooser();
+    }
+  };
+
+  window.openCreateRuleFromChooser = function () {
+    const targetGroupId = state.chooseRuleTargetGroupId;
+    window.closeModal('modalChooseRule');
+    window.openCreateRuleForGroup(targetGroupId);
+  };
+
+  window.openCreateRuleForGroup = function (targetGroupId = null) {
+    haptic('selection');
+    document.getElementById('editLimitsAccountId').value = '';
+    document.getElementById('modalLimitsTitle').textContent = 'Создание правила';
+    
+    const backBtn = document.getElementById('btnBackToRuleChooser');
+    const divider = document.getElementById('modalLimitsBreadcrumbDivider');
+    if (backBtn && divider) {
+      backBtn.classList.remove('hidden');
+      divider.classList.remove('hidden');
+    }
+
+    window.populateRuleGroupSelect(targetGroupId);
+    window.newPresetMode();
+    window.openModal('modalEditLimits');
+  };
+
+  window.backToRuleChooser = function () {
+    window.closeModal('modalEditLimits');
+    window.openChooseRuleModal(state.chooseRuleTargetGroupId);
+  };
+
+  window.populateRuleGroupSelect = function (selectedGroupId = null) {
+    const select = document.getElementById('ruleGroupSelect');
+    if (!select) return;
+    select.innerHTML = '<option value="">Без группы</option>' + state.ruleGroups.map(g => {
+      const isSel = selectedGroupId !== null && Number(selectedGroupId) === g.id;
+      return `<option value="${g.id}" ${isSel ? 'selected' : ''}>${escapeHtml(g.name)}</option>`;
+    }).join('');
+  };
 
   // Drag & Drop handlers for rules Kanban board
   window.onRuleDragStart = function (event, presetId, sourceGroupId) {
@@ -2399,7 +2794,6 @@
   }
 
   function renderRuleGroups() {
-    // Kept for backward compatibility and internal calls
     renderRulesTab();
   }
 
@@ -2433,33 +2827,11 @@
   }
 
   window.openCreateRuleGroup = async function () {
-    if (state.presets.length === 0) await loadPresets();
-    if (state.presets.length === 0) {
-      showToast('Сначала создайте хотя бы одно правило', 'info');
-      window.openCreateRuleFromTab();
-      return;
-    }
-    document.getElementById('editingRuleGroupId').value = '';
-    document.getElementById('ruleGroupName').value = '';
-    document.getElementById('ruleGroupDescription').value = '';
-    document.getElementById('ruleGroupModalTitle').textContent = 'Новая группа правил';
-    document.getElementById('btnDeleteRuleGroup').classList.add('hidden');
-    renderRuleGroupChoices([]);
-    window.openModal('modalRuleGroup');
-    document.getElementById('ruleGroupName')?.focus();
+    window.openAddColumnPopover();
   };
 
   window.editRuleGroup = async function (groupId) {
-    const group = state.ruleGroups.find(item => item.id === groupId);
-    if (!group) return;
-    if (state.presets.length === 0) await loadPresets();
-    document.getElementById('editingRuleGroupId').value = group.id;
-    document.getElementById('ruleGroupName').value = group.name;
-    document.getElementById('ruleGroupDescription').value = group.description || '';
-    document.getElementById('ruleGroupModalTitle').textContent = `Группа: ${group.name}`;
-    document.getElementById('btnDeleteRuleGroup').classList.remove('hidden');
-    renderRuleGroupChoices(group.preset_ids || []);
-    window.openModal('modalRuleGroup');
+    window.openGroupMenuPopover(null, groupId);
   };
 
   window.deleteRuleGroup = async function (groupId) {
@@ -2467,7 +2839,7 @@
     if (!group || !window.confirm(`Удалить группу «${group.name}»? Уже назначенные правила останутся в кабинетах.`)) return;
     try {
       await apiRequest(`/api/rule-groups/${groupId}`, { method: 'DELETE' });
-      showToast('Группа удалена. Активные правила сохранены.', 'success');
+      showToast('Группа удалена. Правила сохранены.', 'success');
       await loadRuleGroups();
       renderRulesTab();
       window.closeModal('modalRuleGroup');
@@ -2483,10 +2855,6 @@
     const presetIds = [...document.querySelectorAll('.rule-group-preset-check:checked')].map(input => Number(input.value));
     if (!name) {
       showToast('Введите название группы', 'error');
-      return;
-    }
-    if (presetIds.length === 0) {
-      showToast('Выберите хотя бы одно правило', 'error');
       return;
     }
     const button = document.getElementById('btnSaveRuleGroup');
@@ -2513,17 +2881,22 @@
   });
 
   window.openCreateRuleFromTab = function () {
-    haptic('selection');
-    document.getElementById('editLimitsAccountId').value = '';
-    document.getElementById('modalLimitsTitle').textContent = 'Создание правила';
-    window.newPresetMode();
-    window.openModal('modalEditLimits');
+    window.openChooseRuleModal(null);
   };
 
   window.editPresetFromTab = function (presetId) {
     haptic('selection');
     document.getElementById('editLimitsAccountId').value = '';
     document.getElementById('modalLimitsTitle').textContent = 'Редактирование правила';
+    
+    // Hide back to chooser button when directly editing an existing rule from card
+    const backBtn = document.getElementById('btnBackToRuleChooser');
+    const divider = document.getElementById('modalLimitsBreadcrumbDivider');
+    if (backBtn && divider) {
+      backBtn.classList.add('hidden');
+      divider.classList.add('hidden');
+    }
+
     state.ruleBuilderMode = 'edit';
     window.selectPreset(presetId);
     window.openModal('modalEditLimits');
@@ -3154,6 +3527,9 @@
     const tgToggle = document.getElementById('ruleNotifyTgToggle');
     if (tgToggle) tgToggle.checked = preset.notify_tg !== false;
 
+    const parentGroup = state.ruleGroups.find(g => (g.preset_ids || []).includes(preset.id));
+    window.populateRuleGroupSelect(parentGroup ? parentGroup.id : null);
+
     renderConditions(preset.conditions || []);
     renderPresetsList(preset.id);
     renderRuleDraftSummary();
@@ -3168,6 +3544,8 @@
     document.getElementById('ruleNameInput').value = '';
     document.getElementById('ruleActionSelect').value = 'turn_off';
     handleActionChange('turn_off');
+
+    window.populateRuleGroupSelect(state.chooseRuleTargetGroupId);
 
     document.getElementById('budgetChangePercentInput').value = 20;
     document.getElementById('budgetMaxDailyInput').value = 0;
@@ -3379,20 +3757,51 @@
         haptic('notification', 'success');
         showToast('Правило сохранено и применено!', 'success');
       } else {
+        let savedPreset;
         if (editingPresetId) {
-          await apiRequest(`/api/presets/${editingPresetId}`, {
+          savedPreset = await apiRequest(`/api/presets/${editingPresetId}`, {
             method: 'PUT',
             body: JSON.stringify(payload)
           });
           showToast('Пресет успешно обновлен!', 'success');
         } else {
-          await apiRequest('/api/presets', {
+          savedPreset = await apiRequest('/api/presets', {
             method: 'POST',
             body: JSON.stringify(payload)
           });
           showToast('Пресет успешно создан!', 'success');
         }
         haptic('notification', 'success');
+
+        const groupSelect = document.getElementById('ruleGroupSelect');
+        if (groupSelect && savedPreset) {
+          const targetGrpId = groupSelect.value ? Number(groupSelect.value) : null;
+          const targetPresetId = savedPreset.id || Number(editingPresetId);
+          
+          for (const grp of state.ruleGroups) {
+            const currentIds = grp.preset_ids || [];
+            const hasPreset = currentIds.includes(targetPresetId);
+            if (targetGrpId !== null && grp.id === targetGrpId && !hasPreset) {
+              await apiRequest(`/api/rule-groups/${grp.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                  name: grp.name,
+                  description: grp.description || '',
+                  preset_ids: [...currentIds, targetPresetId]
+                })
+              });
+            } else if ((targetGrpId === null || grp.id !== targetGrpId) && hasPreset) {
+              await apiRequest(`/api/rule-groups/${grp.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                  name: grp.name,
+                  description: grp.description || '',
+                  preset_ids: currentIds.filter(id => id !== targetPresetId)
+                })
+              });
+            }
+          }
+        }
       }
 
       window.closeModal('modalEditLimits');
@@ -6620,6 +7029,48 @@
         loadSummary(state.currentPeriod, false, { silent: true, refreshIfStale: true });
       } else {
         refreshSummaryIfStale(state.currentPeriod, data);
+      }
+    }
+  });
+
+  // Global Outside Click listener for Attio popovers
+  document.addEventListener('click', (e) => {
+    const groupPopover = document.getElementById('ruleGroupMenuPopover');
+    if (groupPopover && !groupPopover.classList.contains('hidden')) {
+      if (!groupPopover.contains(e.target) && !e.target.closest('.rules-column-title-wrap') && !e.target.closest('.rules-column-btn')) {
+        window.saveGroupNameFromPopover();
+        groupPopover.classList.add('hidden');
+      }
+    }
+    const addColumnPopover = document.getElementById('ruleAddColumnPopover');
+    if (addColumnPopover && !addColumnPopover.classList.contains('hidden')) {
+      if (!addColumnPopover.contains(e.target) && !e.target.closest('.rules-add-column-card')) {
+        addColumnPopover.classList.add('hidden');
+      }
+    }
+  });
+
+  // Global Keyboard shortcuts (ESC to close, Ctrl+Enter to save)
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      const editModal = document.getElementById('modalEditLimits');
+      if (editModal && !editModal.classList.contains('hidden')) {
+        e.preventDefault();
+        document.getElementById('btnSaveLimits')?.click();
+      }
+    }
+    if (e.key === 'Escape') {
+      const chooseModal = document.getElementById('modalChooseRule');
+      if (chooseModal && !chooseModal.classList.contains('hidden')) {
+        window.closeModal('modalChooseRule');
+      }
+      const groupPopover = document.getElementById('ruleGroupMenuPopover');
+      if (groupPopover && !groupPopover.classList.contains('hidden')) {
+        groupPopover.classList.add('hidden');
+      }
+      const addColumnPopover = document.getElementById('ruleAddColumnPopover');
+      if (addColumnPopover && !addColumnPopover.classList.contains('hidden')) {
+        addColumnPopover.classList.add('hidden');
       }
     }
   });

@@ -239,7 +239,7 @@ class CreatePresetRequest(BaseModel):
 class RuleGroupWriteRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=500)
-    preset_ids: List[int] = Field(min_length=1, max_length=50)
+    preset_ids: List[int] = Field(default_factory=list, min_length=0, max_length=50)
 
 class RuleGroupResponse(BaseModel):
     id: int
