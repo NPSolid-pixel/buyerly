@@ -364,6 +364,78 @@ code, .mono {
   display: none;
 }
 
+.lists-sort-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 170px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 4px 10px -2px rgba(0, 0, 0, 0.08);
+  padding: 6px;
+  z-index: 100;
+  animation: fadeInDropdown 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sort-menu-header {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 4px 8px 6px 8px;
+  user-select: none;
+}
+
+.sort-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  user-select: none;
+}
+
+.sort-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.sort-menu-item.active {
+  font-weight: 600;
+}
+
+.sort-check-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sort-menu-item.active .sort-check-icon {
+  opacity: 1;
+  background: #D97706; /* Attio amber/orange badge */
+  color: #FFFFFF;
+}
+
+.sort-menu-item.active .sort-check-icon::after {
+  content: '';
+  width: 3.5px;
+  height: 6.5px;
+  border: solid white;
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(45deg);
+  margin-bottom: 1.5px;
+}
+
 .list-item {
   display: flex;
   align-items: center;
@@ -375,9 +447,20 @@ code, .mono {
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
+  user-select: none;
 }
 .list-item:hover { background-color: var(--bg-hover); color: var(--text-primary); }
 .list-item.active { background-color: var(--bg-active); color: var(--text-primary); font-weight: 600; }
+.list-item.dragging {
+  opacity: 0.35;
+  background: var(--bg-hover);
+}
+.list-item.drag-over-top {
+  box-shadow: inset 0 2px 0 0 #D97706;
+}
+.list-item.drag-over-bottom {
+  box-shadow: inset 0 -2px 0 0 #D97706;
+}
 .list-flag { font-size: 14px; line-height: 1; }
 .list-count { font-size: 11px; color: var(--text-muted); margin-left: auto; font-variant-numeric: tabular-nums; }
 

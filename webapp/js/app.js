@@ -92,6 +92,8 @@
     newWorkspaceSelectedColor: '#F5A300',
     editWorkspaceSelectedColor: '#F5A300',
     collapsedSections: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_sections') || '[]')),
+    accountGroupsSortMode: localStorage.getItem('buyerly_groups_sort_mode') || 'relevant',
+    accountGroupsCustomOrder: JSON.parse(localStorage.getItem('buyerly_groups_custom_order') || '[]'),
     selectedAccounts: new Set(),
     fbConnections: [],
     fbFilter: 'all',
@@ -790,17 +792,55 @@
     container.innerHTML = buttons.join('');
   }
 
+  function getSortedAccountGroups() {
+    if (!state.accountGroups || state.accountGroups.length === 0) return [];
+    const groups = [...state.accountGroups];
+    const mode = state.accountGroupsSortMode || 'relevant';
+
+    if (mode === 'recent') {
+      return groups.sort((a, b) => (b.id || 0) - (a.id || 0));
+    } else if (mode === 'alpha') {
+      return groups.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ru', { sensitivity: 'base' }));
+    } else if (mode === 'custom') {
+      const order = state.accountGroupsCustomOrder || [];
+      return groups.sort((a, b) => {
+        const idxA = order.indexOf(a.id);
+        const idxB = order.indexOf(b.id);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return (a.id || 0) - (b.id || 0);
+      });
+    } else {
+      // 'relevant' - sort by active spend / accounts_count desc, then id
+      return groups.sort((a, b) => (b.accounts_count || 0) - (a.accounts_count || 0) || (a.id || 0) - (b.id || 0));
+    }
+  }
+
   function renderSidebarAccountGroups() {
     const container = document.getElementById('sidebarAccountGroupsContainer');
     if (!container) return;
-    if (!state.accountGroups || state.accountGroups.length === 0) {
+    const sortedGroups = getSortedAccountGroups();
+    if (!sortedGroups || sortedGroups.length === 0) {
       container.innerHTML = '';
       return;
     }
-    const html = state.accountGroups.map(group => {
+    const html = sortedGroups.map(group => {
       const isActive = state.activeTab === 'accounts' && String(state.accountGroupFilter) === String(group.id);
       return `
-        <div class="list-item nav-tab ${isActive ? 'active' : ''}" data-tab="accounts" data-group-filter="${group.id}" id="navGroup-${group.id}" onclick="window.switchAccountGroup('${group.id}');">
+        <div class="list-item nav-tab ${isActive ? 'active' : ''}" 
+             draggable="true"
+             data-group-id="${group.id}"
+             data-tab="accounts" 
+             data-group-filter="${group.id}" 
+             id="navGroup-${group.id}" 
+             onclick="window.switchAccountGroup('${group.id}');"
+             ondragstart="window.onGroupDragStart(event, ${group.id})"
+             ondragover="window.onGroupDragOver(event)"
+             ondragenter="window.onGroupDragEnter(event, ${group.id})"
+             ondragleave="window.onGroupDragLeave(event)"
+             ondrop="window.onGroupDrop(event, ${group.id})"
+             ondragend="window.onGroupDragEnd(event)">
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${escapeHtml(group.name)}</span>
           <span class="list-count">${group.accounts_count || 0}</span>
@@ -808,6 +848,133 @@
       `;
     }).join('');
     container.innerHTML = html;
+  }
+
+  let draggedGroupId = null;
+
+  window.onGroupDragStart = function (e, groupId) {
+    draggedGroupId = groupId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(groupId));
+    const target = e.currentTarget;
+    setTimeout(() => {
+      if (target) target.classList.add('dragging');
+    }, 0);
+  };
+
+  window.onGroupDragOver = function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  window.onGroupDragEnter = function (e, targetGroupId) {
+    e.preventDefault();
+    if (!draggedGroupId || draggedGroupId === targetGroupId) return;
+    const target = e.currentTarget;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    if (e.clientY < midY) {
+      target.classList.add('drag-over-top');
+      target.classList.remove('drag-over-bottom');
+    } else {
+      target.classList.add('drag-over-bottom');
+      target.classList.remove('drag-over-top');
+    }
+  };
+
+  window.onGroupDragLeave = function (e) {
+    const target = e.currentTarget;
+    if (target) {
+      target.classList.remove('drag-over-top', 'drag-over-bottom');
+    }
+  };
+
+  window.onGroupDrop = function (e, targetGroupId) {
+    e.preventDefault();
+    const target = e.currentTarget;
+    if (target) {
+      target.classList.remove('drag-over-top', 'drag-over-bottom');
+    }
+    if (!draggedGroupId || draggedGroupId === targetGroupId) return;
+
+    const currentSorted = getSortedAccountGroups();
+    const currentIds = currentSorted.map(g => g.id);
+    const fromIndex = currentIds.indexOf(draggedGroupId);
+    const toIndex = currentIds.indexOf(targetGroupId);
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const rect = target.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+
+    currentIds.splice(fromIndex, 1);
+    const newTargetIndex = currentIds.indexOf(targetGroupId);
+    if (e.clientY < midY) {
+      currentIds.splice(newTargetIndex, 0, draggedGroupId);
+    } else {
+      currentIds.splice(newTargetIndex + 1, 0, draggedGroupId);
+    }
+
+    state.accountGroupsCustomOrder = currentIds;
+    state.accountGroupsSortMode = 'custom';
+
+    try {
+      localStorage.setItem('buyerly_groups_custom_order', JSON.stringify(currentIds));
+      localStorage.setItem('buyerly_groups_sort_mode', 'custom');
+    } catch (err) {}
+
+    updateSortDropdownUI();
+    renderSidebarAccountGroups();
+    haptic('impact', 'light');
+  };
+
+  window.onGroupDragEnd = function (e) {
+    draggedGroupId = null;
+    document.querySelectorAll('#sidebarAccountGroupsContainer .list-item').forEach(el => {
+      el.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+    });
+  };
+
+  window.toggleListsSortMenu = function (e) {
+    if (e) e.stopPropagation();
+    const dropdown = document.getElementById('listsSortDropdown');
+    if (!dropdown) return;
+    const isHidden = dropdown.classList.contains('hidden');
+    document.getElementById('workspaceDropdown')?.classList.remove('show');
+    document.getElementById('bulkGroupDropdown')?.classList.add('hidden');
+    dropdown.classList.toggle('hidden', !isHidden);
+    if (isHidden) {
+      updateSortDropdownUI();
+    }
+  };
+
+  window.setGroupsSortMode = function (mode) {
+    state.accountGroupsSortMode = mode;
+    try {
+      localStorage.setItem('buyerly_groups_sort_mode', mode);
+    } catch (e) {}
+
+    if (mode === 'custom' && (!state.accountGroupsCustomOrder || state.accountGroupsCustomOrder.length === 0)) {
+      state.accountGroupsCustomOrder = (state.accountGroups || []).map(g => g.id);
+      try {
+        localStorage.setItem('buyerly_groups_custom_order', JSON.stringify(state.accountGroupsCustomOrder));
+      } catch (e) {}
+    }
+
+    updateSortDropdownUI();
+    renderSidebarAccountGroups();
+    const dropdown = document.getElementById('listsSortDropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+    haptic('selection');
+  };
+
+  function updateSortDropdownUI() {
+    const currentMode = state.accountGroupsSortMode || 'relevant';
+    document.querySelectorAll('#listsSortDropdown .sort-menu-item').forEach(item => {
+      const sort = item.dataset.sort;
+      item.classList.toggle('active', sort === currentMode);
+    });
   }
 
   window.switchAccountGroup = function (groupId) {
@@ -5488,6 +5655,14 @@
         }
       });
     }
+
+    document.addEventListener('click', (e) => {
+      const sortDropdown = document.getElementById('listsSortDropdown');
+      const btnSort = document.getElementById('btnListsSortMenu');
+      if (sortDropdown && btnSort && !sortDropdown.contains(e.target) && !btnSort.contains(e.target)) {
+        sortDropdown.classList.add('hidden');
+      }
+    });
 
     applySidebarSectionsCollapsedState();
   }

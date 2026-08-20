@@ -479,6 +479,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="accountBulkActionBar"',
             'id="bulkSelectedCount"',
             'id="bulkGroupDropdown"',
+            'id="btnListsSortMenu"',
+            'id="listsSortDropdown"',
         ):
             self.assertIn(contract, self.index)
 
@@ -487,6 +489,11 @@ class TestFrontendRuleContract(unittest.TestCase):
             'loadFacebookAccounts',
             'renderFacebookAccounts',
             'renderSidebarAccountGroups',
+            'getSortedAccountGroups',
+            'window.onGroupDragStart',
+            'window.onGroupDrop',
+            'window.toggleListsSortMenu',
+            'window.setGroupsSortMode',
             'window.switchAccountGroup',
             'window.toggleAccountSelection',
             'window.toggleSelectAllAccounts',
@@ -506,6 +513,10 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.token-chip',
             '.nav-section-chevron',
             '.nav-section-content',
+            '.lists-sort-dropdown',
+            '.sort-menu-item',
+            '.sort-check-icon',
+            '.list-item.dragging',
         ):
             self.assertIn(style_contract, self.styles)
 

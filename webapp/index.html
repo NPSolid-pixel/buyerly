@@ -162,8 +162,32 @@
           <span>Рекламные аккаунты</span>
         </div>
         <div class="nav-section-actions">
-          <div class="nav-section-action-btn" title="Настройки групп кабинетов" onclick="event.stopPropagation(); window.openEditCurrentGroup();">
-            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <div class="relative-dropdown-container">
+            <div class="nav-section-action-btn" id="btnListsSortMenu" title="Сортировка списков" onclick="event.stopPropagation(); window.toggleListsSortMenu(event);">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </div>
+            <div id="listsSortDropdown" class="lists-sort-dropdown hidden" onclick="event.stopPropagation();">
+              <div class="sort-menu-header">Sort</div>
+              <div class="sort-menu-item" data-sort="relevant" onclick="window.setGroupsSortMode('relevant')">
+                <span>Most relevant</span>
+                <span class="sort-check-icon"></span>
+              </div>
+              <div class="sort-menu-item" data-sort="recent" onclick="window.setGroupsSortMode('recent')">
+                <span>Recently added</span>
+                <span class="sort-check-icon"></span>
+              </div>
+              <div class="sort-menu-item" data-sort="alpha" onclick="window.setGroupsSortMode('alpha')">
+                <span>Alphabetical</span>
+                <span class="sort-check-icon"></span>
+              </div>
+              <div class="sort-menu-item" data-sort="custom" onclick="window.setGroupsSortMode('custom')">
+                <span>Custom</span>
+                <span class="sort-check-icon"></span>
+              </div>
+            </div>
           </div>
           <div class="nav-section-add-btn" title="Создать новую группу" onclick="event.stopPropagation(); window.openCreateAccountGroup();">+</div>
         </div>
