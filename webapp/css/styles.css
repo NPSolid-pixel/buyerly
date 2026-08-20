@@ -344,9 +344,14 @@ code, .mono {
   justify-content: center;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 13px;
   line-height: 1;
   transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-section-action-btn svg,
+.nav-section-add-btn svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 .nav-section-action-btn:hover,

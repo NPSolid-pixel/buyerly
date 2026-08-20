@@ -196,14 +196,18 @@
         <li><div class="nav-item nav-tab" data-tab="logs" id="navLogs" onclick="window.switchTab('logs');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Логи</span></div></li>
       </ul>
 
-      <!-- Section: Аккаунты Facebook -->
+      <!-- Section: Facebook Аккаунты -->
       <div class="nav-section-header" id="headerFbSection" onclick="window.toggleSidebarSection('fb_accounts')">
         <div class="nav-section-title">
           <svg class="nav-section-chevron" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           <span>Facebook Аккаунты</span>
         </div>
         <div class="nav-section-actions">
-          <div class="nav-section-add-btn" title="Подключить Facebook" onclick="event.stopPropagation(); window.switchTab('add');">+</div>
+          <div class="nav-section-add-btn" title="Подключить Facebook" onclick="event.stopPropagation(); window.switchTab('add');">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </div>
         </div>
       </div>
       <div id="sidebarFbAccountsList" class="nav-section-content">
@@ -229,26 +233,30 @@
               </svg>
             </div>
             <div id="listsSortDropdown" class="lists-sort-dropdown hidden" onclick="event.stopPropagation();">
-              <div class="sort-menu-header">Sort</div>
+              <div class="sort-menu-header">Сортировка</div>
               <div class="sort-menu-item" data-sort="relevant" onclick="window.setGroupsSortMode('relevant')">
-                <span>Most relevant</span>
+                <span>По релевантности</span>
                 <span class="sort-check-icon"></span>
               </div>
               <div class="sort-menu-item" data-sort="recent" onclick="window.setGroupsSortMode('recent')">
-                <span>Recently added</span>
+                <span>Недавно добавленные</span>
                 <span class="sort-check-icon"></span>
               </div>
               <div class="sort-menu-item" data-sort="alpha" onclick="window.setGroupsSortMode('alpha')">
-                <span>Alphabetical</span>
+                <span>По алфавиту</span>
                 <span class="sort-check-icon"></span>
               </div>
               <div class="sort-menu-item" data-sort="custom" onclick="window.setGroupsSortMode('custom')">
-                <span>Custom</span>
+                <span>Пользовательский порядок</span>
                 <span class="sort-check-icon"></span>
               </div>
             </div>
           </div>
-          <div class="nav-section-add-btn" title="Создать новую группу" onclick="event.stopPropagation(); window.openCreateAccountGroup();">+</div>
+          <div class="nav-section-add-btn" title="Создать новую группу" onclick="event.stopPropagation(); window.openCreateAccountGroup();">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </div>
         </div>
       </div>
 
