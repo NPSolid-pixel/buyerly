@@ -1894,7 +1894,9 @@ input:checked + .slider:before { transform: translateX(16px); }
 
 .attio-grid,
 .attio-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12.5px;
@@ -1917,11 +1919,24 @@ input:checked + .slider:before { transform: translateX(16px); }
   z-index: 10;
   user-select: none;
   box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: background-color 0.15s;
 }
 .attio-grid th:last-child,
 .attio-th:last-child {
   border-right: none;
+}
+
+.attio-th.attio-th-spacer,
+.attio-td.attio-td-spacer {
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  border-right: none !important;
+  border-bottom: 1px solid var(--border-table) !important;
+  background: transparent !important;
+  pointer-events: none !important;
 }
 
 /* Sticky First Column */
@@ -1997,17 +2012,24 @@ input:checked + .slider:before { transform: translateX(16px); }
 
 .attio-resizer {
   position: absolute;
-  right: 0;
+  right: -2px;
   top: 0;
   bottom: 0;
-  width: 5px;
+  width: 6px;
   cursor: col-resize;
   user-select: none;
-  z-index: 1;
+  z-index: 2;
+  transition: background-color 0.12s;
 }
 .attio-resizer:hover,
 .attio-resizer.is-resizing {
   background: #266DF0;
+}
+
+body.is-resizing-column,
+body.is-resizing-column * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 /* Data Rows & Cells */
@@ -2022,6 +2044,9 @@ input:checked + .slider:before { transform: translateX(16px); }
   vertical-align: middle;
   font-variant-numeric: tabular-nums;
   background: var(--bg-surface);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: background-color 0.1s;
 }
 .attio-grid td:last-child,

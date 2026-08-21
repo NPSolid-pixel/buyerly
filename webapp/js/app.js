@@ -1470,31 +1470,61 @@
     renderAccounts();
   };
 
+  window.resetSingleColumnWidth = function (e, colId) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (state.accountsColumnWidths && state.accountsColumnWidths[colId] !== undefined) {
+      delete state.accountsColumnWidths[colId];
+      localStorage.setItem('buyerly_accounts_col_widths', JSON.stringify(state.accountsColumnWidths));
+      const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
+      const defaultW = colDef.defaultWidth || 120;
+      const th = document.querySelector(`.attio-th[data-col-id="${colId}"]`);
+      const colTrack = document.getElementById(`col-track-${colId}`);
+      if (th) th.style.width = defaultW + 'px';
+      if (colTrack) colTrack.style.width = defaultW + 'px';
+      showToast(`Ширина колонки «${colDef.label || colId}» сброшена`, 'info');
+      renderAccounts();
+    }
+  };
+
   window.initColumnResize = function (e, colId) {
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
     const th = e.currentTarget.closest('th');
-    const startWidth = th ? th.offsetWidth : 120;
+    const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
+    const startWidth = th ? th.offsetWidth : (colDef.defaultWidth || 120);
+    const minWidth = colDef.minWidth || 60;
+    const colTrack = document.getElementById(`col-track-${colId}`);
     const resizer = e.currentTarget;
+    
     resizer.classList.add('is-resizing');
+    document.body.classList.add('is-resizing-column');
+
+    let currentWidth = startWidth;
 
     const onMouseMove = (moveEvent) => {
+      moveEvent.preventDefault();
       const diff = moveEvent.clientX - startX;
-      const newWidth = Math.max(70, startWidth + diff);
-      if (th) th.style.width = newWidth + 'px';
-      state.accountsColumnWidths[colId] = newWidth;
+      currentWidth = Math.max(minWidth, startWidth + diff);
+      if (th) th.style.width = currentWidth + 'px';
+      if (colTrack) colTrack.style.width = currentWidth + 'px';
+      state.accountsColumnWidths[colId] = currentWidth;
     };
 
-    const onMouseUp = () => {
+    const onMouseUp = (upEvent) => {
+      upEvent.preventDefault();
       resizer.classList.remove('is-resizing');
+      document.body.classList.remove('is-resizing-column');
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       localStorage.setItem('buyerly_accounts_col_widths', JSON.stringify(state.accountsColumnWidths));
     };
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.addEventListener('mousemove', onMouseMove, { passive: false });
+    document.addEventListener('mouseup', onMouseUp, { passive: false });
   };
 
   // ==========================================================
@@ -2137,7 +2167,7 @@
               <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
               <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
             </div>
-            <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" title="Потяните для изменения ширины"></div>
+            <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" ondblclick="window.resetSingleColumnWidth(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
           </div>
         </th>
       `;
@@ -2165,17 +2195,28 @@
       return `
         <tr id="row-${escapeHtml(acc.account_id)}" class="attio-row ${isSelected ? 'is-selected' : ''}">
           ${cellsHtml}
+          <td class="attio-td attio-td-spacer"></td>
         </tr>
       `;
     }).join('');
 
     if (listEl) {
+      const colgroupHtml = colOrder.map(colId => {
+        const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
+        const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 120;
+        return `<col id="col-track-${colId}" style="width: ${width}px;">`;
+      }).join('') + '<col class="col-track-spacer" style="width: auto;">';
+
       listEl.innerHTML = `
         <div class="attio-table-viewport">
           <table class="attio-table">
+            <colgroup>
+              ${colgroupHtml}
+            </colgroup>
             <thead>
               <tr>
                 ${theadHtml}
+                <th class="attio-th attio-th-spacer"></th>
               </tr>
             </thead>
             <tbody>
@@ -2293,6 +2334,7 @@
               <button class="btn btn-secondary btn-xs" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение" style="padding: 2px 6px; color: #BA2525;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
           </td>
+          <td class="attio-td attio-td-spacer"></td>
         </tr>
       `;
     }).join('');
