@@ -2095,7 +2095,7 @@ body.is-resizing-column * {
   background-color: #F5F8FF !important;
 }
 
-/* Cell Avatar to Checkbox Swap (Attio UX) */
+/* Cell Entity Wrapper & Icons */
 .cell-entity-wrapper {
   display: flex;
   align-items: center;
@@ -2124,49 +2124,10 @@ body.is-resizing-column * {
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  transition: opacity 0.1s;
-}
-.cell-entity-icon.rk-icon {
-  background: #E5EEFF;
-  color: #266DF0;
 }
 .cell-entity-icon.fb-icon {
   background: #1877F2;
   color: #FFFFFF;
-}
-.cell-checkbox-wrapper {
-  display: none;
-  position: absolute;
-  inset: 0;
-  align-items: center;
-  justify-content: center;
-}
-
-.attio-table tr:hover .cell-entity-icon {
-  display: none;
-}
-.attio-table tr:hover .cell-checkbox-wrapper {
-  display: flex;
-}
-.attio-table tr.is-selected .cell-entity-icon {
-  display: none;
-}
-.attio-table tr.is-selected .cell-checkbox-wrapper {
-  display: flex;
-}
-
-/* Header Master Checkbox Swap */
-.attio-th:hover .cell-icon-container .cell-entity-icon {
-  display: none;
-}
-.attio-th:hover .cell-icon-container .cell-checkbox-wrapper {
-  display: flex;
-}
-.attio-th.has-selected .cell-icon-container .cell-entity-icon {
-  display: none;
-}
-.attio-th.has-selected .cell-icon-container .cell-checkbox-wrapper {
-  display: flex;
 }
 
 /* Attio Checkbox */

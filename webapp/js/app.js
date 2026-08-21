@@ -2036,13 +2036,8 @@
         return `
           <td class="attio-td sticky-col" style="width: ${width}px; min-width: ${colDef.minWidth || 100}px;">
             <div class="cell-entity-wrapper">
-              <div class="cell-icon-container">
-                <div class="cell-entity-icon rk-icon" title="Рекламный кабинет">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                </div>
-                <div class="cell-checkbox-wrapper">
-                  <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)">
-                </div>
+              <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
+                <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)" title="Выбрать кабинет">
               </div>
               <div style="min-width: 0; overflow: hidden; flex: 1;">
                 <div class="account-text-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
@@ -2204,13 +2199,8 @@
               style="width: ${width}px; min-width: ${colDef.minWidth || 100}px;">
             <div class="attio-th-content">
               <div class="attio-th-left" onclick="${colDef.sortable ? `window.setAccountsSort('${colId}')` : ''}" style="${colDef.sortable ? 'cursor: pointer;' : ''}" title="${colDef.sortable ? 'Нажмите для сортировки' : ''}">
-                <div class="cell-icon-container" onclick="event.stopPropagation();">
-                  <div class="cell-entity-icon rk-icon" title="Рекламные кабинеты">
-                    ${colDef.iconSvg || ''}
-                  </div>
-                  <div class="cell-checkbox-wrapper">
-                    <input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" ${allSelected ? 'checked' : ''} onchange="window.toggleSelectAllAccounts(this.checked)" title="Выбрать все кабинеты">
-                  </div>
+                <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
+                  <input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" ${allSelected ? 'checked' : ''} onchange="window.toggleSelectAllAccounts(this.checked)" title="Выбрать все кабинеты">
                 </div>
                 <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
               </div>
