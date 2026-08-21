@@ -1903,16 +1903,17 @@
     const popoverWidth = 180;
     const popoverHeight = isNumeric ? 260 : 190;
 
-    // Position Popover precisely above or below the target button
+    // Position Popover: default is downwards (below the button)
     let left = rect.left;
     if (left + popoverWidth > window.innerWidth - 10) {
       left = window.innerWidth - popoverWidth - 10;
     }
     if (left < 10) left = 10;
 
-    let top = rect.top - popoverHeight - 6;
-    if (top < 10) {
-      top = rect.bottom + 6;
+    let top = rect.bottom + 4;
+    // Flip upwards only if overflowing the bottom of the screen
+    if (top + popoverHeight > window.innerHeight - 10) {
+      top = Math.max(10, rect.top - popoverHeight - 4);
     }
 
     popover.style.left = `${left}px`;
