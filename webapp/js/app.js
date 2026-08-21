@@ -1740,6 +1740,190 @@
     document.addEventListener('mouseup', onMouseUp);
   };
 
+  const DEFAULT_ACCOUNTS_COLUMN_CALCS = {
+    name: 'count',
+    spend: 'sum',
+    leads: 'sum',
+    registrations: 'sum',
+    purchases: 'sum',
+    impressions: 'sum',
+    clicks: 'sum',
+    reach: 'sum',
+    amount_spent: 'sum'
+  };
+
+  try {
+    const savedCalcs = localStorage.getItem('buyerly_accounts_col_calcs');
+    state.accountsColumnCalcs = savedCalcs ? JSON.parse(savedCalcs) : { ...DEFAULT_ACCOUNTS_COLUMN_CALCS };
+  } catch (_) {
+    state.accountsColumnCalcs = { ...DEFAULT_ACCOUNTS_COLUMN_CALCS };
+  }
+
+  function getAccountColRawValue(acc, colId) {
+    const m = acc.latest_metrics || acc.insights || {};
+    switch (colId) {
+      case 'name': return accountDisplayName(acc);
+      case 'status': return getAccountMetaState(acc).label;
+      case 'timezone': return acc.timezone_name || 'UTC';
+      case 'spend': return Number(acc.today_spend !== undefined ? acc.today_spend : (m.spend || 0));
+      case 'cpm': return Number(m.cpm || 0);
+      case 'cpc': return Number(m.cpc || 0);
+      case 'ctr': return Number(m.ctr || 0);
+      case 'leads': return Number(acc.today_leads !== undefined ? acc.today_leads : (m.leads || 0));
+      case 'cpl': return Number(acc.today_cpl !== undefined ? acc.today_cpl : (m.cpl || 0));
+      case 'registrations': return Number(m.registrations || 0);
+      case 'cpreg': return Number(m.cpreg || 0);
+      case 'purchases': return Number(m.purchases || 0);
+      case 'cpp': return Number(m.cpp || 0);
+      case 'automation': return acc.rules_enabled ? 'Включена' : 'На паузе';
+      case 'currency': return acc.currency || 'USD';
+      case 'business_name': return acc.business_name || acc.batch_name || '';
+      case 'note': return acc.note || '';
+      case 'spend_cap': return Number(acc.spend_cap || 0);
+      case 'amount_spent': return Number(acc.amount_spent || 0);
+      case 'impressions': return Number(m.impressions || 0);
+      case 'reach': return Number(m.reach || 0);
+      case 'frequency': return Number(m.frequency || 0);
+      case 'clicks': return Number(m.clicks || 0);
+      case 'link_clicks': return Number(m.link_clicks || 0);
+      case 'link_ctr': return Number(m.link_ctr !== undefined ? m.link_ctr : (m.ctr_link || 0));
+      case 'rules': return Array.isArray(acc.active_rules) ? acc.active_rules.length : 0;
+      default: return acc[colId] !== undefined ? acc[colId] : null;
+    }
+  }
+
+  function computeColumnCalculation(colId, calcType, accounts) {
+    if (!calcType || calcType === 'none') return null;
+    const total = accounts.length;
+    if (calcType === 'count') {
+      return { val: total, typeLabel: 'count' };
+    }
+    if (calcType === 'filled') {
+      let filled = 0;
+      accounts.forEach(acc => {
+        const v = getAccountColRawValue(acc, colId);
+        if (v !== null && v !== undefined && v !== '' && v !== '—' && v !== 0) filled++;
+      });
+      return { val: filled, typeLabel: 'filled' };
+    }
+    if (calcType === 'empty') {
+      let empty = 0;
+      accounts.forEach(acc => {
+        const v = getAccountColRawValue(acc, colId);
+        if (v === null || v === undefined || v === '' || v === '—' || v === 0) empty++;
+      });
+      return { val: empty, typeLabel: 'empty' };
+    }
+    if (calcType === 'unique') {
+      const set = new Set();
+      accounts.forEach(acc => {
+        const v = getAccountColRawValue(acc, colId);
+        if (v !== null && v !== undefined && v !== '') set.add(v);
+      });
+      return { val: set.size, typeLabel: 'unique' };
+    }
+    if (calcType === 'sum') {
+      let sum = 0;
+      accounts.forEach(acc => {
+        const v = Number(getAccountColRawValue(acc, colId)) || 0;
+        sum += v;
+      });
+      const isMoney = ['spend', 'cpl', 'cpm', 'cpc', 'cpp', 'cpreg', 'spend_cap', 'amount_spent'].includes(colId);
+      return { 
+        val: isMoney ? formatMoneyOrDash(sum, 'USD') : (Number.isInteger(sum) ? sum : sum.toFixed(2)), 
+        typeLabel: 'sum' 
+      };
+    }
+    if (calcType === 'average') {
+      let sum = 0;
+      let count = 0;
+      accounts.forEach(acc => {
+        const v = Number(getAccountColRawValue(acc, colId));
+        if (!isNaN(v) && v !== 0) {
+          sum += v;
+          count++;
+        }
+      });
+      const avg = count > 0 ? (sum / count) : 0;
+      const isMoney = ['spend', 'cpl', 'cpm', 'cpc', 'cpp', 'cpreg', 'spend_cap', 'amount_spent'].includes(colId);
+      const isPercent = ['ctr', 'link_ctr'].includes(colId);
+      let formatted = isMoney ? formatMoneyOrDash(avg, 'USD') : (isPercent ? `${avg.toFixed(2)}%` : avg.toFixed(2));
+      return { val: formatted, typeLabel: 'average' };
+    }
+    return null;
+  }
+
+  let activeCalcColId = null;
+
+  window.openColumnCalcPopover = function (event, colId) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    activeCalcColId = colId;
+    const popover = document.getElementById('accountsCalcPopover');
+    const listEl = document.getElementById('accountsCalcMenuList');
+    if (!popover || !listEl) return;
+
+    const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
+    const isNumeric = ['number', 'currency', 'percentage'].includes(colDef.type) || 
+                      ['spend', 'leads', 'registrations', 'purchases', 'impressions', 'clicks', 'reach', 'cpl', 'cpm', 'cpc', 'ctr', 'amount_spent'].includes(colId);
+
+    const currentCalc = (state.accountsColumnCalcs && state.accountsColumnCalcs[colId]) || (colId === 'name' ? 'count' : 'none');
+
+    const options = [
+      { key: 'none', label: 'None' },
+      { key: 'count', label: 'Count all' },
+      { key: 'filled', label: 'Count filled' },
+      { key: 'empty', label: 'Count empty' },
+      { key: 'unique', label: 'Count unique' }
+    ];
+
+    if (isNumeric) {
+      options.push(
+        { key: 'sum', label: 'Sum' },
+        { key: 'average', label: 'Average' }
+      );
+    }
+
+    listEl.innerHTML = options.map(opt => {
+      const isActive = currentCalc === opt.key;
+      return `
+        <div class="attio-dropdown-item ${isActive ? 'active' : ''}" onclick="window.setColumnCalculation('${opt.key}')">
+          <div class="attio-dropdown-item-left">
+            <span>${opt.label}</span>
+          </div>
+          ${isActive ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+        </div>
+      `;
+    }).join('');
+
+    const target = event.currentTarget;
+    const rect = target.getBoundingClientRect();
+    popover.style.left = `${Math.max(10, rect.left)}px`;
+    popover.style.top = `${Math.max(10, rect.top - 240)}px`;
+    popover.classList.remove('hidden');
+
+    const closeHandler = () => {
+      popover.classList.add('hidden');
+      document.removeEventListener('click', closeHandler);
+    };
+    setTimeout(() => document.addEventListener('click', closeHandler), 10);
+  };
+
+  window.setColumnCalculation = function (calcType) {
+    if (!activeCalcColId) return;
+    if (!state.accountsColumnCalcs) state.accountsColumnCalcs = {};
+    if (calcType === 'none') {
+      delete state.accountsColumnCalcs[activeCalcColId];
+    } else {
+      state.accountsColumnCalcs[activeCalcColId] = calcType;
+    }
+    localStorage.setItem('buyerly_accounts_col_calcs', JSON.stringify(state.accountsColumnCalcs));
+    const popover = document.getElementById('accountsCalcPopover');
+    if (popover) popover.classList.add('hidden');
+    renderAccounts();
+  };
 
   let lastResizerClick = { time: 0, colId: null };
 
@@ -2937,123 +3121,38 @@
       `;
     }).join('');
 
-    // Build Calculations Footer Row (Attio _927ba54)
-    let totalSpend = 0;
-    let totalLeads = 0;
-    let totalRegs = 0;
-    let totalPurchases = 0;
-    let totalImpressions = 0;
-    let totalClicks = 0;
-    let totalReach = 0;
-    let totalAmountSpent = 0;
-
-    filtered.forEach(acc => {
-      const m = acc.latest_metrics || acc.insights || {};
-      totalSpend += Number(acc.today_spend !== undefined ? acc.today_spend : (m.spend || 0));
-      totalLeads += Number(acc.today_leads !== undefined ? acc.today_leads : (m.leads || 0));
-      totalRegs += Number(m.registrations || 0);
-      totalPurchases += Number(m.purchases || 0);
-      totalImpressions += Number(m.impressions || 0);
-      totalClicks += Number(m.clicks || 0);
-      totalReach += Number(m.reach || 0);
-      totalAmountSpent += Number(acc.amount_spent || 0);
-    });
-
+    // Build Calculations Footer Row (Attio _3wkrhj0 & Radix Popover)
     const calcCellsHtml = colOrder.map(colId => {
-      if (colId === 'name') {
+      const isSticky = colId === 'name';
+      const calcType = (state.accountsColumnCalcs && state.accountsColumnCalcs[colId]) || (colId === 'name' ? 'count' : 'none');
+      const calcRes = computeColumnCalculation(colId, calcType, filtered);
+
+      if (calcRes) {
         return `
-          <td class="attio-calc-td sticky-col">
-            <div class="attio-calc-count-badge">
-              <span class="attio-calc-count-num">${totalFiltered}</span>
-              <span>count</span>
-            </div>
+          <td class="attio-calc-td ${isSticky ? 'sticky-col' : ''}">
+            <button type="button" 
+                    class="attio-calc-trigger has-value" 
+                    onclick="window.openColumnCalcPopover(event, '${colId}')" 
+                    aria-haspopup="dialog" 
+                    aria-expanded="false" 
+                    title="Нажмите для изменения вычисления">
+              <div class="attio-calc-content">
+                <div class="attio-calc-val">${calcRes.val}</div>
+                <div class="attio-calc-type">${calcRes.typeLabel}</div>
+              </div>
+            </button>
           </td>
         `;
       }
-      if (colId === 'spend') {
-        return `
-          <td class="attio-calc-td">
-            <div class="attio-calc-val" title="Суммарный расход: $${totalSpend.toFixed(2)}">
-              <span>${formatMoneyOrDash(totalSpend, 'USD')}</span>
-              <span class="attio-calc-val-tag">sum</span>
-            </div>
-          </td>
-        `;
-      }
-      if (colId === 'leads') {
-        return `
-          <td class="attio-calc-td">
-            <div class="attio-calc-val" title="Суммарно лидов: ${totalLeads}">
-              <span>${totalLeads}</span>
-              <span class="attio-calc-val-tag">sum</span>
-            </div>
-          </td>
-        `;
-      }
-      if (colId === 'registrations') {
-        return `
-          <td class="attio-calc-td">
-            <div class="attio-calc-val" title="Суммарно регистраций: ${totalRegs}">
-              <span>${totalRegs}</span>
-              <span class="attio-calc-val-tag">sum</span>
-            </div>
-          </td>
-        `;
-      }
-      if (colId === 'purchases') {
-        return `
-          <td class="attio-calc-td">
-            <div class="attio-calc-val" title="Суммарно покупок: ${totalPurchases}">
-              <span>${totalPurchases}</span>
-              <span class="attio-calc-val-tag">sum</span>
-            </div>
-          </td>
-        `;
-      }
-      if (colId === 'impressions') {
-        return `
-          <td class="attio-calc-td">
-            <div class="attio-calc-val">
-              <span>${totalImpressions}</span>
-              <span class="attio-calc-val-tag">sum</span>
-            </div>
-          </td>
-        `;
-      }
-      if (colId === 'clicks') {
-        return `
-          <td class="attio-calc-td">
-            <div class="attio-calc-val">
-              <span>${totalClicks}</span>
-              <span class="attio-calc-val-tag">sum</span>
-            </div>
-          </td>
-        `;
-      }
-      if (colId === 'reach') {
-        return `
-          <td class="attio-calc-td">
-            <div class="attio-calc-val">
-              <span>${totalReach}</span>
-              <span class="attio-calc-val-tag">sum</span>
-            </div>
-          </td>
-        `;
-      }
-      if (colId === 'amount_spent') {
-        return `
-          <td class="attio-calc-td">
-            <div class="attio-calc-val">
-              <span>${formatMoneyOrDash(totalAmountSpent, 'USD')}</span>
-              <span class="attio-calc-val-tag">sum</span>
-            </div>
-          </td>
-        `;
-      }
+
       return `
-        <td class="attio-calc-td">
-          <button type="button" class="attio-calc-btn" title="Calculate">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <td class="attio-calc-td ${isSticky ? 'sticky-col' : ''}">
+          <button type="button" 
+                  class="attio-calc-trigger is-empty" 
+                  onclick="window.openColumnCalcPopover(event, '${colId}')" 
+                  aria-haspopup="dialog" 
+                  aria-expanded="false" 
+                  title="Добавить вычисление">
             <span>Calculate</span>
           </button>
         </td>
