@@ -4274,6 +4274,832 @@
     }
   };
 
+  // ==========================================================
+  // ATTIO RULE RECORD OVERLAY (LAYER 1 / PHOTO 1)
+  // ==========================================================
+  state.currentRecordPresetId = null;
+  state.recordActiveTab = 'overview';
+
+  window.editPresetFromTab = function (presetId) {
+    window.openRuleRecordOverlay(presetId);
+  };
+
+  window.openRuleRecordOverlay = async function (presetId) {
+    haptic('selection');
+    state.currentRecordPresetId = Number(presetId);
+    const preset = state.presets.find(p => p.id === Number(presetId));
+    if (!preset) {
+      showToast('Правило не найдено', 'error');
+      return;
+    }
+
+    // Determine current group & sibling rules for navigation
+    const parentGroup = state.ruleGroups.find(g => (g.preset_ids || []).includes(preset.id));
+    const groupName = parentGroup ? parentGroup.name : 'Без группы';
+    const groupPresets = parentGroup
+      ? (parentGroup.preset_ids || []).map(id => state.presets.find(p => p.id === id)).filter(Boolean)
+      : state.presets;
+
+    const currentIndex = groupPresets.findIndex(p => p.id === preset.id);
+    const totalCount = groupPresets.length || 1;
+    const posIndex = currentIndex >= 0 ? currentIndex + 1 : 1;
+
+    // Navigation arrows & pill
+    const pill = document.getElementById('recordNavPositionPill');
+    if (pill) {
+      pill.innerHTML = `${posIndex} из ${totalCount} в rules &bull; <span style="font-weight:600;">${escapeHtml(groupName)}</span>`;
+    }
+    const btnPrev = document.getElementById('btnPrevRecord');
+    const btnNext = document.getElementById('btnNextRecord');
+    if (btnPrev) btnPrev.disabled = currentIndex <= 0;
+    if (btnNext) btnNext.disabled = currentIndex < 0 || currentIndex >= totalCount - 1;
+
+    // Title & Icon
+    const titleText = document.getElementById('recordTitleText');
+    const titleInput = document.getElementById('recordTitleInput');
+    const titleDisplay = document.getElementById('recordTitleDisplay');
+    if (titleText) titleText.textContent = preset.name || 'Без названия';
+    if (titleInput) {
+      titleInput.value = preset.name || '';
+      titleInput.classList.add('hidden');
+    }
+    if (titleDisplay) titleDisplay.classList.remove('hidden');
+
+    const avatarIcon = document.getElementById('recordAvatarIcon');
+    if (avatarIcon) {
+      const actionIcons = {
+        'turn_off': '🛑',
+        'notify_only': '🔔',
+        'turn_on': '🚀',
+        'increase_budget': '📈',
+        'decrease_budget': '📉'
+      };
+      avatarIcon.textContent = actionIcons[preset.action] || '⚡';
+    }
+
+    // Populate Left Column: Record Details
+    const detailsGrid = document.getElementById('recordDetailsGrid');
+    if (detailsGrid) {
+      const actionLabels = {
+        'turn_off': '🛑 Выключить адсет (STOP)',
+        'notify_only': '🔔 Прислать уведомление (NOTIFY)',
+        'turn_on': '🚀 Включить адсет (START)',
+        'increase_budget': `📈 +${preset.budget_change_percent || 20}% к бюджету`,
+        'decrease_budget': `📉 -${preset.budget_change_percent || 20}% от бюджета`
+      };
+
+      const metricLabels = {
+        spend: 'Спенд', cpl: 'CPL', cpreg: 'CPReg', cpp: 'CPP',
+        leads: 'Лиды', registrations: 'Регистрации', purchases: 'Покупки',
+        ctr: 'CTR', cpc: 'CPC'
+      };
+      const opLabels = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
+      const winLabels = { today: 'сегодня', yesterday: 'вчера', last_3d: '3 дня', last_7d: '7 дней' };
+
+      const conditionsFormatted = (preset.conditions || []).map(c => {
+        const m = metricLabels[c.metric] || c.metric;
+        const op = opLabels[c.operator] || c.operator;
+        const w = winLabels[c.time_window] || c.time_window;
+        const val = ['spend', 'cpl', 'cpreg', 'cpp', 'cpc'].includes(c.metric) ? `$${c.value}` : (c.metric === 'ctr' ? `${c.value}%` : `${c.value} шт`);
+        return `${m} ${op} ${val} (${w})`;
+      }).join((preset.condition_logic || 'and').toUpperCase() === 'OR' ? ' <b style="color:var(--accent-primary)">ИЛИ</b> ' : ' <b style="color:var(--accent-primary)">И</b> ');
+
+      const colorEmojiMap = {
+        purple: '🟣', blue: '🔵', emerald: '🟢', amber: '🟡',
+        orange: '🟠', cyan: '🌐', magenta: '🌸', rose: '🔴',
+        lime: '🍏', yellow: '🟡', red: '🔴', gray: '⚪'
+      };
+      const groupColor = parentGroup ? (state.ruleGroupColors[parentGroup.id] || 'purple') : 'gray';
+      const groupEmoji = colorEmojiMap[groupColor] || '🟣';
+
+      detailsGrid.innerHTML = `
+        <div class="record-detail-row">
+          <span class="record-detail-key">Действие</span>
+          <span class="record-detail-val">${actionLabels[preset.action] || preset.action}</span>
+        </div>
+        <div class="record-detail-row">
+          <span class="record-detail-key">Группа</span>
+          <span class="record-detail-val">${groupEmoji} ${escapeHtml(groupName)}</span>
+        </div>
+        <div class="record-detail-row">
+          <span class="record-detail-key">Логика</span>
+          <span class="record-detail-val">${(preset.condition_logic || 'and').toUpperCase() === 'OR' ? 'OR (Любое)' : 'AND (Все)'}</span>
+        </div>
+        <div class="record-detail-row">
+          <span class="record-detail-key">Условия</span>
+          <span class="record-detail-val" style="font-size: 12px; line-height: 1.4;">${conditionsFormatted || '—'}</span>
+        </div>
+        ${preset.action === 'increase_budget' && preset.budget_max_daily ? `
+        <div class="record-detail-row">
+          <span class="record-detail-key">Потолок</span>
+          <span class="record-detail-val">$${preset.budget_max_daily} / день</span>
+        </div>` : ''}
+        <div class="record-detail-row">
+          <span class="record-detail-key">Кулдаун</span>
+          <span class="record-detail-val">${preset.cooldown_minutes ? `${preset.cooldown_minutes} мин` : 'Без паузы'}</span>
+        </div>
+        <div class="record-detail-row">
+          <span class="record-detail-key">Telegram</span>
+          <span class="record-detail-val">${preset.notify_tg !== false ? '✅ Включены' : '❌ Выключены'}</span>
+        </div>
+      `;
+    }
+
+    // Populate Left Column: Groups
+    const groupsList = document.getElementById('recordGroupsList');
+    if (groupsList) {
+      if (parentGroup) {
+        const groupColor = state.ruleGroupColors[parentGroup.id] || 'purple';
+        const colorEmojiMap = {
+          purple: '🟣', blue: '🔵', emerald: '🟢', amber: '🟡',
+          orange: '🟠', cyan: '🌐', magenta: '🌸', rose: '🔴',
+          lime: '🍏', yellow: '🟡', red: '🔴', gray: '⚪'
+        };
+        groupsList.innerHTML = `
+          <div class="record-group-pill">
+            <span class="record-group-dot-label">
+              <span>${colorEmojiMap[groupColor] || '🟣'}</span>
+              <span>${escapeHtml(parentGroup.name)}</span>
+            </span>
+            <span class="record-group-time">Активна</span>
+          </div>
+        `;
+      } else {
+        groupsList.innerHTML = `
+          <div class="record-group-pill" style="color:var(--text-muted);">
+            <span>⚪ Без группы (не в колонке)</span>
+          </div>
+        `;
+      }
+    }
+
+    // Calculate Linked Accounts
+    let linkedAccounts = [];
+    (state.accounts || []).forEach(acc => {
+      if (acc.rules_enabled && (acc.active_rules || []).some(r => r.preset_id === preset.id)) {
+        linkedAccounts.push(acc);
+      }
+    });
+
+    const accountsBadge = document.getElementById('recordAccountsCountBadge');
+    if (accountsBadge) accountsBadge.textContent = String(linkedAccounts.length);
+
+    // Populate Accounts Tab
+    const accountsContainer = document.getElementById('recordAccountsList');
+    if (accountsContainer) {
+      if (linkedAccounts.length === 0) {
+        accountsContainer.innerHTML = `
+          <div style="text-align:center; padding: 30px; color: var(--text-muted); font-size: 13px;">
+            Правило пока не привязано ни к одному активному кабинету.<br>
+            Включите его в настройках кабинета или назначьте группу.
+          </div>
+        `;
+      } else {
+        accountsContainer.innerHTML = linkedAccounts.map(acc => `
+          <div class="record-account-row">
+            <div>
+              <div class="record-account-name">${escapeHtml(acc.name)}</div>
+              <div class="record-account-id">ID: ${escapeHtml(acc.account_id)} &bull; ${acc.currency || 'USD'}</div>
+            </div>
+            <span class="badge badge-success">Активно</span>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Load Activity Events
+    await window.loadRuleRecordActivity(preset.id, preset.name);
+
+    // Render Highlights
+    window.renderRecordHighlights(preset, linkedAccounts.length);
+
+    window.setRecordActiveTab('overview');
+    window.openModal('modalRuleRecordOverlay');
+  };
+
+  window.loadRuleRecordActivity = async function (presetId, presetName) {
+    const overviewFeed = document.getElementById('recordOverviewActivityFeed');
+    const fullFeed = document.getElementById('recordFullActivityFeed');
+    const badge = document.getElementById('recordActivityCountBadge');
+
+    try {
+      const resp = await apiRequest(`/api/audit-events?rule_id=${presetId}&page_size=30`);
+      let events = (resp && resp.items) || [];
+
+      // Fallback search by rule_name if no rule_id events yet
+      if (events.length === 0 && presetName) {
+        const fallbackResp = await apiRequest(`/api/audit-events?search=${encodeURIComponent(presetName)}&page_size=20`);
+        events = (fallbackResp && fallbackResp.items) || [];
+      }
+
+      state.currentRecordEvents = events;
+      if (badge) badge.textContent = String(events.length);
+
+      if (events.length === 0) {
+        const emptyHtml = `
+          <div style="padding: 16px 10px; color: var(--text-muted); font-size: 12.5px; text-align: center;">
+            Событий и срабатываний по этому правилу пока не зафиксировано.
+          </div>
+        `;
+        if (overviewFeed) overviewFeed.innerHTML = emptyHtml;
+        if (fullFeed) fullFeed.innerHTML = emptyHtml;
+        return;
+      }
+
+      const renderItem = (evt) => {
+        const timeAgo = formatTimeAgo(new Date(evt.created_at || Date.now()));
+        const statusBadge = evt.status === 'SUCCESS' ? '✅' : (evt.status === 'ERROR' ? '❌' : 'ℹ️');
+        return `
+          <div class="record-activity-item">
+            <div class="record-activity-avatar">B</div>
+            <div class="record-activity-text">
+              <b>${escapeHtml(evt.actor_id || 'Бот Buyerly')}</b>
+              <span>${escapeHtml(evt.message || evt.event_type || 'Выполнил проверку')}</span>
+              ${evt.account_name ? `<span style="color:var(--text-muted)"> &bull; ${escapeHtml(evt.account_name)}</span>` : ''}
+              ${evt.adset_name ? `<span style="color:var(--text-muted)"> &bull; адсет: ${escapeHtml(evt.adset_name)}</span>` : ''}
+            </div>
+            <div class="record-activity-time">${statusBadge} ${timeAgo}</div>
+          </div>
+        `;
+      };
+
+      if (overviewFeed) {
+        overviewFeed.innerHTML = events.slice(0, 4).map(renderItem).join('');
+      }
+      if (fullFeed) {
+        fullFeed.innerHTML = events.map(renderItem).join('');
+      }
+    } catch (e) {
+      if (overviewFeed) overviewFeed.innerHTML = '<div style="color:var(--text-muted); font-size:12px;">Логи временно недоступны</div>';
+    }
+  };
+
+  window.renderRecordHighlights = function (preset, linkedAccountsCount) {
+    const grid = document.getElementById('recordHighlightsGrid');
+    if (!grid) return;
+
+    const events = state.currentRecordEvents || [];
+    const todayCount = events.filter(e => {
+      const d = new Date(e.created_at);
+      const now = new Date();
+      return d.toDateString() === now.toDateString();
+    }).length;
+
+    const lastEvent = events[0];
+    const lastTriggeredText = lastEvent ? formatTimeAgo(new Date(lastEvent.created_at)) : 'Пока нет';
+
+    grid.innerHTML = `
+      <div class="record-highlight-card">
+        <span class="record-highlight-label">Статус</span>
+        <span class="record-highlight-value" style="color: var(--color-success, #02ad6e);">Активно</span>
+      </div>
+      <div class="record-highlight-card">
+        <span class="record-highlight-label">Срабатываний сегодня</span>
+        <span class="record-highlight-value">${todayCount} раз</span>
+      </div>
+      <div class="record-highlight-card">
+        <span class="record-highlight-label">Последнее действие</span>
+        <span class="record-highlight-value" style="font-size: 13.5px;">${lastTriggeredText}</span>
+      </div>
+      <div class="record-highlight-card">
+        <span class="record-highlight-label">Кабинетов привязано</span>
+        <span class="record-highlight-value">${linkedAccountsCount}</span>
+      </div>
+    `;
+  };
+
+  window.setRecordActiveTab = function (tabName) {
+    state.recordActiveTab = tabName;
+    document.querySelectorAll('.record-tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    document.getElementById('recordTabOverview')?.classList.toggle('hidden', tabName !== 'overview');
+    document.getElementById('recordTabActivity')?.classList.toggle('hidden', tabName !== 'activity');
+    document.getElementById('recordTabAccounts')?.classList.toggle('hidden', tabName !== 'accounts');
+  };
+
+  window.navigateRecordRule = function (delta) {
+    if (!state.currentRecordPresetId) return;
+    const preset = state.presets.find(p => p.id === state.currentRecordPresetId);
+    if (!preset) return;
+
+    const parentGroup = state.ruleGroups.find(g => (g.preset_ids || []).includes(preset.id));
+    const groupPresets = parentGroup
+      ? (parentGroup.preset_ids || []).map(id => state.presets.find(p => p.id === id)).filter(Boolean)
+      : state.presets;
+
+    const currentIndex = groupPresets.findIndex(p => p.id === preset.id);
+    if (currentIndex < 0) return;
+
+    const newIndex = currentIndex + delta;
+    if (newIndex >= 0 && newIndex < groupPresets.length) {
+      window.openRuleRecordOverlay(groupPresets[newIndex].id);
+    }
+  };
+
+  window.onRuleRecordOverlayClick = function (event) {
+    if (event.target.id === 'modalRuleRecordOverlay') {
+      window.closeModal('modalRuleRecordOverlay');
+    }
+  };
+
+  // Inline Title Editing in Record Overlay
+  window.enableInlineTitleEdit = function () {
+    const display = document.getElementById('recordTitleDisplay');
+    const input = document.getElementById('recordTitleInput');
+    if (!display || !input) return;
+    display.classList.add('hidden');
+    input.classList.remove('hidden');
+    input.focus();
+    input.select();
+  };
+
+  window.saveInlineTitleEdit = async function () {
+    const display = document.getElementById('recordTitleDisplay');
+    const input = document.getElementById('recordTitleInput');
+    const titleText = document.getElementById('recordTitleText');
+    if (!display || !input || !state.currentRecordPresetId) return;
+
+    const newName = input.value.trim();
+    display.classList.remove('hidden');
+    input.classList.add('hidden');
+
+    if (!newName) return;
+
+    const preset = state.presets.find(p => p.id === state.currentRecordPresetId);
+    if (!preset || preset.name === newName) return;
+
+    try {
+      const payload = {
+        name: newName,
+        action: preset.action,
+        conditions: preset.conditions || [],
+        condition_logic: preset.condition_logic || 'and',
+        cooldown_minutes: preset.cooldown_minutes || 0,
+        check_interval_minutes: preset.check_interval_minutes || 5,
+        notify_tg: preset.notify_tg !== false,
+        budget_change_percent: preset.budget_change_percent || 0.0,
+        budget_max_daily: preset.budget_max_daily || 0.0
+      };
+
+      const updated = await apiRequest(`/api/presets/${preset.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+
+      preset.name = updated.name || newName;
+      if (titleText) titleText.textContent = preset.name;
+      showToast('Название правила обновлено', 'success');
+      haptic('notification', 'success');
+
+      if (state.activeTab === 'rules') renderRulesTab();
+    } catch (e) {
+      showToast(`Ошибка сохранения: ${e.message}`, 'error');
+    }
+  };
+
+  window.onInlineTitleKeydown = function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      window.saveInlineTitleEdit();
+    } else if (event.key === 'Escape') {
+      const display = document.getElementById('recordTitleDisplay');
+      const input = document.getElementById('recordTitleInput');
+      if (display && input) {
+        input.classList.add('hidden');
+        display.classList.remove('hidden');
+      }
+    }
+  };
+
+  window.runRuleCheckNow = async function () {
+    haptic('impact', 'medium');
+    showToast('Запущена ручная проверка правила...', 'info');
+    try {
+      await apiRequest('/api/worker/run-now', { method: 'POST' });
+      showToast('Проверка успешно выполнена!', 'success');
+      if (state.currentRecordPresetId) {
+        const preset = state.presets.find(p => p.id === state.currentRecordPresetId);
+        if (preset) await window.loadRuleRecordActivity(preset.id, preset.name);
+      }
+    } catch (e) {
+      showToast(`Результат проверки: ${e.message}`, 'info');
+    }
+  };
+
+  window.openMoveRuleGroupFromOverlay = function () {
+    if (!state.currentRecordPresetId) return;
+    window.openChooseGroupModal([state.currentRecordPresetId]);
+  };
+
+  window.deleteRuleFromOverlay = async function () {
+    if (!state.currentRecordPresetId) return;
+    const preset = state.presets.find(p => p.id === state.currentRecordPresetId);
+    const name = preset ? preset.name : 'правило';
+    if (!confirm(`Вы уверены, что хотите удалить «${name}»?`)) return;
+
+    window.closeModal('modalRuleRecordOverlay');
+    await window.deletePresetDirectly(state.currentRecordPresetId);
+  };
+
+  // ==========================================================
+  // ATTIO EDIT RULE MODAL (LAYER 2 / PHOTO 2)
+  // ==========================================================
+  window.openEditRuleFromOverlay = function () {
+    if (state.currentRecordPresetId) {
+      window.openEditRuleModal(state.currentRecordPresetId);
+    }
+  };
+
+  window.openEditRuleModal = function (presetId) {
+    haptic('selection');
+    const preset = state.presets.find(p => p.id === Number(presetId));
+    if (!preset) {
+      showToast('Правило не найдено', 'error');
+      return;
+    }
+
+    const idInput = document.getElementById('editRulePresetId');
+    if (idInput) idInput.value = String(preset.id);
+
+    const sub = document.getElementById('editRuleSubtitle');
+    if (sub) sub.textContent = `Настройка параметров и условий для «${preset.name}»`;
+
+    const nameInput = document.getElementById('editRuleNameInput');
+    if (nameInput) nameInput.value = preset.name || '';
+
+    // Group Select
+    const parentGroup = state.ruleGroups.find(g => (g.preset_ids || []).includes(preset.id));
+    window.populateEditRuleGroupSelect(parentGroup ? parentGroup.id : null);
+
+    // Action Select
+    const actionSelect = document.getElementById('editRuleActionSelect');
+    if (actionSelect) actionSelect.value = preset.action || 'turn_off';
+    window.onEditRuleActionChange(preset.action || 'turn_off');
+
+    // Budget config
+    const budgetPercent = document.getElementById('editRuleBudgetPercentInput');
+    if (budgetPercent) budgetPercent.value = preset.budget_change_percent || 20;
+    const budgetCeiling = document.getElementById('editRuleBudgetCeilingInput');
+    if (budgetCeiling) budgetCeiling.value = preset.budget_max_daily || 0;
+
+    // Logic
+    window.setEditRuleLogic(preset.condition_logic || 'and');
+
+    // Cooldown & Telegram
+    const cooldownSelect = document.getElementById('editRuleCooldownSelect');
+    const customCooldown = document.getElementById('editRuleCustomCooldownInput');
+    const standardCooldowns = ['0', '15', '30', '60', '120', '360', '720', '1440'];
+    const cdVal = String(preset.cooldown_minutes || 0);
+    if (standardCooldowns.includes(cdVal)) {
+      if (cooldownSelect) cooldownSelect.value = cdVal;
+      if (customCooldown) {
+        customCooldown.classList.add('hidden');
+        customCooldown.value = '';
+      }
+    } else {
+      if (cooldownSelect) cooldownSelect.value = 'custom';
+      if (customCooldown) {
+        customCooldown.classList.remove('hidden');
+        customCooldown.value = cdVal;
+      }
+    }
+
+    const notifyToggle = document.getElementById('editRuleNotifyTgToggle');
+    if (notifyToggle) notifyToggle.checked = preset.notify_tg !== false;
+
+    // Conditions List
+    const container = document.getElementById('editRuleConditionsList');
+    if (container) container.innerHTML = '';
+    const conditions = (preset.conditions && preset.conditions.length > 0)
+      ? preset.conditions
+      : [{ metric: 'spend', operator: 'gte', value: 2.0, time_window: 'today' }];
+
+    conditions.forEach(c => {
+      window.addEditRuleConditionRow(c.metric, c.operator, c.value, c.time_window);
+    });
+
+    window.renderEditRuleDraftSummary();
+    window.openModal('modalEditRule');
+    setTimeout(() => nameInput?.focus(), 50);
+  };
+
+  window.onEditRuleOverlayClick = function (event) {
+    if (event.target.id === 'modalEditRule') {
+      window.closeModal('modalEditRule');
+    }
+  };
+
+  window.populateEditRuleGroupSelect = function (selectedGroupId = null) {
+    const select = document.getElementById('editRuleGroupSelect');
+    if (!select) return;
+
+    const colorEmojiMap = {
+      purple: '🟣', blue: '🔵', emerald: '🟢', amber: '🟡',
+      orange: '🟠', cyan: '🌐', magenta: '🌸', rose: '🔴',
+      lime: '🍏', yellow: '🟡', red: '🔴', gray: '⚪'
+    };
+
+    let html = '<option value="">⚪ Без группы</option>';
+    (state.ruleGroups || []).forEach(g => {
+      const savedColor = state.ruleGroupColors[g.id] || 'purple';
+      const emoji = colorEmojiMap[savedColor] || '🟣';
+      const isSel = selectedGroupId !== null && Number(selectedGroupId) === g.id;
+      html += `<option value="${g.id}" ${isSel ? 'selected' : ''}>${emoji} ${escapeHtml(g.name)}</option>`;
+    });
+    select.innerHTML = html;
+  };
+
+  window.onEditRuleActionChange = function (action) {
+    const budgetSection = document.getElementById('editRuleBudgetSection');
+    const ceilingField = document.getElementById('editRuleBudgetCeilingField');
+    if (action === 'increase_budget' || action === 'decrease_budget') {
+      budgetSection?.classList.remove('hidden');
+      if (ceilingField) {
+        ceilingField.style.display = action === 'increase_budget' ? 'flex' : 'none';
+      }
+    } else {
+      budgetSection?.classList.add('hidden');
+    }
+    window.renderEditRuleDraftSummary();
+  };
+
+  window.setEditRuleLogic = function (logic = 'and') {
+    document.querySelectorAll('#editRuleLogicGroup .attio-logic-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.logic === (logic || 'and'));
+    });
+    window.renderEditRuleDraftSummary();
+  };
+
+  window.getEditRuleLogic = function () {
+    const activeBtn = document.querySelector('#editRuleLogicGroup .attio-logic-btn.active');
+    return activeBtn?.dataset.logic || 'and';
+  };
+
+  window.toggleEditRuleMoreSettings = function () {
+    const moreBody = document.getElementById('editRuleMoreBody');
+    const moreArrow = document.getElementById('editRuleMoreArrow');
+    if (!moreBody || !moreArrow) return;
+    const isHidden = moreBody.classList.contains('hidden');
+    moreBody.classList.toggle('hidden', !isHidden);
+    moreArrow.classList.toggle('open', isHidden);
+  };
+
+  window.onEditRuleCooldownChange = function (val) {
+    const customInput = document.getElementById('editRuleCustomCooldownInput');
+    if (val === 'custom') {
+      customInput?.classList.remove('hidden');
+      customInput?.focus();
+    } else {
+      customInput?.classList.add('hidden');
+      if (customInput) customInput.value = '';
+    }
+    window.renderEditRuleDraftSummary();
+  };
+
+  window.getEditRuleCooldownFromUI = function () {
+    const select = document.getElementById('editRuleCooldownSelect');
+    const customInput = document.getElementById('editRuleCustomCooldownInput');
+    if (!select) return 0;
+    if (select.value === 'custom') {
+      return parseInt(customInput?.value) || 0;
+    }
+    return parseInt(select.value) || 0;
+  };
+
+  window.addEditRuleConditionRow = function (metric = 'spend', operator = 'gte', value = '2.0', timeWindow = 'today') {
+    haptic('selection');
+    const container = document.getElementById('editRuleConditionsList');
+    if (!container) return;
+
+    const row = document.createElement('div');
+    row.className = 'attio-cond-row';
+    row.innerHTML = `
+      <select class="attio-cond-metric attio-field-select" onchange="window.renderEditRuleDraftSummary()">
+        <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд (валюта кабинета)</option>
+        <option value="cpl" ${metric === 'cpl' ? 'selected' : ''}>CPL (Цена лида)</option>
+        <option value="cpreg" ${metric === 'cpreg' ? 'selected' : ''}>CPReg (Цена регистрации)</option>
+        <option value="cpp" ${metric === 'cpp' ? 'selected' : ''}>CPP (Цена покупки)</option>
+        <option value="leads" ${metric === 'leads' ? 'selected' : ''}>Лиды (шт)</option>
+        <option value="registrations" ${metric === 'registrations' ? 'selected' : ''}>Регистрации (шт)</option>
+        <option value="purchases" ${metric === 'purchases' ? 'selected' : ''}>Покупки (шт)</option>
+        <option value="ctr" ${metric === 'ctr' ? 'selected' : ''}>CTR All (%)</option>
+        <option value="cpc" ${metric === 'cpc' ? 'selected' : ''}>CPC All (валюта кабинета)</option>
+      </select>
+      <select class="attio-cond-op attio-field-select" onchange="window.renderEditRuleDraftSummary()">
+        <option value="gt" ${operator === 'gt' ? 'selected' : ''}>&gt; (больше)</option>
+        <option value="gte" ${operator === 'gte' ? 'selected' : ''}>&ge; (не меньше)</option>
+        <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt; (меньше)</option>
+        <option value="lte" ${operator === 'lte' ? 'selected' : ''}>&le; (не больше)</option>
+        <option value="eq" ${operator === 'eq' ? 'selected' : ''}>= (равно)</option>
+      </select>
+      <input type="number" class="attio-cond-val attio-field-input text-center" placeholder="0.0" step="0.5" min="0" inputmode="decimal" value="${value}" oninput="window.renderEditRuleDraftSummary()">
+      <select class="attio-cond-win attio-field-select" onchange="window.renderEditRuleDraftSummary()">
+        <option value="today" ${timeWindow === 'today' ? 'selected' : ''}>Сегодня</option>
+        <option value="yesterday" ${timeWindow === 'yesterday' ? 'selected' : ''}>Вчера</option>
+        <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
+        <option value="last_7d" ${timeWindow === 'last_7d' ? 'selected' : ''}>7 дней</option>
+      </select>
+      <button type="button" class="attio-cond-del-btn" onclick="window.removeEditRuleConditionRow(this)" title="Удалить условие">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    `;
+    container.appendChild(row);
+    window.renderEditRuleDraftSummary();
+  };
+
+  window.removeEditRuleConditionRow = function (button) {
+    haptic('selection');
+    const container = document.getElementById('editRuleConditionsList');
+    button?.closest('.attio-cond-row')?.remove();
+    if (container && container.children.length === 0) {
+      window.addEditRuleConditionRow('spend', 'gte', 2.0, 'today');
+    } else {
+      window.renderEditRuleDraftSummary();
+    }
+  };
+
+  window.getEditRuleConditionsFromUI = function () {
+    const rows = document.querySelectorAll('#editRuleConditionsList .attio-cond-row');
+    const conditions = [];
+    rows.forEach(r => {
+      const metric = r.querySelector('.attio-cond-metric')?.value || 'spend';
+      const operator = r.querySelector('.attio-cond-op')?.value || 'gte';
+      const valInput = r.querySelector('.attio-cond-val')?.value;
+      const timeWindow = r.querySelector('.attio-cond-win')?.value || 'today';
+      const value = parseFloat(valInput);
+      if (!isNaN(value)) {
+        conditions.push({ metric, operator, value, time_window: timeWindow });
+      }
+    });
+    return conditions;
+  };
+
+  window.renderEditRuleDraftSummary = function () {
+    const textElement = document.getElementById('editRulePlainText');
+    const errorsElement = document.getElementById('editRuleValidationErrors');
+    const saveButton = document.getElementById('btnSubmitEditRule');
+    if (!textElement || !errorsElement) return [];
+
+    const action = document.getElementById('editRuleActionSelect')?.value || 'turn_off';
+    const logic = window.getEditRuleLogic();
+    const conditions = window.getEditRuleConditionsFromUI();
+    const budgetPercent = parseFloat(document.getElementById('editRuleBudgetPercentInput')?.value) || 0;
+    const budgetCeiling = parseFloat(document.getElementById('editRuleBudgetCeilingInput')?.value) || 0;
+
+    const plainText = buildPlainRuleTextFromValues(action, logic, conditions, budgetPercent, budgetCeiling);
+    textElement.textContent = plainText;
+    textElement.dataset.plainName = fitPlainRuleName(plainText);
+
+    const errors = [];
+    if (conditions.length === 0) {
+      errors.push('Добавьте хотя бы одно корректное условие.');
+    }
+    if (conditions.some(c => ['leads', 'registrations', 'purchases'].includes(c.metric) && !Number.isInteger(c.value))) {
+      errors.push('Лиды, регистрации и покупки указываются только целыми числами.');
+    }
+    if ((action === 'increase_budget' || action === 'decrease_budget') && (budgetPercent <= 0 || budgetPercent > 100)) {
+      errors.push('Изменение бюджета должно быть от 1% до 100%.');
+    }
+    if (action === 'increase_budget' && (budgetCeiling <= 0 || budgetCeiling > 10000000)) {
+      errors.push('Для увеличения бюджета укажите безопасный дневной потолок (> 0).');
+    }
+
+    errorsElement.innerHTML = errors.map(e => `
+      <div class="attio-val-item error">
+        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>${escapeHtml(e)}</span>
+      </div>
+    `).join('');
+
+    if (saveButton) saveButton.disabled = errors.length > 0;
+    return errors;
+  };
+
+  window.useEditRulePlainName = function () {
+    const input = document.getElementById('editRuleNameInput');
+    const name = document.getElementById('editRulePlainText')?.dataset.plainName || '';
+    if (input && name) {
+      input.value = name;
+      input.focus();
+      showToast('Понятное название вставлено', 'success');
+    }
+  };
+
+  window.submitEditRule = async function () {
+    const presetIdStr = document.getElementById('editRulePresetId')?.value;
+    const presetId = presetIdStr ? Number(presetIdStr) : null;
+    if (!presetId) return;
+
+    const nameInput = document.getElementById('editRuleNameInput');
+    const actionSelect = document.getElementById('editRuleActionSelect');
+    const groupSelect = document.getElementById('editRuleGroupSelect');
+    const saveButton = document.getElementById('btnSubmitEditRule');
+
+    const name = nameInput?.value.trim() || document.getElementById('editRulePlainText')?.dataset.plainName || 'Правило';
+    const action = actionSelect?.value || 'turn_off';
+    const newGroupId = groupSelect?.value ? Number(groupSelect.value) : null;
+    const logic = window.getEditRuleLogic();
+    const conditions = window.getEditRuleConditionsFromUI();
+    const cooldownMins = window.getEditRuleCooldownFromUI();
+    const notifyTg = document.getElementById('editRuleNotifyTgToggle')?.checked !== false;
+    const budgetPercent = parseFloat(document.getElementById('editRuleBudgetPercentInput')?.value) || 0;
+    const budgetCeiling = parseFloat(document.getElementById('editRuleBudgetCeilingInput')?.value) || 0;
+
+    const errors = window.renderEditRuleDraftSummary();
+    if (errors && errors.length > 0) {
+      showToast(errors[0], 'error');
+      return;
+    }
+
+    const payload = {
+      name,
+      action,
+      conditions,
+      condition_logic: logic,
+      cooldown_minutes: cooldownMins,
+      check_interval_minutes: 5,
+      notify_tg: notifyTg,
+      budget_change_percent: (action === 'increase_budget' || action === 'decrease_budget') ? budgetPercent : 0.0,
+      budget_max_daily: action === 'increase_budget' ? budgetCeiling : 0.0
+    };
+
+    if (saveButton) saveButton.disabled = true;
+    try {
+      const updatedPreset = await apiRequest(`/api/presets/${presetId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+
+      // Handle group assignment changes
+      const prevGroup = state.ruleGroups.find(g => (g.preset_ids || []).includes(presetId));
+      const prevGroupId = prevGroup ? prevGroup.id : null;
+
+      if (prevGroupId !== newGroupId) {
+        // Remove from old group
+        if (prevGroup) {
+          await apiRequest(`/api/rule-groups/${prevGroup.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              name: prevGroup.name,
+              description: prevGroup.description || '',
+              preset_ids: (prevGroup.preset_ids || []).filter(id => id !== presetId)
+            })
+          });
+        }
+        // Add to new group
+        if (newGroupId) {
+          const targetGroup = state.ruleGroups.find(g => g.id === newGroupId);
+          if (targetGroup) {
+            const currentIds = targetGroup.preset_ids || [];
+            if (!currentIds.includes(presetId)) {
+              await apiRequest(`/api/rule-groups/${newGroupId}`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                  name: targetGroup.name,
+                  description: targetGroup.description || '',
+                  preset_ids: [...currentIds, presetId]
+                })
+              });
+            }
+          }
+        }
+      }
+
+      haptic('notification', 'success');
+      showToast(`Правило «${updatedPreset.name || name}» успешно обновлено!`, 'success');
+      window.closeModal('modalEditRule');
+
+      await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
+
+      // If Record Overlay is currently viewing this rule, refresh it live
+      if (state.currentRecordPresetId === presetId) {
+        const overlay = document.getElementById('modalRuleRecordOverlay');
+        if (overlay && !overlay.classList.contains('hidden')) {
+          await window.openRuleRecordOverlay(presetId);
+        }
+      }
+
+      if (state.activeTab === 'rules') renderRulesTab();
+    } catch (err) {
+      showToast(`Ошибка сохранения: ${err.message}`, 'error');
+    } finally {
+      if (saveButton) saveButton.disabled = false;
+    }
+  };
+
+  window.deletePresetDirectly = async function (presetId) {
+    haptic('impact', 'medium');
+    try {
+      await apiRequest(`/api/presets/${presetId}`, { method: 'DELETE' });
+      showToast('Правило удалено', 'success');
+      await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
+      renderRulesTab();
+    } catch (e) {
+      showToast(`Ошибка удаления: ${e.message}`, 'error');
+    }
+  };
+
   async function loadRuleGroups() {
     try {
       state.ruleGroups = await apiRequest('/api/rule-groups') || [];
@@ -8557,9 +9383,15 @@
     }
   });
 
-  // Global Keyboard shortcuts (ESC to close, Ctrl+Enter to save)
+  // Global Keyboard shortcuts (ESC to close, Ctrl+Enter to save, Arrow Left/Right to navigate)
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      const editRuleModal = document.getElementById('modalEditRule');
+      if (editRuleModal && !editRuleModal.classList.contains('hidden')) {
+        e.preventDefault();
+        window.submitEditRule();
+        return;
+      }
       const createModal = document.getElementById('modalCreateRule');
       if (createModal && !createModal.classList.contains('hidden')) {
         e.preventDefault();
@@ -8574,9 +9406,19 @@
       }
     }
     if (e.key === 'Escape') {
+      const editRuleModal = document.getElementById('modalEditRule');
+      if (editRuleModal && !editRuleModal.classList.contains('hidden')) {
+        window.closeModal('modalEditRule');
+        return;
+      }
       const createModal = document.getElementById('modalCreateRule');
       if (createModal && !createModal.classList.contains('hidden')) {
         window.closeModal('modalCreateRule');
+        return;
+      }
+      const recordOverlay = document.getElementById('modalRuleRecordOverlay');
+      if (recordOverlay && !recordOverlay.classList.contains('hidden')) {
+        window.closeModal('modalRuleRecordOverlay');
         return;
       }
       const chooseModal = document.getElementById('modalChooseRule');
@@ -8592,6 +9434,17 @@
       const addColumnPopover = document.getElementById('ruleAddColumnPopover');
       if (addColumnPopover && !addColumnPopover.classList.contains('hidden')) {
         addColumnPopover.classList.add('hidden');
+      }
+    }
+    // Arrow Left / Right navigation inside Rule Record Overlay
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const recordOverlay = document.getElementById('modalRuleRecordOverlay');
+      if (recordOverlay && !recordOverlay.classList.contains('hidden')) {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        if (activeTag !== 'input' && activeTag !== 'textarea' && activeTag !== 'select') {
+          e.preventDefault();
+          window.navigateRecordRule(e.key === 'ArrowLeft' ? -1 : 1);
+        }
       }
     }
   });

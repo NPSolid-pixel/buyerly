@@ -2932,6 +2932,7 @@ async def list_audit_events(
     category: Optional[str] = Query(None, max_length=40),
     event_status: Optional[str] = Query(None, alias="status", max_length=20),
     account_id: Optional[str] = Query(None, max_length=80),
+    rule_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None, max_length=100),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
@@ -2946,6 +2947,8 @@ async def list_audit_events(
         filters.append(AuditEvent.category == category.upper())
     if account_id:
         filters.append(AuditEvent.account_id == account_id)
+    if rule_id is not None:
+        filters.append(AuditEvent.rule_id == rule_id)
     if date_from:
         filters.append(AuditEvent.created_at >= date_from)
     if date_to:

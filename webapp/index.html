@@ -2120,6 +2120,317 @@
       </div>
     </div>
 
+    <!-- Modal: Attio Rule Record Overlay / Full Record View ("Photo 1") -->
+    <div id="modalRuleRecordOverlay" class="modal-overlay rule-record-overlay hidden" onclick="window.onRuleRecordOverlayClick(event)">
+      <div class="rule-record-dialog" onclick="event.stopPropagation()">
+        
+        <!-- Top Navigation Bar -->
+        <div class="record-top-bar">
+          <div class="record-top-bar-left">
+            <button type="button" class="btn-ghost-icon" onclick="window.closeModal('modalRuleRecordOverlay')" title="Закрыть (Esc)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <div class="record-nav-arrows">
+              <button type="button" id="btnPrevRecord" class="btn-ghost-icon" onclick="window.navigateRecordRule(-1)" title="Предыдущее правило (←)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <button type="button" id="btnNextRecord" class="btn-ghost-icon" onclick="window.navigateRecordRule(1)" title="Следующее правило (→)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+            <div id="recordNavPositionPill" class="record-nav-pill">1 из 1 в rules</div>
+          </div>
+          <div class="record-top-bar-right">
+            <button type="button" class="btn-ghost-icon" onclick="window.openEditRuleFromOverlay()" title="Редактировать параметры">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            </button>
+            <button type="button" class="btn-ghost-icon btn-danger-hover" onclick="window.deleteRuleFromOverlay()" title="Удалить правило">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Main Two-Column Layout -->
+        <div class="record-main-layout">
+          
+          <!-- Left Column: Record Details & Quick Actions -->
+          <div class="record-sidebar-column">
+            
+            <!-- Header: Title & Quick Rename -->
+            <div class="record-header-block">
+              <div class="record-avatar-icon" id="recordAvatarIcon">⚡</div>
+              <div class="record-title-wrap">
+                <div class="record-title-display" id="recordTitleDisplay" onclick="window.enableInlineTitleEdit()">
+                  <span id="recordTitleText">Правило</span>
+                  <button type="button" class="btn-inline-pencil" title="Переименовать">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  </button>
+                </div>
+                <input type="text" id="recordTitleInput" class="record-title-input hidden" maxlength="120" onblur="window.saveInlineTitleEdit()" onkeydown="window.onInlineTitleKeydown(event)">
+              </div>
+            </div>
+
+            <!-- Action Buttons Row -->
+            <div class="record-quick-actions">
+              <button type="button" class="btn-record-action primary" onclick="window.runRuleCheckNow()" title="Запустить проверку прямо сейчас">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Проверить</span>
+              </button>
+              <button type="button" class="btn-record-action" onclick="window.openMoveRuleGroupFromOverlay()" title="Переместить в группу">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                <span>В группу</span>
+              </button>
+              <button type="button" class="btn-record-action" onclick="window.openEditRuleFromOverlay()" title="Настроить условия и параметры">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                <span>Настроить</span>
+              </button>
+            </div>
+
+            <!-- Section: Record Details -->
+            <div class="record-section">
+              <div class="record-section-title">ПАРАМЕТРЫ ПРАВИЛА</div>
+              <div class="record-details-grid" id="recordDetailsGrid">
+                <!-- Dynamically populated key-value rows -->
+              </div>
+              <button type="button" class="btn-view-all-values" onclick="window.openEditRuleFromOverlay()">
+                Настроить параметры правила
+              </button>
+            </div>
+
+            <!-- Section: Lists / Groups -->
+            <div class="record-section">
+              <div class="record-section-title">СПИСКИ / ГРУППЫ</div>
+              <div id="recordGroupsList" class="record-groups-list">
+                <!-- Dynamically populated group cards -->
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Right Column: Tabs (Overview, Activity, Accounts) -->
+          <div class="record-content-column">
+            
+            <!-- Tabs Header -->
+            <div class="record-tabs-bar">
+              <button type="button" class="record-tab-btn active" data-tab="overview" onclick="window.setRecordActiveTab('overview')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                <span>Обзор</span>
+              </button>
+              <button type="button" class="record-tab-btn" data-tab="activity" onclick="window.setRecordActiveTab('activity')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <span>Активность и логи</span>
+                <span id="recordActivityCountBadge" class="tab-badge">0</span>
+              </button>
+              <button type="button" class="record-tab-btn" data-tab="accounts" onclick="window.setRecordActiveTab('accounts')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span>Привязанные кабинеты</span>
+                <span id="recordAccountsCountBadge" class="tab-badge">0</span>
+              </button>
+            </div>
+
+            <!-- Tab 1: Overview -->
+            <div id="recordTabOverview" class="record-tab-content active">
+              <div class="record-highlights-title">Сводка правила</div>
+              <div class="record-highlights-grid" id="recordHighlightsGrid">
+                <!-- Status, Last Triggered, Total Triggers, Accounts count -->
+              </div>
+
+              <div class="record-activity-section">
+                <div class="record-activity-head">
+                  <span class="record-activity-title">Лента активности</span>
+                  <button type="button" class="btn-link-action" onclick="window.setRecordActiveTab('activity')">Показать все</button>
+                </div>
+                <div id="recordOverviewActivityFeed" class="record-activity-feed">
+                  <!-- Timeline nodes -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab 2: Activity / Logs -->
+            <div id="recordTabActivity" class="record-tab-content hidden">
+              <div class="record-activity-full-feed" id="recordFullActivityFeed">
+                <!-- Full audit log items -->
+              </div>
+            </div>
+
+            <!-- Tab 3: Accounts -->
+            <div id="recordTabAccounts" class="record-tab-content hidden">
+              <div class="record-accounts-list" id="recordAccountsList">
+                <!-- List of ad accounts with active status toggle -->
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Modal: Attio Edit Rule Modal / Popup ("Photo 2") -->
+    <div id="modalEditRule" class="modal-overlay hidden" onclick="window.onEditRuleOverlayClick(event)">
+      <div class="modal-card create-rule-card" onclick="event.stopPropagation()">
+        
+        <!-- Header -->
+        <div class="create-rule-header">
+          <div class="create-rule-breadcrumb-wrap">
+            <div class="edit-rule-header-title-block">
+              <span class="edit-rule-modal-title">Редактирование правила</span>
+              <span id="editRuleSubtitle" class="edit-rule-modal-sub">Настройка параметров и условий</span>
+            </div>
+          </div>
+          <button class="btn-close" type="button" onclick="window.closeModal('modalEditRule')" title="Закрыть (ESC)">&times;</button>
+        </div>
+
+        <!-- Body with Form Fields -->
+        <div class="create-rule-body">
+          <div class="create-rule-form">
+            <input type="hidden" id="editRulePresetId" value="">
+            
+            <!-- 1. Name Field -->
+            <div class="attio-field-row">
+              <div class="attio-field-label">
+                <label for="editRuleNameInput">Название</label>
+              </div>
+              <div class="attio-field-input-wrap">
+                <input type="text" id="editRuleNameInput" class="attio-field-input" maxlength="120" placeholder="Название правила..." autocomplete="off">
+              </div>
+            </div>
+
+            <!-- 2. Group Field -->
+            <div class="attio-field-row">
+              <div class="attio-field-label">
+                <label for="editRuleGroupSelect">Группа</label>
+              </div>
+              <div class="attio-field-input-wrap">
+                <select id="editRuleGroupSelect" class="attio-field-select">
+                  <option value="">⚪ Без группы</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 3. Action Field (THEN) -->
+            <div class="attio-field-row">
+              <div class="attio-field-label">
+                <label for="editRuleActionSelect">Действие</label>
+              </div>
+              <div class="attio-field-input-wrap">
+                <select id="editRuleActionSelect" class="attio-field-select" onchange="window.onEditRuleActionChange(this.value)">
+                  <option value="turn_off">🛑 Выключить адсет (STOP)</option>
+                  <option value="notify_only">🔔 Только прислать уведомление (NOTIFY)</option>
+                  <option value="turn_on">🚀 Включить адсет (START)</option>
+                  <option value="increase_budget">📈 Увеличить дневной бюджет (+Budget)</option>
+                  <option value="decrease_budget">📉 Уменьшить дневной бюджет (-Budget)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 3b. Budget Configuration -->
+            <div id="editRuleBudgetSection" class="attio-budget-section hidden">
+              <div class="attio-budget-row">
+                <div class="attio-budget-field">
+                  <label for="editRuleBudgetPercentInput">Изменение (%)</label>
+                  <input type="number" id="editRuleBudgetPercentInput" class="attio-field-input text-center" placeholder="20" min="1" max="100" step="5" value="20">
+                </div>
+                <div class="attio-budget-field" id="editRuleBudgetCeilingField">
+                  <label for="editRuleBudgetCeilingInput">Потолок (в валюте кабинета/день)</label>
+                  <input type="number" id="editRuleBudgetCeilingInput" class="attio-field-input text-center" placeholder="Обязателен для увеличения" min="0" max="10000000" step="10" value="0">
+                </div>
+              </div>
+              <div class="attio-budget-hint">Потолок защищает от чрезмерного разгона бюджета. Все пороги считаются в валюте кабинета.</div>
+            </div>
+
+            <!-- 4. Conditions Builder (IF) -->
+            <div class="attio-conditions-section">
+              <div class="attio-conditions-header">
+                <span class="attio-conditions-title">Условия (ЕСЛИ)</span>
+                <div class="attio-logic-toggle" id="editRuleLogicGroup">
+                  <span class="attio-logic-label">Логика:</span>
+                  <button type="button" class="attio-logic-btn active" data-logic="and" onclick="window.setEditRuleLogic('and')">AND (Все)</button>
+                  <button type="button" class="attio-logic-btn" data-logic="or" onclick="window.setEditRuleLogic('or')">OR (Любое)</button>
+                </div>
+              </div>
+
+              <div id="editRuleConditionsList" class="attio-conditions-list">
+                <!-- Condition rows dynamically added -->
+              </div>
+
+              <button type="button" class="attio-add-cond-btn" onclick="window.addEditRuleConditionRow()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Добавить условие</span>
+              </button>
+            </div>
+
+            <!-- 5. Additional Settings -->
+            <div class="attio-more-settings">
+              <div class="attio-more-toggle" onclick="window.toggleEditRuleMoreSettings()">
+                <span id="editRuleMoreArrow" class="attio-more-arrow">▸</span>
+                <span>Дополнительные параметры (Уведомления, Пауза)</span>
+              </div>
+              <div id="editRuleMoreBody" class="attio-more-body hidden">
+                <div class="attio-field-row">
+                  <div class="attio-field-label">
+                    <label for="editRuleCooldownSelect">Пауза между срабатываниями</label>
+                  </div>
+                  <div class="attio-field-input-wrap">
+                    <select id="editRuleCooldownSelect" class="attio-field-select" onchange="window.onEditRuleCooldownChange(this.value)">
+                      <option value="0">Без паузы (0 мин)</option>
+                      <option value="15">15 минут</option>
+                      <option value="30">30 минут</option>
+                      <option value="60">1 час</option>
+                      <option value="120">2 часа</option>
+                      <option value="360">6 часов</option>
+                      <option value="720">12 часов</option>
+                      <option value="1440">24 часа</option>
+                      <option value="custom">Указать вручную...</option>
+                    </select>
+                    <input type="number" id="editRuleCustomCooldownInput" class="attio-field-input hidden" placeholder="Минут" min="1" max="10080" style="margin-top: 6px;">
+                  </div>
+                </div>
+
+                <div class="attio-field-row" style="align-items: center;">
+                  <div class="attio-field-label">
+                    <span>Уведомление в Telegram</span>
+                  </div>
+                  <div class="attio-field-input-wrap" style="display: flex; align-items: center; justify-content: space-between;">
+                    <label class="switch">
+                      <input type="checkbox" id="editRuleNotifyTgToggle" checked>
+                      <span class="slider round"></span>
+                    </label>
+                    <span class="attio-field-subtext">Бот пришлёт сообщение в Telegram</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Plain Text Summary & Validation Messages -->
+            <div class="attio-summary-card" id="editRuleSummaryCard">
+              <div class="attio-summary-head">
+                <span class="attio-summary-label">Предпросмотр правила:</span>
+                <button type="button" class="btn-link-action" onclick="window.useEditRulePlainName()">Вставить в название</button>
+              </div>
+              <div id="editRulePlainText" class="attio-summary-text">Настройте условия...</div>
+              <div id="editRuleValidationErrors" class="attio-validation-box"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Footer with Actions -->
+        <div class="create-rule-footer">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalEditRule')">
+            <span>Отмена</span>
+            <kbd>Esc</kbd>
+          </button>
+          <button type="button" id="btnSubmitEditRule" class="btn btn-primary" onclick="window.submitEditRule()">
+            <span>Завершить редактирование</span>
+            <kbd>Ctrl ↵</kbd>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
     <!-- Modal: Attio Choose / Move to Group ("Choose list") -->
     <div id="modalChooseGroup" class="modal-overlay hidden" onclick="window.onChooseGroupOverlayClick(event)">
       <div class="choose-group-modal-card" onclick="event.stopPropagation()">
