@@ -4718,6 +4718,7 @@
 
   window.openEditRuleModal = function (presetId) {
     haptic('selection');
+    state.ruleBuilderMode = 'edit';
     const preset = state.presets.find(p => p.id === Number(presetId));
     if (!preset) {
       showToast('Правило не найдено', 'error');
