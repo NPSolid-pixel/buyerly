@@ -1559,7 +1559,7 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
                 timezone_name=a.timezone_name or "UTC",
                 currency=normalize_currency(a.currency),
                 account_status=a.account_status,
-                status_label=a.status_label or "🟢 Активен (ACTIVE)",
+                status_label=a.status_label or "Активен (ACTIVE)",
                 rules_enabled=a.rules_enabled,
                 is_active=a.is_active,
                 active_rules=active_rules_list,
@@ -2248,7 +2248,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
                     )
                 fb_name = acc_info.get("name", acc_id)
                 status_code = acc_info.get("account_status", 1)
-                status_label = acc_info.get("status_label", "🟢 Активен (ACTIVE)")
+                status_label = acc_info.get("status_label", "Активен (ACTIVE)")
                 currency = normalize_currency(acc_info.get("currency"))
 
                 if batch_name != "-" and len(batch_name) > 0:
@@ -2659,7 +2659,7 @@ async def get_summary_report(
                     "timezone_name": acc.timezone_name,
                     "currency": account_currency,
                     "account_status": acc.account_status,
-                    "status_label": "⚠️ Ошибка синхронизации",
+                    "status_label": "Ошибка синхронизации",
                     "rules_enabled": acc.rules_enabled,
                     "spend": 0.0,
                     "clicks": 0,

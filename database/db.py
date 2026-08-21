@@ -732,7 +732,7 @@ async def init_schema():
             "ALTER TABLE telegram_users ADD COLUMN auth_token VARCHAR;",
             "ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;",
             "ALTER TABLE accounts ADD COLUMN account_status INTEGER DEFAULT 1;",
-            "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT '🟢 Активен (ACTIVE)';",
+            "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT 'Активен (ACTIVE)';",
             "ALTER TABLE accounts ADD COLUMN currency VARCHAR DEFAULT 'UNKNOWN';",
             "ALTER TABLE accounts ADD COLUMN last_day_start_date VARCHAR DEFAULT '';",
             "ALTER TABLE accounts ADD COLUMN custom_name VARCHAR DEFAULT '';",

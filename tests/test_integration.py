@@ -67,7 +67,7 @@ class MockMetaClient(MetaClient):
         *,
         priority: str = "normal",
     ):
-        return {"id": account_id, "name": "Underdog 3286", "timezone_name": "HST", "currency": "USD", "account_status": 1, "status_label": "🟢 Активен (ACTIVE)"}
+        return {"id": account_id, "name": "Underdog 3286", "timezone_name": "HST", "currency": "USD", "account_status": 1, "status_label": "Активен (ACTIVE)"}
 
     async def get_adsets_insights(
         self,
@@ -872,7 +872,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             "id": "act_e2e_sweden_1083",
             "name": "Underdog 3286",
             "account_status": 2, # Disabled
-            "status_label": "🔴 Заблокирован в Meta (DISABLED / Policy Ban)",
+            "status_label": "Заблокирован в Meta (DISABLED / Policy Ban)",
             "timezone_name": "HST"
         })
         sent_alerts = []

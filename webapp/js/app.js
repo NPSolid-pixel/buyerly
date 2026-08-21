@@ -2793,7 +2793,9 @@
            onclick="window.openRuleRecordPage(${p.id})">
         <div class="rule-card-top">
           <div class="rule-card-top-left">
-            <span class="rule-card-avatar">⚡</span>
+            <span class="rule-card-checkbox ${isSelected ? 'selected' : ''}" onclick="event.stopPropagation(); window.toggleSelectRule(${p.id})" title="Выбрать правило">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </span>
             <span class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
           </div>
           <div class="rule-card-top-right">
@@ -2807,7 +2809,7 @@
             <span class="rule-conditions-text">${escapeHtml(conditionsSummary || 'Без условий')}</span>
           </div>
           <div class="rule-card-meta-right">
-            ${linkedCount > 0 ? `<span class="rule-link-badge active" title="Привязано кабинетов">🔗 ${linkedCount}</span>` : ''}
+            ${linkedCount > 0 ? `<span class="rule-link-badge active" title="Привязано кабинетов"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:2px; vertical-align:-1px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${linkedCount}</span>` : ''}
             <span class="rule-meta-tag" title="Интервал проверки">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               ${p.check_interval_minutes || 5}м
@@ -3820,18 +3822,10 @@
     const select = document.getElementById('createRuleGroupSelect');
     if (!select) return;
     
-    const colorEmojiMap = {
-      purple: '🟣', blue: '🔵', emerald: '🟢', amber: '🟡',
-      orange: '🟠', cyan: '🌐', magenta: '🌸', rose: '🔴',
-      lime: '🍏', yellow: '🟡', red: '🔴', gray: '⚪'
-    };
-    
-    let html = '<option value="">⚪ Без группы</option>';
+    let html = '<option value="">Без группы</option>';
     (state.ruleGroups || []).forEach(g => {
-      const savedColor = state.ruleGroupColors[g.id] || 'purple';
-      const emoji = colorEmojiMap[savedColor] || '🟣';
       const isSel = selectedGroupId !== null && Number(selectedGroupId) === g.id;
-      html += `<option value="${g.id}" ${isSel ? 'selected' : ''}>${emoji} ${escapeHtml(g.name)}</option>`;
+      html += `<option value="${g.id}" ${isSel ? 'selected' : ''}>${escapeHtml(g.name)}</option>`;
     });
     select.innerHTML = html;
   };
@@ -4426,24 +4420,24 @@
     const avatarIcon = document.getElementById('recordAvatarIcon');
     if (avatarIcon) {
       const actionIcons = {
-        'turn_off': '🛑',
-        'notify_only': '🔔',
-        'turn_on': '🚀',
-        'increase_budget': '📈',
-        'decrease_budget': '📉'
+        'turn_off': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>',
+        'notify_only': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+        'turn_on': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>',
+        'increase_budget': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>',
+        'decrease_budget': '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>'
       };
-      avatarIcon.textContent = actionIcons[preset.action] || '⚡';
+      avatarIcon.innerHTML = actionIcons[preset.action] || '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
     }
 
     // Populate Left Column: Record Details
     const detailsGrid = document.getElementById('recordDetailsGrid');
     if (detailsGrid) {
       const actionLabels = {
-        'turn_off': '🛑 Выключить адсет (STOP)',
-        'notify_only': '🔔 Прислать уведомление (NOTIFY)',
-        'turn_on': '🚀 Включить адсет (START)',
-        'increase_budget': `📈 +${preset.budget_change_percent || 20}% к бюджету`,
-        'decrease_budget': `📉 -${preset.budget_change_percent || 20}% от бюджета`
+        'turn_off': 'Выключить адсет (STOP)',
+        'notify_only': 'Прислать уведомление (NOTIFY)',
+        'turn_on': 'Включить адсет (START)',
+        'increase_budget': `+${preset.budget_change_percent || 20}% к бюджету`,
+        'decrease_budget': `-${preset.budget_change_percent || 20}% от бюджета`
       };
 
       const metricLabels = {
@@ -4462,13 +4456,7 @@
         return `${m} ${op} ${val} (${w})`;
       }).join((preset.condition_logic || 'and').toUpperCase() === 'OR' ? ' <b style="color:var(--accent-primary)">ИЛИ</b> ' : ' <b style="color:var(--accent-primary)">И</b> ');
 
-      const colorEmojiMap = {
-        purple: '🟣', blue: '🔵', emerald: '🟢', amber: '🟡',
-        orange: '🟠', cyan: '🌐', magenta: '🌸', rose: '🔴',
-        lime: '🍏', yellow: '🟡', red: '🔴', gray: '⚪'
-      };
       const groupColor = parentGroup ? (state.ruleGroupColors[parentGroup.id] || 'purple') : 'gray';
-      const groupEmoji = colorEmojiMap[groupColor] || '🟣';
 
       detailsGrid.innerHTML = `
         <div class="record-detail-row">
@@ -4477,7 +4465,7 @@
         </div>
         <div class="record-detail-row">
           <span class="record-detail-key">Группа</span>
-          <span class="record-detail-val">${groupEmoji} ${escapeHtml(groupName)}</span>
+          <span class="record-detail-val" style="display:inline-flex;align-items:center;gap:6px;"><span class="rules-column-dot dot-${groupColor}"></span> <span>${escapeHtml(groupName)}</span></span>
         </div>
         <div class="record-detail-row">
           <span class="record-detail-key">Логика</span>
@@ -4498,7 +4486,7 @@
         </div>
         <div class="record-detail-row">
           <span class="record-detail-key">Telegram</span>
-          <span class="record-detail-val">${preset.notify_tg !== false ? '✅ Включены' : '❌ Выключены'}</span>
+          <span class="record-detail-val"><span class="status-pill ${preset.notify_tg !== false ? 'green' : 'gray'}">${preset.notify_tg !== false ? 'Включены' : 'Выключены'}</span></span>
         </div>
       `;
     }
@@ -4508,15 +4496,10 @@
     if (groupsList) {
       if (parentGroup) {
         const groupColor = state.ruleGroupColors[parentGroup.id] || 'purple';
-        const colorEmojiMap = {
-          purple: '🟣', blue: '🔵', emerald: '🟢', amber: '🟡',
-          orange: '🟠', cyan: '🌐', magenta: '🌸', rose: '🔴',
-          lime: '🍏', yellow: '🟡', red: '🔴', gray: '⚪'
-        };
         groupsList.innerHTML = `
           <div class="record-group-pill">
             <span class="record-group-dot-label">
-              <span>${colorEmojiMap[groupColor] || '🟣'}</span>
+              <span class="rules-column-dot dot-${groupColor}"></span>
               <span>${escapeHtml(parentGroup.name)}</span>
             </span>
             <span class="record-group-time">Активна</span>
@@ -4525,7 +4508,8 @@
       } else {
         groupsList.innerHTML = `
           <div class="record-group-pill" style="color:var(--text-muted);">
-            <span>⚪ Без группы (не в колонке)</span>
+            <span class="rules-column-dot dot-gray"></span>
+            <span>Без группы (не в колонке)</span>
           </div>
         `;
       }
@@ -4808,7 +4792,7 @@
 
       const renderItem = (evt) => {
         const timeAgo = formatTimeAgo(new Date(evt.created_at || Date.now()));
-        const statusBadge = evt.status === 'SUCCESS' ? '✅' : (evt.status === 'ERROR' ? '❌' : 'ℹ️');
+        const statusDotClass = evt.status === 'SUCCESS' ? 'dot-emerald' : (evt.status === 'ERROR' ? 'dot-red' : 'dot-blue');
         return `
           <div class="record-activity-item">
             <div class="record-activity-avatar">B</div>
@@ -4818,7 +4802,7 @@
               ${evt.account_name ? `<span style="color:var(--text-muted)"> &bull; ${escapeHtml(evt.account_name)}</span>` : ''}
               ${evt.adset_name ? `<span style="color:var(--text-muted)"> &bull; адсет: ${escapeHtml(evt.adset_name)}</span>` : ''}
             </div>
-            <div class="record-activity-time">${statusBadge} ${timeAgo}</div>
+            <div class="record-activity-time" style="display:inline-flex;align-items:center;gap:5px;"><span class="rules-column-dot ${statusDotClass}" style="width:6px;height:6px;"></span> ${timeAgo}</div>
           </div>
         `;
       };
@@ -5089,18 +5073,10 @@
     const select = document.getElementById('editRuleGroupSelect');
     if (!select) return;
 
-    const colorEmojiMap = {
-      purple: '🟣', blue: '🔵', emerald: '🟢', amber: '🟡',
-      orange: '🟠', cyan: '🌐', magenta: '🌸', rose: '🔴',
-      lime: '🍏', yellow: '🟡', red: '🔴', gray: '⚪'
-    };
-
-    let html = '<option value="">⚪ Без группы</option>';
+    let html = '<option value="">Без группы</option>';
     (state.ruleGroups || []).forEach(g => {
-      const savedColor = state.ruleGroupColors[g.id] || 'purple';
-      const emoji = colorEmojiMap[savedColor] || '🟣';
       const isSel = selectedGroupId !== null && Number(selectedGroupId) === g.id;
-      html += `<option value="${g.id}" ${isSel ? 'selected' : ''}>${emoji} ${escapeHtml(g.name)}</option>`;
+      html += `<option value="${g.id}" ${isSel ? 'selected' : ''}>${escapeHtml(g.name)}</option>`;
     });
     select.innerHTML = html;
   };

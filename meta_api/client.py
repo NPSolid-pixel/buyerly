@@ -16,13 +16,13 @@ from core.timezones import canonical_timezone_name
 logger = logging.getLogger(__name__)
 
 ACCOUNT_STATUS_MAP = {
-    1: "🟢 Активен (ACTIVE)",
-    2: "🔴 Заблокирован в Meta (DISABLED / Policy Ban)",
-    3: "💳 Проблема с оплатой (UNSETTLED / Hold на карте)",
-    7: "⚠️ На проверке безопасности (PENDING_RISK_REVIEW)",
-    8: "⏳ Ожидает списания средств (PENDING_SETTLEMENT)",
-    9: "⏳ Льготный период оплаты (IN_GRACE_PERIOD)",
-    101: "⚪ Кабинет закрыт (CLOSED)"
+    1: "Активен (ACTIVE)",
+    2: "Заблокирован в Meta (DISABLED / Policy Ban)",
+    3: "Проблема с оплатой (UNSETTLED / Hold на карте)",
+    7: "На проверке безопасности (PENDING_RISK_REVIEW)",
+    8: "Ожидает списания средств (PENDING_SETTLEMENT)",
+    9: "Льготный период оплаты (IN_GRACE_PERIOD)",
+    101: "Кабинет закрыт (CLOSED)"
 }
 
 ACCOUNT_SUMMARY_FIELDS = (

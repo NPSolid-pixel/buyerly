@@ -2819,10 +2819,17 @@ body.is-resizing-column * {
   color: transparent;
   transition: all 0.15s ease;
 }
+.rule-card-checkbox:hover {
+  border-color: rgba(0, 0, 0, 0.4);
+}
 .rule-card-checkbox.selected {
   background: #F5A300;
   border-color: #F5A300;
   color: #FFFFFF;
+}
+.rule-card-checkbox.selected:hover {
+  background: #D98E00;
+  border-color: #D98E00;
 }
 
 /* Card Meta Bar */

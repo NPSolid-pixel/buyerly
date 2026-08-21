@@ -119,7 +119,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
             "account_status": 1,
             "currency": "USD",
             "timezone_name": "Pacific/Honolulu",
-            "status_label": "🟢 Активен (ACTIVE)",
+            "status_label": "Активен (ACTIVE)",
         }
 
         transport = httpx.ASGITransport(app=self.app)
