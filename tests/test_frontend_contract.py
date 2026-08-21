@@ -590,27 +590,40 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertNotIn('id="headerFbSection"', self.index)
         self.assertNotIn('id="sidebarFbAccountsList"', self.index)
 
+        for contract in (
+            'id="headerRulesSection"',
+            'id="sidebarRulesListContainer"',
+            'id="navRuleGroupAll"',
+            'id="sidebarRuleGroupsContainer"',
+        ):
+            self.assertIn(contract, self.index)
+
         home_pos = self.index.index('id="navDashboard"')
         fb_pos = self.index.index('id="navFbAccounts"')
-        rules_pos = self.index.index('id="navRules"')
         summary_pos = self.index.index('id="navSummary"')
         logs_pos = self.index.index('id="navLogs"')
+        rules_pos = self.index.index('id="headerRulesSection"')
+        accounts_pos = self.index.index('id="headerAccountsSection"')
         self.assertLess(home_pos, fb_pos)
-        self.assertLess(fb_pos, rules_pos)
-        self.assertLess(rules_pos, summary_pos)
+        self.assertLess(fb_pos, summary_pos)
         self.assertLess(summary_pos, logs_pos)
+        self.assertLess(logs_pos, rules_pos)
+        self.assertLess(rules_pos, accounts_pos)
 
         for script_contract in (
             "fb_accounts: '/facebook-accounts'",
             'loadFacebookAccounts',
             'renderFacebookAccounts',
             'renderSidebarAccountGroups',
+            'renderSidebarRuleGroups',
             'getSortedAccountGroups',
             'window.onGroupDragStart',
             'window.onGroupDrop',
             'window.toggleListsSortMenu',
             'window.setGroupsSortMode',
             'window.switchAccountGroup',
+            'window.switchRuleGroup',
+            'window.openCreateRuleGroupFromSidebar',
             'window.copyCurrentGroupLink',
             'window.toggleAccountSelection',
             'window.toggleSelectAllAccounts',

@@ -116,6 +116,7 @@
     summaryViewLoaded: false,
     presets: [],
     ruleGroups: [],
+    ruleGroupFilter: 'all',
     collapsedRuleGroups: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_rule_groups') || '[]')),
     ruleGroupColors: JSON.parse(localStorage.getItem('buyerly_rule_group_colors') || '{}'),
     selectedRuleIds: new Set(),
@@ -374,25 +375,30 @@
       const route = sessionStorage.getItem('buyerly_return_route') || '';
       sessionStorage.removeItem('buyerly_return_route');
       return route;
-    } catch (e) {
-      return '';
+  function syncBrowserRoute(tab, method = 'push') {
+    const slug = state.activeWorkspace ? state.activeWorkspace.slug : '';
+    let route = `/${tab}`;
+    if (slug) {
+      if (tab === 'accounts' && state.accountGroupFilter && state.accountGroupFilter !== 'all') {
+        const group = (state.accountGroups || []).find(g => 
+          String(g.id) === String(state.accountGroupFilter) || 
+          String(g.name || '').toLowerCase() === String(state.accountGroupFilter).toLowerCase()
+        );
+        const groupSlug = group ? (group.slug || slugifyName(group.name)) : state.accountGroupFilter;
+        route = `/${slug}/list-${groupSlug}`;
+      } else if (tab === 'rules' && state.ruleGroupFilter && state.ruleGroupFilter !== 'all') {
+        const group = (state.ruleGroups || []).find(g => 
+          String(g.id) === String(state.ruleGroupFilter) || 
+          String(g.name || '').toLowerCase() === String(state.ruleGroupFilter).toLowerCase()
+        );
+        const groupSlug = group ? (group.slug || slugifyName(group.name)) : state.ruleGroupFilter;
+        route = `/${slug}/rules-${groupSlug}`;
+      } else {
+        route = `/${slug}/${tab}`;
+      }
     }
-  }
-
-  function syncBrowserRoute(tabName, historyMode = 'push') {
-    if (historyMode === 'none') return;
-    const tab = Object.hasOwn(TAB_ROUTES, tabName) ? tabName : 'home';
-    const slug = (state.activeWorkspace && state.activeWorkspace.slug) ? state.activeWorkspace.slug : 'buyerly';
-    let route = `/${slug}/${tab}`;
-
-    if (tab === 'accounts' && state.accountGroupFilter && state.accountGroupFilter !== 'all') {
-      route = `/${slug}/groups/${encodeURIComponent(state.accountGroupFilter)}`;
-    }
-
-    const currentPath = normalizeAppPath(window.location.pathname);
-    const method = historyMode === 'replace' || currentPath === route ? 'replaceState' : 'pushState';
     try {
-      window.history[method]({ tab: tab, workspace: slug, groupFilter: state.accountGroupFilter || 'all' }, '', route);
+      window.history[method]({ tab: tab, workspace: slug, groupFilter: state.accountGroupFilter || 'all', ruleGroupFilter: state.ruleGroupFilter || 'all' }, '', route);
     } catch (e) {}
   }
 
@@ -407,6 +413,13 @@
             isActive = String(groupFilter) === String(state.accountGroupFilter || 'all');
           } else {
             isActive = (state.accountGroupFilter === 'all');
+          }
+        } else if (tabName === 'rules') {
+          const ruleGroupFilter = btn.dataset.ruleGroupFilter;
+          if (ruleGroupFilter !== undefined) {
+            isActive = String(ruleGroupFilter) === String(state.ruleGroupFilter || 'all');
+          } else {
+            isActive = (state.ruleGroupFilter === 'all');
           }
         } else {
           isActive = true;
@@ -432,11 +445,17 @@
 
   function applySidebarSectionsCollapsedState() {
     const isAccountsCollapsed = state.collapsedSections.has('accounts');
+    const isRulesCollapsed = state.collapsedSections.has('rules');
 
     const headerAccounts = document.getElementById('headerAccountsSection');
     const listAccounts = document.getElementById('sidebarAccountsListContainer');
     if (headerAccounts) headerAccounts.classList.toggle('collapsed', isAccountsCollapsed);
     if (listAccounts) listAccounts.classList.toggle('collapsed', isAccountsCollapsed);
+
+    const headerRules = document.getElementById('headerRulesSection');
+    const listRules = document.getElementById('sidebarRulesListContainer');
+    if (headerRules) headerRules.classList.toggle('collapsed', isRulesCollapsed);
+    if (listRules) listRules.classList.toggle('collapsed', isRulesCollapsed);
   }
 
   window.switchTab = function (requestedTab, options = {}) {
@@ -444,6 +463,9 @@
     state.activeTab = tabName;
     if (tabName !== 'accounts') {
       state.accountGroupFilter = 'all';
+    }
+    if (tabName !== 'rules') {
+      state.ruleGroupFilter = 'all';
     }
     if (options.haptic !== false) haptic('selection');
     syncBrowserRoute(tabName, options.historyMode || 'push');
@@ -467,12 +489,25 @@
           </div>
         `;
         document.title = `${group ? group.name : 'Группа'} — Buyerly`;
+      } else if (tabName === 'rules' && state.ruleGroupFilter && state.ruleGroupFilter !== 'all') {
+        const group = (state.ruleGroups || []).find(g => 
+          String(g.id) === String(state.ruleGroupFilter) || 
+          String(g.name || '').toLowerCase() === String(state.ruleGroupFilter).toLowerCase()
+        );
+        const groupTitle = group ? escapeHtml(group.name) : 'Группа правил';
+        breadcrumbArea.innerHTML = `
+          <div class="breadcrumb-title">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px; color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            <span>${groupTitle}</span>
+          </div>
+        `;
+        document.title = `${group ? group.name : 'Группа правил'} — Buyerly`;
       } else {
         const titles = {
           home: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Главная</span>',
           fb_accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>FB Аккаунты</span>',
           accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Все кабинеты</span>',
-          rules: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span>',
+          rules: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Все правила</span>',
           summary: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Сводка</span>',
           logs: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Логи</span>',
           add: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v16m8-8H4"/></svg><span>Добавить кабинеты</span>',
@@ -1017,6 +1052,56 @@
     }).join('');
     container.innerHTML = html;
   }
+
+  function renderSidebarRuleGroups() {
+    const container = document.getElementById('sidebarRuleGroupsContainer');
+    if (!container) return;
+    const groups = state.ruleGroups || [];
+    if (!groups || groups.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+    const defaultDotColors = ['purple', 'blue', 'emerald', 'amber', 'orange', 'indigo', 'rose'];
+    const html = groups.map((group, idx) => {
+      const isActive = state.activeTab === 'rules' && String(state.ruleGroupFilter) === String(group.id);
+      const savedColor = state.ruleGroupColors[group.id];
+      const colorName = savedColor || defaultDotColors[idx % defaultDotColors.length];
+      return `
+        <div class="list-item nav-tab ${isActive ? 'active' : ''}" 
+             data-tab="rules" 
+             data-rule-group-filter="${group.id}" 
+             id="navRuleGroup-${group.id}" 
+             onclick="window.switchRuleGroup('${group.id}');">
+          <span class="sidebar-rule-group-dot dot-${colorName}"></span>
+          <span class="sidebar-rule-group-name">${escapeHtml(group.name)}</span>
+        </div>
+      `;
+    }).join('');
+    container.innerHTML = html;
+  }
+
+  window.switchRuleGroup = function (groupId, options = {}) {
+    state.ruleGroupFilter = String(groupId);
+    state.activeTab = 'rules';
+    window.switchTab('rules', {
+      historyMode: options.historyMode || 'push',
+      haptic: options.haptic,
+      scrollBehavior: options.scrollBehavior
+    });
+    renderRulesTab();
+    window.updateSidebarActiveState();
+  };
+
+  window.openCreateRuleGroupFromSidebar = function (event) {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    if (state.activeTab !== 'rules') {
+      window.switchTab('rules');
+    }
+    window.openAddColumnPopover(event);
+  };
 
   let draggedGroupId = null;
 
@@ -2566,8 +2651,17 @@
       (g.preset_ids || []).forEach(id => allGroupedPresetIds.add(id));
     });
 
+    const isFilteredSingleGroup = state.ruleGroupFilter && state.ruleGroupFilter !== 'all';
+    let groupsToRender = state.ruleGroups;
+    if (isFilteredSingleGroup) {
+      const matched = state.ruleGroups.filter(g => String(g.id) === String(state.ruleGroupFilter));
+      if (matched.length > 0) {
+        groupsToRender = matched;
+      }
+    }
+
     // 1. Group Columns
-    const groupColumnsHtml = state.ruleGroups.map((group, idx) => {
+    const groupColumnsHtml = groupsToRender.map((group, idx) => {
       const savedColor = state.ruleGroupColors[group.id];
       const dotColor = savedColor ? `dot-${savedColor}` : defaultDotColors[idx % defaultDotColors.length];
       const groupPresetIds = group.preset_ids || [];
@@ -2617,39 +2711,41 @@
     }).join('');
 
     // 2. Ungrouped Rules Column ("Без группы")
-    const ungroupedPresets = state.presets
-      .filter(p => !allGroupedPresetIds.has(p.id))
-      .filter(isPresetMatchingFilter);
-
     let ungroupedColumnHtml = '';
-    if (ungroupedPresets.length > 0 || state.ruleGroups.length === 0) {
-      const ungroupedCardsHtml = ungroupedPresets.map(p => buildKanbanRuleCard(p, null)).join('');
-      ungroupedColumnHtml = `
-        <div class="rules-column" data-group-id="ungrouped">
-          <div class="rules-column-header">
-            <div class="rules-column-title-wrap">
-              <span class="rules-column-dot dot-gray"></span>
-              <span class="rules-column-title">Без группы</span>
-              <span class="rules-column-count">${ungroupedPresets.length}</span>
+    if (!isFilteredSingleGroup) {
+      const ungroupedPresets = state.presets
+        .filter(p => !allGroupedPresetIds.has(p.id))
+        .filter(isPresetMatchingFilter);
+
+      if (ungroupedPresets.length > 0 || state.ruleGroups.length === 0) {
+        const ungroupedCardsHtml = ungroupedPresets.map(p => buildKanbanRuleCard(p, null)).join('');
+        ungroupedColumnHtml = `
+          <div class="rules-column" data-group-id="ungrouped">
+            <div class="rules-column-header">
+              <div class="rules-column-title-wrap">
+                <span class="rules-column-dot dot-gray"></span>
+                <span class="rules-column-title">Без группы</span>
+                <span class="rules-column-count">${ungroupedPresets.length}</span>
+              </div>
+              <div class="rules-column-actions">
+                <button class="rules-column-btn" title="Добавить правило" onclick="window.openChooseRuleModal(null)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+              </div>
             </div>
-            <div class="rules-column-actions">
-              <button class="rules-column-btn" title="Добавить правило" onclick="window.openChooseRuleModal(null)">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              </button>
+            <div class="rules-column-body"
+                 ondragover="window.onRuleColumnDragOver(event)"
+                 ondragleave="window.onRuleColumnDragLeave(event)"
+                 ondrop="window.onRuleColumnDrop(event, null)">
+              ${ungroupedCardsHtml || '<div class="rules-column-empty">Нет одиночных правил</div>'}
             </div>
           </div>
-          <div class="rules-column-body"
-               ondragover="window.onRuleColumnDragOver(event)"
-               ondragleave="window.onRuleColumnDragLeave(event)"
-               ondrop="window.onRuleColumnDrop(event, null)">
-            ${ungroupedCardsHtml || '<div class="rules-column-empty">Нет одиночных правил</div>'}
-          </div>
-        </div>
-      `;
+        `;
+      }
     }
 
     // 3. Add Group Column Button (Attio dashed square [ + ])
-    const addGroupColumnCard = `
+    const addGroupColumnCard = isFilteredSingleGroup ? '' : `
       <button class="rules-add-column-btn" type="button" onclick="window.openAddColumnPopover(event)" title="Добавить группу правил">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       </button>
@@ -3145,6 +3241,7 @@
       state.ruleGroups = [];
       console.error('Failed to load rule groups:', error);
     }
+    renderSidebarRuleGroups();
   }
 
   function renderRuleGroups() {
