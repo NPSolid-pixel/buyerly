@@ -587,6 +587,18 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         self.assertNotIn('id="sidebarFbAccountsCount"', self.index)
         self.assertNotIn('id="sidebarTotalCount"', self.index)
+        self.assertNotIn('id="headerFbSection"', self.index)
+        self.assertNotIn('id="sidebarFbAccountsList"', self.index)
+
+        home_pos = self.index.index('id="navDashboard"')
+        fb_pos = self.index.index('id="navFbAccounts"')
+        rules_pos = self.index.index('id="navRules"')
+        summary_pos = self.index.index('id="navSummary"')
+        logs_pos = self.index.index('id="navLogs"')
+        self.assertLess(home_pos, fb_pos)
+        self.assertLess(fb_pos, rules_pos)
+        self.assertLess(rules_pos, summary_pos)
+        self.assertLess(summary_pos, logs_pos)
 
         for script_contract in (
             "fb_accounts: '/facebook-accounts'",
