@@ -4104,7 +4104,7 @@ input[type="text"].attio-popover-name-input:focus,
   box-shadow: 0 0 0 2px rgba(38, 109, 240, 0.15);
 }
 
-.record-quick-actions {
+.record-actions-bar {
   display: flex;
   align-items: center;
   gap: 6px;
