@@ -2773,7 +2773,12 @@
             </div>
             <div class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
           </div>
-          <span class="rule-action-badge ${act.class}">${act.label}${stepInfo}</span>
+          <div class="rule-card-top-right">
+            <button type="button" class="rule-card-edit-btn" onclick="event.stopPropagation(); window.openEditRuleModal(${p.id})" title="Редактировать параметры правила">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            </button>
+            <span class="rule-action-badge ${act.class}">${act.label}${stepInfo}</span>
+          </div>
         </div>
         
         <div class="rule-card-meta-bar">
@@ -5198,36 +5203,6 @@
 
   window.openCreateRuleFromTab = function () {
     window.openChooseRuleModal(null);
-  };
-
-  window.editPresetFromTab = function (presetId) {
-    haptic('selection');
-    document.getElementById('editLimitsAccountId').value = '';
-    document.getElementById('modalLimitsTitle').textContent = 'Редактирование правила';
-    
-    // Hide back to chooser button when directly editing an existing rule from card
-    const backBtn = document.getElementById('btnBackToRuleChooser');
-    const divider = document.getElementById('modalLimitsBreadcrumbDivider');
-    if (backBtn && divider) {
-      backBtn.classList.add('hidden');
-      divider.classList.add('hidden');
-    }
-
-    state.ruleBuilderMode = 'edit';
-    window.selectPreset(presetId);
-    window.openModal('modalEditLimits');
-  };
-
-  window.deletePresetDirectly = async function (presetId) {
-    haptic('impact', 'medium');
-    try {
-      await apiRequest(`/api/presets/${presetId}`, { method: 'DELETE' });
-      showToast('Правило удалено', 'success');
-      await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
-      renderRulesTab();
-    } catch (e) {
-      showToast(`Ошибка удаления: ${e.message}`, 'error');
-    }
   };
 
   // ==========================================================
