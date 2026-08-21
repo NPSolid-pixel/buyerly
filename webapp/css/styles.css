@@ -2053,6 +2053,203 @@ body.is-resizing-column * {
   user-select: none !important;
 }
 
+/* Attio Table Add Column Header & Button */
+.attio-th.attio-th-add-col {
+  border-right: none !important;
+  padding: 0 4px !important;
+  background: #FBFBFB;
+}
+
+.attio-add-col-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6E7175;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.attio-add-col-btn:hover {
+  background: #F0F2F5;
+  color: #101112;
+}
+
+.attio-td.attio-td-add-col-spacer {
+  border-right: none !important;
+  background: transparent !important;
+}
+
+/* Attio Column Picker Popover */
+.attio-column-picker-popover {
+  position: fixed;
+  z-index: 1050;
+  width: 270px;
+  max-height: 380px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: attioPopoverFadeIn 0.15s ease-out;
+}
+
+@keyframes attioPopoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.attio-picker-header {
+  padding: 8px;
+  border-bottom: 1px solid #F0F1F3;
+  background: #FAFAFA;
+}
+
+.attio-picker-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: #FFFFFF;
+  border: 1px solid #E2E4E8;
+  border-radius: 6px;
+  color: #898A8D;
+}
+
+.attio-picker-search-box:focus-within {
+  border-color: #266DF0;
+  box-shadow: 0 0 0 2px rgba(38, 109, 240, 0.12);
+}
+
+.attio-picker-search-box input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: #101112;
+  width: 100%;
+}
+
+.attio-picker-search-box input::placeholder {
+  color: #9CA3AF;
+}
+
+.attio-picker-scroll-viewport {
+  padding: 6px 6px 8px;
+  overflow-y: auto;
+  max-height: 320px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.attio-picker-scroll-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.attio-picker-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #898A8D;
+  padding: 6px 8px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.attio-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.12s;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.attio-picker-item:hover {
+  background: #F3F4F6;
+}
+
+.attio-picker-item.is-active {
+  background: #F0F5FF;
+}
+
+.attio-picker-item.is-active:hover {
+  background: #E5EFFF;
+}
+
+.attio-picker-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.attio-picker-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+.attio-picker-item.is-active .attio-picker-item-icon {
+  color: #266DF0;
+}
+
+.attio-picker-item-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #1F2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attio-picker-item.is-active .attio-picker-item-label {
+  color: #111827;
+  font-weight: 600;
+}
+
+.attio-picker-item-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.attio-picker-check-icon {
+  color: #266DF0;
+}
+
+.attio-picker-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #9CA3AF;
+}
+
 /* Data Rows & Cells */
 .attio-grid td,
 .attio-td {
