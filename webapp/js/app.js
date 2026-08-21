@@ -315,6 +315,10 @@
       if (segment === 'rule-groups') {
         return { workspaceSlug: slug, tab: 'rules', groupFilter: subSegment || groupFilter || 'all' };
       }
+      if (segment === 'rules') {
+        const ruleId = subSegment && /^\d+$/.test(subSegment) ? Number(subSegment) : null;
+        return { workspaceSlug: slug, tab: 'rules', groupFilter: groupFilter, ruleId: ruleId };
+      }
       if (segment === 'chats') {
         return { workspaceSlug: slug, tab: 'home', chatId: subSegment, groupFilter: 'all' };
       }
@@ -329,7 +333,13 @@
       return { workspaceSlug: slug, tab: 'home', groupFilter: groupFilter };
     }
 
-    // Paths without workspace slug e.g. /groups/1 or /accounts or /rules
+    // Paths without workspace slug e.g. /groups/1 or /accounts or /rules or /rules/12
+    if (parts.length === 2) {
+      if (parts[0] === 'rules' && /^\d+$/.test(parts[1])) {
+        return { workspaceSlug: '', tab: 'rules', groupFilter: groupFilter, ruleId: Number(parts[1]) };
+      }
+    }
+
     if (parts.length === 1) {
       const candidate = parts[0];
       if (candidate === 'groups' || candidate === 'lists' || candidate === 'collection') {
@@ -402,12 +412,25 @@
       if (slug) {
         if (tab === 'accounts' && state.accountGroupFilter && state.accountGroupFilter !== 'all') {
           route = `/${slug}/groups/${encodeURIComponent(state.accountGroupFilter)}`;
+        } else if (tab === 'rules' && state.currentRecordPresetId) {
+          route = `/${slug}/rules/${state.currentRecordPresetId}`;
         } else {
           route = `/${slug}/${tabPath}`;
         }
+      } else {
+        if (tab === 'rules' && state.currentRecordPresetId) {
+          route = `/rules/${state.currentRecordPresetId}`;
+        } else {
+          route = `/${tabPath}`;
+        }
       }
       if (typeof window.history[historyFn] === 'function') {
-        window.history[historyFn]({ tab: tab, workspace: slug, groupFilter: state.accountGroupFilter || 'all' }, '', route);
+        window.history[historyFn]({ 
+          tab: tab, 
+          workspace: slug, 
+          groupFilter: state.accountGroupFilter || 'all',
+          ruleId: (tab === 'rules') ? state.currentRecordPresetId : null 
+        }, '', route);
       }
     } catch (e) {
       console.warn('syncBrowserRoute error:', e);
@@ -4280,23 +4303,79 @@
   };
 
   // ==========================================================
-  // ATTIO RULE RECORD OVERLAY (LAYER 1 / PHOTO 1)
+  // ATTIO RULE RECORD SCREEN (EMBEDDED FULL-PAGE VIEW / PHOTO 1)
   // ==========================================================
   state.currentRecordPresetId = null;
   state.recordActiveTab = 'overview';
 
   window.editPresetFromTab = function (presetId) {
-    window.openRuleRecordOverlay(presetId);
+    window.openRuleRecordPage(presetId);
   };
 
-  window.openRuleRecordOverlay = async function (presetId) {
+  window.openRuleRecordOverlay = function (presetId) {
+    window.openRuleRecordPage(presetId);
+  };
+
+  window.closeRuleRecordPage = function (historyMode = 'push') {
+    haptic('selection');
+    state.currentRecordPresetId = null;
+    const kanbanView = document.getElementById('rulesKanbanView');
+    const recordView = document.getElementById('rulesRecordView');
+    if (recordView) recordView.classList.add('hidden');
+    if (kanbanView) kanbanView.classList.remove('hidden');
+
+    syncBrowserRoute('rules', historyMode);
+
+    const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
+    if (breadcrumbArea) {
+      breadcrumbArea.innerHTML = `<div class="breadcrumb-title"><svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span></div>`;
+    }
+    document.title = 'Правила — Buyerly';
+  };
+
+  window.openRuleRecordPage = async function (presetId, historyMode = 'push') {
     haptic('selection');
     state.currentRecordPresetId = Number(presetId);
-    const preset = state.presets.find(p => p.id === Number(presetId));
+    
+    // Ensure tab-rules is visible
+    if (state.activeTab !== 'rules') {
+      state.activeTab = 'rules';
+      document.querySelectorAll('.tab-content').forEach(section => {
+        section.classList.toggle('active', section.id === 'tab-rules');
+      });
+      window.updateSidebarActiveState();
+    }
+
+    const kanbanView = document.getElementById('rulesKanbanView');
+    const recordView = document.getElementById('rulesRecordView');
+    if (kanbanView) kanbanView.classList.add('hidden');
+    if (recordView) recordView.classList.remove('hidden');
+
+    let preset = state.presets.find(p => p.id === Number(presetId));
+    if (!preset) {
+      await loadPresets();
+      preset = state.presets.find(p => p.id === Number(presetId));
+    }
     if (!preset) {
       showToast('Правило не найдено', 'error');
+      window.closeRuleRecordPage('none');
       return;
     }
+
+    syncBrowserRoute('rules', historyMode);
+
+    // Update Header Breadcrumbs
+    const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
+    if (breadcrumbArea) {
+      breadcrumbArea.innerHTML = `
+        <div class="breadcrumb-title" style="display:flex; align-items:center; gap:6px;">
+          <span style="cursor:pointer; color:var(--text-muted);" onclick="window.closeRuleRecordPage()">Правила</span>
+          <span style="color:var(--text-muted);">/</span>
+          <span>${escapeHtml(preset.name || 'Правило')}</span>
+        </div>
+      `;
+    }
+    document.title = `${preset.name || 'Правило'} — Buyerly`;
 
     // Determine current group & sibling rules for navigation
     const parentGroup = state.ruleGroups.find(g => (g.preset_ids || []).includes(preset.id));
@@ -4479,7 +4558,6 @@
     window.renderRecordHighlights(preset, linkedAccounts.length);
 
     window.setRecordActiveTab('overview');
-    window.openModal('modalRuleRecordOverlay');
   };
 
   window.loadRuleRecordActivity = async function (presetId, presetName) {
@@ -4598,17 +4676,11 @@
 
     const newIndex = currentIndex + delta;
     if (newIndex >= 0 && newIndex < groupPresets.length) {
-      window.openRuleRecordOverlay(groupPresets[newIndex].id);
+      window.openRuleRecordPage(groupPresets[newIndex].id, 'push');
     }
   };
 
-  window.onRuleRecordOverlayClick = function (event) {
-    if (event.target.id === 'modalRuleRecordOverlay') {
-      window.closeModal('modalRuleRecordOverlay');
-    }
-  };
-
-  // Inline Title Editing in Record Overlay
+  // Inline Title Editing in Record View
   window.enableInlineTitleEdit = function () {
     const display = document.getElementById('recordTitleDisplay');
     const input = document.getElementById('recordTitleInput');
@@ -4703,7 +4775,7 @@
     const name = preset ? preset.name : 'правило';
     if (!confirm(`Вы уверены, что хотите удалить «${name}»?`)) return;
 
-    window.closeModal('modalRuleRecordOverlay');
+    window.closeRuleRecordPage('push');
     await window.deletePresetDirectly(state.currentRecordPresetId);
   };
 
@@ -5078,11 +5150,11 @@
 
       await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
 
-      // If Record Overlay is currently viewing this rule, refresh it live
+      // If Record Screen is currently viewing this rule, refresh it live
       if (state.currentRecordPresetId === presetId) {
-        const overlay = document.getElementById('modalRuleRecordOverlay');
-        if (overlay && !overlay.classList.contains('hidden')) {
-          await window.openRuleRecordOverlay(presetId);
+        const recordView = document.getElementById('rulesRecordView');
+        if (recordView && !recordView.classList.contains('hidden')) {
+          await window.openRuleRecordPage(presetId, 'none');
         }
       }
 
@@ -9013,6 +9085,10 @@
             haptic: false,
             scrollBehavior: 'auto'
           });
+          if (initialTab === 'rules' && parsed.ruleId) {
+            await initDataPromise;
+            window.openRuleRecordPage(parsed.ruleId, 'replace');
+          }
         }
       }
     } catch (e) {
@@ -9115,11 +9191,15 @@
   };
 
   function setupModalListeners() {
-    // Close modals on Escape key
+    // Close modals on Escape key or return from Rule Record page
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && activeModalStack.length > 0) {
-        const topModal = activeModalStack[activeModalStack.length - 1];
-        window.closeModal(topModal);
+      if (e.key === 'Escape') {
+        if (activeModalStack.length > 0) {
+          const topModal = activeModalStack[activeModalStack.length - 1];
+          window.closeModal(topModal);
+        } else if (state.activeTab === 'rules' && state.currentRecordPresetId) {
+          window.closeRuleRecordPage('push');
+        }
       }
     });
 
@@ -9296,6 +9376,7 @@
     const stateObj = event?.state || {};
     const parsed = parsePathLocation();
     const groupFilter = stateObj.groupFilter !== undefined ? stateObj.groupFilter : parsed.groupFilter;
+    const ruleId = stateObj.ruleId !== undefined ? stateObj.ruleId : parsed.ruleId;
 
     if (groupFilter && groupFilter !== 'all') {
       window.switchAccountGroup(groupFilter, {
@@ -9304,11 +9385,19 @@
         scrollBehavior: 'auto'
       });
     } else {
-      window.switchTab(stateObj.tab || parsed.tab, {
+      const tab = stateObj.tab || parsed.tab;
+      window.switchTab(tab, {
         historyMode: 'none',
         haptic: false,
         scrollBehavior: 'auto'
       });
+      if (tab === 'rules') {
+        if (ruleId) {
+          window.openRuleRecordPage(ruleId, 'none');
+        } else {
+          window.closeRuleRecordPage('none');
+        }
+      }
     }
   });
 
@@ -9392,9 +9481,14 @@
         window.closeModal('modalCreateRule');
         return;
       }
-      const recordOverlay = document.getElementById('modalRuleRecordOverlay');
-      if (recordOverlay && !recordOverlay.classList.contains('hidden')) {
-        window.closeModal('modalRuleRecordOverlay');
+      const editModal = document.getElementById('modalEditRule');
+      if (editModal && !editModal.classList.contains('hidden')) {
+        window.closeModal('modalEditRule');
+        return;
+      }
+      const recordView = document.getElementById('rulesRecordView');
+      if (recordView && !recordView.classList.contains('hidden')) {
+        window.closeRuleRecordPage('push');
         return;
       }
       const chooseModal = document.getElementById('modalChooseRule');
@@ -9412,10 +9506,10 @@
         addColumnPopover.classList.add('hidden');
       }
     }
-    // Arrow Left / Right navigation inside Rule Record Overlay
+    // Arrow Left / Right navigation inside Rule Record Screen
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      const recordOverlay = document.getElementById('modalRuleRecordOverlay');
-      if (recordOverlay && !recordOverlay.classList.contains('hidden')) {
+      const recordView = document.getElementById('rulesRecordView');
+      if (recordView && !recordView.classList.contains('hidden')) {
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
         if (activeTag !== 'input' && activeTag !== 'textarea' && activeTag !== 'select') {
           e.preventDefault();

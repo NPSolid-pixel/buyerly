@@ -684,60 +684,213 @@
       <!-- ============================================== -->
       <!-- TAB: ПРАВИЛА (RULES & PRESETS - ATTIO KANBAN BOARD) -->
       <!-- ============================================== -->
-      <section id="tab-rules" class="tab-content">
-        <!-- Rules Header & Actions -->
-        <div class="rules-tab-header">
-          <div class="rules-header-info">
-            <h2>Правила мониторинга кампаний</h2>
-          </div>
-          <div class="rules-header-actions">
-            <button class="btn btn-primary btn-add-rule-main" type="button" onclick="window.openCreateRuleFromTab()">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Новое правило</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Kanban Board: Groups as Columns & Rules as Cards -->
-        <div class="rules-board-wrapper">
-          <div id="ruleGroupsContainer" class="rule-groups-grid rules-kanban-board">
-            <!-- Dynamically populated Kanban columns with rule cards inside -->
-          </div>
-        </div>
-
-        <!-- Floating Bulk Actions Bar (Attio Style) -->
-        <div id="rulesBulkActionsBar" class="rules-bulk-bar hidden">
-          <div class="rules-bulk-bar-inner">
-            <button type="button" class="rules-bulk-selected-pill" onclick="window.clearRuleSelection()" title="Снять выделение">
-              <span id="rulesBulkCount" class="rules-bulk-count-badge">1</span>
-              <span>Selected</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-            <div class="rules-bulk-divider"></div>
-            <div class="rules-bulk-actions">
-              <button type="button" class="rules-bulk-btn" onclick="window.openBulkMoveModal(event)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                <span>В группу</span>
+      <!-- TAB: ПРАВИЛА (RULES & PRESETS - ATTIO WORKSPACE) -->
+      <!-- ============================================== -->
+      <section id="tab-rules" class="tab-content rules-tab-content">
+        
+        <!-- VIEW 1: Rules Kanban Board -->
+        <div id="rulesKanbanView" class="rules-subview">
+          <!-- Rules Header & Actions -->
+          <div class="rules-tab-header">
+            <div class="rules-header-info">
+              <h2>Правила мониторинга кампаний</h2>
+            </div>
+            <div class="rules-header-actions">
+              <button class="btn btn-primary btn-add-rule-main" type="button" onclick="window.openCreateRuleFromTab()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Новое правило</span>
               </button>
-              <button type="button" class="rules-bulk-btn danger" onclick="window.bulkDeleteSelectedRules()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </div>
+          </div>
+
+          <!-- Kanban Board: Groups as Columns & Rules as Cards -->
+          <div class="rules-board-wrapper">
+            <div id="ruleGroupsContainer" class="rule-groups-grid rules-kanban-board">
+              <!-- Dynamically populated Kanban columns with rule cards inside -->
+            </div>
+          </div>
+
+          <!-- Floating Bulk Actions Bar (Attio Style) -->
+          <div id="rulesBulkActionsBar" class="rules-bulk-bar hidden">
+            <div class="rules-bulk-bar-inner">
+              <button type="button" class="rules-bulk-selected-pill" onclick="window.clearRuleSelection()" title="Снять выделение">
+                <span id="rulesBulkCount" class="rules-bulk-count-badge">1</span>
+                <span>Selected</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+              <div class="rules-bulk-divider"></div>
+              <div class="rules-bulk-actions">
+                <button type="button" class="rules-bulk-btn" onclick="window.openBulkMoveModal(event)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                  <span>В группу</span>
+                </button>
+                <button type="button" class="rules-bulk-btn danger" onclick="window.bulkDeleteSelectedRules()">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                  <span>Удалить</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contract elements maintained for backward compatibility -->
+          <div id="rulesCardsContainer" class="rules-cards-grid hidden"></div>
+          <div id="singleRulesHeading" class="rules-section-heading hidden"></div>
+          <section id="ruleGroupsSection" class="rule-groups-section hidden"></section>
+
+          <!-- Rules Empty State (when 0 rules created) -->
+          <div id="rulesEmptyState" class="rules-empty-card hidden">
+            <div class="bell-empty-icon">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            </div>
+            <h3>Правил пока нет</h3>
+            <p>Создайте первое правило для автоматического управления рекламой</p>
+            <button class="btn btn-primary" type="button" onclick="window.openCreateRuleFromTab()">Создать правило</button>
+          </div>
+        </div>
+
+        <!-- VIEW 2: Dedicated Full-Page Rule Record Screen (Attio Style / Photo 1) -->
+        <div id="rulesRecordView" class="rules-record-page-view hidden">
+          <!-- Top Navigation Header -->
+          <div class="record-page-top-bar">
+            <div class="record-page-top-left">
+              <button type="button" class="record-page-back-btn" onclick="window.closeRuleRecordPage()" title="Назад ко всем правилам (Esc)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                <span>Правила</span>
+              </button>
+              <span class="record-breadcrumb-separator">/</span>
+              <div class="record-nav-arrows">
+                <button type="button" id="btnPrevRecord" class="btn-ghost-icon" onclick="window.navigateRecordRule(-1)" title="Предыдущее правило (←)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button type="button" id="btnNextRecord" class="btn-ghost-icon" onclick="window.navigateRecordRule(1)" title="Следующее правило (→)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+              <div id="recordNavPositionPill" class="record-nav-pill">1 из 1 в rules</div>
+            </div>
+            <div class="record-page-top-right">
+              <button type="button" class="btn-record-header-action" onclick="window.openEditRuleFromOverlay()" title="Настроить условия и параметры (попап)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                <span>Настроить</span>
+              </button>
+              <button type="button" class="btn-record-header-action btn-danger-hover" onclick="window.deleteRuleFromOverlay()" title="Удалить правило">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 <span>Удалить</span>
               </button>
             </div>
           </div>
-        </div>
 
-        <!-- Contract elements maintained for backward compatibility -->
-        <div id="rulesCardsContainer" class="rules-cards-grid hidden"></div>
-        <div id="singleRulesHeading" class="rules-section-heading hidden"></div>
-        <section id="ruleGroupsSection" class="rule-groups-section hidden"></section>
+          <!-- Two-Column Layout filling 100% height -->
+          <div class="record-page-main-layout">
+            
+            <!-- Left Column: Details & Action Buttons -->
+            <div class="record-sidebar-column">
+              <!-- Header: Title & Quick Rename -->
+              <div class="record-header-block">
+                <div class="record-avatar-icon" id="recordAvatarIcon">⚡</div>
+                <div class="record-title-wrap">
+                  <div class="record-title-display" id="recordTitleDisplay" onclick="window.enableInlineTitleEdit()">
+                    <span id="recordTitleText">Правило</span>
+                    <button type="button" class="btn-inline-pencil" title="Переименовать">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    </button>
+                  </div>
+                  <input type="text" id="recordTitleInput" class="record-title-input hidden" maxlength="120" onblur="window.saveInlineTitleEdit()" onkeydown="window.onInlineTitleKeydown(event)">
+                </div>
+              </div>
 
-        <!-- Rules Empty State (when 0 rules created) -->
-        <div id="rulesEmptyState" class="rules-empty-card hidden">
-          <div class="bell-empty-icon">
-            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <!-- Action Buttons Row -->
+              <div class="record-actions-bar">
+                <button type="button" class="btn-record-action primary" onclick="window.runRuleCheckNow()" title="Запустить проверку прямо сейчас">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>Проверить</span>
+                </button>
+                <button type="button" class="btn-record-action" onclick="window.openMoveRuleGroupFromOverlay()" title="Переместить в группу">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  <span>В группу</span>
+                </button>
+                <button type="button" class="btn-record-action" onclick="window.openEditRuleFromOverlay()" title="Настроить условия и параметры">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <span>Настроить</span>
+                </button>
+              </div>
+
+              <!-- Section: Details -->
+              <div class="record-section">
+                <div class="record-section-title">ПАРАМЕТРЫ ПРАВИЛА</div>
+                <div class="record-details-grid" id="recordDetailsGrid">
+                  <!-- Dynamically populated key-value rows -->
+                </div>
+                <button type="button" class="btn-view-all-values" onclick="window.openEditRuleFromOverlay()">
+                  Настроить параметры правила
+                </button>
+              </div>
+
+              <!-- Section: Lists / Groups -->
+              <div class="record-section">
+                <div class="record-section-title">СПИСКИ / ГРУППЫ</div>
+                <div id="recordGroupsList" class="record-groups-list">
+                  <!-- Dynamically populated group cards -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Tabs (Overview, Activity, Accounts) -->
+            <div class="record-content-column">
+              
+              <!-- Tabs Header -->
+              <div class="record-tabs-bar">
+                <button type="button" class="record-tab-btn active" data-tab="overview" onclick="window.setRecordActiveTab('overview')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                  <span>Обзор</span>
+                </button>
+                <button type="button" class="record-tab-btn" data-tab="activity" onclick="window.setRecordActiveTab('activity')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  <span>Активность и логи</span>
+                  <span id="recordActivityCountBadge" class="tab-badge">0</span>
+                </button>
+                <button type="button" class="record-tab-btn" data-tab="accounts" onclick="window.setRecordActiveTab('accounts')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  <span>Привязанные кабинеты</span>
+                  <span id="recordAccountsCountBadge" class="tab-badge">0</span>
+                </button>
+              </div>
+
+              <!-- Tab 1: Overview -->
+              <div id="recordTabOverview" class="record-tab-content active">
+                <div class="record-highlights-title">Сводка правила</div>
+                <div class="record-highlights-grid" id="recordHighlightsGrid">
+                  <!-- Status, Last Triggered, Total Triggers, Accounts count -->
+                </div>
+
+                <div class="record-activity-section">
+                  <div class="record-activity-head">
+                    <span class="record-activity-title">Лента активности</span>
+                    <button type="button" class="btn-link-action" onclick="window.setRecordActiveTab('activity')">Показать все</button>
+                  </div>
+                  <div id="recordOverviewActivityFeed" class="record-activity-feed">
+                    <!-- Timeline nodes -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tab 2: Activity / Logs -->
+              <div id="recordTabActivity" class="record-tab-content hidden">
+                <div class="record-activity-full-feed" id="recordFullActivityFeed">
+                  <!-- Full audit log items -->
+                </div>
+              </div>
+
+              <!-- Tab 3: Accounts -->
+              <div id="recordTabAccounts" class="record-tab-content hidden">
+                <div class="record-accounts-list" id="recordAccountsList">
+                  <!-- List of ad accounts with active status toggle -->
+                </div>
+              </div>
+
+            </div>
           </div>
-          <h3>Правил пока нет</h3>
+        </div>
           <p>Создайте правило, чтобы начать автоматический мониторинг кампаний и управление бюджетами.</p>
           <button class="btn btn-primary btn-lg" onclick="window.openCreateRuleFromTab()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -2115,153 +2268,6 @@
             <span>Создать правило</span>
             <kbd>Ctrl ↵</kbd>
           </button>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- Modal: Attio Rule Record Overlay / Full Record View ("Photo 1") -->
-    <div id="modalRuleRecordOverlay" class="modal-overlay rule-record-overlay hidden" onclick="window.onRuleRecordOverlayClick(event)">
-      <div class="rule-record-dialog" onclick="event.stopPropagation()">
-        
-        <!-- Top Navigation Bar -->
-        <div class="record-top-bar">
-          <div class="record-top-bar-left">
-            <button type="button" class="btn-ghost-icon" onclick="window.closeModal('modalRuleRecordOverlay')" title="Закрыть (Esc)">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-            <div class="record-nav-arrows">
-              <button type="button" id="btnPrevRecord" class="btn-ghost-icon" onclick="window.navigateRecordRule(-1)" title="Предыдущее правило (←)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-              </button>
-              <button type="button" id="btnNextRecord" class="btn-ghost-icon" onclick="window.navigateRecordRule(1)" title="Следующее правило (→)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            </div>
-            <div id="recordNavPositionPill" class="record-nav-pill">1 из 1 в rules</div>
-          </div>
-          <div class="record-top-bar-right">
-            <button type="button" class="btn-ghost-icon" onclick="window.openEditRuleFromOverlay()" title="Редактировать параметры">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            </button>
-            <button type="button" class="btn-ghost-icon btn-danger-hover" onclick="window.deleteRuleFromOverlay()" title="Удалить правило">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Main Two-Column Layout -->
-        <div class="record-main-layout">
-          
-          <!-- Left Column: Record Details and Action Buttons -->
-          <div class="record-sidebar-column">
-            
-            <!-- Header: Title & Quick Rename -->
-            <div class="record-header-block">
-              <div class="record-avatar-icon" id="recordAvatarIcon">⚡</div>
-              <div class="record-title-wrap">
-                <div class="record-title-display" id="recordTitleDisplay" onclick="window.enableInlineTitleEdit()">
-                  <span id="recordTitleText">Правило</span>
-                  <button type="button" class="btn-inline-pencil" title="Переименовать">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                  </button>
-                </div>
-                <input type="text" id="recordTitleInput" class="record-title-input hidden" maxlength="120" onblur="window.saveInlineTitleEdit()" onkeydown="window.onInlineTitleKeydown(event)">
-              </div>
-            </div>
-
-            <!-- Action Buttons Row -->
-            <div class="record-actions-bar">
-              <button type="button" class="btn-record-action primary" onclick="window.runRuleCheckNow()" title="Запустить проверку прямо сейчас">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                <span>Проверить</span>
-              </button>
-              <button type="button" class="btn-record-action" onclick="window.openMoveRuleGroupFromOverlay()" title="Переместить в группу">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                <span>В группу</span>
-              </button>
-              <button type="button" class="btn-record-action" onclick="window.openEditRuleFromOverlay()" title="Настроить условия и параметры">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                <span>Настроить</span>
-              </button>
-            </div>
-
-            <!-- Section: Record Details -->
-            <div class="record-section">
-              <div class="record-section-title">ПАРАМЕТРЫ ПРАВИЛА</div>
-              <div class="record-details-grid" id="recordDetailsGrid">
-                <!-- Dynamically populated key-value rows -->
-              </div>
-              <button type="button" class="btn-view-all-values" onclick="window.openEditRuleFromOverlay()">
-                Настроить параметры правила
-              </button>
-            </div>
-
-            <!-- Section: Lists / Groups -->
-            <div class="record-section">
-              <div class="record-section-title">СПИСКИ / ГРУППЫ</div>
-              <div id="recordGroupsList" class="record-groups-list">
-                <!-- Dynamically populated group cards -->
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Right Column: Tabs (Overview, Activity, Accounts) -->
-          <div class="record-content-column">
-            
-            <!-- Tabs Header -->
-            <div class="record-tabs-bar">
-              <button type="button" class="record-tab-btn active" data-tab="overview" onclick="window.setRecordActiveTab('overview')">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                <span>Обзор</span>
-              </button>
-              <button type="button" class="record-tab-btn" data-tab="activity" onclick="window.setRecordActiveTab('activity')">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                <span>Активность и логи</span>
-                <span id="recordActivityCountBadge" class="tab-badge">0</span>
-              </button>
-              <button type="button" class="record-tab-btn" data-tab="accounts" onclick="window.setRecordActiveTab('accounts')">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                <span>Привязанные кабинеты</span>
-                <span id="recordAccountsCountBadge" class="tab-badge">0</span>
-              </button>
-            </div>
-
-            <!-- Tab 1: Overview -->
-            <div id="recordTabOverview" class="record-tab-content active">
-              <div class="record-highlights-title">Сводка правила</div>
-              <div class="record-highlights-grid" id="recordHighlightsGrid">
-                <!-- Status, Last Triggered, Total Triggers, Accounts count -->
-              </div>
-
-              <div class="record-activity-section">
-                <div class="record-activity-head">
-                  <span class="record-activity-title">Лента активности</span>
-                  <button type="button" class="btn-link-action" onclick="window.setRecordActiveTab('activity')">Показать все</button>
-                </div>
-                <div id="recordOverviewActivityFeed" class="record-activity-feed">
-                  <!-- Timeline nodes -->
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab 2: Activity / Logs -->
-            <div id="recordTabActivity" class="record-tab-content hidden">
-              <div class="record-activity-full-feed" id="recordFullActivityFeed">
-                <!-- Full audit log items -->
-              </div>
-            </div>
-
-            <!-- Tab 3: Accounts -->
-            <div id="recordTabAccounts" class="record-tab-content hidden">
-              <div class="record-accounts-list" id="recordAccountsList">
-                <!-- List of ad accounts with active status toggle -->
-              </div>
-            </div>
-
-          </div>
-
         </div>
 
       </div>

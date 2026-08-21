@@ -102,6 +102,7 @@ def create_app() -> FastAPI:
         @app.get("/collection/{group_id}")
         @app.get("/collection/{group_id}/view/{view_id}")
         @app.get("/rules")
+        @app.get("/rules/{rule_id}")
         @app.get("/rule-groups/{group_id}")
         @app.get("/chats")
         @app.get("/chats/{chat_id}")
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
         @app.get("/{workspace_slug}/collection/{group_id}")
         @app.get("/{workspace_slug}/collection/{group_id}/view/{view_id}")
         @app.get("/{workspace_slug}/rules")
+        @app.get("/{workspace_slug}/rules/{rule_id}")
         @app.get("/{workspace_slug}/rule-groups/{group_id}")
         @app.get("/{workspace_slug}/chats")
         @app.get("/{workspace_slug}/chats/{chat_id}")
@@ -126,7 +128,7 @@ def create_app() -> FastAPI:
         @app.get("/{workspace_slug}/add-accounts")
         @app.get("/{workspace_slug}/settings")
         @app.get("/{workspace_slug}")
-        async def serve_index(workspace_slug: str = "", group_id: str = "", view_id: str = "", chat_id: str = ""):
+        async def serve_index(workspace_slug: str = "", group_id: str = "", view_id: str = "", chat_id: str = "", rule_id: str = ""):
             index_path = os.path.join(webapp_dir, "index.html")
             if os.path.exists(index_path):
                 return FileResponse(index_path, headers={

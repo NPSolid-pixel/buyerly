@@ -3944,96 +3944,114 @@ input[type="text"].attio-popover-name-input:focus,
 }
 
 /* ==========================================================================
-   Attio "Record View Overlay" & "Edit Rule Modal" (Layer 1 & Layer 2)
+   Attio "Dedicated Full-Page Rule Record Screen" & "Edit Modal"
    ========================================================================== */
 
-.rule-record-overlay {
-  background: rgba(16, 17, 18, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  z-index: 1050;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.rule-record-dialog {
-  width: 980px;
-  max-width: 96vw;
-  height: 86vh;
-  max-height: 860px;
-  background: var(--bg-surface);
-  border-radius: 16px;
-  box-shadow: 0 12px 48px -12px rgba(28, 40, 64, 0.2), 0 24px 96px -8px rgba(28, 40, 64, 0.24), 0 0 1px 0 rgba(28, 40, 64, 0.16);
-  border: 1px solid var(--border-subtle);
+.rules-tab-content {
+  padding: 0;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  animation: attioModalSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.record-top-bar {
+.rules-subview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 24px;
+}
+
+.rules-record-page-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-surface);
+  animation: attioViewFadeIn 0.15s ease-out;
+}
+
+@keyframes attioViewFadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.record-page-top-bar {
   height: 48px;
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 20px;
   background: var(--bg-surface);
   flex-shrink: 0;
 }
 
-.record-top-bar-left,
-.record-top-bar-right {
+.record-page-top-left,
+.record-page-top-right {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.btn-ghost-icon {
-  width: 28px;
-  height: 28px;
+.record-page-back-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.btn-ghost-icon:hover {
+.record-page-back-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: var(--border-subtle);
 }
 
-.btn-ghost-icon.btn-danger-hover:hover {
-  background: rgba(235, 59, 59, 0.1);
-  color: var(--color-danger, #eb3b3b);
-  border-color: rgba(235, 59, 59, 0.2);
+.record-breadcrumb-separator {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 2px;
 }
 
-.record-nav-arrows {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.record-nav-pill {
+.btn-record-header-action {
+  height: 28px;
+  padding: 0 10px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--bg-canvas);
+  border-radius: 6px;
   border: 1px solid var(--border-subtle);
-  padding: 3px 10px;
-  border-radius: 12px;
-  margin-left: 4px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.record-main-layout {
+.btn-record-header-action:hover {
+  background: var(--bg-hover);
+}
+
+.btn-record-header-action.btn-danger-hover:hover {
+  background: rgba(235, 59, 59, 0.1);
+  color: var(--color-danger, #eb3b3b);
+  border-color: rgba(235, 59, 59, 0.25);
+}
+
+.record-page-main-layout {
   flex: 1;
   min-height: 0;
   display: flex;
