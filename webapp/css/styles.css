@@ -2549,7 +2549,13 @@ body.is-resizing-column * {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.rules-column:hover .rules-column-btn,
+.rules-column-header:hover .rules-column-btn,
+.rules-column-btn:focus-visible {
+  opacity: 1;
 }
 .rules-column-btn:hover {
   background: rgba(0, 0, 0, 0.06);
@@ -2573,7 +2579,8 @@ body.is-resizing-column * {
   cursor: grabbing;
 }
 .rules-column:hover .rules-column-drag-handle,
-.rules-column-header:hover .rules-column-drag-handle {
+.rules-column-header:hover .rules-column-drag-handle,
+.rules-column-drag-handle:focus-visible {
   opacity: 1;
 }
 .rules-column-drag-handle:hover {
