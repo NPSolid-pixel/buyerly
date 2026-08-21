@@ -1018,7 +1018,6 @@
              ondragend="window.onGroupDragEnd(event)">
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${escapeHtml(group.name)}</span>
-          <span class="list-count">${group.accounts_count || 0}</span>
         </div>
       `;
     }).join('');
@@ -1114,11 +1113,15 @@
   window.toggleListsSortMenu = function (e) {
     if (e) e.stopPropagation();
     const dropdown = document.getElementById('listsSortDropdown');
+    const btnSort = document.getElementById('btnListsSortMenu');
+    const header = document.getElementById('headerAccountsSection');
     if (!dropdown) return;
     const isHidden = dropdown.classList.contains('hidden');
     document.getElementById('workspaceDropdown')?.classList.remove('show');
     document.getElementById('bulkGroupDropdown')?.classList.add('hidden');
     dropdown.classList.toggle('hidden', !isHidden);
+    if (btnSort) btnSort.classList.toggle('active', isHidden);
+    if (header) header.classList.toggle('has-open-menu', isHidden);
     if (isHidden) {
       updateSortDropdownUI();
     }
@@ -1141,6 +1144,8 @@
     renderSidebarAccountGroups();
     const dropdown = document.getElementById('listsSortDropdown');
     if (dropdown) dropdown.classList.add('hidden');
+    document.getElementById('btnListsSortMenu')?.classList.remove('active');
+    document.getElementById('headerAccountsSection')?.classList.remove('has-open-menu');
     haptic('selection');
   };
 
@@ -7036,6 +7041,8 @@
       const btnSort = document.getElementById('btnListsSortMenu');
       if (sortDropdown && btnSort && !sortDropdown.contains(e.target) && !btnSort.contains(e.target)) {
         sortDropdown.classList.add('hidden');
+        btnSort.classList.remove('active');
+        document.getElementById('headerAccountsSection')?.classList.remove('has-open-menu');
       }
     });
 

@@ -617,6 +617,16 @@ body.is-sidebar-resizing .sidebar {
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+.nav-section-header:hover .nav-section-actions,
+.nav-section-header.has-open-menu .nav-section-actions,
+.nav-section-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .nav-section-action-btn,
@@ -640,7 +650,8 @@ body.is-sidebar-resizing .sidebar {
 }
 
 .nav-section-action-btn:hover,
-.nav-section-add-btn:hover {
+.nav-section-add-btn:hover,
+.nav-section-action-btn.active {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
@@ -795,6 +806,9 @@ body.is-sidebar-resizing .sidebar {
 .list-item.active .list-count {
   color: var(--text-primary);
   font-weight: 600;
+}
+.sidebar .list-count {
+  display: none !important;
 }
 
 /* Workspace Dropdown */

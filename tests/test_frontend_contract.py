@@ -341,7 +341,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.21.0', self.index)
+        self.assertIn('v=9.22.0', self.index)
 
     def test_account_groups_scope_the_whole_summary_and_keep_profile_columns_configurable(self):
         for contract in (
@@ -573,7 +573,6 @@ class TestFrontendRuleContract(unittest.TestCase):
         for contract in (
             'data-tab="fb_accounts"',
             'id="navFbAccounts"',
-            'id="sidebarFbAccountsCount"',
             'id="navGroupAll"',
             'id="sidebarAccountGroupsContainer"',
             'id="tab-fb_accounts"',
@@ -585,6 +584,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="listsSortDropdown"',
         ):
             self.assertIn(contract, self.index)
+
+        self.assertNotIn('id="sidebarFbAccountsCount"', self.index)
+        self.assertNotIn('id="sidebarTotalCount"', self.index)
 
         for script_contract in (
             "fb_accounts: '/facebook-accounts'",
@@ -632,6 +634,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.sort-menu-item',
             '.sort-check-icon',
             '.list-item.dragging',
+            '.nav-section-actions',
+            '.sidebar .list-count',
         ):
             self.assertIn(style_contract, self.styles)
 
