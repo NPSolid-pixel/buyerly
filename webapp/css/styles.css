@@ -2475,9 +2475,10 @@ input:checked + .slider:before { transform: translateX(16px); }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 0 8px;
+  height: 30px;
   border: 1px solid #e6e7ea;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #ffffff;
   box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -2511,19 +2512,28 @@ input:checked + .slider:before { transform: translateX(16px); }
 .attio-popover-dot:hover {
   transform: scale(1.15);
 }
+input[type="text"].attio-popover-name-input,
 .attio-popover-name-input {
   border: none !important;
   background: transparent !important;
-  font-size: 13.5px;
-  font-weight: 500;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: #101112;
-  width: 100%;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  color: #101112 !important;
+  width: 100% !important;
   outline: none !important;
   box-shadow: none !important;
-  padding: 0;
-  margin: 0;
-  line-height: 20px;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 20px !important;
+  line-height: 20px !important;
+  border-radius: 0 !important;
+}
+input[type="text"].attio-popover-name-input:focus,
+.attio-popover-name-input:focus {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 .attio-popover-name-input::placeholder {
   color: #a2a4a7;
@@ -2532,7 +2542,7 @@ input:checked + .slider:before { transform: translateX(16px); }
 /* Floating Color Palette Flyout */
 .attio-color-palette {
   position: absolute;
-  top: 46px;
+  top: 42px;
   left: 8px;
   z-index: 1060;
   background: #ffffff;
