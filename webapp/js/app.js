@@ -1726,48 +1726,85 @@
       delete state.accountsColumnWidths[colId];
       localStorage.setItem('buyerly_accounts_col_widths', JSON.stringify(state.accountsColumnWidths));
       const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
-      const defaultW = colDef.defaultWidth || 120;
-      const th = document.querySelector(`.attio-th[data-col-id="${colId}"]`);
-      const colTrack = document.getElementById(`col-track-${colId}`);
-      if (th) th.style.width = defaultW + 'px';
-      if (colTrack) colTrack.style.width = defaultW + 'px';
       showToast(`Ширина колонки «${colDef.label || colId}» сброшена`, 'info');
       renderAccounts();
     }
   };
 
   window.initColumnResize = function (e, colId) {
+    if (e.button !== 0) return; // Only left-click
     e.preventDefault();
     e.stopPropagation();
+
     const startX = e.clientX;
-    const th = e.currentTarget.closest('th');
+    const th = document.getElementById(`th-col-${colId}`) || e.currentTarget.closest('th');
     const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
-    const startWidth = th ? th.offsetWidth : (colDef.defaultWidth || 120);
+    const startWidth = th ? th.offsetWidth : (state.accountsColumnWidths[colId] || colDef.defaultWidth || 120);
     const minWidth = colDef.minWidth || 50;
     const colTrack = document.getElementById(`col-track-${colId}`);
     const resizer = e.currentTarget;
+    const viewport = document.querySelector('.attio-table-viewport');
     
+    // Create or reuse full-height guide line
+    let guide = document.getElementById('attioResizeGuide');
+    if (!guide && viewport) {
+      guide = document.createElement('div');
+      guide.id = 'attioResizeGuide';
+      guide.className = 'attio-table-resize-guide';
+      viewport.appendChild(guide);
+    }
+
+    const viewportRect = viewport ? viewport.getBoundingClientRect() : { left: 0, top: 0 };
+    const thRect = th ? th.getBoundingClientRect() : { right: startX };
+    
+    if (guide && viewport) {
+      const initialGuideLeft = thRect.right - viewportRect.left + viewport.scrollLeft;
+      guide.style.left = `${initialGuideLeft}px`;
+      guide.classList.add('is-active');
+    }
+
     resizer.classList.add('is-resizing');
     document.body.classList.add('is-resizing-column');
 
     let currentWidth = startWidth;
+    let rafId = null;
 
     const onMouseMove = (moveEvent) => {
       moveEvent.preventDefault();
       const diff = moveEvent.clientX - startX;
       currentWidth = Math.max(minWidth, startWidth + diff);
-      if (th) th.style.width = currentWidth + 'px';
-      if (colTrack) colTrack.style.width = currentWidth + 'px';
-      state.accountsColumnWidths[colId] = currentWidth;
+
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (colTrack) colTrack.style.width = `${currentWidth}px`;
+        if (th) {
+          th.style.width = `${currentWidth}px`;
+          th.style.minWidth = `${currentWidth}px`;
+        }
+        if (guide && th && viewport) {
+          const updatedThRect = th.getBoundingClientRect();
+          const guideLeft = updatedThRect.right - viewportRect.left + viewport.scrollLeft;
+          guide.style.left = `${guideLeft}px`;
+        }
+      });
     };
 
     const onMouseUp = (upEvent) => {
       upEvent.preventDefault();
+      if (rafId) cancelAnimationFrame(rafId);
+
+      if (guide) {
+        guide.classList.remove('is-active');
+      }
+
       resizer.classList.remove('is-resizing');
       document.body.classList.remove('is-resizing-column');
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+
+      state.accountsColumnWidths[colId] = currentWidth;
       localStorage.setItem('buyerly_accounts_col_widths', JSON.stringify(state.accountsColumnWidths));
+      renderAccounts();
     };
 
     document.addEventListener('mousemove', onMouseMove, { passive: false });
@@ -2790,8 +2827,8 @@
                 </div>
                 <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
               </div>
-              <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" ondblclick="window.resetSingleColumnWidth(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
             </div>
+            <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" ondblclick="window.resetSingleColumnWidth(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
           </th>
         `;
       }
@@ -2799,18 +2836,22 @@
       return `
         <th class="attio-th" 
             data-col-id="${colId}" 
+            id="th-col-${colId}"
             style="width: ${width}px; min-width: ${colDef.minWidth || 50}px;"
-            draggable="true" ondragstart="window.handleColumnDragStart(event, '${colId}')" ondragover="window.handleColumnDragOver(event, '${colId}')" ondragleave="window.handleColumnDragLeave(event)" ondrop="window.handleColumnDrop(event, '${colId}')" ondragend="window.handleColumnDragEnd(event)">
+            ondragover="window.handleColumnDragOver(event, '${colId}')" 
+            ondragleave="window.handleColumnDragLeave(event)" 
+            ondrop="window.handleColumnDrop(event, '${colId}')" 
+            ondragend="window.handleColumnDragEnd(event)">
           <div class="attio-th-content">
             <div class="attio-th-left" onclick="${colDef.sortable ? `window.setAccountsSort('${colId}')` : ''}" style="${colDef.sortable ? 'cursor: pointer;' : ''}" title="${colDef.sortable ? 'Нажмите для сортировки' : ''}">
-              <span class="attio-th-drag-handle" title="Перетащите для изменения порядка">
+              <span class="attio-th-drag-handle" draggable="true" ondragstart="window.handleColumnDragStart(event, '${colId}')" onclick="event.stopPropagation();" title="Перетащите для изменения порядка">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
               </span>
               <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
               <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
             </div>
-            <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" ondblclick="window.resetSingleColumnWidth(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
           </div>
+          <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" ondblclick="window.resetSingleColumnWidth(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
         </th>
       `;
     }).join('');
