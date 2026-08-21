@@ -1232,10 +1232,12 @@
     const subtitle = document.getElementById('accountsPageSubtitle');
     const btnSettings = document.getElementById('btnGroupSettings');
     const btnShare = document.getElementById('btnGroupShare');
+    const viewTitle = document.getElementById('accountsViewCurrentTitle');
 
     if (state.accountGroupFilter === 'all') {
       if (eyebrow) eyebrow.textContent = 'Рабочее пространство';
       if (title) title.textContent = 'Рекламные кабинеты';
+      if (viewTitle) viewTitle.textContent = 'Все кабинеты';
       if (subtitle) subtitle.textContent = 'Статус Meta, автоматика и назначенные правила — отдельно и без скрытых состояний.';
       if (btnSettings) btnSettings.classList.add('hidden');
       if (btnShare) btnShare.classList.add('hidden');
@@ -1247,6 +1249,7 @@
       if (group) {
         if (eyebrow) eyebrow.textContent = `Группа кабинетов (${group.accounts_count || 0} шт.)`;
         if (title) title.textContent = group.name;
+        if (viewTitle) viewTitle.textContent = group.name;
         if (subtitle) subtitle.textContent = group.description || 'Кабинеты, входящие в эту группу.';
         if (btnSettings) {
           btnSettings.classList.remove('hidden');

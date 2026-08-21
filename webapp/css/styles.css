@@ -1686,18 +1686,12 @@ input:checked + .slider:before { transform: translateX(16px); }
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  cursor: pointer;
+  padding: 4px 0;
   font-weight: 600;
   font-size: 14px;
   color: var(--text-primary);
   position: relative;
   user-select: none;
-  transition: background 0.15s;
-}
-.attio-view-selector:hover {
-  background: var(--bg-hover);
 }
 .attio-view-icon-badge {
   width: 20px;
