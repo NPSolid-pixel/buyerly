@@ -1676,41 +1676,35 @@ input:checked + .slider:before { transform: translateX(16px); }
   align-items: center;
   gap: 8px;
 }
-.attio-view-header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.attio-view-selector {
+.attio-view-selector-btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 4px 0;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13.5px;
   font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
-  position: relative;
+  color: #101112;
+  cursor: pointer;
   user-select: none;
+  transition: background-color 0.15s;
 }
-.attio-view-icon-badge {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: #E5EEFF;
-  color: #266DF0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+.attio-view-selector-btn:hover {
+  background: #F1F2F4;
+}
+.attio-view-icon {
+  font-size: 14px;
 }
 .attio-view-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
   letter-spacing: -0.01em;
+  color: #101112;
 }
 .attio-chevron-icon {
-  color: var(--text-muted);
+  color: #898A8D;
   transition: transform 0.15s;
 }
 
@@ -1722,8 +1716,8 @@ input:checked + .slider:before { transform: translateX(16px); }
   padding: 0 9px;
   border-radius: 6px;
   background: transparent;
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
+  border: 1px solid #E5E7EB;
+  color: #374151;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -1731,16 +1725,39 @@ input:checked + .slider:before { transform: translateX(16px); }
   transition: all 0.15s;
 }
 .attio-header-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--border-medium);
+  background: #F3F4F6;
+  color: #111827;
+  border-color: #D1D5DB;
 }
 .attio-header-btn svg {
-  color: var(--text-muted);
+  color: #6B7280;
   flex-shrink: 0;
 }
 .attio-header-btn:hover svg {
-  color: var(--text-primary);
+  color: #111827;
+}
+
+.attio-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: #266DF0;
+  border: 1px solid #215BC4;
+  color: #FFFFFF;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(38, 109, 240, 0.2);
+  transition: background-color 0.15s, box-shadow 0.15s;
+  user-select: none;
+  white-space: nowrap;
+}
+.attio-primary-btn:hover {
+  background: #215BC4;
 }
 
 /* Attio Filter & Sort Toolbar */
@@ -2472,30 +2489,43 @@ body.is-resizing-column * {
   min-width: 0;
   overflow: hidden;
 }
-.cell-icon-container {
+.attio-entity-avatar {
   width: 20px;
   height: 20px;
-  position: relative;
+  border-radius: 5px;
+  background: #F1F3F5;
+  border: 1px solid #E5E7EB;
+  color: #505155;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.cell-entity-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  background: #EEEFF1;
-  color: #505155;
+.attio-entity-text-block {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 600;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.25;
 }
-.cell-entity-icon.fb-icon {
-  background: #1877F2;
-  color: #FFFFFF;
+.account-text-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #101112;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-text-id {
+  font-size: 11px;
+  color: #898A8D;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.account-text-id:hover {
+  color: #266DF0;
 }
 
 /* Attio Checkbox */

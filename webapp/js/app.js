@@ -2557,9 +2557,12 @@
               <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
                 <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)" title="Выбрать кабинет">
               </div>
-              <div style="min-width: 0; overflow: hidden; flex: 1;">
+              <div class="attio-entity-avatar">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              </div>
+              <div class="attio-entity-text-block">
                 <div class="account-text-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
-                <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID" style="cursor:pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID">
                   ${escapeHtml(acc.account_id)}
                 </div>
               </div>
