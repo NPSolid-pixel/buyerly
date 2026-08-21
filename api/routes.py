@@ -268,10 +268,26 @@ class AccountLatestMetrics(BaseModel):
     data_status_label: str = ""
     spend: Optional[float] = None
     impressions: int = 0
+    reach: int = 0
+    frequency: Optional[float] = None
+    cpm: Optional[float] = None
     clicks: int = 0
+    unique_clicks: int = 0
+    link_clicks: int = 0
+    outbound_clicks: int = 0
+    landing_page_views: int = 0
     leads: int = 0
     registrations: int = 0
     purchases: int = 0
+    cpl: Optional[float] = None
+    cpreg: Optional[float] = None
+    cpp: Optional[float] = None
+    cpc: Optional[float] = None
+    ctr: Optional[float] = None
+    ctr_link: Optional[float] = None
+    cpc_link: Optional[float] = None
+    cost_per_lpv: Optional[float] = None
+    roas: Optional[float] = None
 
 
 class AccountItem(BaseModel):
@@ -857,6 +873,15 @@ def _latest_account_metrics_by_id(summary: Optional[Dict[str, Any]]) -> Dict[str
             except (TypeError, ValueError):
                 return 0
 
+        def safe_float(key: str) -> Optional[float]:
+            val = row.get(key)
+            if val is None:
+                return None
+            try:
+                return round(float(val), 2)
+            except (TypeError, ValueError):
+                return None
+
         spend: Optional[float]
         try:
             spend = round(float(row.get("spend")), 2) if row.get("spend") is not None else None
@@ -870,10 +895,26 @@ def _latest_account_metrics_by_id(summary: Optional[Dict[str, Any]]) -> Dict[str
             "data_status_label": str(row.get("data_status_label") or ""),
             "spend": spend,
             "impressions": safe_int("impressions"),
+            "reach": safe_int("reach"),
+            "frequency": safe_float("frequency"),
+            "cpm": safe_float("cpm"),
             "clicks": safe_int("clicks"),
+            "unique_clicks": safe_int("unique_clicks"),
+            "link_clicks": safe_int("link_clicks"),
+            "outbound_clicks": safe_int("outbound_clicks"),
+            "landing_page_views": safe_int("landing_page_views"),
             "leads": safe_int("leads"),
             "registrations": safe_int("registrations"),
             "purchases": safe_int("purchases"),
+            "cpl": safe_float("cost_per_lead"),
+            "cpreg": safe_float("cost_per_registration"),
+            "cpp": safe_float("cost_per_purchase"),
+            "cpc": safe_float("cpc"),
+            "ctr": safe_float("ctr"),
+            "ctr_link": safe_float("ctr_link"),
+            "cpc_link": safe_float("cpc_link"),
+            "cost_per_lpv": safe_float("cost_per_landing_page_view"),
+            "roas": safe_float("purchase_roas"),
         }
     return result
 
