@@ -16,6 +16,7 @@ from database.models import (
     AppSettings,
     AutomationRuntimeState,
     AutomationScheduleState,
+    MetaConnection,
     RuleExecutionState,
     StoppedAdSet,
     TelegramUser,
@@ -291,7 +292,11 @@ class MonitoringWorker:
         state_key: str,
         account: Account,
         rule_key: str = "",
+        state_cache: Optional[dict[str, AutomationScheduleState]] = None,
     ) -> AutomationScheduleState:
+        if state_cache is not None and state_key in state_cache:
+            return state_cache[state_key]
+
         state = (
             await session.execute(
                 select(AutomationScheduleState).where(
@@ -300,7 +305,10 @@ class MonitoringWorker:
             )
         ).scalar_one_or_none()
         if state is not None:
+            if state_cache is not None:
+                state_cache[state_key] = state
             return state
+
         state = AutomationScheduleState(
             state_key=state_key,
             owner_id=str(account.owner_id or ""),
@@ -309,19 +317,24 @@ class MonitoringWorker:
             rule_key=rule_key,
             last_checked_at=0.0,
         )
-        session.add(state)
         try:
-            await session.flush()
+            async with session.begin_nested():
+                session.add(state)
+                await session.flush()
+            if state_cache is not None:
+                state_cache[state_key] = state
             return state
         except IntegrityError:
-            await session.rollback()
-            return (
+            refreshed = (
                 await session.execute(
                     select(AutomationScheduleState).where(
                         AutomationScheduleState.state_key == state_key
                     )
                 )
             ).scalar_one()
+            if state_cache is not None:
+                state_cache[state_key] = refreshed
+            return refreshed
 
     async def _claim_execution(
         self,
@@ -812,6 +825,13 @@ class MonitoringWorker:
             stmt = select(Account).where(Account.is_active == True)
             result = await session.execute(stmt)
             accounts = result.scalars().all()
+            if not accounts:
+                await self._persist_runtime_state(
+                    stats=stats,
+                    started_at=started_at,
+                    duration_ms=(time.perf_counter() - cycle_started) * 1000,
+                )
+                return stats
 
             owner_user_ids = {
                 account.owner_user_id
@@ -829,6 +849,42 @@ class MonitoringWorker:
                     owner.id: str(owner.telegram_id or "")
                     for owner in owner_rows
                 }
+
+            # Пакетная предзагрузка AutomationScheduleState (с чанкованием по 500)
+            account_ids = [str(acc.account_id) for acc in accounts]
+            schedule_cache: dict[str, AutomationScheduleState] = {}
+            for i in range(0, len(account_ids), 500):
+                chunk = account_ids[i:i + 500]
+                chunk_rows = (
+                    await session.execute(
+                        select(AutomationScheduleState).where(
+                            AutomationScheduleState.account_id.in_(chunk)
+                        )
+                    )
+                ).scalars().all()
+                for row in chunk_rows:
+                    schedule_cache[row.state_key] = row
+
+            # Пакетная предзагрузка MetaConnection (с чанкованием по 500)
+            connection_ids = {
+                acc.meta_connection_id
+                for acc in accounts
+                if acc.meta_connection_id is not None
+            }
+            connection_cache: dict[int, MetaConnection] = {}
+            if connection_ids:
+                conn_id_list = list(connection_ids)
+                for i in range(0, len(conn_id_list), 500):
+                    chunk_conn_ids = conn_id_list[i:i + 500]
+                    conn_rows = (
+                        await session.execute(
+                            select(MetaConnection).where(
+                                MetaConnection.id.in_(chunk_conn_ids)
+                            )
+                        )
+                    ).scalars().all()
+                    for conn in conn_rows:
+                        connection_cache[conn.id] = conn
 
             settings_result = await session.execute(select(AppSettings).limit(1))
             app_settings = settings_result.scalar_one_or_none()
@@ -899,6 +955,7 @@ class MonitoringWorker:
                             state_key=state_key,
                             account=acc,
                             rule_key=rule_key,
+                            state_cache=schedule_cache,
                         )
                         if (
                             schedule_state.last_checked_at <= 0
@@ -910,6 +967,7 @@ class MonitoringWorker:
                     session,
                     state_key=self._schedule_key("account", acc.account_id),
                     account=acc,
+                    state_cache=schedule_cache,
                 )
                 account_monitor_due = (
                     account_state.last_checked_at <= 0
@@ -919,6 +977,7 @@ class MonitoringWorker:
                     session,
                     state_key=self._schedule_key("health", acc.account_id),
                     account=acc,
+                    state_cache=schedule_cache,
                 )
                 health_due = (
                     health_state.last_checked_at <= 0
@@ -945,7 +1004,9 @@ class MonitoringWorker:
                 stats["accounts_checked"] += 1
                 stats["rules_checked"] += len(due_rules)
                 try:
-                    access_token = await resolve_account_access_token(session, acc)
+                    access_token = await resolve_account_access_token(
+                        session, acc, connection_cache=connection_cache
+                    )
                 except Exception as error:
                     stats["errors"].append(f"Account {account_ref}: {error}")
                     continue
