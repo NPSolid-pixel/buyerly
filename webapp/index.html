@@ -484,42 +484,9 @@
       <!-- TAB: РЕКЛАМНЫЕ КАБИНЕТЫ (ACCOUNTS / LISTS) -->
       <!-- ============================================== -->
       <section id="tab-accounts" class="tab-content">
-        <!-- Attio View Header -->
-        <div class="attio-view-header">
+        <!-- Accounts Minimal Toolbar (Sort & Add Account) -->
+        <div class="attio-view-header" style="margin-bottom: 8px;">
           <div class="attio-view-header-left">
-            <div class="attio-view-selector-btn" id="btnViewSelector">
-              <span class="attio-view-icon">📋</span>
-              <span class="attio-view-title" id="accountsViewCurrentTitle">All</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="attio-chevron-icon"><path d="M6 9l6 6 6-6"/></svg>
-            </div>
-
-            <button type="button" class="attio-header-btn" id="btnViewSettings" onclick="window.toggleAccountsSortDropdown(event)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-              <span>View settings</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="attio-chevron-icon"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-          </div>
-
-          <div class="attio-view-header-right">
-            <button id="btnGroupShare" class="attio-header-btn hidden" type="button" onclick="window.copyCurrentGroupLink()" title="Скопировать ссылку на группу">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-              <span>Share</span>
-            </button>
-            <button class="attio-header-btn" type="button" onclick="window.switchTab('add')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span>Import / Export</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="attio-chevron-icon"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <button class="attio-primary-btn" onclick="window.switchTab('add')">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Add Account</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Attio Filter & Sort Toolbar -->
-        <div class="attio-filter-bar">
-          <div class="attio-filter-bar-left">
             <!-- Sort Popover -->
             <div class="attio-popover-container">
               <button type="button" class="attio-filter-pill-btn" id="btnAccountsSort" onclick="window.toggleAccountsSortDropdown(event)">
@@ -536,24 +503,17 @@
                 <div class="attio-dropdown-item" data-sort-key="rules" onclick="window.setAccountsSort('rules')">Правила</div>
               </div>
             </div>
-
-            <!-- Filter Button -->
-            <div class="attio-popover-container">
-              <button type="button" class="attio-filter-pill-btn" id="btnAccountsFilter">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                <span>Filter</span>
-              </button>
-            </div>
           </div>
 
-          <div class="attio-filter-bar-right">
-            <div class="attio-search-box">
-              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="accountsSearchInput" placeholder="Search..." oninput="window.handleAccountsSearch(this.value)">
-              <button id="accountsSearchClearBtn" class="attio-search-clear hidden" type="button" onclick="window.clearAccountsSearch()">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
-            </div>
+          <div class="attio-view-header-right">
+            <button id="btnGroupShare" class="attio-header-btn hidden" type="button" onclick="window.copyCurrentGroupLink()" title="Скопировать ссылку на группу">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              <span>Share</span>
+            </button>
+            <button class="attio-primary-btn" onclick="window.switchTab('add')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Add Account</span>
+            </button>
           </div>
         </div>
 
