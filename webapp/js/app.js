@@ -3696,32 +3696,349 @@
     }
   };
 
+  // ==========================================================
+  // ATTIO CREATE RULE CONTROLLER (MODAL 2)
+  // ==========================================================
   window.openCreateRuleFromChooser = function () {
     const targetGroupId = state.chooseRuleTargetGroupId;
     window.closeModal('modalChooseRule');
-    window.openCreateRuleForGroup(targetGroupId);
+    window.openCreateRuleModal(targetGroupId);
   };
 
   window.openCreateRuleForGroup = function (targetGroupId = null) {
-    haptic('selection');
-    document.getElementById('editLimitsAccountId').value = '';
-    document.getElementById('modalLimitsTitle').textContent = 'Создание правила';
-    
-    const backBtn = document.getElementById('btnBackToRuleChooser');
-    const divider = document.getElementById('modalLimitsBreadcrumbDivider');
-    if (backBtn && divider) {
-      backBtn.classList.remove('hidden');
-      divider.classList.remove('hidden');
-    }
+    window.openCreateRuleModal(targetGroupId);
+  };
 
-    window.populateRuleGroupSelect(targetGroupId);
-    window.newPresetMode();
-    window.openModal('modalEditLimits');
+  window.openCreateRuleModal = function (targetGroupId = null) {
+    haptic('selection');
+    state.createRuleTargetGroupId = targetGroupId !== null && targetGroupId !== undefined ? Number(targetGroupId) : null;
+    
+    // Reset form fields
+    const nameInput = document.getElementById('createRuleNameInput');
+    if (nameInput) nameInput.value = '';
+    
+    window.populateCreateRuleGroupSelect(state.createRuleTargetGroupId);
+    
+    const actionSelect = document.getElementById('createRuleActionSelect');
+    if (actionSelect) actionSelect.value = 'turn_off';
+    window.onCreateRuleActionChange('turn_off');
+    
+    const budgetPercent = document.getElementById('createRuleBudgetPercentInput');
+    if (budgetPercent) budgetPercent.value = 20;
+    const budgetCeiling = document.getElementById('createRuleBudgetCeilingInput');
+    if (budgetCeiling) budgetCeiling.value = 0;
+    
+    window.setCreateRuleLogic('and');
+    
+    // Cooldown & Telegram
+    const cooldownSelect = document.getElementById('createRuleCooldownSelect');
+    if (cooldownSelect) cooldownSelect.value = '0';
+    const customCooldown = document.getElementById('createRuleCustomCooldownInput');
+    if (customCooldown) {
+      customCooldown.classList.add('hidden');
+      customCooldown.value = '';
+    }
+    const notifyToggle = document.getElementById('createRuleNotifyTgToggle');
+    if (notifyToggle) notifyToggle.checked = true;
+
+    // Reset More options spoiler
+    const moreBody = document.getElementById('createRuleMoreBody');
+    const moreArrow = document.getElementById('createRuleMoreArrow');
+    if (moreBody) moreBody.classList.add('hidden');
+    if (moreArrow) moreArrow.classList.remove('open');
+
+    // Default condition: Spend >= 2.0 (today)
+    const container = document.getElementById('createRuleConditionsList');
+    if (container) container.innerHTML = '';
+    window.addCreateRuleConditionRow('spend', 'gte', 2.0, 'today');
+
+    window.renderCreateRuleDraftSummary();
+    window.openModal('modalCreateRule');
+    setTimeout(() => nameInput?.focus(), 50);
   };
 
   window.backToRuleChooser = function () {
-    window.closeModal('modalEditLimits');
-    window.openChooseRuleModal(state.chooseRuleTargetGroupId);
+    window.closeModal('modalCreateRule');
+    window.openChooseRuleModal(state.chooseRuleTargetGroupId || state.createRuleTargetGroupId);
+  };
+
+  window.onCreateRuleOverlayClick = function (event) {
+    if (event.target.id === 'modalCreateRule') {
+      window.closeModal('modalCreateRule');
+    }
+  };
+
+  window.onChooseRuleOverlayClick = function (event) {
+    if (event.target.id === 'modalChooseRule') {
+      window.closeModal('modalChooseRule');
+    }
+  };
+
+  window.populateCreateRuleGroupSelect = function (selectedGroupId = null) {
+    const select = document.getElementById('createRuleGroupSelect');
+    if (!select) return;
+    
+    const colorEmojiMap = {
+      purple: '🟣', blue: '🔵', emerald: '🟢', amber: '🟡',
+      orange: '🟠', cyan: '🌐', magenta: '🌸', rose: '🔴',
+      lime: '🍏', yellow: '🟡', red: '🔴', gray: '⚪'
+    };
+    
+    let html = '<option value="">⚪ Без группы</option>';
+    (state.ruleGroups || []).forEach(g => {
+      const savedColor = state.ruleGroupColors[g.id] || 'purple';
+      const emoji = colorEmojiMap[savedColor] || '🟣';
+      const isSel = selectedGroupId !== null && Number(selectedGroupId) === g.id;
+      html += `<option value="${g.id}" ${isSel ? 'selected' : ''}>${emoji} ${escapeHtml(g.name)}</option>`;
+    });
+    select.innerHTML = html;
+  };
+
+  window.onCreateRuleActionChange = function (action) {
+    const budgetSection = document.getElementById('createRuleBudgetSection');
+    const ceilingField = document.getElementById('createRuleBudgetCeilingField');
+    if (action === 'increase_budget' || action === 'decrease_budget') {
+      budgetSection?.classList.remove('hidden');
+      if (ceilingField) {
+        ceilingField.style.display = action === 'increase_budget' ? 'flex' : 'none';
+      }
+    } else {
+      budgetSection?.classList.add('hidden');
+    }
+    window.renderCreateRuleDraftSummary();
+  };
+
+  window.setCreateRuleLogic = function (logic = 'and') {
+    document.querySelectorAll('#createRuleLogicGroup .attio-logic-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.logic === (logic || 'and'));
+    });
+    window.renderCreateRuleDraftSummary();
+  };
+
+  window.getCreateRuleLogic = function () {
+    const activeBtn = document.querySelector('#createRuleLogicGroup .attio-logic-btn.active');
+    return activeBtn?.dataset.logic || 'and';
+  };
+
+  window.toggleCreateRuleMoreSettings = function () {
+    const moreBody = document.getElementById('createRuleMoreBody');
+    const moreArrow = document.getElementById('createRuleMoreArrow');
+    if (!moreBody || !moreArrow) return;
+    const isHidden = moreBody.classList.contains('hidden');
+    moreBody.classList.toggle('hidden', !isHidden);
+    moreArrow.classList.toggle('open', isHidden);
+  };
+
+  window.onCreateRuleCooldownChange = function (val) {
+    const customInput = document.getElementById('createRuleCustomCooldownInput');
+    if (val === 'custom') {
+      customInput?.classList.remove('hidden');
+      customInput?.focus();
+    } else {
+      customInput?.classList.add('hidden');
+      if (customInput) customInput.value = '';
+    }
+    window.renderCreateRuleDraftSummary();
+  };
+
+  window.getCreateRuleCooldownFromUI = function () {
+    const select = document.getElementById('createRuleCooldownSelect');
+    const customInput = document.getElementById('createRuleCustomCooldownInput');
+    if (!select) return 0;
+    if (select.value === 'custom') {
+      return parseInt(customInput?.value) || 0;
+    }
+    return parseInt(select.value) || 0;
+  };
+
+  window.addCreateRuleConditionRow = function (metric = 'spend', operator = 'gte', value = '2.0', timeWindow = 'today') {
+    haptic('selection');
+    const container = document.getElementById('createRuleConditionsList');
+    if (!container) return;
+
+    const row = document.createElement('div');
+    row.className = 'attio-cond-row';
+    row.innerHTML = `
+      <select class="attio-cond-metric attio-field-select" onchange="window.renderCreateRuleDraftSummary()">
+        <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд (валюта кабинета)</option>
+        <option value="cpl" ${metric === 'cpl' ? 'selected' : ''}>CPL (Цена лида)</option>
+        <option value="cpreg" ${metric === 'cpreg' ? 'selected' : ''}>CPReg (Цена регистрации)</option>
+        <option value="cpp" ${metric === 'cpp' ? 'selected' : ''}>CPP (Цена покупки)</option>
+        <option value="leads" ${metric === 'leads' ? 'selected' : ''}>Лиды (шт)</option>
+        <option value="registrations" ${metric === 'registrations' ? 'selected' : ''}>Регистрации (шт)</option>
+        <option value="purchases" ${metric === 'purchases' ? 'selected' : ''}>Покупки (шт)</option>
+        <option value="ctr" ${metric === 'ctr' ? 'selected' : ''}>CTR All (%)</option>
+        <option value="cpc" ${metric === 'cpc' ? 'selected' : ''}>CPC All (валюта кабинета)</option>
+      </select>
+      <select class="attio-cond-op attio-field-select" onchange="window.renderCreateRuleDraftSummary()">
+        <option value="gt" ${operator === 'gt' ? 'selected' : ''}>&gt; (больше)</option>
+        <option value="gte" ${operator === 'gte' ? 'selected' : ''}>&ge; (не меньше)</option>
+        <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt; (меньше)</option>
+        <option value="lte" ${operator === 'lte' ? 'selected' : ''}>&le; (не больше)</option>
+        <option value="eq" ${operator === 'eq' ? 'selected' : ''}>= (равно)</option>
+      </select>
+      <input type="number" class="attio-cond-val attio-field-input text-center" placeholder="0.0" step="0.5" min="0" inputmode="decimal" value="${value}" oninput="window.renderCreateRuleDraftSummary()">
+      <select class="attio-cond-win attio-field-select" onchange="window.renderCreateRuleDraftSummary()">
+        <option value="today" ${timeWindow === 'today' ? 'selected' : ''}>Сегодня</option>
+        <option value="yesterday" ${timeWindow === 'yesterday' ? 'selected' : ''}>Вчера</option>
+        <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
+        <option value="last_7d" ${timeWindow === 'last_7d' ? 'selected' : ''}>7 дней</option>
+      </select>
+      <button type="button" class="attio-cond-del-btn" onclick="window.removeCreateRuleConditionRow(this)" title="Удалить условие">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    `;
+    container.appendChild(row);
+    window.renderCreateRuleDraftSummary();
+  };
+
+  window.removeCreateRuleConditionRow = function (button) {
+    haptic('selection');
+    const container = document.getElementById('createRuleConditionsList');
+    button?.closest('.attio-cond-row')?.remove();
+    if (container && container.children.length === 0) {
+      window.addCreateRuleConditionRow('spend', 'gte', 2.0, 'today');
+    } else {
+      window.renderCreateRuleDraftSummary();
+    }
+  };
+
+  window.getCreateRuleConditionsFromUI = function () {
+    const rows = document.querySelectorAll('#createRuleConditionsList .attio-cond-row');
+    const conditions = [];
+    rows.forEach(r => {
+      const metric = r.querySelector('.attio-cond-metric')?.value || 'spend';
+      const operator = r.querySelector('.attio-cond-op')?.value || 'gte';
+      const valInput = r.querySelector('.attio-cond-val')?.value;
+      const timeWindow = r.querySelector('.attio-cond-win')?.value || 'today';
+      const value = parseFloat(valInput);
+      if (!isNaN(value)) {
+        conditions.push({ metric, operator, value, time_window: timeWindow });
+      }
+    });
+    return conditions;
+  };
+
+  window.renderCreateRuleDraftSummary = function () {
+    const textElement = document.getElementById('createRulePlainText');
+    const errorsElement = document.getElementById('createRuleValidationErrors');
+    const saveButton = document.getElementById('btnSubmitCreateRule');
+    if (!textElement || !errorsElement) return [];
+
+    const action = document.getElementById('createRuleActionSelect')?.value || 'turn_off';
+    const logic = window.getCreateRuleLogic();
+    const conditions = window.getCreateRuleConditionsFromUI();
+    const budgetPercent = parseFloat(document.getElementById('createRuleBudgetPercentInput')?.value) || 0;
+    const budgetCeiling = parseFloat(document.getElementById('createRuleBudgetCeilingInput')?.value) || 0;
+
+    const plainText = buildPlainRuleTextFromValues(action, logic, conditions, budgetPercent, budgetCeiling);
+    textElement.textContent = plainText;
+    textElement.dataset.plainName = fitPlainRuleName(plainText);
+
+    const errors = [];
+    if (conditions.length === 0) {
+      errors.push('Добавьте хотя бы одно корректное условие.');
+    }
+    if (conditions.some(c => ['leads', 'registrations', 'purchases'].includes(c.metric) && !Number.isInteger(c.value))) {
+      errors.push('Лиды, регистрации и покупки указываются только целыми числами.');
+    }
+    if ((action === 'increase_budget' || action === 'decrease_budget') && (budgetPercent <= 0 || budgetPercent > 100)) {
+      errors.push('Изменение бюджета должно быть от 1% до 100%.');
+    }
+    if (action === 'increase_budget' && (budgetCeiling <= 0 || budgetCeiling > 10000000)) {
+      errors.push('Для увеличения бюджета укажите безопасный дневной потолок (> 0).');
+    }
+
+    errorsElement.innerHTML = errors.map(e => `
+      <div class="attio-val-item error">
+        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>${escapeHtml(e)}</span>
+      </div>
+    `).join('');
+
+    if (saveButton) saveButton.disabled = errors.length > 0;
+    return errors;
+  };
+
+  window.useCreateRulePlainName = function () {
+    const input = document.getElementById('createRuleNameInput');
+    const name = document.getElementById('createRulePlainText')?.dataset.plainName || '';
+    if (input && name) {
+      input.value = name;
+      input.focus();
+      showToast('Понятное название вставлено', 'success');
+    }
+  };
+
+  window.submitCreateRule = async function () {
+    const nameInput = document.getElementById('createRuleNameInput');
+    const actionSelect = document.getElementById('createRuleActionSelect');
+    const groupSelect = document.getElementById('createRuleGroupSelect');
+    const saveButton = document.getElementById('btnSubmitCreateRule');
+
+    const name = nameInput?.value.trim() || document.getElementById('createRulePlainText')?.dataset.plainName || 'Новое правило';
+    const action = actionSelect?.value || 'turn_off';
+    const selectedGroupId = groupSelect?.value ? Number(groupSelect.value) : null;
+    const logic = window.getCreateRuleLogic();
+    const conditions = window.getCreateRuleConditionsFromUI();
+    const cooldownMins = window.getCreateRuleCooldownFromUI();
+    const notifyTg = document.getElementById('createRuleNotifyTgToggle')?.checked !== false;
+    const budgetPercent = parseFloat(document.getElementById('createRuleBudgetPercentInput')?.value) || 0;
+    const budgetCeiling = parseFloat(document.getElementById('createRuleBudgetCeilingInput')?.value) || 0;
+
+    const errors = window.renderCreateRuleDraftSummary();
+    if (errors && errors.length > 0) {
+      showToast(errors[0], 'error');
+      return;
+    }
+
+    const payload = {
+      name,
+      action,
+      conditions,
+      condition_logic: logic,
+      cooldown_minutes: cooldownMins,
+      check_interval_minutes: 5,
+      notify_tg: notifyTg,
+      budget_change_percent: (action === 'increase_budget' || action === 'decrease_budget') ? budgetPercent : 0.0,
+      budget_max_daily: action === 'increase_budget' ? budgetCeiling : 0.0
+    };
+
+    if (saveButton) saveButton.disabled = true;
+    try {
+      const newPreset = await apiRequest('/api/presets', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      if (selectedGroupId && newPreset && newPreset.id) {
+        const group = state.ruleGroups.find(g => g.id === selectedGroupId);
+        if (group) {
+          const currentIds = group.preset_ids || [];
+          if (!currentIds.includes(newPreset.id)) {
+            await apiRequest(`/api/rule-groups/${selectedGroupId}`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                name: group.name,
+                description: group.description || '',
+                preset_ids: [...currentIds, newPreset.id]
+              })
+            });
+          }
+        }
+      }
+
+      haptic('notification', 'success');
+      showToast(`Правило «${newPreset.name || name}» успешно создано!`, 'success');
+      window.closeModal('modalCreateRule');
+
+      await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
+      if (state.activeTab === 'rules') renderRulesTab();
+    } catch (err) {
+      showToast(`Ошибка создания правила: ${err.message}`, 'error');
+    } finally {
+      if (saveButton) saveButton.disabled = false;
+    }
   };
 
   window.populateRuleGroupSelect = function (selectedGroupId = null) {
@@ -8243,13 +8560,25 @@
   // Global Keyboard shortcuts (ESC to close, Ctrl+Enter to save)
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      const createModal = document.getElementById('modalCreateRule');
+      if (createModal && !createModal.classList.contains('hidden')) {
+        e.preventDefault();
+        window.submitCreateRule();
+        return;
+      }
       const editModal = document.getElementById('modalEditLimits');
       if (editModal && !editModal.classList.contains('hidden')) {
         e.preventDefault();
         document.getElementById('btnSaveLimits')?.click();
+        return;
       }
     }
     if (e.key === 'Escape') {
+      const createModal = document.getElementById('modalCreateRule');
+      if (createModal && !createModal.classList.contains('hidden')) {
+        window.closeModal('modalCreateRule');
+        return;
+      }
       const chooseModal = document.getElementById('modalChooseRule');
       if (chooseModal && !chooseModal.classList.contains('hidden')) {
         window.closeModal('modalChooseRule');

@@ -3440,9 +3440,478 @@ input[type="text"].attio-popover-name-input:focus,
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+}
+.btn-back-chooser:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Attio "Create Rule" Modal Card */
+.create-rule-card {
+  width: 580px;
+  max-width: 94vw;
+  background: var(--bg-surface);
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 8px 28px -6px rgba(28, 40, 64, 0.12), 0 18px 88px -4px rgba(28, 40, 64, 0.16), 0 0 1px 0 rgba(28, 40, 64, 0.16);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: attioModalSlideIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes attioModalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.create-rule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.create-rule-breadcrumb-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.create-rule-breadcrumbs {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.crumb-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 6px;
   border-radius: 4px;
   transition: all var(--transition-fast);
+}
+
+.crumb-link-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.crumb-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+  font-size: 12px;
+}
+
+.crumb-current {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 2px 4px;
+}
+
+.crumb-icon {
+  font-size: 12px;
+}
+
+.create-rule-body {
+  max-height: calc(85vh - 120px);
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.create-rule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Attio Field Rows */
+.attio-field-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.attio-field-label {
+  width: 110px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding-top: 7px;
+}
+
+.attio-field-input-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.attio-field-input {
+  width: 100%;
+  height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  outline: none;
+  transition: all var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.attio-field-input:focus {
+  border-color: var(--accent-primary, #266df0);
+  box-shadow: 0 0 0 2px rgba(38, 109, 240, 0.15);
+  background: var(--bg-surface);
+}
+
+.attio-field-input::placeholder {
+  color: var(--text-muted);
+}
+
+.attio-field-select {
+  width: 100%;
+  height: 34px;
+  padding: 6px 28px 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-canvas) url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23898A8D' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: all var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.attio-field-select:focus {
+  border-color: var(--accent-primary, #266df0);
+  box-shadow: 0 0 0 2px rgba(38, 109, 240, 0.15);
+  background-color: var(--bg-surface);
+}
+
+.attio-field-subtext {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* Attio Budget Config Section */
+.attio-budget-section {
+  background: rgba(38, 109, 240, 0.04);
+  border: 1px solid rgba(38, 109, 240, 0.18);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-left: 124px;
+}
+
+.attio-budget-row {
+  display: flex;
+  gap: 10px;
+}
+
+.attio-budget-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attio-budget-field label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.attio-budget-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+/* Attio Conditions Section */
+.attio-conditions-section {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 12px 14px;
+  margin-top: 4px;
+}
+
+.attio-conditions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.attio-conditions-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.attio-logic-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.attio-logic-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.attio-logic-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.attio-logic-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.attio-logic-btn.active {
+  background: var(--accent-primary, #266df0);
+  border-color: var(--accent-primary, #266df0);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(38, 109, 240, 0.3);
+}
+
+.attio-conditions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.attio-cond-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.8fr) minmax(75px, 1fr) minmax(65px, 0.9fr) minmax(85px, 1.1fr) 28px;
+  gap: 6px;
+  align-items: center;
+}
+
+.attio-cond-row .attio-field-select,
+.attio-cond-row .attio-field-input {
+  height: 30px;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.attio-cond-row .attio-field-select {
+  padding-right: 18px;
+  background-position: right 6px center;
+  background-size: 8px 5px;
+}
+
+.attio-cond-del-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.attio-cond-del-btn:hover {
+  background: rgba(235, 59, 59, 0.1);
+  border-color: rgba(235, 59, 59, 0.25);
+  color: var(--color-danger, #eb3b3b);
+}
+
+.attio-add-cond-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-primary, #266df0);
+  background: rgba(38, 109, 240, 0.08);
+  border: 1px dashed rgba(38, 109, 240, 0.35);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.attio-add-cond-btn:hover {
+  background: rgba(38, 109, 240, 0.14);
+  border-color: var(--accent-primary, #266df0);
+}
+
+/* Attio Collapsible Settings */
+.attio-more-settings {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+  margin-top: 4px;
+}
+
+.attio-more-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 3px 0;
+  transition: color var(--transition-fast);
+}
+
+.attio-more-toggle:hover {
+  color: var(--text-primary);
+}
+
+.attio-more-arrow {
+  font-size: 11px;
+  transition: transform var(--transition-fast);
+  display: inline-block;
+}
+
+.attio-more-arrow.open {
+  transform: rotate(90deg);
+}
+
+.attio-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+/* Attio Summary and Validation */
+.attio-summary-card {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.attio-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.attio-summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.attio-summary-text {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.attio-validation-box {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attio-val-item {
+  font-size: 11.5px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attio-val-item.error {
+  background: rgba(235, 59, 59, 0.08);
+  border: 1px solid rgba(235, 59, 59, 0.2);
+  color: var(--color-danger, #eb3b3b);
+}
+
+.attio-val-item.warning {
+  background: rgba(207, 131, 0, 0.08);
+  border: 1px solid rgba(207, 131, 0, 0.2);
+  color: #cf8300;
+}
+
+/* Attio Footer */
+.create-rule-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
+}
+
+.create-rule-footer .btn {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.create-rule-footer kbd {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-family: inherit;
+  opacity: 0.8;
+}
+
+.create-rule-footer .btn-primary kbd {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 /* Attio "Choose Group" (Move to list) Modal */

@@ -1906,8 +1906,8 @@
     </div>
 
     <!-- Modal: Attio Choose / Add Rule ("Choose record" / Photo 4) -->
-    <div id="modalChooseRule" class="modal-overlay hidden">
-      <div class="modal-card choose-rule-card">
+    <div id="modalChooseRule" class="modal-overlay hidden" onclick="window.onChooseRuleOverlayClick(event)">
+      <div class="modal-card choose-rule-card" onclick="event.stopPropagation()">
         <div class="choose-rule-header">
           <div class="choose-rule-title-wrap">
             <span class="choose-rule-title">Выбор правила</span>
@@ -1947,6 +1947,176 @@
             <span class="key-hint">↵</span>
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal: Attio Create Rule Dialog ("Create Record") -->
+    <div id="modalCreateRule" class="modal-overlay hidden" onclick="window.onCreateRuleOverlayClick(event)">
+      <div class="modal-card create-rule-card" onclick="event.stopPropagation()">
+        
+        <!-- Header with Back Button and Breadcrumbs -->
+        <div class="create-rule-header">
+          <div class="create-rule-breadcrumb-wrap">
+            <button type="button" class="btn-back-chooser" onclick="window.backToRuleChooser()" title="Назад к выбору правила">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <ol class="create-rule-breadcrumbs">
+              <li><button type="button" class="crumb-link-btn" onclick="window.backToRuleChooser()">Выбор правила</button></li>
+              <li aria-hidden="true"><span class="crumb-sep">/</span></li>
+              <li class="crumb-current">
+                <span class="crumb-icon">⚡</span>
+                <span class="crumb-title">Создать правило</span>
+              </li>
+            </ol>
+          </div>
+          <button class="btn-close" type="button" onclick="window.closeModal('modalCreateRule')" title="Закрыть (ESC)">&times;</button>
+        </div>
+
+        <!-- Body with Form Fields -->
+        <div class="create-rule-body">
+          <div class="create-rule-form">
+            
+            <!-- 1. Name Field -->
+            <div class="attio-field-row">
+              <div class="attio-field-label">
+                <label for="createRuleNameInput">Название</label>
+              </div>
+              <div class="attio-field-input-wrap">
+                <input type="text" id="createRuleNameInput" class="attio-field-input" maxlength="120" placeholder="Например: Стоп CPL выше 15 при расходе 20..." autocomplete="off">
+              </div>
+            </div>
+
+            <!-- 2. Group Field -->
+            <div class="attio-field-row">
+              <div class="attio-field-label">
+                <label for="createRuleGroupSelect">Группа</label>
+              </div>
+              <div class="attio-field-input-wrap">
+                <select id="createRuleGroupSelect" class="attio-field-select">
+                  <option value="">⚪ Без группы</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 3. Action Field (THEN) -->
+            <div class="attio-field-row">
+              <div class="attio-field-label">
+                <label for="createRuleActionSelect">Действие</label>
+              </div>
+              <div class="attio-field-input-wrap">
+                <select id="createRuleActionSelect" class="attio-field-select" onchange="window.onCreateRuleActionChange(this.value)">
+                  <option value="turn_off">🛑 Выключить адсет (STOP)</option>
+                  <option value="notify_only">🔔 Только прислать уведомление (NOTIFY)</option>
+                  <option value="turn_on">🚀 Включить адсет (START)</option>
+                  <option value="increase_budget">📈 Увеличить дневной бюджет (+Budget)</option>
+                  <option value="decrease_budget">📉 Уменьшить дневной бюджет (-Budget)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 3b. Budget Configuration (visible for increase/decrease budget) -->
+            <div id="createRuleBudgetSection" class="attio-budget-section hidden">
+              <div class="attio-budget-row">
+                <div class="attio-budget-field">
+                  <label for="createRuleBudgetPercentInput">Изменение (%)</label>
+                  <input type="number" id="createRuleBudgetPercentInput" class="attio-field-input text-center" placeholder="20" min="1" max="100" step="5" value="20">
+                </div>
+                <div class="attio-budget-field" id="createRuleBudgetCeilingField">
+                  <label for="createRuleBudgetCeilingInput">Потолок (в валюте кабинета/день)</label>
+                  <input type="number" id="createRuleBudgetCeilingInput" class="attio-field-input text-center" placeholder="Обязателен для увеличения" min="0" max="10000000" step="10" value="0">
+                </div>
+              </div>
+              <div class="attio-budget-hint">Потолок защищает от чрезмерного разгона бюджета. Все пороги считаются в валюте кабинета.</div>
+            </div>
+
+            <!-- 4. Conditions Builder (IF) -->
+            <div class="attio-conditions-section">
+              <div class="attio-conditions-header">
+                <span class="attio-conditions-title">Условия (ЕСЛИ)</span>
+                <div class="attio-logic-toggle" id="createRuleLogicGroup">
+                  <span class="attio-logic-label">Логика:</span>
+                  <button type="button" class="attio-logic-btn active" data-logic="and" onclick="window.setCreateRuleLogic('and')">AND (Все)</button>
+                  <button type="button" class="attio-logic-btn" data-logic="or" onclick="window.setCreateRuleLogic('or')">OR (Любое)</button>
+                </div>
+              </div>
+
+              <div id="createRuleConditionsList" class="attio-conditions-list">
+                <!-- Condition rows dynamically added -->
+              </div>
+
+              <button type="button" class="attio-add-cond-btn" onclick="window.addCreateRuleConditionRow()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Добавить условие</span>
+              </button>
+            </div>
+
+            <!-- 5. Additional Settings (Collapsible / Compact) -->
+            <div class="attio-more-settings">
+              <div class="attio-more-toggle" onclick="window.toggleCreateRuleMoreSettings()">
+                <span id="createRuleMoreArrow" class="attio-more-arrow">▸</span>
+                <span>Дополнительные параметры (Уведомления, Пауза)</span>
+              </div>
+              <div id="createRuleMoreBody" class="attio-more-body hidden">
+                <div class="attio-field-row">
+                  <div class="attio-field-label">
+                    <label for="createRuleCooldownSelect">Пауза между срабатываниями</label>
+                  </div>
+                  <div class="attio-field-input-wrap">
+                    <select id="createRuleCooldownSelect" class="attio-field-select" onchange="window.onCreateRuleCooldownChange(this.value)">
+                      <option value="0">Без паузы (0 мин)</option>
+                      <option value="15">15 минут</option>
+                      <option value="30">30 минут</option>
+                      <option value="60">1 час</option>
+                      <option value="120">2 часа</option>
+                      <option value="360">6 часов</option>
+                      <option value="720">12 часов</option>
+                      <option value="1440">24 часа</option>
+                      <option value="custom">Указать вручную...</option>
+                    </select>
+                    <input type="number" id="createRuleCustomCooldownInput" class="attio-field-input hidden" placeholder="Минут" min="1" max="10080" style="margin-top: 6px;">
+                  </div>
+                </div>
+
+                <div class="attio-field-row" style="align-items: center;">
+                  <div class="attio-field-label">
+                    <span>Уведомление в Telegram</span>
+                  </div>
+                  <div class="attio-field-input-wrap" style="display: flex; align-items: center; justify-content: space-between;">
+                    <label class="switch">
+                      <input type="checkbox" id="createRuleNotifyTgToggle" checked>
+                      <span class="slider round"></span>
+                    </label>
+                    <span class="attio-field-subtext">Бот пришлёт сообщение в Telegram</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Plain Text Summary & Validation Messages -->
+            <div class="attio-summary-card" id="createRuleSummaryCard">
+              <div class="attio-summary-head">
+                <span class="attio-summary-label">Предпросмотр правила:</span>
+                <button type="button" class="btn-link-action" onclick="window.useCreateRulePlainName()">Вставить в название</button>
+              </div>
+              <div id="createRulePlainText" class="attio-summary-text">Настройте условия...</div>
+              <div id="createRuleValidationErrors" class="attio-validation-box"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Footer with Actions -->
+        <div class="create-rule-footer">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalCreateRule')">
+            <span>Отмена</span>
+            <kbd>Esc</kbd>
+          </button>
+          <button type="button" id="btnSubmitCreateRule" class="btn btn-primary" onclick="window.submitCreateRule()">
+            <span>Создать правило</span>
+            <kbd>Ctrl ↵</kbd>
+          </button>
+        </div>
+
       </div>
     </div>
 
