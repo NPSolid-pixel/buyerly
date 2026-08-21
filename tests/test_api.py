@@ -904,6 +904,39 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             ).scalars().all()
             self.assertEqual(group_items, [])
 
+    async def test_rule_groups_reorder(self):
+        user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
+        init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)
+        headers = {"Authorization": f"tma {init_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp1 = await client.post("/api/rule-groups", headers=headers, json={"name": "Group Alpha", "preset_ids": []})
+            self.assertEqual(resp1.status_code, 200)
+            g1 = resp1.json()
+
+            resp2 = await client.post("/api/rule-groups", headers=headers, json={"name": "Group Beta", "preset_ids": []})
+            self.assertEqual(resp2.status_code, 200)
+            g2 = resp2.json()
+
+            resp3 = await client.post("/api/rule-groups", headers=headers, json={"name": "Group Gamma", "preset_ids": []})
+            self.assertEqual(resp3.status_code, 200)
+            g3 = resp3.json()
+
+            reorder_resp = await client.put(
+                "/api/rule-groups/reorder",
+                headers=headers,
+                json={"group_ids": [g3["id"], g1["id"], g2["id"]]},
+            )
+            self.assertEqual(reorder_resp.status_code, 200)
+            reordered = reorder_resp.json()
+            custom_groups = [g for g in reordered if g["id"] in {g1["id"], g2["id"], g3["id"]}]
+            self.assertEqual([g["id"] for g in custom_groups], [g3["id"], g1["id"], g2["id"]])
+
+            get_resp = await client.get("/api/rule-groups", headers=headers)
+            self.assertEqual(get_resp.status_code, 200)
+            get_groups = [g for g in get_resp.json() if g["id"] in {g1["id"], g2["id"], g3["id"]}]
+            self.assertEqual([g["id"] for g in get_groups], [g3["id"], g1["id"], g2["id"]])
+
     async def test_parse_raw_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
         init_data = generate_valid_telegram_init_data(settings.BOT_TOKEN, user_info)

@@ -13,6 +13,7 @@ from database.db import (
     migrate_automation_settings_contract,
     migrate_audit_undo_contract,
     migrate_legacy_account_rules,
+    migrate_rule_groups_position,
     migrate_rule_metric_contract,
     migrate_rule_safety_contract,
     migrate_stable_owner_contract,
@@ -511,6 +512,34 @@ class TestAccountDayBoundaryContractMigration(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(first)
             self.assertFalse(second)
             self.assertEqual(row, ("2026-08-17", ""))
+        finally:
+            await engine.dispose()
+
+
+class TestRuleGroupsPositionMigration(unittest.IsolatedAsyncioTestCase):
+    async def test_adds_position_column_idempotently(self):
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "CREATE TABLE rule_groups ("
+                        "id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, description VARCHAR DEFAULT '')"
+                    )
+                )
+                await conn.execute(
+                    text("INSERT INTO rule_groups (id, name) VALUES (1, 'Test Group')")
+                )
+                first = await migrate_rule_groups_position(conn)
+                second = await migrate_rule_groups_position(conn)
+                row = (
+                    await conn.execute(
+                        text("SELECT id, name, position FROM rule_groups WHERE id = 1")
+                    )
+                ).one()
+            self.assertTrue(first)
+            self.assertFalse(second)
+            self.assertEqual(row, (1, "Test Group", 0))
         finally:
             await engine.dispose()
 

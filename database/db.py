@@ -660,6 +660,24 @@ async def migrate_workspaces_contract(conn) -> int:
     return created_workspaces
 
 
+async def migrate_rule_groups_position(conn) -> bool:
+    """Add position column to rule_groups table if missing."""
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "rule_groups" not in table_names:
+        return False
+    columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"] for column in inspect(sync_conn).get_columns("rule_groups")
+        }
+    )
+    if "position" not in columns:
+        await conn.execute(text("ALTER TABLE rule_groups ADD COLUMN position INTEGER NOT NULL DEFAULT 0"))
+        return True
+    return False
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -667,6 +685,8 @@ async def init_schema():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if await migrate_rule_groups_position(conn):
+            logger.info("Added position column to rule_groups.")
         audit_undo_migrated = await migrate_audit_undo_contract(conn)
         if audit_undo_migrated:
             logger.info("Added immutable audit reversal links.")
@@ -732,7 +752,8 @@ async def init_schema():
             "ALTER TABLE rule_presets ADD COLUMN notify_tg BOOLEAN DEFAULT 1;",
             "ALTER TABLE rule_presets ADD COLUMN condition_logic VARCHAR DEFAULT 'and';",
             "ALTER TABLE rule_presets ADD COLUMN budget_change_percent FLOAT DEFAULT 0.0;",
-            "ALTER TABLE rule_presets ADD COLUMN budget_max_daily FLOAT DEFAULT 0.0;"
+            "ALTER TABLE rule_presets ADD COLUMN budget_max_daily FLOAT DEFAULT 0.0;",
+            "ALTER TABLE rule_groups ADD COLUMN position INTEGER DEFAULT 0;"
         ]
         if conn.dialect.name == "sqlite":
             for col_sql in legacy_sqlite_columns:

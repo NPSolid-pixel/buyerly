@@ -239,15 +239,20 @@ class CreatePresetRequest(BaseModel):
 class RuleGroupWriteRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=500)
+    position: Optional[int] = None
     preset_ids: List[int] = Field(default_factory=list, min_length=0, max_length=50)
 
 class RuleGroupResponse(BaseModel):
     id: int
     name: str
     description: str
+    position: int = 0
     preset_ids: List[int]
     rules: List[RulePresetItem]
     created_at: str
+
+class RuleGroupsReorderRequest(BaseModel):
+    group_ids: List[int] = Field(min_length=0, max_length=100)
 
 class ApplyPresetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -1189,6 +1194,7 @@ def _rule_group_response(group: RuleGroup, presets: List[RulePreset]) -> RuleGro
         id=group.id,
         name=group.name,
         description=group.description or "",
+        position=getattr(group, "position", 0) or 0,
         preset_ids=[preset.id for preset in presets],
         rules=[_preset_response(preset) for preset in presets],
         created_at=group.created_at.strftime("%Y-%m-%d %H:%M") if group.created_at else "",
@@ -1820,13 +1826,46 @@ async def list_rule_groups(user: TelegramUser = Depends(get_current_user)):
             await session.execute(
                 select(RuleGroup)
                 .where(owned_by(RuleGroup, user))
-                .order_by(RuleGroup.id.desc())
+                .order_by(RuleGroup.position.asc(), RuleGroup.id.asc())
             )
         ).scalars().all()
         presets_by_group = await _load_group_presets(session, [group.id for group in groups])
         return [
             _rule_group_response(group, presets_by_group.get(group.id, []))
             for group in groups
+        ]
+
+
+@router.put("/rule-groups/reorder", response_model=List[RuleGroupResponse])
+async def reorder_rule_groups(
+    payload: RuleGroupsReorderRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    async with async_session_maker() as session:
+        groups = (
+            await session.execute(
+                select(RuleGroup).where(owned_by(RuleGroup, user))
+            )
+        ).scalars().all()
+        group_map = {g.id: g for g in groups}
+
+        for idx, gid in enumerate(payload.group_ids):
+            if gid in group_map:
+                group_map[gid].position = idx
+
+        await session.commit()
+
+        ordered_groups = (
+            await session.execute(
+                select(RuleGroup)
+                .where(owned_by(RuleGroup, user))
+                .order_by(RuleGroup.position.asc(), RuleGroup.id.asc())
+            )
+        ).scalars().all()
+        presets_by_group = await _load_group_presets(session, [g.id for g in ordered_groups])
+        return [
+            _rule_group_response(g, presets_by_group.get(g.id, []))
+            for g in ordered_groups
         ]
 
 
@@ -1839,18 +1878,29 @@ async def create_rule_group(
         presets = await _get_owned_presets(session, user, payload.preset_ids)
         _ensure_compatible_presets(presets)
         ws = await get_user_workspace(session, user)
+        if payload.position is not None:
+            position = payload.position
+        else:
+            max_pos = (
+                await session.execute(
+                    select(func.max(RuleGroup.position)).where(owned_by(RuleGroup, user))
+                )
+            ).scalar()
+            position = (max_pos + 1) if max_pos is not None else 0
+
         group = RuleGroup(
             workspace_id=ws.id if ws else None,
             owner_id=user.telegram_id,
             owner_user_id=user.id,
             name=_clean_rule_group_name(payload.name),
             description=payload.description.strip(),
+            position=position,
         )
         session.add(group)
         await session.flush()
         session.add_all(
-            RuleGroupItem(group_id=group.id, preset_id=preset.id, position=position)
-            for position, preset in enumerate(presets)
+            RuleGroupItem(group_id=group.id, preset_id=preset.id, position=pos)
+            for pos, preset in enumerate(presets)
         )
         await session.commit()
         await session.refresh(group)
@@ -1879,10 +1929,12 @@ async def update_rule_group(
         _ensure_compatible_presets(presets)
         group.name = _clean_rule_group_name(payload.name)
         group.description = payload.description.strip()
+        if payload.position is not None:
+            group.position = payload.position
         await session.execute(delete(RuleGroupItem).where(RuleGroupItem.group_id == group.id))
         session.add_all(
-            RuleGroupItem(group_id=group.id, preset_id=preset.id, position=position)
-            for position, preset in enumerate(presets)
+            RuleGroupItem(group_id=group.id, preset_id=preset.id, position=pos)
+            for pos, preset in enumerate(presets)
         )
         await session.commit()
         await session.refresh(group)

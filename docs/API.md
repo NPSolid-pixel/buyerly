@@ -163,6 +163,7 @@ Meta возвращает браузер на служебный callback `/api/
 |---|---|---|
 | `GET /api/rule-groups` | — | группы с упорядоченными пресетами |
 | `POST /api/rule-groups` | `name`, `description`, `preset_ids` | создаёт группу из 1–50 своих пресетов |
+| `PUT /api/rule-groups/reorder` | `group_ids` | обновляет порядок следования групп |
 | `PUT /api/rule-groups/{group_id}` | полный group payload | меняет название, описание и состав |
 | `DELETE /api/rule-groups/{group_id}` | — | удаляет группу; уже назначенные кабинетам правила сохраняются |
 

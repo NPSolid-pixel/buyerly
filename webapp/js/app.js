@@ -3210,57 +3210,7 @@
       (g.preset_ids || []).forEach(id => allGroupedPresetIds.add(id));
     });
 
-    // 1. Group Columns
-    const groupColumnsHtml = state.ruleGroups.map((group, idx) => {
-      const savedColor = state.ruleGroupColors[group.id];
-      const dotColor = savedColor ? `dot-${savedColor}` : defaultDotColors[idx % defaultDotColors.length];
-      const groupPresetIds = group.preset_ids || [];
-      const presetsInGroup = groupPresetIds
-        .map(id => state.presets.find(p => p.id === id))
-        .filter(Boolean)
-        .filter(isPresetMatchingFilter);
-
-      const isCollapsed = state.collapsedRuleGroups.has(group.id);
-
-      if (isCollapsed) {
-        return `
-          <div class="rules-column collapsed" data-group-id="${group.id}" onclick="window.toggleGroupCollapse(${group.id})" title="Нажмите, чтобы развернуть колонку">
-            <div class="rules-column-collapsed-strip">
-              <span class="rules-column-collapsed-dot ${dotColor}"></span>
-              <span class="rules-column-collapsed-count">${presetsInGroup.length}</span>
-              <span class="rules-column-collapsed-title">${escapeHtml(group.name)}</span>
-            </div>
-          </div>
-        `;
-      }
-
-      const cardsHtml = presetsInGroup.map(p => buildKanbanRuleCard(p, group.id)).join('');
-
-      return `
-        <div class="rules-column" data-group-id="${group.id}">
-          <div class="rules-column-header">
-            <div class="rules-column-title-wrap" onclick="window.openGroupMenuPopover(event, ${group.id})" title="Настройки группы">
-              <span class="rules-column-dot ${dotColor}"></span>
-              <span class="rules-column-title" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
-              <span class="rules-column-count">${presetsInGroup.length}</span>
-            </div>
-            <div class="rules-column-actions">
-              <button class="rules-column-btn" title="Добавить правило в группу" onclick="window.openChooseRuleModal(${group.id})">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              </button>
-            </div>
-          </div>
-          <div class="rules-column-body"
-               ondragover="window.onRuleColumnDragOver(event)"
-               ondragleave="window.onRuleColumnDragLeave(event)"
-               ondrop="window.onRuleColumnDrop(event, ${group.id})">
-            ${cardsHtml || '<div class="rules-column-empty">Нет правил</div>'}
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    // 2. Ungrouped Rules Column ("Без группы")
+    // 1. Ungrouped Rules Column ("Без группы") - Fixed first as "No stage" in Attio
     const ungroupedPresets = state.presets
       .filter(p => !allGroupedPresetIds.has(p.id))
       .filter(isPresetMatchingFilter);
@@ -3269,7 +3219,7 @@
     if (ungroupedPresets.length > 0 || state.ruleGroups.length === 0) {
       const ungroupedCardsHtml = ungroupedPresets.map(p => buildKanbanRuleCard(p, null)).join('');
       ungroupedColumnHtml = `
-        <div class="rules-column" data-group-id="ungrouped">
+        <div class="rules-column fixed-column" data-group-id="ungrouped">
           <div class="rules-column-header">
             <div class="rules-column-title-wrap">
               <span class="rules-column-dot dot-gray"></span>
@@ -3292,6 +3242,89 @@
       `;
     }
 
+    // 2. Custom Group Columns (Draggable horizontally in Attio style)
+    const groupColumnsHtml = state.ruleGroups.map((group, idx) => {
+      const savedColor = state.ruleGroupColors[group.id];
+      const dotColor = savedColor ? `dot-${savedColor}` : defaultDotColors[idx % defaultDotColors.length];
+      const groupPresetIds = group.preset_ids || [];
+      const presetsInGroup = groupPresetIds
+        .map(id => state.presets.find(p => p.id === id))
+        .filter(Boolean)
+        .filter(isPresetMatchingFilter);
+
+      const isCollapsed = state.collapsedRuleGroups.has(group.id);
+
+      if (isCollapsed) {
+        return `
+          <div class="rules-column collapsed"
+               data-group-id="${group.id}"
+               ondragover="window.onRuleGroupColumnDragOver(event, ${group.id})"
+               ondragenter="window.onRuleGroupColumnDragEnter(event, ${group.id})"
+               ondragleave="window.onRuleGroupColumnDragLeave(event, ${group.id})"
+               ondrop="window.onRuleGroupColumnDrop(event, ${group.id})"
+               onclick="window.toggleGroupCollapse(${group.id})"
+               title="Нажмите, чтобы развернуть колонку">
+            <div class="rules-column-collapsed-strip"
+                 draggable="true"
+                 ondragstart="window.onRuleGroupColumnDragStart(event, ${group.id})"
+                 ondragend="window.onRuleGroupColumnDragEnd(event)">
+              <span class="rules-column-collapsed-dot ${dotColor}"></span>
+              <span class="rules-column-collapsed-count">${presetsInGroup.length}</span>
+              <span class="rules-column-collapsed-title">${escapeHtml(group.name)}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      const cardsHtml = presetsInGroup.map(p => buildKanbanRuleCard(p, group.id)).join('');
+
+      return `
+        <div class="rules-column"
+             data-group-id="${group.id}"
+             ondragover="window.onRuleGroupColumnDragOver(event, ${group.id})"
+             ondragenter="window.onRuleGroupColumnDragEnter(event, ${group.id})"
+             ondragleave="window.onRuleGroupColumnDragLeave(event, ${group.id})"
+             ondrop="window.onRuleGroupColumnDrop(event, ${group.id})">
+          <div class="rules-column-header"
+               draggable="true"
+               ondragstart="window.onRuleGroupColumnDragStart(event, ${group.id})"
+               ondragend="window.onRuleGroupColumnDragEnd(event)">
+            <div class="rules-column-title-wrap" onclick="window.openGroupMenuPopover(event, ${group.id})" title="Настройки группы" draggable="false">
+              <span class="rules-column-dot ${dotColor}"></span>
+              <span class="rules-column-title" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
+              <span class="rules-column-count">${presetsInGroup.length}</span>
+            </div>
+            <div class="rules-column-actions" draggable="false">
+              <button class="rules-column-btn" title="Добавить правило в группу" onclick="window.openChooseRuleModal(${group.id})">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </button>
+              <button class="rules-column-drag-handle"
+                      type="button"
+                      title="Переместить группу"
+                      draggable="true"
+                      ondragstart="window.onRuleGroupColumnDragStart(event, ${group.id})"
+                      ondragend="window.onRuleGroupColumnDragEnd(event)">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                  <circle cx="5" cy="3" r="1.25"/>
+                  <circle cx="11" cy="3" r="1.25"/>
+                  <circle cx="5" cy="8" r="1.25"/>
+                  <circle cx="11" cy="8" r="1.25"/>
+                  <circle cx="5" cy="13" r="1.25"/>
+                  <circle cx="11" cy="13" r="1.25"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="rules-column-body"
+               ondragover="window.onRuleColumnDragOver(event)"
+               ondragleave="window.onRuleColumnDragLeave(event)"
+               ondrop="window.onRuleColumnDrop(event, ${group.id})">
+            ${cardsHtml || '<div class="rules-column-empty">Нет правил</div>'}
+          </div>
+        </div>
+      `;
+    }).join('');
+
     // 3. Add Group Column Button (Attio dashed square [ + ])
     const addGroupColumnCard = `
       <button class="rules-add-column-btn" type="button" onclick="window.openAddColumnPopover(event)" title="Добавить группу правил">
@@ -3299,7 +3332,7 @@
       </button>
     `;
 
-    boardContainer.innerHTML = groupColumnsHtml + ungroupedColumnHtml + addGroupColumnCard;
+    boardContainer.innerHTML = ungroupedColumnHtml + groupColumnsHtml + addGroupColumnCard;
   }
 
   // Group Collapse handler
@@ -3701,6 +3734,118 @@
   };
 
   // Drag & Drop handlers for rules Kanban board
+  let draggedRuleGroupId = null;
+
+  window.onRuleGroupColumnDragStart = function (event, groupId) {
+    if (event.target.closest('button:not(.rules-column-drag-handle), .rules-column-title-wrap')) {
+      if (!event.target.closest('.rules-column-drag-handle')) {
+        event.preventDefault();
+        return;
+      }
+    }
+    draggedRuleGroupId = Number(groupId);
+    try {
+      event.dataTransfer.setData('application/x-rule-group-id', String(groupId));
+      event.dataTransfer.setData('text/plain', `rule-group-${groupId}`);
+      event.dataTransfer.effectAllowed = 'move';
+    } catch (e) {}
+
+    const col = event.currentTarget.closest('.rules-column');
+    if (col) {
+      setTimeout(() => {
+        if (draggedRuleGroupId !== null) {
+          col.classList.add('column-dragging');
+        }
+      }, 0);
+    }
+  };
+
+  window.onRuleGroupColumnDragEnd = function (event) {
+    draggedRuleGroupId = null;
+    document.querySelectorAll('.rules-column').forEach(el => {
+      el.classList.remove('column-dragging', 'drag-over-left', 'drag-over-right');
+    });
+  };
+
+  window.onRuleGroupColumnDragOver = function (event, targetGroupId) {
+    if (!draggedRuleGroupId || draggedRuleGroupId === Number(targetGroupId)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    const col = event.currentTarget.closest('.rules-column');
+    if (!col) return;
+
+    const rect = col.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    if (event.clientX < midX) {
+      col.classList.add('drag-over-left');
+      col.classList.remove('drag-over-right');
+    } else {
+      col.classList.add('drag-over-right');
+      col.classList.remove('drag-over-left');
+    }
+  };
+
+  window.onRuleGroupColumnDragEnter = function (event, targetGroupId) {
+    if (!draggedRuleGroupId || draggedRuleGroupId === Number(targetGroupId)) return;
+    event.preventDefault();
+  };
+
+  window.onRuleGroupColumnDragLeave = function (event, targetGroupId) {
+    const col = event.currentTarget.closest('.rules-column');
+    if (col && !col.contains(event.relatedTarget)) {
+      col.classList.remove('drag-over-left', 'drag-over-right');
+    }
+  };
+
+  window.onRuleGroupColumnDrop = async function (event, targetGroupId) {
+    if (!draggedRuleGroupId) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const fromId = Number(draggedRuleGroupId);
+    const toId = Number(targetGroupId);
+
+    const col = event.currentTarget.closest('.rules-column');
+    const isRight = col ? col.classList.contains('drag-over-right') : false;
+
+    document.querySelectorAll('.rules-column').forEach(el => {
+      el.classList.remove('column-dragging', 'drag-over-left', 'drag-over-right');
+    });
+
+    draggedRuleGroupId = null;
+
+    if (fromId === toId) return;
+
+    const fromIdx = state.ruleGroups.findIndex(g => g.id === fromId);
+    let toIdx = state.ruleGroups.findIndex(g => g.id === toId);
+
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const [movedGroup] = state.ruleGroups.splice(fromIdx, 1);
+    toIdx = state.ruleGroups.findIndex(g => g.id === toId);
+    const insertIdx = isRight ? toIdx + 1 : toIdx;
+    state.ruleGroups.splice(insertIdx, 0, movedGroup);
+
+    renderRulesTab();
+
+    try {
+      const groupIds = state.ruleGroups.map(g => g.id);
+      const updated = await apiRequest('/api/rule-groups/reorder', {
+        method: 'PUT',
+        body: JSON.stringify({ group_ids: groupIds })
+      });
+      if (Array.isArray(updated) && updated.length > 0) {
+        state.ruleGroups = updated;
+      }
+    } catch (err) {
+      console.error('Failed to save rule groups order:', err);
+      showToast(`Ошибка сохранения порядка групп: ${err.message}`, 'error');
+      await loadRuleGroups();
+      renderRulesTab();
+    }
+  };
+
   window.onRuleDragStart = function (event, presetId, sourceGroupId) {
     draggedRuleInfo = {
       presetId: Number(presetId),
@@ -3720,6 +3865,7 @@
   };
 
   window.onRuleColumnDragOver = function (event) {
+    if (draggedRuleGroupId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
     const body = event.currentTarget.classList.contains('rules-column-body') ? event.currentTarget : event.currentTarget.querySelector('.rules-column-body');

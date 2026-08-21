@@ -182,6 +182,7 @@ class RuleGroup(Base):
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
+    position = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=utcnow_naive, nullable=False)
     updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
 

@@ -2555,6 +2555,65 @@ body.is-resizing-column * {
   background: rgba(0, 0, 0, 0.06);
   color: #101112;
 }
+.rules-column-drag-handle {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.rules-column-drag-handle:active {
+  cursor: grabbing;
+}
+.rules-column:hover .rules-column-drag-handle,
+.rules-column-header:hover .rules-column-drag-handle {
+  opacity: 1;
+}
+.rules-column-drag-handle:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #101112;
+}
+
+/* Rules Column Drag & Drop states */
+.rules-column {
+  position: relative;
+}
+.rules-column.column-dragging {
+  opacity: 0.4 !important;
+  cursor: grabbing !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+}
+.rules-column.drag-over-left::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: 4px;
+  background: var(--accent-primary, #266DF0);
+  border-radius: 4px;
+  z-index: 10;
+  box-shadow: 0 0 8px rgba(38, 109, 240, 0.4);
+}
+.rules-column.drag-over-right::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -8px;
+  width: 4px;
+  background: var(--accent-primary, #266DF0);
+  border-radius: 4px;
+  z-index: 10;
+  box-shadow: 0 0 8px rgba(38, 109, 240, 0.4);
+}
 
 .rules-column-body {
   min-height: 48px;
