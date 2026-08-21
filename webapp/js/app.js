@@ -64,9 +64,14 @@
     add: '/add-accounts',
     settings: '/settings'
   });
-  const ROUTE_TABS = Object.freeze(Object.fromEntries(
-    Object.entries(TAB_ROUTES).map(([tab, route]) => [route, tab])
-  ));
+  const ROUTE_TABS = Object.freeze({
+    ...Object.fromEntries(Object.entries(TAB_ROUTES).map(([tab, route]) => [route, tab])),
+    '/fb-accounts': 'fb_accounts',
+    '/fb_accounts': 'fb_accounts',
+    '/add': 'add',
+    '/main': 'home',
+    '/dashboard': 'home'
+  });
   const LEGACY_ROUTE_TABS = Object.freeze({ '/': 'home', '/dashboard': 'home' });
   const TAB_PAGE_TITLES = Object.freeze({
     home: 'Главная — Buyerly',
@@ -291,7 +296,7 @@
 
     const parts = trimmed.split('/');
 
-    // Paths with workspace slug e.g. /buyerly/groups/1 or /buyerly/accounts or /buyerly/collection/1
+    // Paths with workspace slug e.g. /buyerly/groups/1 or /buyerly/accounts or /buyerly/facebook-accounts
     if (parts.length >= 2) {
       const slug = parts[0];
       const segment = parts[1];
@@ -313,8 +318,11 @@
         return { workspaceSlug: slug, tab: 'accounts', groupFilter: subSegment };
       }
 
-      const tab = Object.hasOwn(TAB_ROUTES, segment) ? segment : 'home';
-      return { workspaceSlug: slug, tab: tab, groupFilter: groupFilter };
+      const segmentTab = ROUTE_TABS['/' + segment] || (Object.hasOwn(TAB_ROUTES, segment) ? segment : null);
+      if (segmentTab) {
+        return { workspaceSlug: slug, tab: segmentTab, groupFilter: groupFilter };
+      }
+      return { workspaceSlug: slug, tab: 'home', groupFilter: groupFilter };
     }
 
     // Paths without workspace slug e.g. /groups/1 or /accounts or /rules
@@ -332,11 +340,12 @@
       if (candidate === 'chats') {
         return { workspaceSlug: '', tab: 'home', groupFilter: 'all' };
       }
-      if (Object.hasOwn(TAB_ROUTES, candidate)) {
-        return { workspaceSlug: '', tab: candidate, groupFilter: groupFilter };
+      const candidateTab = ROUTE_TABS['/' + candidate] || (Object.hasOwn(TAB_ROUTES, candidate) ? candidate : null);
+      if (candidateTab) {
+        return { workspaceSlug: '', tab: candidateTab, groupFilter: groupFilter };
       }
-      if (ROUTE_TABS['/' + candidate] || LEGACY_ROUTE_TABS['/' + candidate]) {
-        return { workspaceSlug: '', tab: ROUTE_TABS['/' + candidate] || LEGACY_ROUTE_TABS['/' + candidate], groupFilter: groupFilter };
+      if (LEGACY_ROUTE_TABS['/' + candidate]) {
+        return { workspaceSlug: '', tab: LEGACY_ROUTE_TABS['/' + candidate], groupFilter: groupFilter };
       }
       return { workspaceSlug: candidate, tab: 'home', groupFilter: groupFilter };
     }
@@ -359,7 +368,7 @@
     if (path === '/' || path === '/sign-in' || path === '/login') return true;
     if (ROUTE_TABS[path] || LEGACY_ROUTE_TABS[path]) return true;
     const parsed = parsePathLocation(pathname);
-    return Boolean(parsed.tab && Object.hasOwn(TAB_ROUTES, parsed.tab));
+    return Boolean(parsed.tab && (Object.hasOwn(TAB_ROUTES, parsed.tab) || ROUTE_TABS['/' + parsed.tab]));
   }
 
   function rememberReturnRoute(pathname = window.location.pathname, search = window.location.search) {
@@ -380,18 +389,25 @@
   }
 
   function syncBrowserRoute(tab, method = 'push') {
+    if (method === 'none') return;
     try {
+      const historyFn = method === 'replace' ? 'replaceState' : 'pushState';
       const slug = state.activeWorkspace ? state.activeWorkspace.slug : '';
-      let route = `/${tab}`;
+      const tabPath = (TAB_ROUTES[tab] || `/${tab}`).replace(/^\//, '');
+      let route = `/${tabPath}`;
       if (slug) {
         if (tab === 'accounts' && state.accountGroupFilter && state.accountGroupFilter !== 'all') {
           route = `/${slug}/groups/${encodeURIComponent(state.accountGroupFilter)}`;
         } else {
-          route = `/${slug}/${tab}`;
+          route = `/${slug}/${tabPath}`;
         }
       }
-      window.history[method]({ tab: tab, workspace: slug, groupFilter: state.accountGroupFilter || 'all' }, '', route);
-    } catch (e) {}
+      if (typeof window.history[historyFn] === 'function') {
+        window.history[historyFn]({ tab: tab, workspace: slug, groupFilter: state.accountGroupFilter || 'all' }, '', route);
+      }
+    } catch (e) {
+      console.warn('syncBrowserRoute error:', e);
+    }
   }
 
   window.updateSidebarActiveState = function () {
@@ -7009,6 +7025,7 @@
     const telegramInitData = getTelegramInitData();
 
     if (!authToken && !telegramInitData) {
+      rememberReturnRoute();
       // Immediate clean display of login screen
       const loginScreen = document.getElementById('loginScreen');
       const appEl = document.getElementById('app');

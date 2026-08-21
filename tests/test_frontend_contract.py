@@ -138,8 +138,12 @@ class TestFrontendRuleContract(unittest.TestCase):
             "historyMode: 'replace'",
             "historyMode: 'none'",
             "btn.setAttribute('aria-current', 'page')",
+            "pushState",
+            "replaceState",
         ):
             self.assertIn(contract, self.script)
+
+        self.assertNotIn("window.history[method]", self.script)
 
         for route in ('accounts', 'rules', 'summary', 'logs', 'add-accounts', 'settings'):
             self.assertIn(f'@app.get("/{route}")', self.server)
