@@ -1900,8 +1900,23 @@
 
     const target = event.currentTarget;
     const rect = target.getBoundingClientRect();
-    popover.style.left = `${Math.max(10, rect.left)}px`;
-    popover.style.top = `${Math.max(10, rect.top - 240)}px`;
+    const popoverWidth = 180;
+    const popoverHeight = isNumeric ? 260 : 190;
+
+    // Position Popover precisely above or below the target button
+    let left = rect.left;
+    if (left + popoverWidth > window.innerWidth - 10) {
+      left = window.innerWidth - popoverWidth - 10;
+    }
+    if (left < 10) left = 10;
+
+    let top = rect.top - popoverHeight - 6;
+    if (top < 10) {
+      top = rect.bottom + 6;
+    }
+
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
     popover.classList.remove('hidden');
 
     const closeHandler = () => {
