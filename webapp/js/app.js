@@ -2788,35 +2788,28 @@
            data-group-id="${groupId !== null ? groupId : ''}"
            ondragstart="window.onRuleDragStart(event, ${p.id}, ${groupId !== null ? groupId : 'null'})"
            ondragend="window.onRuleDragEnd(event)"
-           onclick="window.editPresetFromTab(${p.id})">
+           onclick="window.openRuleRecordPage(${p.id})">
         <div class="rule-card-top">
-          <div class="rule-card-title-wrap">
-            <div class="rule-card-checkbox ${isSelected ? 'selected' : ''}" onclick="event.stopPropagation(); window.toggleSelectRule(${p.id})" title="${isSelected ? 'Снять выделение' : 'Выбрать правило'}">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
-            </div>
-            <div class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+          <div class="rule-card-top-left">
+            <span class="rule-card-avatar">⚡</span>
+            <span class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
           </div>
           <div class="rule-card-top-right">
-            <button type="button" class="rule-card-edit-btn" onclick="event.stopPropagation(); window.openEditRuleModal(${p.id})" title="Редактировать параметры правила">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            </button>
             <span class="rule-action-badge ${act.class}">${act.label}${stepInfo}</span>
           </div>
         </div>
         
         <div class="rule-card-meta-bar">
           <div class="rule-card-meta-left" title="${escapeHtml(conditionsSummary || 'Без условий')}">
-            <span class="rule-conditions-inline">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              <span class="rule-conditions-text">${escapeHtml(conditionsSummary || 'Без условий')}</span>
-            </span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span class="rule-conditions-text">${escapeHtml(conditionsSummary || 'Без условий')}</span>
           </div>
           <div class="rule-card-meta-right">
+            ${linkedCount > 0 ? `<span class="rule-link-badge active" title="Привязано кабинетов">🔗 ${linkedCount}</span>` : ''}
             <span class="rule-meta-tag" title="Интервал проверки">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               ${p.check_interval_minutes || 5}м
             </span>
-            ${linkedCount > 0 ? `<span class="rule-link-badge active" title="Привязано кабинетов">🔗 ${linkedCount}</span>` : ''}
           </div>
         </div>
       </div>
@@ -3266,6 +3259,11 @@
                ondrop="window.onRuleColumnDrop(event, null)">
             ${ungroupedCardsHtml || '<div class="rules-column-empty">Нет одиночных правил</div>'}
           </div>
+          <div class="rules-column-footer">
+            <button type="button" class="rules-column-add-calc-btn" onclick="window.openCreateRuleFromTab()">
+              <span>+ Add calculation</span>
+            </button>
+          </div>
         </div>
       `;
     }
@@ -3349,6 +3347,11 @@
                ondrop="window.onRuleColumnDrop(event, ${group.id})">
             ${cardsHtml || '<div class="rules-column-empty">Нет правил</div>'}
           </div>
+          <div class="rules-column-footer">
+            <button type="button" class="rules-column-add-calc-btn" onclick="window.openCreateRuleFromTab()">
+              <span>+ Add calculation</span>
+            </button>
+          </div>
         </div>
       `;
     }).join('');
@@ -3422,8 +3425,17 @@
 
     setTimeout(() => {
       input.focus();
-      input.select();
+      const len = input.value.length;
+      input.setSelectionRange(len, len);
     }, 50);
+  };
+
+  window.hideCurrentGroupFromPopover = function () {
+    if (!activePopoverGroupId) return;
+    state.collapsedRuleGroups.add(activePopoverGroupId);
+    localStorage.setItem('buyerly_collapsed_rule_groups', JSON.stringify([...state.collapsedRuleGroups]));
+    document.getElementById('ruleGroupMenuPopover')?.classList.add('hidden');
+    renderRulesTab();
   };
 
   window.saveGroupNameFromPopover = async function () {
