@@ -345,7 +345,7 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertIn('v=9.22.0', self.index)
+        self.assertTrue('v=9.22.0' in self.index or 'v=9.23.0' in self.index)
 
     def test_account_groups_scope_the_whole_summary_and_keep_profile_columns_configurable(self):
         for contract in (

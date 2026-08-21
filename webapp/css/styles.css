@@ -4399,7 +4399,8 @@ input[type="text"].attio-popover-name-input:focus,
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
-.attio-selected-pill {
+.attio-selected-pill,
+.selected-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -4414,7 +4415,8 @@ input[type="text"].attio-popover-name-input:focus,
   user-select: none;
   transition: background-color 0.15s, border-color 0.15s;
 }
-.attio-selected-pill:hover {
+.attio-selected-pill:hover,
+.selected-badge:hover {
   background: #EEEFF1;
   border-color: #D9DADE;
 }
