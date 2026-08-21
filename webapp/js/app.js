@@ -375,6 +375,11 @@
       const route = sessionStorage.getItem('buyerly_return_route') || '';
       sessionStorage.removeItem('buyerly_return_route');
       return route;
+    } catch (e) {
+      return '';
+    }
+  }
+
   function syncBrowserRoute(tab, method = 'push') {
     const slug = state.activeWorkspace ? state.activeWorkspace.slug : '';
     let route = `/${tab}`;
