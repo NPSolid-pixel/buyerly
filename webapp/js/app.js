@@ -2088,6 +2088,19 @@
     };
     const act = actionBadgeMap[p.action] || { label: p.action, class: '' };
     const condList = p.conditions || [];
+    const metricLabels = {
+      'spend': 'Спенд', 'cpl': 'CPL', 'cpreg': 'CPReg', 'cpp': 'CPP',
+      'legacy_cpa': 'CPA', 'leads': 'Лиды', 'registrations': 'Реги',
+      'purchases': 'Покупки', 'ctr': 'CTR', 'cpc': 'CPC'
+    };
+    const opLabels = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
+
+    const conditionsSummary = condList.map(c => {
+      const mLabel = metricLabels[c.metric] || c.metric;
+      const op = opLabels[c.operator] || c.operator;
+      const unit = (c.metric === 'leads' || c.metric === 'registrations' || c.metric === 'purchases') ? ' шт' : (c.metric === 'ctr' ? '%' : ' вал.');
+      return `${mLabel} ${op} ${Number(c.value || 0)}${unit}`;
+    }).join(' · ');
 
     let linkedCount = 0;
     (state.accounts || []).forEach(acc => {
@@ -2112,17 +2125,8 @@
            onclick="window.editPresetFromTab(${p.id})">
         <div class="rule-card-top">
           <div class="rule-card-title-wrap">
-            <div class="rule-avatar-checkbox ${isSelected ? 'selected' : ''}" onclick="event.stopPropagation(); window.toggleSelectRule(${p.id})" title="${isSelected ? 'Снять выделение' : 'Выбрать правило'}">
-              ${isSelected ? `
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><polyline points="20 6 9 17 4 12"/></svg>
-              ` : `
-                <span class="rule-avatar-circle">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                </span>
-                <span class="rule-hover-check">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-                </span>
-              `}
+            <div class="rule-card-checkbox ${isSelected ? 'selected' : ''}" onclick="event.stopPropagation(); window.toggleSelectRule(${p.id})" title="${isSelected ? 'Снять выделение' : 'Выбрать правило'}">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
             <div class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
           </div>
@@ -2130,10 +2134,11 @@
         </div>
         
         <div class="rule-card-meta-bar">
-          <div class="rule-card-meta-left">
-            <span class="rule-attio-icon-btn" title="Документация и условия"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-            <span class="rule-attio-icon-btn" title="Условия (${condList.length})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
-            <span class="rule-attio-icon-btn" title="Логи и уведомления"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="rule-card-meta-left" title="${escapeHtml(conditionsSummary || 'Без условий')}">
+            <span class="rule-conditions-inline">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span class="rule-conditions-text">${escapeHtml(conditionsSummary || 'Без условий')}</span>
+            </span>
           </div>
           <div class="rule-card-meta-right">
             <span class="rule-meta-tag" title="Интервал проверки">

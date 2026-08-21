@@ -1927,12 +1927,13 @@ input:checked + .slider:before { transform: translateX(16px); }
 
 /* Kanban Column */
 .rules-column {
-  width: 268px;
-  min-width: 268px;
-  max-width: 268px;
+  width: 268px !important;
+  min-width: 268px !important;
+  max-width: 268px !important;
   flex-shrink: 0;
-  background: #F6F7F7;
-  border: none;
+  background: #F6F7F7 !important;
+  border: none !important;
+  box-shadow: none !important;
   border-radius: 16px;
   display: flex;
   flex-direction: column;
@@ -1940,13 +1941,18 @@ input:checked + .slider:before { transform: translateX(16px); }
   padding: 8px;
   transition: background var(--transition-fast);
 }
+.rules-column:hover {
+  border: none !important;
+  box-shadow: none !important;
+}
 .rules-column-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 4px 6px;
   height: 36px;
-  background: transparent;
+  background: transparent !important;
+  border-bottom: none !important;
   border-radius: 10px;
 }
 .rules-column-title-wrap {
@@ -2025,6 +2031,7 @@ input:checked + .slider:before { transform: translateX(16px); }
   gap: 6px;
   flex: 1;
   border-radius: 10px;
+  border: none !important;
   transition: background 0.15s ease, outline 0.15s ease;
 }
 .rules-column-body.drop-target-active {
@@ -2115,44 +2122,26 @@ input:checked + .slider:before { transform: translateX(16px); }
   flex: 1;
 }
 
-/* Avatar / Checkbox Circle in Card */
-.rule-avatar-checkbox {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #F8F9FA;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+/* Clean Square Checkbox in Card */
+.rule-card-checkbox {
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(0, 0, 0, 0.2);
+  background: #FFFFFF;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: transparent;
   transition: all 0.15s ease;
-  position: relative;
 }
-.rule-avatar-checkbox .rule-avatar-circle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.rule-avatar-checkbox .rule-hover-check {
-  display: none;
-}
-.rule-avatar-checkbox:hover {
-  background: #F5A300;
+.rule-card-checkbox:hover {
   border-color: #F5A300;
-  color: #FFFFFF;
 }
-.rule-avatar-checkbox:hover .rule-avatar-circle {
-  display: none;
-}
-.rule-avatar-checkbox:hover .rule-hover-check {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.rule-avatar-checkbox.selected {
+.rule-card-checkbox.selected {
   background: #F5A300;
   border-color: #F5A300;
   color: #FFFFFF;
@@ -2210,28 +2199,34 @@ input:checked + .slider:before { transform: translateX(16px); }
   justify-content: space-between;
   gap: 6px;
   font-size: 11.5px;
-  color: #898A8D;
+  color: #505155;
   padding-top: 0;
   border-top: none;
 }
 .rule-card-meta-left {
   display: flex;
   align-items: center;
-  gap: 4px;
+  min-width: 0;
+  flex: 1;
 }
-.rule-attio-icon-btn {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
+.rule-conditions-inline {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  color: #898A8D;
-  border-radius: 4px;
-  transition: all 0.15s ease;
+  gap: 4px;
+  font-size: 11.5px;
+  color: #505155;
+  max-width: 175px;
+  overflow: hidden;
+  white-space: nowrap;
 }
-.rule-attio-icon-btn:hover {
-  color: #101112;
-  background: rgba(0, 0, 0, 0.05);
+.rule-conditions-inline svg {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+.rule-conditions-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rule-meta-tag {
   display: inline-flex;
@@ -2239,6 +2234,7 @@ input:checked + .slider:before { transform: translateX(16px); }
   gap: 3.5px;
   font-size: 11.5px;
   color: #898A8D;
+  flex-shrink: 0;
 }
 .rule-card-meta-right {
   display: flex;
