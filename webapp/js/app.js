@@ -2558,7 +2558,7 @@
 
     emptyEl.classList.add('hidden');
 
-    const defaultDotColors = ['dot-purple', 'dot-blue', 'dot-emerald', 'dot-amber', 'dot-orange', 'dot-indigo', 'dot-rose'];
+    const defaultDotColors = ['dot-purple', 'dot-blue', 'dot-emerald', 'dot-amber', 'dot-orange', 'dot-cyan', 'dot-magenta', 'dot-rose', 'dot-lime', 'dot-yellow', 'dot-red', 'dot-gray'];
     const allGroupedPresetIds = new Set();
     state.ruleGroups.forEach(g => {
       (g.preset_ids || []).forEach(id => allGroupedPresetIds.add(id));
@@ -2697,6 +2697,12 @@
     const currentColor = state.ruleGroupColors[groupId] || 'purple';
     dot.className = `attio-popover-dot swatch-${currentColor}`;
 
+    if (palette) {
+      palette.querySelectorAll('.color-swatch').forEach(swatch => {
+        swatch.classList.toggle('active', swatch.dataset.color === currentColor);
+      });
+    }
+
     if (collapseText) {
       collapseText.textContent = state.collapsedRuleGroups.has(groupId) ? 'Развернуть колонку' : 'Свернуть колонку';
     }
@@ -2747,7 +2753,10 @@
   };
 
   window.toggleGroupColorPalette = function (event) {
-    if (event) event.stopPropagation();
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
     document.getElementById('ruleGroupColorPalette')?.classList.toggle('hidden');
   };
 
@@ -2757,7 +2766,13 @@
     localStorage.setItem('buyerly_rule_group_colors', JSON.stringify(state.ruleGroupColors));
     const dot = document.getElementById('ruleGroupPopoverDot');
     if (dot) dot.className = `attio-popover-dot swatch-${colorName}`;
-    document.getElementById('ruleGroupColorPalette')?.classList.add('hidden');
+    const palette = document.getElementById('ruleGroupColorPalette');
+    if (palette) {
+      palette.querySelectorAll('.color-swatch').forEach(swatch => {
+        swatch.classList.toggle('active', swatch.dataset.color === colorName);
+      });
+      palette.classList.add('hidden');
+    }
     renderRulesTab();
   };
 
@@ -2792,6 +2807,11 @@
     activeNewColumnColor = 'purple';
     dot.className = 'attio-popover-dot swatch-purple';
     palette?.classList.add('hidden');
+    if (palette) {
+      palette.querySelectorAll('.color-swatch').forEach(swatch => {
+        swatch.classList.toggle('active', swatch.dataset.color === 'purple');
+      });
+    }
     input.value = '';
 
     const target = event.currentTarget || event.target;
@@ -2808,7 +2828,10 @@
   };
 
   window.toggleNewColumnColorPalette = function (event) {
-    if (event) event.stopPropagation();
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
     document.getElementById('newColumnColorPalette')?.classList.toggle('hidden');
   };
 
@@ -2816,7 +2839,13 @@
     activeNewColumnColor = colorName;
     const dot = document.getElementById('newColumnPopoverDot');
     if (dot) dot.className = `attio-popover-dot swatch-${colorName}`;
-    document.getElementById('newColumnColorPalette')?.classList.add('hidden');
+    const palette = document.getElementById('newColumnColorPalette');
+    if (palette) {
+      palette.querySelectorAll('.color-swatch').forEach(swatch => {
+        swatch.classList.toggle('active', swatch.dataset.color === colorName);
+      });
+      palette.classList.add('hidden');
+    }
   };
 
   window.onNewColumnNameKeydown = function (event) {
@@ -7389,6 +7418,20 @@
 
   // Global Outside Click listener for Attio popovers
   document.addEventListener('click', (e) => {
+    // Close color palettes if clicking outside them
+    const groupPalette = document.getElementById('ruleGroupColorPalette');
+    if (groupPalette && !groupPalette.classList.contains('hidden')) {
+      if (!groupPalette.contains(e.target) && !e.target.closest('#ruleGroupPopoverDotBtn')) {
+        groupPalette.classList.add('hidden');
+      }
+    }
+    const addColumnPalette = document.getElementById('newColumnColorPalette');
+    if (addColumnPalette && !addColumnPalette.classList.contains('hidden')) {
+      if (!addColumnPalette.contains(e.target) && !e.target.closest('#newColumnPopoverDotBtn')) {
+        addColumnPalette.classList.add('hidden');
+      }
+    }
+
     const groupPopover = document.getElementById('ruleGroupMenuPopover');
     if (groupPopover && !groupPopover.classList.contains('hidden')) {
       if (!groupPopover.contains(e.target) && !e.target.closest('.rules-column-title-wrap') && !e.target.closest('.rules-column-btn')) {
@@ -7418,6 +7461,8 @@
       if (chooseModal && !chooseModal.classList.contains('hidden')) {
         window.closeModal('modalChooseRule');
       }
+      document.getElementById('ruleGroupColorPalette')?.classList.add('hidden');
+      document.getElementById('newColumnColorPalette')?.classList.add('hidden');
       const groupPopover = document.getElementById('ruleGroupMenuPopover');
       if (groupPopover && !groupPopover.classList.contains('hidden')) {
         groupPopover.classList.add('hidden');

@@ -1891,27 +1891,33 @@
     <div id="ruleGroupMenuPopover" class="attio-popover hidden" role="menu">
       <input type="hidden" id="popoverGroupId" value="">
       <div class="attio-popover-header-row">
-        <span class="attio-popover-dot swatch-purple" id="ruleGroupPopoverDot" title="Выбрать цвет" onclick="window.toggleGroupColorPalette(event)"></span>
-        <input type="text" id="ruleGroupPopoverNameInput" class="attio-popover-name-input" placeholder="Название группы" maxlength="120" onkeydown="window.onGroupNameInputKeydown(event)" onblur="window.saveGroupNameFromPopover()">
+        <button type="button" class="attio-popover-dot-btn" id="ruleGroupPopoverDotBtn" title="Выбрать цвет" onclick="window.toggleGroupColorPalette(event)">
+          <span class="attio-popover-dot swatch-purple" id="ruleGroupPopoverDot"></span>
+        </button>
+        <input type="text" id="ruleGroupPopoverNameInput" class="attio-popover-name-input" placeholder="Название группы" maxlength="120" onkeydown="window.onGroupNameInputKeydown(event)" onblur="window.saveGroupNameFromPopover()" autocomplete="off" spellcheck="false">
       </div>
-      <div id="ruleGroupColorPalette" class="attio-color-palette hidden">
-        <button type="button" class="color-swatch swatch-purple" data-color="purple" title="Фиолетовый" onclick="window.selectGroupColor('purple')"></button>
-        <button type="button" class="color-swatch swatch-indigo" data-color="indigo" title="Индиго" onclick="window.selectGroupColor('indigo')"></button>
-        <button type="button" class="color-swatch swatch-blue" data-color="blue" title="Синий" onclick="window.selectGroupColor('blue')"></button>
-        <button type="button" class="color-swatch swatch-emerald" data-color="emerald" title="Изумрудный" onclick="window.selectGroupColor('emerald')"></button>
-        <button type="button" class="color-swatch swatch-amber" data-color="amber" title="Жёлтый" onclick="window.selectGroupColor('amber')"></button>
+      <div id="ruleGroupColorPalette" class="attio-color-palette hidden" onclick="event.stopPropagation()">
+        <button type="button" class="color-swatch swatch-red" data-color="red" title="Красный" onclick="window.selectGroupColor('red')"></button>
         <button type="button" class="color-swatch swatch-orange" data-color="orange" title="Оранжевый" onclick="window.selectGroupColor('orange')"></button>
-        <button type="button" class="color-swatch swatch-rose" data-color="rose" title="Розовый" onclick="window.selectGroupColor('rose')"></button>
+        <button type="button" class="color-swatch swatch-amber" data-color="amber" title="Янтарный" onclick="window.selectGroupColor('amber')"></button>
+        <button type="button" class="color-swatch swatch-lime" data-color="lime" title="Лаймовый" onclick="window.selectGroupColor('lime')"></button>
+        <button type="button" class="color-swatch swatch-emerald" data-color="emerald" title="Зелёный" onclick="window.selectGroupColor('emerald')"></button>
+        <button type="button" class="color-swatch swatch-cyan" data-color="cyan" title="Голубой" onclick="window.selectGroupColor('cyan')"></button>
+        <button type="button" class="color-swatch swatch-blue" data-color="blue" title="Синий" onclick="window.selectGroupColor('blue')"></button>
+        <button type="button" class="color-swatch swatch-magenta" data-color="magenta" title="Пурпурный" onclick="window.selectGroupColor('magenta')"></button>
+        <button type="button" class="color-swatch swatch-purple" data-color="purple" title="Фиолетовый" onclick="window.selectGroupColor('purple')"></button>
+        <button type="button" class="color-swatch swatch-pink" data-color="pink" title="Розовый" onclick="window.selectGroupColor('pink')"></button>
+        <button type="button" class="color-swatch swatch-yellow" data-color="yellow" title="Жёлтый" onclick="window.selectGroupColor('yellow')"></button>
         <button type="button" class="color-swatch swatch-gray" data-color="gray" title="Серый" onclick="window.selectGroupColor('gray')"></button>
       </div>
       <div class="attio-popover-divider"></div>
       <div class="attio-popover-actions">
         <button type="button" class="attio-popover-item" onclick="window.toggleCollapseCurrentGroup()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2.5"/><path d="M9.5 5.5L7 8l2.5 2.5"/></svg>
           <span id="popoverCollapseText">Свернуть колонку</span>
         </button>
         <button type="button" class="attio-popover-item attio-popover-item-danger" onclick="window.deleteCurrentGroupFromPopover()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h11M5.5 4.5V3a1 1 0 011-1h3a1 1 0 011 1v1.5M12 4.5v8.5a1.5 1.5 0 01-1.5 1.5H5.5A1.5 1.5 0 014 13V4.5"/><path d="M6.5 7.5v4M9.5 7.5v4"/></svg>
           <span>Удалить группу</span>
         </button>
       </div>
@@ -1920,19 +1926,26 @@
     <!-- Popover: Quick Add New Column / Group (Photo 3) -->
     <div id="ruleAddColumnPopover" class="attio-popover hidden">
       <div class="attio-popover-header-row">
-        <span class="attio-popover-dot swatch-purple" id="newColumnPopoverDot" title="Выбрать цвет" onclick="window.toggleNewColumnColorPalette(event)"></span>
-        <input type="text" id="newColumnPopoverNameInput" class="attio-popover-name-input" placeholder="Название группы..." maxlength="120" onkeydown="window.onNewColumnNameKeydown(event)">
+        <button type="button" class="attio-popover-dot-btn" id="newColumnPopoverDotBtn" title="Выбрать цвет" onclick="window.toggleNewColumnColorPalette(event)">
+          <span class="attio-popover-dot swatch-purple" id="newColumnPopoverDot"></span>
+        </button>
+        <input type="text" id="newColumnPopoverNameInput" class="attio-popover-name-input" placeholder="Название группы..." maxlength="120" onkeydown="window.onNewColumnNameKeydown(event)" autocomplete="off" spellcheck="false">
       </div>
-      <div id="newColumnColorPalette" class="attio-color-palette hidden">
-        <button type="button" class="color-swatch swatch-purple" data-color="purple" onclick="window.selectNewColumnColor('purple')"></button>
-        <button type="button" class="color-swatch swatch-indigo" data-color="indigo" onclick="window.selectNewColumnColor('indigo')"></button>
-        <button type="button" class="color-swatch swatch-blue" data-color="blue" onclick="window.selectNewColumnColor('blue')"></button>
-        <button type="button" class="color-swatch swatch-emerald" data-color="emerald" onclick="window.selectNewColumnColor('emerald')"></button>
-        <button type="button" class="color-swatch swatch-amber" data-color="amber" onclick="window.selectNewColumnColor('amber')"></button>
-        <button type="button" class="color-swatch swatch-orange" data-color="orange" onclick="window.selectNewColumnColor('orange')"></button>
-        <button type="button" class="color-swatch swatch-rose" data-color="rose" onclick="window.selectNewColumnColor('rose')"></button>
-        <button type="button" class="color-swatch swatch-gray" data-color="gray" onclick="window.selectNewColumnColor('gray')"></button>
+      <div id="newColumnColorPalette" class="attio-color-palette hidden" onclick="event.stopPropagation()">
+        <button type="button" class="color-swatch swatch-red" data-color="red" title="Красный" onclick="window.selectNewColumnColor('red')"></button>
+        <button type="button" class="color-swatch swatch-orange" data-color="orange" title="Оранжевый" onclick="window.selectNewColumnColor('orange')"></button>
+        <button type="button" class="color-swatch swatch-amber" data-color="amber" title="Янтарный" onclick="window.selectNewColumnColor('amber')"></button>
+        <button type="button" class="color-swatch swatch-lime" data-color="lime" title="Лаймовый" onclick="window.selectNewColumnColor('lime')"></button>
+        <button type="button" class="color-swatch swatch-emerald" data-color="emerald" title="Зелёный" onclick="window.selectNewColumnColor('emerald')"></button>
+        <button type="button" class="color-swatch swatch-cyan" data-color="cyan" title="Голубой" onclick="window.selectNewColumnColor('cyan')"></button>
+        <button type="button" class="color-swatch swatch-blue" data-color="blue" title="Синий" onclick="window.selectNewColumnColor('blue')"></button>
+        <button type="button" class="color-swatch swatch-magenta" data-color="magenta" title="Пурпурный" onclick="window.selectNewColumnColor('magenta')"></button>
+        <button type="button" class="color-swatch swatch-purple" data-color="purple" title="Фиолетовый" onclick="window.selectNewColumnColor('purple')"></button>
+        <button type="button" class="color-swatch swatch-pink" data-color="pink" title="Розовый" onclick="window.selectNewColumnColor('pink')"></button>
+        <button type="button" class="color-swatch swatch-yellow" data-color="yellow" title="Жёлтый" onclick="window.selectNewColumnColor('yellow')"></button>
+        <button type="button" class="color-swatch swatch-gray" data-color="gray" title="Серый" onclick="window.selectNewColumnColor('gray')"></button>
       </div>
+      <div class="attio-popover-divider"></div>
       <div class="attio-popover-footer">
         <button type="button" class="btn btn-secondary btn-sm" onclick="window.closeAddColumnPopover()">Отмена</button>
         <button type="button" class="btn btn-primary btn-sm" onclick="window.submitNewColumnFromPopover()">Создать группу ↵</button>
