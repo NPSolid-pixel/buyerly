@@ -1312,8 +1312,8 @@
       label: 'Кабинет / Имя',
       type: 'entity',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>`,
-      minWidth: 200,
-      defaultWidth: 260,
+      minWidth: 100,
+      defaultWidth: 280,
       sticky: true,
       sortable: true
     },
@@ -1322,7 +1322,7 @@
       label: 'Статус Meta',
       type: 'status',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>`,
-      minWidth: 110,
+      minWidth: 50,
       defaultWidth: 130,
       sortable: true
     },
@@ -1331,8 +1331,8 @@
       label: 'Заметка',
       type: 'text',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>`,
-      minWidth: 120,
-      defaultWidth: 180,
+      minWidth: 50,
+      defaultWidth: 130,
       sortable: true
     },
     spend: {
@@ -1340,7 +1340,7 @@
       label: 'Spend (Сегодня)',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      minWidth: 100,
+      minWidth: 50,
       defaultWidth: 130,
       sortable: true
     },
@@ -1349,8 +1349,8 @@
       label: 'Лиды',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>`,
-      minWidth: 70,
-      defaultWidth: 85,
+      minWidth: 50,
+      defaultWidth: 130,
       sortable: true
     },
     cpl: {
@@ -1358,8 +1358,8 @@
       label: 'CPL',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      minWidth: 80,
-      defaultWidth: 95,
+      minWidth: 50,
+      defaultWidth: 130,
       sortable: true
     },
     automation: {
@@ -1367,7 +1367,7 @@
       label: 'Автоматика',
       type: 'toggle',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
-      minWidth: 110,
+      minWidth: 50,
       defaultWidth: 130,
       sortable: true
     },
@@ -1376,8 +1376,8 @@
       label: 'Правила',
       type: 'rules',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`,
-      minWidth: 120,
-      defaultWidth: 160,
+      minWidth: 50,
+      defaultWidth: 130,
       sortable: true
     },
     actions: {
@@ -1385,8 +1385,8 @@
       label: 'Действия',
       type: 'actions',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>`,
-      minWidth: 100,
-      defaultWidth: 110,
+      minWidth: 50,
+      defaultWidth: 130,
       sortable: false
     }
   };
@@ -1790,6 +1790,7 @@
     const bar = document.getElementById('accountBulkActionBar');
     const countEl = document.getElementById('bulkSelectedCount');
     const selectAllCb = document.getElementById('selectAllAccountsCheckbox');
+    const thName = document.getElementById('th-col-name');
     if (!bar) return;
 
     const count = state.selectedAccounts.size;
@@ -1803,9 +1804,23 @@
       if (moreDd) moreDd.classList.add('hidden');
     }
 
+    if (thName) {
+      thName.classList.toggle('has-selected', count > 0);
+    }
+
     if (selectAllCb) {
-      const filteredCount = state.accounts.length;
-      selectAllCb.checked = (filteredCount > 0 && count >= filteredCount);
+      const visibleCheckboxes = document.querySelectorAll('.attio-row-checkbox');
+      const filteredCount = visibleCheckboxes.length;
+      if (count === 0 || filteredCount === 0) {
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = false;
+      } else if (count >= filteredCount) {
+        selectAllCb.checked = true;
+        selectAllCb.indeterminate = false;
+      } else {
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = true;
+      }
     }
   }
 
@@ -1989,12 +2004,12 @@
   // ==========================================================
   function renderAccountCell(acc, colId, isSelected, displayName, metaState, noteText, spendVal, leadsVal, cplVal, activeRules, autoPillClass, autoPillText) {
     const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
-    const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 120;
+    const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
     
     switch (colId) {
       case 'name':
         return `
-          <td class="attio-td sticky-col" style="width: ${width}px; min-width: ${colDef.minWidth || 200}px;">
+          <td class="attio-td sticky-col" style="width: ${width}px; min-width: ${colDef.minWidth || 100}px;">
             <div class="cell-entity-wrapper">
               <div class="cell-icon-container">
                 <div class="cell-entity-icon rk-icon" title="Рекламный кабинет">
@@ -2006,7 +2021,7 @@
               </div>
               <div style="min-width: 0; overflow: hidden; flex: 1;">
                 <div class="account-text-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
-                <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID" style="cursor:pointer;">
+                <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID" style="cursor:pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                   ${escapeHtml(acc.account_id)} · <span class="mono">${escapeHtml(acc.currency || 'USD')}</span>
                 </div>
               </div>
@@ -2017,16 +2032,16 @@
         const metaPillClass = metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red');
         return `
           <td class="attio-td" style="width: ${width}px;">
-            <span class="status-pill ${metaPillClass}">
+            <span class="status-pill ${metaPillClass}" style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
               <span class="status-dot"></span>
-              ${escapeHtml(metaState.label)}
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(metaState.label)}</span>
             </span>
           </td>
         `;
       case 'note':
         return `
-          <td class="attio-td" style="width: ${width}px; max-width: ${width}px; overflow: hidden; text-overflow: ellipsis;">
-            <span style="color: ${noteText ? 'var(--text-primary)' : 'var(--text-muted)'}; font-size: 12px;">
+          <td class="attio-td" style="width: ${width}px;">
+            <span style="color: ${noteText ? 'var(--text-primary)' : 'var(--text-muted)'}; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(noteText || '')}">
               ${escapeHtml(noteText || '—')}
             </span>
           </td>
@@ -2034,38 +2049,38 @@
       case 'spend':
         return `
           <td class="attio-td" style="width: ${width}px;">
-            <span class="num-bold">${escapeHtml(spendVal)}</span>
+            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(spendVal)}</span>
           </td>
         `;
       case 'leads':
         return `
           <td class="attio-td" style="width: ${width}px;">
-            <span class="num-bold">${escapeHtml(String(leadsVal))}</span>
+            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(leadsVal))}</span>
           </td>
         `;
       case 'cpl':
         return `
           <td class="attio-td" style="width: ${width}px;">
-            <span>${escapeHtml(String(cplVal))}</span>
+            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(cplVal))}</span>
           </td>
         `;
       case 'automation':
         return `
           <td class="attio-td" style="width: ${width}px;">
-            <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules('${escapeHtml(acc.account_id)}', ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit;" title="Нажмите, чтобы переключить автоматику">
+            <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules('${escapeHtml(acc.account_id)}', ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Нажмите, чтобы переключить автоматику">
               <span class="status-dot"></span>
-              ${autoPillText}
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${autoPillText}</span>
             </button>
           </td>
         `;
       case 'rules':
         return `
           <td class="attio-td" style="width: ${width}px;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span class="status-pill ${activeRules.length > 0 ? 'green' : 'amber'}" style="font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; min-width: 0;">
+              <span class="status-pill ${activeRules.length > 0 ? 'green' : 'amber'}" style="font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
                 ${activeRules.length > 0 ? `${activeRules.length} ${pluralize(activeRules.length, 'правило', 'правила', 'правил')}` : 'Без правил'}
               </span>
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAssignRuleModal('${escapeHtml(acc.account_id)}')" style="padding: 2px 7px; font-size: 11px;">
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAssignRuleModal('${escapeHtml(acc.account_id)}')" style="padding: 2px 5px; font-size: 10.5px; flex-shrink: 0;">
                 Настроить
               </button>
             </div>
@@ -2074,9 +2089,9 @@
       case 'actions':
         return `
           <td class="attio-td" style="width: ${width}px; text-align: right;">
-            <div style="display: inline-flex; align-items: center; gap: 4px;">
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" title="Изменить заметку и название" style="padding: 2px 6px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')" title="Подробнее" style="padding: 2px 7px; font-size: 11px;">Инфо</button>
+            <div style="display: inline-flex; align-items: center; gap: 4px; overflow: hidden;">
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" title="Изменить заметку и название" style="padding: 2px 6px; flex-shrink: 0;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')" title="Подробнее" style="padding: 2px 7px; font-size: 11px; flex-shrink: 0;">Инфо</button>
             </div>
           </td>
         `;
@@ -2144,26 +2159,52 @@
 
     // Build Table Headers dynamically based on state.accountsColumnOrder
     const colOrder = state.accountsColumnOrder || ['name', 'status', 'note', 'spend', 'leads', 'cpl', 'automation', 'rules', 'actions'];
+    const totalFiltered = filtered.length;
+    const selectedCount = state.selectedAccounts.size;
+    const allSelected = totalFiltered > 0 && selectedCount >= totalFiltered;
     
     const theadHtml = colOrder.map(colId => {
-      const colDef = ACCOUNTS_COLUMNS_DEF[colId] || { id: colId, label: colId, type: 'text', minWidth: 100, defaultWidth: 120 };
+      const colDef = ACCOUNTS_COLUMNS_DEF[colId] || { id: colId, label: colId, type: 'text', minWidth: 50, defaultWidth: 130 };
       const isSticky = colDef.sticky;
-      const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 120;
+      const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
       const isSorted = state.accountsSortColumn === colId;
       const sortArrow = isSorted ? (state.accountsSortDirection === 'asc' ? ' ↑' : ' ↓') : '';
 
+      if (isSticky && colId === 'name') {
+        const isHeaderSelectedClass = selectedCount > 0 ? 'has-selected' : '';
+        return `
+          <th class="attio-th sticky-col ${isHeaderSelectedClass}" 
+              data-col-id="${colId}" 
+              id="th-col-${colId}"
+              style="width: ${width}px; min-width: ${colDef.minWidth || 100}px;">
+            <div class="attio-th-content">
+              <div class="attio-th-left" onclick="${colDef.sortable ? `window.setAccountsSort('${colId}')` : ''}" style="${colDef.sortable ? 'cursor: pointer;' : ''}" title="${colDef.sortable ? 'Нажмите для сортировки' : ''}">
+                <div class="cell-icon-container" onclick="event.stopPropagation();">
+                  <div class="cell-entity-icon rk-icon" title="Рекламные кабинеты">
+                    ${colDef.iconSvg || ''}
+                  </div>
+                  <div class="cell-checkbox-wrapper">
+                    <input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" ${allSelected ? 'checked' : ''} onchange="window.toggleSelectAllAccounts(this.checked)" title="Выбрать все кабинеты">
+                  </div>
+                </div>
+                <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
+              </div>
+              <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" ondblclick="window.resetSingleColumnWidth(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
+            </div>
+          </th>
+        `;
+      }
+
       return `
-        <th class="attio-th ${isSticky ? 'sticky-col' : ''}" 
+        <th class="attio-th" 
             data-col-id="${colId}" 
-            style="width: ${width}px; min-width: ${colDef.minWidth || 70}px;"
-            ${!isSticky ? `draggable="true" ondragstart="window.handleColumnDragStart(event, '${colId}')" ondragover="window.handleColumnDragOver(event, '${colId}')" ondragleave="window.handleColumnDragLeave(event)" ondrop="window.handleColumnDrop(event, '${colId}')" ondragend="window.handleColumnDragEnd(event)"` : ''}>
+            style="width: ${width}px; min-width: ${colDef.minWidth || 50}px;"
+            draggable="true" ondragstart="window.handleColumnDragStart(event, '${colId}')" ondragover="window.handleColumnDragOver(event, '${colId}')" ondragleave="window.handleColumnDragLeave(event)" ondrop="window.handleColumnDrop(event, '${colId}')" ondragend="window.handleColumnDragEnd(event)">
           <div class="attio-th-content">
             <div class="attio-th-left" onclick="${colDef.sortable ? `window.setAccountsSort('${colId}')` : ''}" style="${colDef.sortable ? 'cursor: pointer;' : ''}" title="${colDef.sortable ? 'Нажмите для сортировки' : ''}">
-              ${!isSticky ? `
-                <span class="attio-th-drag-handle" title="Перетащите для изменения порядка">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
-                </span>
-              ` : ''}
+              <span class="attio-th-drag-handle" title="Перетащите для изменения порядка">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+              </span>
               <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
               <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
             </div>
@@ -2203,7 +2244,7 @@
     if (listEl) {
       const colgroupHtml = colOrder.map(colId => {
         const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
-        const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 120;
+        const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
         return `<col id="col-track-${colId}" style="width: ${width}px;">`;
       }).join('') + '<col class="col-track-spacer" style="width: auto;">';
 
