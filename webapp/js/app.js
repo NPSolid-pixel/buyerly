@@ -1360,7 +1360,7 @@
       category: 'account',
       type: 'entity',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>`,
-      minWidth: 100,
+      minWidth: 40,
       defaultWidth: 260,
       sticky: true,
       sortable: true
@@ -1371,7 +1371,7 @@
       category: 'account',
       type: 'status',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>`,
-      minWidth: 60,
+      minWidth: 28,
       defaultWidth: 130,
       sortable: true
     },
@@ -1381,7 +1381,7 @@
       category: 'account',
       type: 'text',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-      minWidth: 70,
+      minWidth: 28,
       defaultWidth: 160,
       sortable: true
     },
@@ -1391,7 +1391,7 @@
       category: 'traffic',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      minWidth: 60,
+      minWidth: 28,
       defaultWidth: 120,
       sortable: true
     },
@@ -1401,7 +1401,7 @@
       category: 'traffic',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 100,
       sortable: true
     },
@@ -1411,7 +1411,7 @@
       category: 'traffic',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 15l6 6m-11-4a7 7 0 110-14 7 7 0 010 14z"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 100,
       sortable: true
     },
@@ -1421,7 +1421,7 @@
       category: 'traffic',
       type: 'percent',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 95,
       sortable: true
     },
@@ -1431,7 +1431,7 @@
       category: 'conversions',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 95,
       sortable: true
     },
@@ -1441,7 +1441,7 @@
       category: 'conversions',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 100,
       sortable: true
     },
@@ -1451,7 +1451,7 @@
       category: 'conversions',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 105,
       sortable: true
     },
@@ -1461,7 +1461,7 @@
       category: 'conversions',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 105,
       sortable: true
     },
@@ -1471,7 +1471,7 @@
       category: 'conversions',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 115,
       sortable: true
     },
@@ -1481,7 +1481,7 @@
       category: 'conversions',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 105,
       sortable: true
     },
@@ -1491,7 +1491,7 @@
       category: 'account',
       type: 'toggle',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
-      minWidth: 70,
+      minWidth: 28,
       defaultWidth: 135,
       sortable: true
     },
@@ -1502,7 +1502,7 @@
       category: 'account',
       type: 'text',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 95,
       sortable: true
     },
@@ -1512,7 +1512,7 @@
       category: 'account',
       type: 'text',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>`,
-      minWidth: 70,
+      minWidth: 28,
       defaultWidth: 160,
       sortable: true
     },
@@ -1522,7 +1522,7 @@
       category: 'account',
       type: 'text',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>`,
-      minWidth: 60,
+      minWidth: 28,
       defaultWidth: 140,
       sortable: true
     },
@@ -1532,7 +1532,7 @@
       category: 'account',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
-      minWidth: 60,
+      minWidth: 28,
       defaultWidth: 130,
       sortable: true
     },
@@ -1542,7 +1542,7 @@
       category: 'account',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>`,
-      minWidth: 60,
+      minWidth: 28,
       defaultWidth: 130,
       sortable: true
     },
@@ -1552,7 +1552,7 @@
       category: 'traffic',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 110,
       sortable: true
     },
@@ -1562,7 +1562,7 @@
       category: 'traffic',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 110,
       sortable: true
     },
@@ -1572,7 +1572,7 @@
       category: 'traffic',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 95,
       sortable: true
     },
@@ -1582,7 +1582,7 @@
       category: 'traffic',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 15l6 6m-11-4a7 7 0 110-14 7 7 0 010 14z"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 105,
       sortable: true
     },
@@ -1592,7 +1592,7 @@
       category: 'traffic',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 130,
       sortable: true
     },
@@ -1602,7 +1602,7 @@
       category: 'traffic',
       type: 'percent',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 100,
       sortable: true
     },
@@ -1612,7 +1612,7 @@
       category: 'conversions',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 95,
       sortable: true
     },
@@ -1622,7 +1622,7 @@
       category: 'conversions',
       type: 'number',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 125,
       sortable: true
     },
@@ -1632,7 +1632,7 @@
       category: 'conversions',
       type: 'currency',
       iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      minWidth: 50,
+      minWidth: 28,
       defaultWidth: 115,
       sortable: true
     }
@@ -1643,70 +1643,103 @@
   // ==========================================================
   let draggedColumnId = null;
 
-  window.handleColumnDragStart = function (e, colId) {
-    if (colId === 'name') {
-      e.preventDefault();
+  window.handleHeaderPointerDown = function (e, colId) {
+    if (e.button !== 0) return; // Only left-click
+    // Do not intercept if clicking resizer or checkbox
+    if (e.target.closest('.attio-resizer') || e.target.closest('.attio-checkbox') || e.target.closest('button')) {
       return;
     }
-    draggedColumnId = colId;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', colId);
-    const th = e.currentTarget.closest('th');
-    if (th) th.classList.add('is-dragging');
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const th = document.getElementById(`th-col-${colId}`) || e.currentTarget.closest('th');
+    let isDragging = false;
+    let dragGhost = null;
+
+    const onMouseMove = (moveEvent) => {
+      const distX = moveEvent.clientX - startX;
+      const distY = moveEvent.clientY - startY;
+
+      if (!isDragging) {
+        if (Math.hypot(distX, distY) > 4) {
+          if (colId === 'name') return; // Name column is fixed
+          isDragging = true;
+          document.body.classList.add('is-dragging-column');
+          if (th) th.classList.add('is-dragging');
+
+          dragGhost = document.createElement('div');
+          dragGhost.className = 'attio-header-drag-ghost';
+          const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
+          dragGhost.innerHTML = `
+            <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
+            <span>${escapeHtml(colDef.label || colId)}</span>
+          `;
+          document.body.appendChild(dragGhost);
+        }
+      }
+
+      if (isDragging && dragGhost) {
+        dragGhost.style.left = `${moveEvent.clientX + 14}px`;
+        dragGhost.style.top = `${moveEvent.clientY + 14}px`;
+
+        const targetTh = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest('.attio-th');
+        document.querySelectorAll('.attio-th').forEach(el => el.classList.remove('drag-over-left', 'drag-over-right'));
+
+        if (targetTh && targetTh.dataset.colId && targetTh.dataset.colId !== colId && targetTh.dataset.colId !== 'name' && !targetTh.classList.contains('attio-th-add-col') && !targetTh.classList.contains('attio-th-spacer')) {
+          const rect = targetTh.getBoundingClientRect();
+          const midX = rect.left + rect.width / 2;
+          if (moveEvent.clientX < midX) {
+            targetTh.classList.add('drag-over-left');
+          } else {
+            targetTh.classList.add('drag-over-right');
+          }
+        }
+      }
+    };
+
+    const onMouseUp = (upEvent) => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+
+      if (dragGhost) {
+        dragGhost.remove();
+        dragGhost = null;
+      }
+      document.body.classList.remove('is-dragging-column');
+      if (th) th.classList.remove('is-dragging');
+
+      if (isDragging) {
+        const targetTh = document.elementFromPoint(upEvent.clientX, upEvent.clientY)?.closest('.attio-th');
+        const targetColId = targetTh ? targetTh.dataset.colId : null;
+        const isRight = targetTh && targetTh.classList.contains('drag-over-right');
+        document.querySelectorAll('.attio-th').forEach(el => el.classList.remove('drag-over-left', 'drag-over-right'));
+
+        if (targetColId && targetColId !== colId && targetColId !== 'name' && targetColId !== 'add_column') {
+          const currentOrder = [...(state.accountsColumnOrder || DEFAULT_ACCOUNTS_COLUMN_ORDER)];
+          const fromIdx = currentOrder.indexOf(colId);
+          if (fromIdx !== -1) {
+            currentOrder.splice(fromIdx, 1);
+            let toIdx = currentOrder.indexOf(targetColId);
+            if (isRight) toIdx += 1;
+            currentOrder.splice(toIdx, 0, colId);
+            state.accountsColumnOrder = currentOrder;
+            localStorage.setItem('buyerly_accounts_col_order_v2', JSON.stringify(currentOrder));
+            renderAccounts();
+          }
+        }
+      } else {
+        // Clean Click -> Sort Column!
+        const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
+        if (colDef.sortable) {
+          window.setAccountsSort(colId);
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
   };
 
-  window.handleColumnDragOver = function (e, colId) {
-    if (!draggedColumnId || draggedColumnId === colId || colId === 'name') return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const th = e.currentTarget.closest('th');
-    if (!th) return;
-    
-    const rect = th.getBoundingClientRect();
-    const midX = rect.left + rect.width / 2;
-    if (e.clientX < midX) {
-      th.classList.add('drag-over-left');
-      th.classList.remove('drag-over-right');
-    } else {
-      th.classList.add('drag-over-right');
-      th.classList.remove('drag-over-left');
-    }
-  };
-
-  window.handleColumnDragLeave = function (e) {
-    const th = e.currentTarget.closest('th');
-    if (th) {
-      th.classList.remove('drag-over-left', 'drag-over-right');
-    }
-  };
-
-  window.handleColumnDrop = function (e, targetColId) {
-    e.preventDefault();
-    if (!draggedColumnId || draggedColumnId === targetColId || targetColId === 'name') return;
-    
-    const th = e.currentTarget.closest('th');
-    const isRight = th && th.classList.contains('drag-over-right');
-    
-    const currentOrder = [...(state.accountsColumnOrder || DEFAULT_ACCOUNTS_COLUMN_ORDER)];
-    const fromIdx = currentOrder.indexOf(draggedColumnId);
-    if (fromIdx === -1) return;
-    currentOrder.splice(fromIdx, 1);
-    
-    let toIdx = currentOrder.indexOf(targetColId);
-    if (isRight) toIdx += 1;
-    currentOrder.splice(toIdx, 0, draggedColumnId);
-    
-    state.accountsColumnOrder = currentOrder;
-    localStorage.setItem('buyerly_accounts_col_order_v2', JSON.stringify(currentOrder));
-    draggedColumnId = null;
-    document.querySelectorAll('.attio-th').forEach(el => el.classList.remove('is-dragging', 'drag-over-left', 'drag-over-right'));
-    renderAccounts();
-  };
-
-  window.handleColumnDragEnd = function () {
-    draggedColumnId = null;
-    document.querySelectorAll('.attio-th').forEach(el => el.classList.remove('is-dragging', 'drag-over-left', 'drag-over-right'));
-  };
 
   window.resetAccountsColumnOrder = function () {
     state.accountsColumnOrder = [...DEFAULT_ACCOUNTS_COLUMN_ORDER];
@@ -1740,7 +1773,7 @@
     const th = document.getElementById(`th-col-${colId}`) || e.currentTarget.closest('th');
     const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
     const startWidth = th ? th.offsetWidth : (state.accountsColumnWidths[colId] || colDef.defaultWidth || 120);
-    const minWidth = colDef.minWidth || 50;
+    const minWidth = 24; 
     const colTrack = document.getElementById(`col-track-${colId}`);
     const resizer = e.currentTarget;
     const viewport = document.querySelector('.attio-table-viewport');
@@ -2497,15 +2530,13 @@
   // RENDER CELL HELPER FOR DYNAMIC ACCOUNTS TABLE
   // ==========================================================
   function renderAccountCell(acc, colId, isSelected, displayName, metaState, activeRules, autoPillClass, autoPillText) {
-    const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
-    const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
     const m = acc.latest_metrics || acc.insights || {};
     const currency = acc.currency || 'USD';
     
     switch (colId) {
       case 'name':
         return `
-          <td class="attio-td sticky-col" style="width: ${width}px; min-width: ${colDef.minWidth || 100}px;">
+          <td class="attio-td sticky-col">
             <div class="cell-entity-wrapper">
               <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
                 <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)" title="Выбрать кабинет">
@@ -2522,7 +2553,7 @@
       case 'status':
         const metaPillClass = metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red');
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="status-pill ${metaPillClass}" style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
               <span class="status-dot"></span>
               <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(metaState.label)}</span>
@@ -2532,7 +2563,7 @@
       case 'timezone':
         const tz = acc.timezone_name || 'UTC';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="font-size: 12px; color: var(--text-secondary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(tz)}">
               ${escapeHtml(tz)}
             </span>
@@ -2542,35 +2573,35 @@
         const rawSpend = acc.today_spend !== undefined ? acc.today_spend : (m.spend !== undefined ? m.spend : 0);
         const spendStr = formatMoneyOrDash(rawSpend, currency);
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(spendStr)}</span>
           </td>
         `;
       case 'cpm':
         const cpmVal = m.cpm !== undefined && m.cpm !== null ? formatMoneyOrDash(m.cpm, currency) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cpmVal)}</span>
           </td>
         `;
       case 'cpc':
         const cpcVal = m.cpc !== undefined && m.cpc !== null ? formatMoneyOrDash(m.cpc, currency) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cpcVal)}</span>
           </td>
         `;
       case 'ctr':
         const ctrVal = m.ctr !== undefined && m.ctr !== null ? `${Number(m.ctr).toFixed(2)}%` : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(ctrVal)}</span>
           </td>
         `;
       case 'leads':
         const rawLeads = acc.today_leads !== undefined ? acc.today_leads : (m.leads !== undefined ? m.leads : '—');
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(rawLeads))}</span>
           </td>
         `;
@@ -2578,41 +2609,41 @@
         const rawCpl = acc.today_cpl !== undefined ? acc.today_cpl : (m.cpl !== undefined ? m.cpl : null);
         const cplStr = rawCpl !== null && rawCpl !== undefined ? formatMoneyOrDash(rawCpl, currency) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cplStr)}</span>
           </td>
         `;
       case 'registrations':
         const regsVal = m.registrations !== undefined ? m.registrations : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(regsVal))}</span>
           </td>
         `;
       case 'cpreg':
         const cpregVal = m.cpreg !== undefined && m.cpreg !== null ? formatMoneyOrDash(m.cpreg, currency) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cpregVal)}</span>
           </td>
         `;
       case 'purchases':
         const purchVal = m.purchases !== undefined ? m.purchases : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(purchVal))}</span>
           </td>
         `;
       case 'cpp':
         const cppVal = m.cpp !== undefined && m.cpp !== null ? formatMoneyOrDash(m.cpp, currency) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cppVal)}</span>
           </td>
         `;
       case 'automation':
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules('${escapeHtml(acc.account_id)}', ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Нажмите, чтобы переключить автоматику">
               <span class="status-dot"></span>
               <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${autoPillText}</span>
@@ -2621,7 +2652,7 @@
         `;
       case 'currency':
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="mono" style="font-size: 12px; font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
               ${escapeHtml(currency)}
             </span>
@@ -2630,7 +2661,7 @@
       case 'business_name':
         const bmName = acc.business_name || acc.batch_name || '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="font-size: 12px; color: var(--text-secondary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(bmName)}">
               ${escapeHtml(bmName)}
             </span>
@@ -2639,7 +2670,7 @@
       case 'note':
         const noteText = String(acc.note || '').trim();
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="color: ${noteText ? 'var(--text-primary)' : 'var(--text-muted)'}; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(noteText || '')}">
               ${escapeHtml(noteText || '—')}
             </span>
@@ -2648,49 +2679,49 @@
       case 'spend_cap':
         const spendCapVal = acc.spend_cap ? formatMoneyOrDash(acc.spend_cap, currency) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(spendCapVal)}</span>
           </td>
         `;
       case 'amount_spent':
         const amountSpentVal = acc.amount_spent ? formatMoneyOrDash(acc.amount_spent, currency) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(amountSpentVal)}</span>
           </td>
         `;
       case 'impressions':
         const impVal = m.impressions !== undefined ? m.impressions : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(impVal))}</span>
           </td>
         `;
       case 'reach':
         const reachVal = m.reach !== undefined ? m.reach : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(reachVal))}</span>
           </td>
         `;
       case 'frequency':
         const freqVal = m.frequency !== undefined && m.frequency !== null ? Number(m.frequency).toFixed(2) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(freqVal)}</span>
           </td>
         `;
       case 'clicks':
         const clicksVal = m.clicks !== undefined ? m.clicks : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(clicksVal))}</span>
           </td>
         `;
       case 'link_clicks':
         const linkClicksVal = m.link_clicks !== undefined ? m.link_clicks : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(linkClicksVal))}</span>
           </td>
         `;
@@ -2698,34 +2729,34 @@
         const lCtr = m.link_ctr !== undefined ? m.link_ctr : (m.ctr_link !== undefined ? m.ctr_link : null);
         const lCtrStr = lCtr !== null ? `${Number(lCtr).toFixed(2)}%` : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(lCtrStr)}</span>
           </td>
         `;
       case 'roas':
         const roasVal = m.roas !== undefined && m.roas !== null ? `${Number(m.roas).toFixed(2)}x` : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(roasVal)}</span>
           </td>
         `;
       case 'landing_page_views':
         const lpvVal = m.landing_page_views !== undefined ? m.landing_page_views : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(lpvVal))}</span>
           </td>
         `;
       case 'cost_per_lpv':
         const costLpv = m.cost_per_lpv !== undefined && m.cost_per_lpv !== null ? formatMoneyOrDash(m.cost_per_lpv, currency) : '—';
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(costLpv)}</span>
           </td>
         `;
       case 'rules':
         return `
-          <td class="attio-td" style="width: ${width}px;">
+          <td class="attio-td">
             <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; min-width: 0;">
               <span class="status-pill ${activeRules.length > 0 ? 'green' : 'amber'}" style="font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
                 ${activeRules.length > 0 ? `${activeRules.length} ${pluralize(activeRules.length, 'правило', 'правила', 'правил')}` : 'Без правил'}
@@ -2807,7 +2838,7 @@
     const allSelected = totalFiltered > 0 && selectedCount >= totalFiltered;
     
     const theadHtml = colOrder.map(colId => {
-      const colDef = ACCOUNTS_COLUMNS_DEF[colId] || { id: colId, label: colId, type: 'text', minWidth: 50, defaultWidth: 130 };
+      const colDef = ACCOUNTS_COLUMNS_DEF[colId] || { id: colId, label: colId, type: 'text', minWidth: 28, defaultWidth: 130 };
       const isSticky = colDef.sticky;
       const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
       const isSorted = state.accountsSortColumn === colId;
@@ -2818,13 +2849,13 @@
         return `
           <th class="attio-th sticky-col ${isHeaderSelectedClass}" 
               data-col-id="${colId}" 
-              id="th-col-${colId}"
-              style="width: ${width}px; min-width: ${colDef.minWidth || 100}px;">
-            <div class="attio-th-content">
-              <div class="attio-th-left" onclick="${colDef.sortable ? `window.setAccountsSort('${colId}')` : ''}" style="${colDef.sortable ? 'cursor: pointer;' : ''}" title="${colDef.sortable ? 'Нажмите для сортировки' : ''}">
+              id="th-col-${colId}">
+            <div class="attio-th-content" onclick="window.setAccountsSort('name')" style="cursor: pointer;" title="Нажмите для сортировки">
+              <div class="attio-th-left">
                 <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
                   <input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" ${allSelected ? 'checked' : ''} onchange="window.toggleSelectAllAccounts(this.checked)" title="Выбрать все кабинеты">
                 </div>
+                <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
                 <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
               </div>
             </div>
@@ -2837,16 +2868,9 @@
         <th class="attio-th" 
             data-col-id="${colId}" 
             id="th-col-${colId}"
-            style="width: ${width}px; min-width: ${colDef.minWidth || 50}px;"
-            ondragover="window.handleColumnDragOver(event, '${colId}')" 
-            ondragleave="window.handleColumnDragLeave(event)" 
-            ondrop="window.handleColumnDrop(event, '${colId}')" 
-            ondragend="window.handleColumnDragEnd(event)">
+            onmousedown="window.handleHeaderPointerDown(event, '${colId}')">
           <div class="attio-th-content">
-            <div class="attio-th-left" onclick="${colDef.sortable ? `window.setAccountsSort('${colId}')` : ''}" style="${colDef.sortable ? 'cursor: pointer;' : ''}" title="${colDef.sortable ? 'Нажмите для сортировки' : ''}">
-              <span class="attio-th-drag-handle" draggable="true" ondragstart="window.handleColumnDragStart(event, '${colId}')" onclick="event.stopPropagation();" title="Перетащите для изменения порядка">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
-              </span>
+            <div class="attio-th-left">
               <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
               <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
             </div>

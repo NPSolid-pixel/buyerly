@@ -2017,9 +2017,6 @@ input:checked + .slider:before { transform: translateX(16px); }
   transition: opacity 0.15s;
   flex-shrink: 0;
 }
-.attio-th:hover .attio-th-drag-handle {
-  opacity: 1;
-}
 .attio-th.is-dragging {
   opacity: 0.35;
   background: #EEF2F6;
@@ -2029,6 +2026,33 @@ input:checked + .slider:before { transform: translateX(16px); }
 }
 .attio-th.drag-over-right {
   border-right: 2px solid #266DF0 !important;
+}
+
+/* Attio Floating Drag Badge */
+.attio-header-drag-ghost {
+  position: fixed;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  background: #FFFFFF;
+  border: 1px solid #266DF0;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px -4px rgba(38, 109, 240, 0.3), 0 4px 8px rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  font-weight: 500;
+  color: #101112;
+  pointer-events: none;
+  user-select: none;
+  transform: translate3d(0, 0, 0);
+}
+
+body.is-dragging-column,
+body.is-dragging-column * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 /* Attio High-Precision Resizer & Vertical Guide Line */
