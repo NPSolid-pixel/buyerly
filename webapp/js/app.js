@@ -381,28 +381,18 @@
   }
 
   function syncBrowserRoute(tab, method = 'push') {
-    const slug = state.activeWorkspace ? state.activeWorkspace.slug : '';
-    let route = `/${tab}`;
-    if (slug) {
-      if (tab === 'accounts' && state.accountGroupFilter && state.accountGroupFilter !== 'all') {
-        const group = (state.accountGroups || []).find(g => 
-          String(g.id) === String(state.accountGroupFilter) || 
-          String(g.name || '').toLowerCase() === String(state.accountGroupFilter).toLowerCase()
-        );
-        const groupSlug = group ? (group.slug || slugifyName(group.name)) : state.accountGroupFilter;
-        route = `/${slug}/list-${groupSlug}`;
-      } else if (tab === 'rules' && state.ruleGroupFilter && state.ruleGroupFilter !== 'all') {
-        const group = (state.ruleGroups || []).find(g => 
-          String(g.id) === String(state.ruleGroupFilter) || 
-          String(g.name || '').toLowerCase() === String(state.ruleGroupFilter).toLowerCase()
-        );
-        const groupSlug = group ? (group.slug || slugifyName(group.name)) : state.ruleGroupFilter;
-        route = `/${slug}/rules-${groupSlug}`;
-      } else {
-        route = `/${slug}/${tab}`;
-      }
-    }
     try {
+      const slug = state.activeWorkspace ? state.activeWorkspace.slug : '';
+      let route = `/${tab}`;
+      if (slug) {
+        if (tab === 'accounts' && state.accountGroupFilter && state.accountGroupFilter !== 'all') {
+          route = `/${slug}/groups/${encodeURIComponent(state.accountGroupFilter)}`;
+        } else if (tab === 'rules' && state.ruleGroupFilter && state.ruleGroupFilter !== 'all') {
+          route = `/${slug}/rules?group=${encodeURIComponent(state.ruleGroupFilter)}`;
+        } else {
+          route = `/${slug}/${tab}`;
+        }
+      }
       window.history[method]({ tab: tab, workspace: slug, groupFilter: state.accountGroupFilter || 'all', ruleGroupFilter: state.ruleGroupFilter || 'all' }, '', route);
     } catch (e) {}
   }
