@@ -98,10 +98,10 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "python", "-c", "from pathlib import Path; assert Path('/tmp/buyerly-worker-ready').is_file()"]
+      test: ["CMD", "python", "-c", "import time, sys; from pathlib import Path; p = Path('/tmp/buyerly-worker-heartbeat'); sys.exit(0 if p.is_file() and (time.time() - p.stat().st_mtime) < 45 else 1)"]
       interval: 10s
       timeout: 5s
-      retries: 8
+      retries: 4
       start_period: 15s
 
   # Compatibility bridge for the first deployment from the former monolith.
