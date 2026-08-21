@@ -2205,37 +2205,328 @@
     }
   };
 
-  window.openBulkMoveModal = async function(event) {
+  let chooseGroupSelectedIndex = 0;
+  let chooseGroupActiveColor = 'purple';
+  let chooseGroupFilteredItems = [];
+
+  function renderChooseGroupItems(query = '') {
+    const listEl = document.getElementById('chooseGroupList');
+    const createRow = document.getElementById('chooseGroupCreateActionRow');
+    if (!listEl) return;
+
+    const q = (query || '').toLowerCase().trim();
+    const matchingGroups = (state.ruleGroups || []).filter(g => {
+      if (!q) return true;
+      return (g.name || '').toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q);
+    });
+
+    chooseGroupFilteredItems = [];
+
+    let groupsHtml = '';
+    if (matchingGroups.length === 0) {
+      groupsHtml = '<div class="rules-column-empty" style="padding: 14px 0; text-align: center; color: #898a8d; font-size: 12px;">Группы не найдены</div>';
+    } else {
+      groupsHtml = matchingGroups.map((group) => {
+        const colorName = group.color || 'purple';
+        const count = (group.preset_ids || []).length;
+        const itemIdx = chooseGroupFilteredItems.length;
+        chooseGroupFilteredItems.push({ type: 'group', id: group.id, name: group.name });
+        const isSelected = itemIdx === chooseGroupSelectedIndex;
+
+        return `
+          <div class="choose-group-item ${isSelected ? 'selected' : ''}" 
+               data-item-index="${itemIdx}"
+               data-group-id="${group.id}"
+               onclick="window.selectGroupFromModal(${group.id})">
+            <div class="choose-group-item-left">
+              <span class="choose-group-dot swatch-${colorName}"></span>
+              <span class="choose-group-item-name">${escapeHtml(group.name)}</span>
+            </div>
+            <div class="choose-group-item-right">
+              <span class="choose-group-count-badge">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                ${count}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    listEl.innerHTML = groupsHtml;
+
+    // Add create item to items list
+    const createIndex = chooseGroupFilteredItems.length;
+    chooseGroupFilteredItems.push({ type: 'create' });
+    if (createRow) {
+      createRow.classList.toggle('selected', chooseGroupSelectedIndex === createIndex);
+      createRow.setAttribute('data-item-index', String(createIndex));
+    }
+
+    if (chooseGroupSelectedIndex >= chooseGroupFilteredItems.length) {
+      chooseGroupSelectedIndex = 0;
+    }
+    updateChooseGroupSelectionHighlight();
+  }
+
+  function updateChooseGroupSelectionHighlight() {
+    document.querySelectorAll('.choose-group-item, #chooseGroupCreateActionRow').forEach(el => {
+      const idx = Number(el.getAttribute('data-item-index'));
+      el.classList.toggle('selected', idx === chooseGroupSelectedIndex);
+      if (idx === chooseGroupSelectedIndex) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+
+  window.openBulkMoveModal = function (event) {
     const count = state.selectedRuleIds ? state.selectedRuleIds.size : 0;
     if (count === 0) return;
 
-    const groupOptions = state.ruleGroups.map((g, i) => `${i + 1}. ${g.name}`).join('\n');
-    const choice = prompt(`Переместить ${count} правил в группу:\n0. Без группы\n${groupOptions}\n\nВведите номер группы:`);
-    if (choice === null) return;
-    const num = parseInt(choice.trim(), 10);
-    if (isNaN(num) || num < 0 || num > state.ruleGroups.length) {
-      showNotification('Неверный выбор группы', 'error');
+    const countBadge = document.getElementById('chooseGroupSelectedCountBadge');
+    if (countBadge) {
+      countBadge.textContent = `${count} выбрано`;
+    }
+
+    const searchInput = document.getElementById('chooseGroupSearchInput');
+    if (searchInput) {
+      searchInput.value = '';
+    }
+
+    document.getElementById('chooseGroupViewSelect')?.classList.remove('hidden');
+    document.getElementById('chooseGroupViewCreate')?.classList.add('hidden');
+
+    chooseGroupSelectedIndex = 0;
+    renderChooseGroupItems('');
+
+    window.openModal('modalChooseGroup');
+    setTimeout(() => {
+      searchInput?.focus();
+    }, 60);
+  };
+
+  window.filterChooseGroupList = function (query) {
+    chooseGroupSelectedIndex = 0;
+    renderChooseGroupItems(query);
+  };
+
+  window.onChooseGroupKeydown = function (event) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (chooseGroupFilteredItems.length > 0) {
+        chooseGroupSelectedIndex = (chooseGroupSelectedIndex + 1) % chooseGroupFilteredItems.length;
+        updateChooseGroupSelectionHighlight();
+      }
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (chooseGroupFilteredItems.length > 0) {
+        chooseGroupSelectedIndex = (chooseGroupSelectedIndex - 1 + chooseGroupFilteredItems.length) % chooseGroupFilteredItems.length;
+        updateChooseGroupSelectionHighlight();
+      }
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      window.confirmSelectedGroupChoice();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      window.closeModal('modalChooseGroup');
+    }
+  };
+
+  window.confirmSelectedGroupChoice = function () {
+    const item = chooseGroupFilteredItems[chooseGroupSelectedIndex];
+    if (!item) return;
+    if (item.type === 'group') {
+      window.selectGroupFromModal(item.id);
+    } else if (item.type === 'create') {
+      window.openCreateGroupFromChooseModal();
+    }
+  };
+
+  window.selectGroupFromModal = async function (groupId) {
+    const targetGroup = state.ruleGroups.find(g => g.id === groupId);
+    if (!targetGroup) return;
+
+    const presetIds = Array.from(state.selectedRuleIds || []);
+    if (presetIds.length === 0) return;
+
+    window.closeModal('modalChooseGroup');
+    showGlobalLoading(`Перемещение правил (${presetIds.length})...`);
+    try {
+      await window.moveMultiplePresetsToGroup(presetIds, groupId);
+      state.selectedRuleIds.clear();
+      updateRulesBulkActionsBar();
+      showToast(`Правила перемещены в группу «${targetGroup.name}»`, 'success');
+    } catch (err) {
+      showToast(`Ошибка перемещения: ${err.message}`, 'error');
+    } finally {
+      hideGlobalLoading();
+    }
+  };
+
+  window.moveMultiplePresetsToGroup = async function (presetIds, targetGroupId) {
+    const idsToMove = Array.from(presetIds);
+    if (idsToMove.length === 0) return;
+
+    // 1. Remove from all other groups
+    for (const group of state.ruleGroups) {
+      if (group.id === targetGroupId) continue;
+      const currentIds = group.preset_ids || [];
+      const hasAny = currentIds.some(id => idsToMove.includes(id));
+      if (hasAny) {
+        const newIds = currentIds.filter(id => !idsToMove.includes(id));
+        await apiRequest(`/api/rule-groups/${group.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: group.name,
+            description: group.description || '',
+            preset_ids: newIds
+          })
+        });
+        group.preset_ids = newIds;
+      }
+    }
+
+    // 2. Add to target group (if specified)
+    if (targetGroupId !== null) {
+      const tgtGroup = state.ruleGroups.find(g => g.id === targetGroupId);
+      if (tgtGroup) {
+        const currentIds = tgtGroup.preset_ids || [];
+        const combinedIds = Array.from(new Set([...currentIds, ...idsToMove]));
+        await apiRequest(`/api/rule-groups/${targetGroupId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: tgtGroup.name,
+            description: tgtGroup.description || '',
+            preset_ids: combinedIds
+          })
+        });
+        tgtGroup.preset_ids = combinedIds;
+      }
+    }
+
+    await loadRuleGroups();
+    await loadRulePresets();
+    renderRulesTab();
+  };
+
+  window.openCreateGroupFromChooseModal = function () {
+    document.getElementById('chooseGroupViewSelect')?.classList.add('hidden');
+    document.getElementById('chooseGroupViewCreate')?.classList.remove('hidden');
+
+    const searchVal = document.getElementById('chooseGroupSearchInput')?.value.trim() || '';
+    const nameInput = document.getElementById('newGroupNameModalInput');
+    const descInput = document.getElementById('newGroupDescModalInput');
+    const dot = document.getElementById('chooseGroupColorDot');
+    const palette = document.getElementById('chooseGroupColorPalette');
+
+    chooseGroupActiveColor = 'purple';
+    if (dot) dot.className = 'attio-popover-dot swatch-purple';
+    palette?.classList.add('hidden');
+
+    if (nameInput) nameInput.value = searchVal;
+    if (descInput) descInput.value = '';
+
+    setTimeout(() => {
+      nameInput?.focus();
+      nameInput?.select();
+    }, 60);
+  };
+
+  window.backToChooseGroupList = function () {
+    document.getElementById('chooseGroupViewCreate')?.classList.add('hidden');
+    document.getElementById('chooseGroupViewSelect')?.classList.remove('hidden');
+
+    const searchInput = document.getElementById('chooseGroupSearchInput');
+    setTimeout(() => {
+      searchInput?.focus();
+    }, 60);
+  };
+
+  window.toggleModalNewGroupColorPalette = function (event) {
+    if (event) event.stopPropagation();
+    document.getElementById('chooseGroupColorPalette')?.classList.toggle('hidden');
+  };
+
+  window.selectModalNewGroupColor = function (colorName) {
+    chooseGroupActiveColor = colorName;
+    const dot = document.getElementById('chooseGroupColorDot');
+    if (dot) dot.className = `attio-popover-dot swatch-${colorName}`;
+    document.getElementById('chooseGroupColorPalette')?.classList.add('hidden');
+  };
+
+  window.onNewGroupNameModalKeydown = function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      window.submitCreateGroupFromModal();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      window.backToChooseGroupList();
+    }
+  };
+
+  window.submitCreateGroupFromModal = async function () {
+    const nameInput = document.getElementById('newGroupNameModalInput');
+    const descInput = document.getElementById('newGroupDescModalInput');
+    const name = nameInput ? nameInput.value.trim() : '';
+    const description = descInput ? descInput.value.trim() : '';
+
+    if (!name) {
+      showToast('Введите название группы', 'error');
+      nameInput?.focus();
       return;
     }
 
-    const targetGroup = num === 0 ? null : state.ruleGroups[num - 1];
-    const targetGroupId = targetGroup ? targetGroup.id : null;
+    const presetIds = Array.from(state.selectedRuleIds || []);
+    const color = chooseGroupActiveColor || 'purple';
 
-    showGlobalLoading('Перемещение правил...');
+    showGlobalLoading('Создание группы и перемещение...');
     try {
-      for (const ruleId of state.selectedRuleIds) {
-        await window.movePresetToGroup(ruleId, targetGroupId);
+      // 1. Remove rules from their current source groups
+      for (const group of state.ruleGroups) {
+        const currentIds = group.preset_ids || [];
+        const hasAny = currentIds.some(id => presetIds.includes(id));
+        if (hasAny) {
+          const newIds = currentIds.filter(id => !presetIds.includes(id));
+          await apiRequest(`/api/rule-groups/${group.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              name: group.name,
+              description: group.description || '',
+              preset_ids: newIds
+            })
+          });
+          group.preset_ids = newIds;
+        }
       }
+
+      // 2. Create the new group with preset_ids
+      await apiRequest('/api/rule-groups', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          description,
+          color,
+          preset_ids: presetIds
+        })
+      });
+
+      window.closeModal('modalChooseGroup');
       state.selectedRuleIds.clear();
       updateRulesBulkActionsBar();
       await loadRuleGroups();
       await loadRulePresets();
       renderRulesTab();
-      showNotification(`Правила перемещены в группу «${targetGroup ? targetGroup.name : 'Без группы'}»`, 'success');
+      showToast(`Группа «${name}» создана, правила перемещены`, 'success');
     } catch (err) {
-      showNotification(`Ошибка перемещения: ${err.message}`, 'error');
+      showToast(`Ошибка: ${err.message}`, 'error');
     } finally {
       hideGlobalLoading();
+    }
+  };
+
+  window.onChooseGroupOverlayClick = function (event) {
+    if (event.target && event.target.id === 'modalChooseGroup') {
+      window.closeModal('modalChooseGroup');
     }
   };
 

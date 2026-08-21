@@ -1775,6 +1775,118 @@
       </div>
     </div>
 
+    <!-- Modal: Attio Choose / Move to Group ("Choose list") -->
+    <div id="modalChooseGroup" class="modal-overlay hidden" onclick="window.onChooseGroupOverlayClick(event)">
+      <div class="choose-group-modal-card" onclick="event.stopPropagation()">
+        
+        <!-- View 1: Select Existing Group -->
+        <div id="chooseGroupViewSelect" class="choose-group-view">
+          <div class="choose-group-header">
+            <div class="choose-group-breadcrumb">
+              <span class="choose-group-title">Выбор группы</span>
+              <span id="chooseGroupSelectedCountBadge" class="choose-group-selected-pill">1 выбрано</span>
+            </div>
+            <button class="choose-group-close-btn" type="button" onclick="window.closeModal('modalChooseGroup')" title="Закрыть (ESC)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+
+          <div class="choose-group-search-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" id="chooseGroupSearchInput" class="choose-group-search-input" placeholder="Поиск групп..." autocomplete="off" oninput="window.filterChooseGroupList(this.value)" onkeydown="window.onChooseGroupKeydown(event)">
+          </div>
+
+          <div class="choose-group-body">
+            <div class="choose-group-section-label">ГРУППЫ</div>
+            <div id="chooseGroupList" class="choose-group-list" role="listbox">
+              <!-- Dynamically populated group items -->
+            </div>
+
+            <div class="choose-group-section-label" style="margin-top: 10px;">ДЕЙСТВИЯ</div>
+            <div class="choose-group-actions">
+              <div class="choose-group-action-row" id="chooseGroupCreateActionRow" onclick="window.openCreateGroupFromChooseModal()">
+                <div class="choose-group-action-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </div>
+                <div class="choose-group-action-text">
+                  <span class="choose-group-action-title">Создать новую группу</span>
+                  <span class="choose-group-action-sub">Создать колонку и переместить правила</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="choose-group-footer">
+            <div class="choose-group-kbd-hints">
+              <span class="choose-group-kbd-hint"><kbd>↑</kbd><kbd>↓</kbd> Навигация</span>
+            </div>
+            <button type="button" id="btnConfirmChooseGroup" class="choose-group-btn-primary" onclick="window.confirmSelectedGroupChoice()">
+              <span>Выбрать группу</span>
+              <kbd class="btn-kbd">↵</kbd>
+            </button>
+          </div>
+        </div>
+
+        <!-- View 2: Create New Group On The Fly -->
+        <div id="chooseGroupViewCreate" class="choose-group-view hidden">
+          <div class="choose-group-header">
+            <div class="choose-group-breadcrumb">
+              <button type="button" class="choose-group-back-btn" onclick="window.backToChooseGroupList()" title="Назад к выбору">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                <span>Выбор группы</span>
+              </button>
+              <span class="choose-group-breadcrumb-sep">/</span>
+              <span class="choose-group-title">Новая группа</span>
+            </div>
+            <button class="choose-group-close-btn" type="button" onclick="window.closeModal('modalChooseGroup')" title="Закрыть (ESC)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+
+          <div class="choose-group-create-body">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label class="form-label" for="newGroupNameModalInput">Название группы</label>
+              <div class="choose-group-input-wrapper">
+                <div class="choose-group-color-picker-trigger" id="chooseGroupColorTrigger" onclick="window.toggleModalNewGroupColorPalette(event)" title="Выбрать цвет">
+                  <span class="attio-popover-dot swatch-purple" id="chooseGroupColorDot"></span>
+                </div>
+                <input type="text" id="newGroupNameModalInput" class="form-control choose-group-name-input" placeholder="Например: Тестовые связки" maxlength="120" onkeydown="window.onNewGroupNameModalKeydown(event)">
+              </div>
+              
+              <!-- Inline color palette dropdown for modal -->
+              <div id="chooseGroupColorPalette" class="attio-color-palette hidden" style="margin-top: 8px;">
+                <button type="button" class="color-swatch swatch-purple" data-color="purple" title="Фиолетовый" onclick="window.selectModalNewGroupColor('purple')"></button>
+                <button type="button" class="color-swatch swatch-indigo" data-color="indigo" title="Индиго" onclick="window.selectModalNewGroupColor('indigo')"></button>
+                <button type="button" class="color-swatch swatch-blue" data-color="blue" title="Синий" onclick="window.selectModalNewGroupColor('blue')"></button>
+                <button type="button" class="color-swatch swatch-emerald" data-color="emerald" title="Изумрудный" onclick="window.selectModalNewGroupColor('emerald')"></button>
+                <button type="button" class="color-swatch swatch-amber" data-color="amber" title="Жёлтый" onclick="window.selectModalNewGroupColor('amber')"></button>
+                <button type="button" class="color-swatch swatch-orange" data-color="orange" title="Оранжевый" onclick="window.selectModalNewGroupColor('orange')"></button>
+                <button type="button" class="color-swatch swatch-rose" data-color="rose" title="Розовый" onclick="window.selectModalNewGroupColor('rose')"></button>
+                <button type="button" class="color-swatch swatch-gray" data-color="gray" title="Серый" onclick="window.selectModalNewGroupColor('gray')"></button>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="newGroupDescModalInput">Описание (опционально)</label>
+              <input type="text" id="newGroupDescModalInput" class="form-control" placeholder="Для каких офферов или связок использовать" maxlength="250" onkeydown="window.onNewGroupNameModalKeydown(event)">
+            </div>
+          </div>
+
+          <div class="choose-group-footer">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.backToChooseGroupList()">
+              <span>Отмена</span>
+              <kbd class="btn-kbd-sec">ESC</kbd>
+            </button>
+            <button type="button" id="btnSubmitCreateGroupModal" class="choose-group-btn-primary" onclick="window.submitCreateGroupFromModal()">
+              <span>Создать и переместить</span>
+              <kbd class="btn-kbd">↵</kbd>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
     <!-- Popover: Rule Group Header Menu (Photo 2 & Palette) -->
     <div id="ruleGroupMenuPopover" class="attio-popover hidden" role="menu">
       <input type="hidden" id="popoverGroupId" value="">
