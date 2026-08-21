@@ -2018,15 +2018,54 @@ input:checked + .slider:before { transform: translateX(16px); }
   transition: opacity 0.15s;
   flex-shrink: 0;
 }
+.attio-th-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.attio-th-sort-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: #9CA3AF;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.attio-th:hover .attio-th-sort-icon {
+  opacity: 0.6;
+}
+.attio-th-sort-icon.is-active {
+  opacity: 1 !important;
+  color: #266DF0 !important;
+}
+
 .attio-th.is-dragging {
   opacity: 0.35;
   background: #EEF2F6;
 }
-.attio-th.drag-over-left {
-  border-left: 2px solid #266DF0 !important;
+.attio-th.drag-over-left::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: #266DF0;
+  z-index: 40;
+  box-shadow: 0 0 6px rgba(38, 109, 240, 0.6);
 }
-.attio-th.drag-over-right {
-  border-right: 2px solid #266DF0 !important;
+.attio-th.drag-over-right::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  background: #266DF0;
+  z-index: 40;
+  box-shadow: 0 0 6px rgba(38, 109, 240, 0.6);
 }
 
 /* Attio Floating Drag Badge */
@@ -2086,13 +2125,6 @@ body.is-dragging-column * {
 .attio-resizer.is-resizing::after {
   background: #266DF0 !important;
 }
-.attio-th:hover .attio-resizer::after {
-  background: rgba(38, 109, 240, 0.4);
-}
-.attio-resizer:hover::after,
-.attio-resizer.is-resizing::after {
-  background: #266DF0 !important;
-}
 
 .attio-table-resize-guide {
   position: absolute;
@@ -2107,6 +2139,89 @@ body.is-dragging-column * {
 }
 .attio-table-resize-guide.is-active {
   display: block;
+}
+
+/* Attio Calculation Footer Row */
+.attio-calc-row {
+  height: 34px;
+}
+.attio-calc-td {
+  height: 34px;
+  padding: 0 8px;
+  background: #FAFAFA;
+  border-top: 1px solid var(--border-table);
+  border-bottom: 1px solid var(--border-table);
+  border-right: 1px solid var(--border-table);
+  vertical-align: middle;
+  box-sizing: border-box;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  min-width: 0 !important;
+  font-size: 11.5px;
+  color: #6E7175;
+}
+.attio-calc-td.sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: #FAFAFA;
+  box-shadow: 2px 0 4px -2px rgba(28, 40, 64, 0.08);
+}
+.attio-calc-count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: #ECEEF2;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #4B5563;
+  user-select: none;
+}
+.attio-calc-count-num {
+  font-weight: 600;
+  color: #111827;
+}
+.attio-calc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #9CA3AF;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+.attio-calc-td:hover .attio-calc-btn {
+  opacity: 1;
+}
+.attio-calc-btn:hover {
+  background: #E5E7EB;
+  color: #111827;
+}
+.attio-calc-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+  color: #1F2937;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.attio-calc-val-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #9CA3AF;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 body.is-resizing-column,

@@ -2858,7 +2858,11 @@
       const isSticky = colDef.sticky;
       const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
       const isSorted = state.accountsSortColumn === colId;
-      const sortArrow = isSorted ? (state.accountsSortDirection === 'asc' ? ' ↑' : ' ↓') : '';
+      const sortIconSvg = isSorted
+        ? (state.accountsSortDirection === 'asc'
+            ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>'
+            : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>')
+        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>';
 
       if (isSticky && colId === 'name') {
         const isHeaderSelectedClass = selectedCount > 0 ? 'has-selected' : '';
@@ -2873,7 +2877,12 @@
                   <input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" ${allSelected ? 'checked' : ''} onchange="window.toggleSelectAllAccounts(this.checked)" title="Выбрать все кабинеты">
                 </div>
                 <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
-                <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
+                <span class="attio-th-title">${escapeHtml(colDef.label)}</span>
+              </div>
+              <div class="attio-th-right">
+                <div class="attio-th-sort-icon ${isSorted ? 'is-active' : ''}">
+                  ${sortIconSvg}
+                </div>
               </div>
             </div>
             <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
@@ -2890,7 +2899,12 @@
           <div class="attio-th-content">
             <div class="attio-th-left">
               <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
-              <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
+              <span class="attio-th-title">${escapeHtml(colDef.label)}</span>
+            </div>
+            <div class="attio-th-right">
+              <div class="attio-th-sort-icon ${isSorted ? 'is-active' : ''}">
+                ${sortIconSvg}
+              </div>
             </div>
           </div>
           <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
@@ -2917,6 +2931,129 @@
           <td class="attio-td attio-td-add-col-spacer"></td>
           <td class="attio-td attio-td-spacer"></td>
         </tr>
+      `;
+    }).join('');
+
+    // Build Calculations Footer Row (Attio _927ba54)
+    let totalSpend = 0;
+    let totalLeads = 0;
+    let totalRegs = 0;
+    let totalPurchases = 0;
+    let totalImpressions = 0;
+    let totalClicks = 0;
+    let totalReach = 0;
+    let totalAmountSpent = 0;
+
+    filtered.forEach(acc => {
+      const m = acc.latest_metrics || acc.insights || {};
+      totalSpend += Number(acc.today_spend !== undefined ? acc.today_spend : (m.spend || 0));
+      totalLeads += Number(acc.today_leads !== undefined ? acc.today_leads : (m.leads || 0));
+      totalRegs += Number(m.registrations || 0);
+      totalPurchases += Number(m.purchases || 0);
+      totalImpressions += Number(m.impressions || 0);
+      totalClicks += Number(m.clicks || 0);
+      totalReach += Number(m.reach || 0);
+      totalAmountSpent += Number(acc.amount_spent || 0);
+    });
+
+    const calcCellsHtml = colOrder.map(colId => {
+      if (colId === 'name') {
+        return `
+          <td class="attio-calc-td sticky-col">
+            <div class="attio-calc-count-badge">
+              <span class="attio-calc-count-num">${totalFiltered}</span>
+              <span>count</span>
+            </div>
+          </td>
+        `;
+      }
+      if (colId === 'spend') {
+        return `
+          <td class="attio-calc-td">
+            <div class="attio-calc-val" title="Суммарный расход: $${totalSpend.toFixed(2)}">
+              <span>${formatMoneyOrDash(totalSpend, 'USD')}</span>
+              <span class="attio-calc-val-tag">sum</span>
+            </div>
+          </td>
+        `;
+      }
+      if (colId === 'leads') {
+        return `
+          <td class="attio-calc-td">
+            <div class="attio-calc-val" title="Суммарно лидов: ${totalLeads}">
+              <span>${totalLeads}</span>
+              <span class="attio-calc-val-tag">sum</span>
+            </div>
+          </td>
+        `;
+      }
+      if (colId === 'registrations') {
+        return `
+          <td class="attio-calc-td">
+            <div class="attio-calc-val" title="Суммарно регистраций: ${totalRegs}">
+              <span>${totalRegs}</span>
+              <span class="attio-calc-val-tag">sum</span>
+            </div>
+          </td>
+        `;
+      }
+      if (colId === 'purchases') {
+        return `
+          <td class="attio-calc-td">
+            <div class="attio-calc-val" title="Суммарно покупок: ${totalPurchases}">
+              <span>${totalPurchases}</span>
+              <span class="attio-calc-val-tag">sum</span>
+            </div>
+          </td>
+        `;
+      }
+      if (colId === 'impressions') {
+        return `
+          <td class="attio-calc-td">
+            <div class="attio-calc-val">
+              <span>${totalImpressions}</span>
+              <span class="attio-calc-val-tag">sum</span>
+            </div>
+          </td>
+        `;
+      }
+      if (colId === 'clicks') {
+        return `
+          <td class="attio-calc-td">
+            <div class="attio-calc-val">
+              <span>${totalClicks}</span>
+              <span class="attio-calc-val-tag">sum</span>
+            </div>
+          </td>
+        `;
+      }
+      if (colId === 'reach') {
+        return `
+          <td class="attio-calc-td">
+            <div class="attio-calc-val">
+              <span>${totalReach}</span>
+              <span class="attio-calc-val-tag">sum</span>
+            </div>
+          </td>
+        `;
+      }
+      if (colId === 'amount_spent') {
+        return `
+          <td class="attio-calc-td">
+            <div class="attio-calc-val">
+              <span>${formatMoneyOrDash(totalAmountSpent, 'USD')}</span>
+              <span class="attio-calc-val-tag">sum</span>
+            </div>
+          </td>
+        `;
+      }
+      return `
+        <td class="attio-calc-td">
+          <button type="button" class="attio-calc-btn" title="Calculate">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Calculate</span>
+          </button>
+        </td>
       `;
     }).join('');
 
@@ -2948,6 +3085,13 @@
             <tbody>
               ${rowsHtml}
             </tbody>
+            <tfoot>
+              <tr class="attio-calc-row">
+                ${calcCellsHtml}
+                <td class="attio-calc-td attio-td-add-col-spacer"></td>
+                <td class="attio-calc-td attio-td-spacer"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       `;
