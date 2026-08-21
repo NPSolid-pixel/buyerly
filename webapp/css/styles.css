@@ -1657,41 +1657,364 @@ input:checked + .slider:before { transform: translateX(16px); }
 }
 .chip.active .chip-count { color: var(--text-primary); }
 
-/* Attio Table Grid */
-.table-viewport {
+/* ==========================================================
+   ATTIO TABLE SYSTEM (VIEW HEADER, FILTER BAR & GRID)
+   ========================================================== */
+
+/* Attio View Header & Toolbar */
+.attio-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 0 2px;
+  flex-wrap: wrap;
+}
+.attio-view-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.attio-view-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attio-view-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  position: relative;
+  user-select: none;
+  transition: background 0.15s;
+}
+.attio-view-selector:hover {
+  background: var(--bg-hover);
+}
+.attio-view-icon-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: #E5EEFF;
+  color: #266DF0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.attio-view-title {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+.attio-chevron-icon {
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+
+.attio-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s;
+}
+.attio-header-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+.attio-header-btn svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.attio-header-btn:hover svg {
+  color: var(--text-primary);
+}
+
+/* Attio Filter & Sort Toolbar */
+.attio-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0 10px;
+  border-bottom: 1px solid var(--border-table);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.attio-filter-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.attio-filter-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attio-filter-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s;
+}
+.attio-filter-pill-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.attio-filter-pill-btn.active {
+  background: #E5EEFF;
+  color: #215BC4;
+  border-color: #D6E5FF;
+}
+.attio-filter-pill-btn svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.attio-filter-pill-btn.active svg {
+  color: #266DF0;
+}
+
+.attio-active-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.attio-active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 7px;
+  background: #EEF2F6;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.attio-active-chip-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+.attio-active-chip-remove:hover {
+  color: var(--text-primary);
+}
+
+.attio-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.attio-search-box input {
+  width: 210px;
+  height: 28px;
+  padding-left: 28px;
+  padding-right: 24px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  transition: all 0.15s;
+}
+.attio-search-box input:focus {
+  outline: none;
+  border-color: #266DF0;
+  box-shadow: 0 0 0 1px #266DF0;
+}
+.attio-search-box svg.search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.attio-search-clear {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+.attio-search-clear:hover {
+  color: var(--text-primary);
+}
+
+/* Attio Table Viewport & Grid */
+.table-viewport,
+.attio-table-viewport {
   width: 100%;
   overflow-x: auto;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  box-shadow: var(--shadow-sm);
+  border-radius: 10px;
+  box-shadow: 0px 1px 3px 0px rgba(0, 0, 0, 0.04);
+  position: relative;
 }
 
-.attio-grid {
+.attio-grid,
+.attio-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12.5px;
   text-align: left;
 }
 
-.attio-grid th {
-  background: var(--bg-canvas);
-  padding: 8px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
+.attio-grid th,
+.attio-th {
+  background: #FBFBFB;
+  height: 38px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #505155;
   border-bottom: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-table);
   white-space: nowrap;
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: 10;
   user-select: none;
+  box-sizing: border-box;
+  transition: background-color 0.15s;
 }
-.attio-grid th:last-child { border-right: none; }
+.attio-grid th:last-child,
+.attio-th:last-child {
+  border-right: none;
+}
 
-.attio-grid td {
-  padding: 9px 12px;
+/* Sticky First Column */
+.attio-grid th.sticky-col,
+.attio-th.sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: #FBFBFB;
+  box-shadow: 2px 0 4px -2px rgba(28, 40, 64, 0.08);
+}
+.attio-grid td.sticky-col,
+.attio-td.sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: var(--bg-surface);
+  box-shadow: 2px 0 4px -2px rgba(28, 40, 64, 0.08);
+}
+
+/* Header Cells Content & Drag & Drop */
+.attio-th-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+}
+.attio-th-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.attio-th-type-icon {
+  display: flex;
+  align-items: center;
+  color: #898A8D;
+  flex-shrink: 0;
+}
+.attio-th-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #505155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attio-th-drag-handle {
+  cursor: grab;
+  color: #A2A4A7;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.attio-th:hover .attio-th-drag-handle {
+  opacity: 1;
+}
+.attio-th.is-dragging {
+  opacity: 0.35;
+  background: #EEF2F6;
+}
+.attio-th.drag-over-left {
+  border-left: 2px solid #266DF0 !important;
+}
+.attio-th.drag-over-right {
+  border-right: 2px solid #266DF0 !important;
+}
+
+.attio-resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 1;
+}
+.attio-resizer:hover,
+.attio-resizer.is-resizing {
+  background: #266DF0;
+}
+
+/* Data Rows & Cells */
+.attio-grid td,
+.attio-td {
+  height: 38px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--border-table);
   border-right: 1px solid var(--border-table);
   white-space: nowrap;
@@ -1699,14 +2022,123 @@ input:checked + .slider:before { transform: translateX(16px); }
   vertical-align: middle;
   font-variant-numeric: tabular-nums;
   background: var(--bg-surface);
+  transition: background-color 0.1s;
 }
-.attio-grid td:last-child { border-right: none; }
-.attio-grid tr:hover td { background-color: var(--bg-hover); }
+.attio-grid td:last-child,
+.attio-td:last-child {
+  border-right: none;
+}
+
+.attio-grid tr:hover td,
+.attio-table tr:hover td {
+  background-color: #FBFBFB;
+}
+.attio-grid tr:hover td.sticky-col,
+.attio-table tr:hover td.sticky-col {
+  background-color: #FBFBFB;
+}
+.attio-table tr.is-selected td,
+.attio-table tr.is-selected td.sticky-col {
+  background-color: #F5F8FF !important;
+}
+
+/* Cell Avatar to Checkbox Swap (Attio UX) */
+.cell-entity-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.cell-icon-container {
+  width: 20px;
+  height: 20px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.cell-entity-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: #EEEFF1;
+  color: #505155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  transition: opacity 0.1s;
+}
+.cell-entity-icon.rk-icon {
+  background: #E5EEFF;
+  color: #266DF0;
+}
+.cell-entity-icon.fb-icon {
+  background: #1877F2;
+  color: #FFFFFF;
+}
+.cell-checkbox-wrapper {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.attio-table tr:hover .cell-entity-icon {
+  display: none;
+}
+.attio-table tr:hover .cell-checkbox-wrapper {
+  display: flex;
+}
+.attio-table tr.is-selected .cell-entity-icon {
+  display: none;
+}
+.attio-table tr.is-selected .cell-checkbox-wrapper {
+  display: flex;
+}
+
+/* Attio Checkbox */
+.attio-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #D9DADE;
+  border-radius: 4px;
+  background: #FFFFFF;
+  cursor: pointer;
+  position: relative;
+  outline: none;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  margin: 0;
+}
+.attio-checkbox:hover {
+  border-color: #A2A4A7;
+}
+.attio-checkbox:checked {
+  background-color: #266DF0;
+  border-color: #266DF0;
+}
+.attio-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 3.5px;
+  height: 7px;
+  border: solid #FFFFFF;
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(45deg);
+}
 
 .grid-th-left { display: flex; align-items: center; gap: 6px; }
 .th-type-icon { font-size: 11px; color: var(--text-muted); }
 .cell-account-box { display: flex; align-items: center; gap: 8px; }
-.account-text-name { font-weight: 600; color: var(--text-primary); font-size: 13px; }
+.account-text-name { font-weight: 600; color: var(--text-primary); font-size: 13px; letter-spacing: -0.01em; }
 .account-text-id { font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
 .num-bold { font-weight: 600; color: var(--text-primary); }
 
@@ -3942,106 +4374,211 @@ input[type="text"].attio-popover-name-input:focus,
 .hidden { display: none !important; }
 
 /* ==========================================================
-   ATTIO FLOATING ACTION BAR (BULK ACTIONS)
+   ATTIO FLOATING ACTION BAR (BULK ACTIONS - LIGHT CARD)
    ========================================================== */
 .floating-action-bar {
   position: fixed;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: #18181B;
-  color: #FFF;
-  border-radius: 30px;
-  padding: 6px 14px;
+  background: #FFFFFF;
+  color: #101112;
+  border-radius: 14px;
+  padding: 6px 8px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  gap: 6px;
+  box-shadow: 0px 4px 8px -4px rgba(28, 40, 64, 0.12), 0px 4px 12px -2px rgba(24, 41, 75, 0.16), 0px 0px 0px 1px rgba(28, 40, 64, 0.06);
   z-index: 1000;
   animation: slideUpFloat 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: 'Inter', sans-serif;
+  user-select: none;
 }
 @keyframes slideUpFloat {
   from { opacity: 0; transform: translate(-50%, 16px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
-.floating-action-left {
-  display: flex;
+.attio-selected-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-}
-.selected-badge {
-  background: rgba(245, 163, 0, 0.2);
-  color: #FBBF24;
-  border: 1px solid rgba(245, 163, 0, 0.35);
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-}
-.btn-icon-clear {
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 16px;
+  gap: 6px;
+  background: #F6F7F7;
+  border: 1px solid #E6E7EA;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #101112;
   cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-  border-radius: 4px;
+  user-select: none;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.attio-selected-pill:hover {
+  background: #EEEFF1;
+  border-color: #D9DADE;
+}
+.attio-selected-pill svg {
+  color: #898A8D;
   transition: color 0.15s;
 }
-.btn-icon-clear:hover { color: #FFF; }
+.attio-selected-pill:hover svg {
+  color: #101112;
+}
 
-.floating-action-divider {
+.attio-selected-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #266DF0;
+  color: #FFFFFF;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.attio-bulk-divider {
   width: 1px;
   height: 20px;
-  background: rgba(255, 255, 255, 0.15);
+  background: #E6E7EA;
+  margin: 0 3px;
 }
 
-.floating-action-buttons {
-  display: flex;
+.attio-bulk-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #101112;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s, color 0.15s;
+  white-space: nowrap;
 }
-.floating-action-buttons .btn {
-  border-radius: 20px;
-  font-size: 12px;
-  padding: 5px 12px;
+.attio-bulk-btn:hover {
+  background: #F6F7F7;
 }
-.btn-danger-subtle {
-  background: rgba(239, 68, 68, 0.15);
-  color: #F87171;
-  border: 1px solid rgba(239, 68, 68, 0.25);
+.attio-bulk-btn svg {
+  color: #898A8D;
+  flex-shrink: 0;
+  transition: color 0.15s;
 }
-.btn-danger-subtle:hover {
-  background: rgba(239, 68, 68, 0.3);
-  color: #FECACA;
+.attio-bulk-btn:hover svg {
+  color: #101112;
+}
+.attio-bulk-btn.danger {
+  color: #BA2525;
+}
+.attio-bulk-btn.danger svg {
+  color: #BA2525;
+}
+.attio-bulk-btn.danger:hover {
+  background: #FFEBEB;
 }
 
-.relative-dropdown-container {
+.relative-dropdown-container,
+.attio-popover-container {
   position: relative;
 }
-.floating-dropdown-menu {
+
+.floating-dropdown-menu,
+.attio-dropdown-menu {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  width: 200px;
-  background: var(--bg-surface);
-  color: var(--text-primary);
+  min-width: 200px;
+  background: #FFFFFF;
+  color: #101112;
   border-radius: 10px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
-  padding: 6px;
-  z-index: 1001;
+  border: 1px solid #E6E7EA;
+  box-shadow: 0px 8px 28px -6px rgba(28, 40, 64, 0.12), 0px 18px 88px -4px rgba(28, 40, 64, 0.16), 0px 0px 1px 0px rgba(28, 40, 64, 0.16);
+  padding: 5px;
+  z-index: 1010;
+  animation: fadeInPop 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.attio-popover-container .attio-dropdown-menu,
+.attio-view-selector .attio-dropdown-menu {
+  bottom: auto;
+  top: calc(100% + 6px);
+  left: 0;
 }
 
-/* Checkbox styling */
-.attio-checkbox {
-  width: 15px;
-  height: 15px;
-  border-radius: 4px;
-  border: 1px solid var(--border-strong);
+@keyframes fadeInPop {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.attio-dropdown-section-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #898A8D;
+  padding: 6px 8px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.attio-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #101112;
   cursor: pointer;
-  accent-color: var(--brand-accent);
+  transition: background-color 0.12s, color 0.12s;
+  user-select: none;
+}
+.attio-dropdown-item:hover {
+  background: #F6F7F7;
+}
+.attio-dropdown-item.active {
+  background: #E5EEFF;
+  color: #215BC4;
+  font-weight: 500;
+}
+.attio-dropdown-item.active svg {
+  color: #266DF0;
+}
+.attio-dropdown-item.danger {
+  color: #BA2525;
+}
+.attio-dropdown-item.danger:hover {
+  background: #FFEBEB;
+}
+.attio-dropdown-item-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.attio-dropdown-item-left svg {
+  color: #898A8D;
+  flex-shrink: 0;
+}
+.attio-dropdown-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #898A8D;
+  background: #F1F2F3;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.attio-dropdown-divider {
+  height: 1px;
+  background: #F1F2F3;
+  margin: 4px 0;
 }
 
 /* FB Accounts Table */

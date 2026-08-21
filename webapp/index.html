@@ -12,7 +12,7 @@
   
   <!-- App Stylesheet & Favicon -->
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=8.9.0">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.22.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=9.23.0">
 </head>
 
 <body>
@@ -378,40 +378,96 @@
       <!-- TAB: FACEBOOK АККАУНТЫ (FB ACCOUNTS / PROFILES) -->
       <!-- ============================================== -->
       <section id="tab-fb_accounts" class="tab-content">
-        <div class="accounts-page-header">
-          <div>
-            <span class="eyebrow">Подключения</span>
-            <h2>Facebook Аккаунты</h2>
-            <p>Материнские профили, личные кабинеты, бизнес-менеджеры и статусы токенов.</p>
+        <!-- Attio View Header -->
+        <div class="attio-view-header">
+          <div class="attio-view-header-left">
+            <div class="attio-view-selector">
+              <div class="attio-view-icon-badge" style="background: #EBF3FF; color: #1877F2;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              </div>
+              <span class="attio-view-title">Facebook Профили и BM</span>
+            </div>
           </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-secondary" onclick="window.switchTab('add')">
-              Добавить по токену
+          <div class="attio-view-header-right">
+            <button class="attio-header-btn" type="button" onclick="window.switchTab('add')">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+              <span>По токену</span>
             </button>
-            <button class="btn btn-primary" onclick="window.startMetaOAuthFlow()">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <button class="btn btn-primary btn-sm" onclick="window.startMetaOAuthFlow()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>Подключить Facebook</span>
             </button>
           </div>
         </div>
 
         <!-- FB Accounts Table Container -->
-        <div class="fb-accounts-table-container">
-          <table class="fb-accounts-table" id="fbAccountsTable">
-            <thead>
-              <tr>
-                <th style="width: 280px;">Имя / Профиль</th>
-                <th style="width: 220px;">Личный кабинет</th>
-                <th style="width: 220px;">Бизнес-менеджеры</th>
-                <th style="width: 140px;">Общий расход</th>
-                <th style="width: 130px;">Токен</th>
-                <th style="width: 120px; text-align: right;">Действия</th>
-              </tr>
-            </thead>
-            <tbody id="fbAccountsTableBody">
-              <!-- Dynamically populated by renderFacebookAccounts() -->
-            </tbody>
-          </table>
+        <div id="fbAccountsListContainer">
+          <div class="attio-table-viewport">
+            <table class="attio-table" id="fbAccountsTable">
+              <thead>
+                <tr>
+                  <th class="attio-th sticky-col" style="width: 280px;">
+                    <div class="attio-th-content">
+                      <div class="attio-th-left">
+                        <span class="attio-th-type-icon">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </span>
+                        <span class="attio-th-title">Профиль / Имя</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th class="attio-th" style="width: 220px;">
+                    <div class="attio-th-content">
+                      <div class="attio-th-left">
+                        <span class="attio-th-type-icon">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h4"/></svg>
+                        </span>
+                        <span class="attio-th-title">Личный кабинет</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th class="attio-th" style="width: 220px;">
+                    <div class="attio-th-content">
+                      <div class="attio-th-left">
+                        <span class="attio-th-type-icon">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                        </span>
+                        <span class="attio-th-title">Бизнес-менеджеры</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th class="attio-th" style="width: 140px;">
+                    <div class="attio-th-content">
+                      <div class="attio-th-left">
+                        <span class="attio-th-type-icon">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        </span>
+                        <span class="attio-th-title">Общий расход</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th class="attio-th" style="width: 160px;">
+                    <div class="attio-th-content">
+                      <div class="attio-th-left">
+                        <span class="attio-th-type-icon">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </span>
+                        <span class="attio-th-title">Токен</span>
+                      </div>
+                    </div>
+                  </th>
+                  <th class="attio-th" style="width: 110px; text-align: right;">
+                    <div class="attio-th-content" style="justify-content: flex-end;">
+                      <span class="attio-th-title">Действия</span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="fbAccountsTableBody">
+                <!-- Dynamically populated by renderFacebookAccounts() -->
+              </tbody>
+            </table>
+          </div>
           <div id="fbAccountsEmptyState" class="empty-state hidden">
             <div class="empty-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -427,63 +483,181 @@
       <!-- TAB: РЕКЛАМНЫЕ КАБИНЕТЫ (ACCOUNTS / LISTS) -->
       <!-- ============================================== -->
       <section id="tab-accounts" class="tab-content">
-        <div class="accounts-page-header">
-          <div>
-            <span class="eyebrow" id="accountsPageEyebrow">Рабочее пространство</span>
-            <h2 id="accountsPageTitle">Рекламные кабинеты</h2>
-            <p id="accountsPageSubtitle">Статус Meta, автоматика и назначенные правила — отдельно и без скрытых состояний.</p>
+        <!-- Attio View Header -->
+        <div class="attio-view-header">
+          <div class="attio-view-header-left">
+            <div class="attio-view-selector" onclick="window.toggleAccountsViewDropdown(event)">
+              <div class="attio-view-icon-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+              </div>
+              <span class="attio-view-title" id="accountsViewCurrentTitle">Все кабинеты</span>
+              <svg class="attio-chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              
+              <div id="accountsViewDropdown" class="attio-dropdown-menu hidden" onclick="event.stopPropagation()">
+                <div class="attio-dropdown-section-title">Представления</div>
+                <div class="attio-dropdown-item active" id="viewItemAll" onclick="window.selectAccountGroupView('all')">
+                  <div class="attio-dropdown-item-left">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                    <span>Все кабинеты</span>
+                  </div>
+                  <span class="attio-dropdown-count" id="viewCountAll">0</span>
+                </div>
+                <div id="accountsViewGroupItems"></div>
+                <div class="attio-dropdown-divider"></div>
+                <div class="attio-dropdown-item" onclick="window.openCreateAccountGroup()">
+                  <div class="attio-dropdown-item-left">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>Новая группа...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" class="attio-header-btn" onclick="window.resetAccountsColumnOrder()" title="Сбросить порядок колонок по умолчанию">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+              <span>Сброс колонок</span>
+            </button>
           </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button id="btnGroupShare" class="btn btn-secondary hidden" type="button" onclick="window.copyCurrentGroupLink()" title="Скопировать ссылку на группу">
+
+          <div class="attio-view-header-right">
+            <button id="btnGroupShare" class="attio-header-btn hidden" type="button" onclick="window.copyCurrentGroupLink()" title="Скопировать ссылку на группу">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
               <span>Поделиться</span>
             </button>
-            <button id="btnGroupSettings" class="btn btn-secondary hidden" type="button" onclick="window.openEditCurrentGroup()">
+            <button id="btnGroupSettings" class="attio-header-btn hidden" type="button" onclick="window.openEditCurrentGroup()">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-              <span>Настройки группы</span>
+              <span>Настройки</span>
             </button>
-            <button class="btn btn-primary" onclick="window.switchTab('add')">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <button class="btn btn-primary btn-sm" onclick="window.switchTab('add')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>Добавить кабинеты</span>
             </button>
           </div>
         </div>
 
-
-
-        <!-- Floating Bulk Action Bar (Attio Style) -->
-        <div id="accountBulkActionBar" class="floating-action-bar hidden">
-          <div class="floating-action-left">
-            <span class="selected-badge"><span id="bulkSelectedCount">1</span> выбрано</span>
-            <button class="btn-icon-clear" title="Снять выбор" onclick="window.clearAccountSelection()">&times;</button>
-          </div>
-          <div class="floating-action-divider"></div>
-          <div class="floating-action-buttons">
-            <div class="relative-dropdown-container">
-              <button class="btn btn-secondary btn-sm" type="button" onclick="window.toggleBulkGroupDropdown(event)">
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                Добавить в группу
-                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        <!-- Attio Filter & Sort Toolbar -->
+        <div class="attio-filter-bar">
+          <div class="attio-filter-bar-left">
+            <!-- Sort Popover -->
+            <div class="attio-popover-container">
+              <button type="button" class="attio-filter-pill-btn" id="btnAccountsSort" onclick="window.toggleAccountsSortDropdown(event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="16" y2="6"/><line x1="4" y1="12" x2="11" y2="12"/><line x1="4" y1="18" x2="8" y2="18"/><polyline points="15 15 18 18 21 15"/><line x1="18" y1="9" x2="18" y2="18"/></svg>
+                <span id="accountsSortLabel">Sort</span>
               </button>
-              <div id="bulkGroupDropdown" class="floating-dropdown-menu hidden">
-                <div id="bulkGroupDropdownList"></div>
-                <div class="dropdown-divider"></div>
-                <div class="dropdown-item" onclick="window.openCreateGroupWithSelected()">+ Новая группа...</div>
+              <div id="accountsSortDropdown" class="attio-dropdown-menu hidden" onclick="event.stopPropagation()">
+                <div class="attio-dropdown-section-title">Сортировать по</div>
+                <div class="attio-dropdown-item active" data-sort-key="name" onclick="window.setAccountsSort('name')">Кабинет / Имя</div>
+                <div class="attio-dropdown-item" data-sort-key="spend" onclick="window.setAccountsSort('spend')">Spend (Расход)</div>
+                <div class="attio-dropdown-item" data-sort-key="leads" onclick="window.setAccountsSort('leads')">Лиды</div>
+                <div class="attio-dropdown-item" data-sort-key="cpl" onclick="window.setAccountsSort('cpl')">CPL</div>
+                <div class="attio-dropdown-item" data-sort-key="status" onclick="window.setAccountsSort('status')">Статус Meta</div>
+                <div class="attio-dropdown-item" data-sort-key="rules" onclick="window.setAccountsSort('rules')">Правила</div>
               </div>
             </div>
-            <button class="btn btn-secondary btn-sm" type="button" onclick="window.openBulkAssignRules()">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-              Назначить правила
-            </button>
-            <button class="btn btn-danger-subtle btn-sm" type="button" onclick="window.bulkDeleteSelectedAccounts()">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              Удалить
-            </button>
+
+            <!-- Filter Popover -->
+            <div class="attio-popover-container">
+              <button type="button" class="attio-filter-pill-btn" id="btnAccountsFilter" onclick="window.toggleAccountsFilterDropdown(event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                <span id="accountsFilterLabel">Filter</span>
+              </button>
+              <div id="accountsFilterDropdown" class="attio-dropdown-menu hidden" onclick="event.stopPropagation()">
+                <div class="attio-dropdown-section-title">Фильтрация</div>
+                <div class="attio-dropdown-item active" data-filter-val="all" onclick="window.setAccountsFilter('all')">
+                  <span>Все кабинеты</span>
+                  <span class="attio-dropdown-count" id="countAll">0</span>
+                </div>
+                <div class="attio-dropdown-item" data-filter-val="active" onclick="window.setAccountsFilter('active')">
+                  <span>Активные</span>
+                  <span class="attio-dropdown-count" id="countActive">0</span>
+                </div>
+                <div class="attio-dropdown-item" data-filter-val="rules" onclick="window.setAccountsFilter('rules')">
+                  <span>С автоматикой</span>
+                  <span class="attio-dropdown-count" id="countRules">0</span>
+                </div>
+                <div class="attio-dropdown-item" data-filter-val="issue" onclick="window.setAccountsFilter('issue')">
+                  <span>Ошибки / Пауза</span>
+                  <span class="attio-dropdown-count" id="countIssue">0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Active filter chips -->
+            <div class="attio-active-filter-chips" id="accountsActiveFilterChips"></div>
+          </div>
+
+          <div class="attio-filter-bar-right">
+            <div class="attio-search-box">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="accountsSearchInput" placeholder="Поиск кабинетов..." oninput="window.handleAccountsSearch(this.value)">
+              <button id="accountsSearchClearBtn" class="attio-search-clear hidden" type="button" onclick="window.clearAccountsSearch()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Accounts Grid / List -->
-        <div id="accountsList" class="accounts-grid">
+        <!-- Floating Bulk Action Bar (Attio Style) -->
+        <div id="accountBulkActionBar" class="floating-action-bar hidden">
+          <button type="button" class="attio-selected-pill" onclick="window.clearAccountSelection()" title="Снять выбор">
+            <span id="bulkSelectedCount" class="attio-selected-count">1</span>
+            <span>Selected</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+          
+          <div class="attio-bulk-divider"></div>
+
+          <!-- Add to Group -->
+          <div class="relative-dropdown-container">
+            <button class="attio-bulk-btn" type="button" onclick="window.toggleBulkGroupDropdown(event)">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+              <span>Добавить в группу</span>
+            </button>
+            <div id="bulkGroupDropdown" class="attio-dropdown-menu hidden">
+              <div id="bulkGroupDropdownList"></div>
+              <div class="attio-dropdown-divider"></div>
+              <div class="attio-dropdown-item" onclick="window.openCreateGroupWithSelected()">+ Новая группа...</div>
+            </div>
+          </div>
+
+          <!-- Toggle Automation -->
+          <button class="attio-bulk-btn" type="button" onclick="window.bulkToggleAutomationPrompt()">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            <span>Автоматика</span>
+          </button>
+
+          <!-- Assign Rules -->
+          <button class="attio-bulk-btn" type="button" onclick="window.openBulkAssignRules()">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            <span>Назначить правила</span>
+          </button>
+
+          <!-- More Dropdown -->
+          <div class="relative-dropdown-container">
+            <button class="attio-bulk-btn" type="button" onclick="window.toggleBulkMoreDropdown(event)">
+              <span>More</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div id="bulkMoreDropdown" class="attio-dropdown-menu hidden" style="right: 0; left: auto;">
+              <div class="attio-dropdown-item" onclick="window.bulkCopyAccountIds()">
+                <div class="attio-dropdown-item-left">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                  <span>Скопировать ID</span>
+                </div>
+              </div>
+              <div class="attio-dropdown-divider"></div>
+              <div class="attio-dropdown-item danger" onclick="window.bulkDeleteSelectedAccounts()">
+                <div class="attio-dropdown-item-left">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  <span>Удалить выбранные</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accounts Grid / List Container -->
+        <div id="accountsList">
           <div class="loading-state">
             <div class="spinner"></div>
             <p>Загрузка рекламных кабинетов...</p>
@@ -2113,6 +2287,6 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/app.js?v=9.22.0"></script>
+  <script src="/static/js/app.js?v=9.23.0"></script>
 </body>
 </html>

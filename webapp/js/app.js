@@ -100,6 +100,10 @@
     accountGroupsSortMode: localStorage.getItem('buyerly_groups_sort_mode') || 'relevant',
     accountGroupsCustomOrder: JSON.parse(localStorage.getItem('buyerly_groups_custom_order') || '[]'),
     selectedAccounts: new Set(),
+    accountsColumnOrder: JSON.parse(localStorage.getItem('buyerly_accounts_col_order') || 'null') || ['name', 'status', 'note', 'spend', 'leads', 'cpl', 'automation', 'rules', 'actions'],
+    accountsSortColumn: localStorage.getItem('buyerly_accounts_sort_col') || 'name',
+    accountsSortDirection: localStorage.getItem('buyerly_accounts_sort_dir') || 'asc',
+    accountsColumnWidths: JSON.parse(localStorage.getItem('buyerly_accounts_col_widths') || '{}'),
     fbConnections: [],
     accounts: [],
     accountGroups: [],
@@ -1300,6 +1304,405 @@
     if (rem === 1) return one;
     return many;
   }
+  // ATTIO ACCOUNTS DATA GRID & COLUMN DEFINITIONS
+  // ==========================================================
+  const ACCOUNTS_COLUMNS_DEF = {
+    name: {
+      id: 'name',
+      label: 'Кабинет / Имя',
+      type: 'entity',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>`,
+      minWidth: 200,
+      defaultWidth: 260,
+      sticky: true,
+      sortable: true
+    },
+    status: {
+      id: 'status',
+      label: 'Статус Meta',
+      type: 'status',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>`,
+      minWidth: 110,
+      defaultWidth: 130,
+      sortable: true
+    },
+    note: {
+      id: 'note',
+      label: 'Заметка',
+      type: 'text',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>`,
+      minWidth: 120,
+      defaultWidth: 180,
+      sortable: true
+    },
+    spend: {
+      id: 'spend',
+      label: 'Spend (Сегодня)',
+      type: 'currency',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+      minWidth: 100,
+      defaultWidth: 130,
+      sortable: true
+    },
+    leads: {
+      id: 'leads',
+      label: 'Лиды',
+      type: 'number',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>`,
+      minWidth: 70,
+      defaultWidth: 85,
+      sortable: true
+    },
+    cpl: {
+      id: 'cpl',
+      label: 'CPL',
+      type: 'currency',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+      minWidth: 80,
+      defaultWidth: 95,
+      sortable: true
+    },
+    automation: {
+      id: 'automation',
+      label: 'Автоматика',
+      type: 'toggle',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+      minWidth: 110,
+      defaultWidth: 130,
+      sortable: true
+    },
+    rules: {
+      id: 'rules',
+      label: 'Правила',
+      type: 'rules',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`,
+      minWidth: 120,
+      defaultWidth: 160,
+      sortable: true
+    },
+    actions: {
+      id: 'actions',
+      label: 'Действия',
+      type: 'actions',
+      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>`,
+      minWidth: 100,
+      defaultWidth: 110,
+      sortable: false
+    }
+  };
+
+  // ==========================================================
+  // DRAG & DROP COLUMN REORDERING & RESIZING
+  // ==========================================================
+  let draggedColumnId = null;
+
+  window.handleColumnDragStart = function (e, colId) {
+    if (colId === 'name') {
+      e.preventDefault();
+      return;
+    }
+    draggedColumnId = colId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', colId);
+    const th = e.currentTarget.closest('th');
+    if (th) th.classList.add('is-dragging');
+  };
+
+  window.handleColumnDragOver = function (e, colId) {
+    if (!draggedColumnId || draggedColumnId === colId || colId === 'name') return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const th = e.currentTarget.closest('th');
+    if (!th) return;
+    
+    const rect = th.getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    if (e.clientX < midX) {
+      th.classList.add('drag-over-left');
+      th.classList.remove('drag-over-right');
+    } else {
+      th.classList.add('drag-over-right');
+      th.classList.remove('drag-over-left');
+    }
+  };
+
+  window.handleColumnDragLeave = function (e) {
+    const th = e.currentTarget.closest('th');
+    if (th) {
+      th.classList.remove('drag-over-left', 'drag-over-right');
+    }
+  };
+
+  window.handleColumnDrop = function (e, targetColId) {
+    e.preventDefault();
+    if (!draggedColumnId || draggedColumnId === targetColId || targetColId === 'name') return;
+    
+    const th = e.currentTarget.closest('th');
+    const isRight = th && th.classList.contains('drag-over-right');
+    
+    const currentOrder = [...state.accountsColumnOrder];
+    const fromIdx = currentOrder.indexOf(draggedColumnId);
+    if (fromIdx === -1) return;
+    currentOrder.splice(fromIdx, 1);
+    
+    let toIdx = currentOrder.indexOf(targetColId);
+    if (isRight) toIdx += 1;
+    currentOrder.splice(toIdx, 0, draggedColumnId);
+    
+    state.accountsColumnOrder = currentOrder;
+    localStorage.setItem('buyerly_accounts_col_order', JSON.stringify(currentOrder));
+    draggedColumnId = null;
+    document.querySelectorAll('.attio-th').forEach(el => el.classList.remove('is-dragging', 'drag-over-left', 'drag-over-right'));
+    renderAccounts();
+  };
+
+  window.handleColumnDragEnd = function () {
+    draggedColumnId = null;
+    document.querySelectorAll('.attio-th').forEach(el => el.classList.remove('is-dragging', 'drag-over-left', 'drag-over-right'));
+  };
+
+  window.resetAccountsColumnOrder = function () {
+    state.accountsColumnOrder = ['name', 'status', 'note', 'spend', 'leads', 'cpl', 'automation', 'rules', 'actions'];
+    state.accountsColumnWidths = {};
+    localStorage.removeItem('buyerly_accounts_col_order');
+    localStorage.removeItem('buyerly_accounts_col_widths');
+    showToast('Порядок и ширина колонок сброшены', 'info');
+    renderAccounts();
+  };
+
+  window.initColumnResize = function (e, colId) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const th = e.currentTarget.closest('th');
+    const startWidth = th ? th.offsetWidth : 120;
+    const resizer = e.currentTarget;
+    resizer.classList.add('is-resizing');
+
+    const onMouseMove = (moveEvent) => {
+      const diff = moveEvent.clientX - startX;
+      const newWidth = Math.max(70, startWidth + diff);
+      if (th) th.style.width = newWidth + 'px';
+      state.accountsColumnWidths[colId] = newWidth;
+    };
+
+    const onMouseUp = () => {
+      resizer.classList.remove('is-resizing');
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      localStorage.setItem('buyerly_accounts_col_widths', JSON.stringify(state.accountsColumnWidths));
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  // ==========================================================
+  // VIEWS, SORT & FILTER POPOVERS
+  // ==========================================================
+  window.toggleAccountsViewDropdown = function (event) {
+    if (event) event.stopPropagation();
+    const dd = document.getElementById('accountsViewDropdown');
+    if (!dd) return;
+    const isHidden = dd.classList.contains('hidden');
+    document.querySelectorAll('.attio-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    if (isHidden) {
+      renderAccountsViewGroupItems();
+      dd.classList.remove('hidden');
+      const closeHandler = (e) => {
+        if (!dd.contains(e.target)) {
+          dd.classList.add('hidden');
+          document.removeEventListener('click', closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closeHandler), 10);
+    }
+  };
+
+  function renderAccountsViewGroupItems() {
+    const container = document.getElementById('accountsViewGroupItems');
+    if (!container) return;
+    const groups = state.accountGroups || [];
+    if (!groups.length) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = groups.map(g => {
+      const isActive = state.accountGroupFilter === String(g.id);
+      return `
+        <div class="attio-dropdown-item ${isActive ? 'active' : ''}" onclick="window.selectAccountGroupView('${g.id}')">
+          <div class="attio-dropdown-item-left">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span>${escapeHtml(g.name)}</span>
+          </div>
+          <span class="attio-dropdown-count">${g.accounts_count || 0}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  window.selectAccountGroupView = function (groupId) {
+    state.accountGroupFilter = String(groupId);
+    const dd = document.getElementById('accountsViewDropdown');
+    if (dd) dd.classList.add('hidden');
+    
+    const titleEl = document.getElementById('accountsViewCurrentTitle');
+    const shareBtn = document.getElementById('btnGroupShare');
+    const settingsBtn = document.getElementById('btnGroupSettings');
+
+    if (state.accountGroupFilter === 'all') {
+      if (titleEl) titleEl.textContent = 'Все кабинеты';
+      if (shareBtn) shareBtn.classList.add('hidden');
+      if (settingsBtn) settingsBtn.classList.add('hidden');
+    } else {
+      const group = (state.accountGroups || []).find(g => String(g.id) === state.accountGroupFilter);
+      if (titleEl) titleEl.textContent = group ? group.name : 'Группа';
+      if (shareBtn) shareBtn.classList.remove('hidden');
+      if (settingsBtn) settingsBtn.classList.remove('hidden');
+    }
+    renderAccounts();
+  };
+
+  window.toggleAccountsSortDropdown = function (event) {
+    if (event) event.stopPropagation();
+    const dd = document.getElementById('accountsSortDropdown');
+    if (!dd) return;
+    const isHidden = dd.classList.contains('hidden');
+    document.querySelectorAll('.attio-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    if (isHidden) {
+      dd.classList.remove('hidden');
+      const closeHandler = (e) => {
+        if (!dd.contains(e.target)) {
+          dd.classList.add('hidden');
+          document.removeEventListener('click', closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closeHandler), 10);
+    }
+  };
+
+  window.setAccountsSort = function (colKey) {
+    if (state.accountsSortColumn === colKey) {
+      state.accountsSortDirection = state.accountsSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.accountsSortColumn = colKey;
+      state.accountsSortDirection = (colKey === 'spend' || colKey === 'leads' || colKey === 'cpl') ? 'desc' : 'asc';
+    }
+    localStorage.setItem('buyerly_accounts_sort_col', state.accountsSortColumn);
+    localStorage.setItem('buyerly_accounts_sort_dir', state.accountsSortDirection);
+    
+    const sortBtn = document.getElementById('btnAccountsSort');
+    const sortLabel = document.getElementById('accountsSortLabel');
+    const colDef = ACCOUNTS_COLUMNS_DEF[colKey];
+    if (sortLabel && colDef) {
+      sortLabel.textContent = `${colDef.label} (${state.accountsSortDirection === 'asc' ? '↑' : '↓'})`;
+    }
+    if (sortBtn) sortBtn.classList.add('active');
+
+    const dd = document.getElementById('accountsSortDropdown');
+    if (dd) {
+      dd.classList.add('hidden');
+      dd.querySelectorAll('.attio-dropdown-item').forEach(item => {
+        item.classList.toggle('active', item.getAttribute('data-sort-key') === colKey);
+      });
+    }
+    renderAccounts();
+  };
+
+  window.toggleAccountsFilterDropdown = function (event) {
+    if (event) event.stopPropagation();
+    const dd = document.getElementById('accountsFilterDropdown');
+    if (!dd) return;
+    const isHidden = dd.classList.contains('hidden');
+    document.querySelectorAll('.attio-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    if (isHidden) {
+      dd.classList.remove('hidden');
+      const closeHandler = (e) => {
+        if (!dd.contains(e.target)) {
+          dd.classList.add('hidden');
+          document.removeEventListener('click', closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closeHandler), 10);
+    }
+  };
+
+  window.setAccountsFilter = function (filterVal) {
+    state.filter = filterVal;
+    const filterBtn = document.getElementById('btnAccountsFilter');
+    const filterLabel = document.getElementById('accountsFilterLabel');
+    const labels = {
+      all: 'Filter',
+      active: 'Активные',
+      rules: 'С автоматикой',
+      issue: 'Ошибки'
+    };
+    if (filterLabel) filterLabel.textContent = labels[filterVal] || 'Filter';
+    if (filterBtn) filterBtn.classList.toggle('active', filterVal !== 'all');
+
+    const dd = document.getElementById('accountsFilterDropdown');
+    if (dd) {
+      dd.classList.add('hidden');
+      dd.querySelectorAll('.attio-dropdown-item').forEach(item => {
+        item.classList.toggle('active', item.getAttribute('data-filter-val') === filterVal);
+      });
+    }
+    renderAccounts();
+  };
+
+  window.handleAccountsSearch = function (query) {
+    state.searchQuery = query || '';
+    const clearBtn = document.getElementById('accountsSearchClearBtn');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !state.searchQuery);
+    renderAccounts();
+  };
+
+  window.clearAccountsSearch = function () {
+    state.searchQuery = '';
+    const input = document.getElementById('accountsSearchInput');
+    if (input) input.value = '';
+    const clearBtn = document.getElementById('accountsSearchClearBtn');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    renderAccounts();
+  };
+
+  function sortAccountsList(list) {
+    const col = state.accountsSortColumn;
+    const dir = state.accountsSortDirection === 'desc' ? -1 : 1;
+    if (!col) return list;
+
+    return [...list].sort((a, b) => {
+      let valA, valB;
+      switch (col) {
+        case 'name':
+          valA = accountDisplayName(a).toLowerCase();
+          valB = accountDisplayName(b).toLowerCase();
+          return valA.localeCompare(valB) * dir;
+        case 'spend':
+          valA = a.today_spend || a.insights?.spend || 0;
+          valB = b.today_spend || b.insights?.spend || 0;
+          return (valA - valB) * dir;
+        case 'leads':
+          valA = a.today_leads !== undefined ? a.today_leads : (a.insights?.leads || 0);
+          valB = b.today_leads !== undefined ? b.today_leads : (b.insights?.leads || 0);
+          return (valA - valB) * dir;
+        case 'cpl':
+          valA = a.today_cpl !== undefined ? a.today_cpl : (a.insights?.cpl || 0);
+          valB = b.today_cpl !== undefined ? b.today_cpl : (b.insights?.cpl || 0);
+          return (valA - valB) * dir;
+        case 'status':
+          valA = a.account_status || 0;
+          valB = b.account_status || 0;
+          return (valA - valB) * dir;
+        case 'rules':
+          valA = (a.active_rules || []).length;
+          valB = (b.active_rules || []).length;
+          return (valA - valB) * dir;
+        default:
+          return 0;
+      }
+    });
+  }
 
   // ==========================================================
   // BULK ACTIONS & ATTIO FLOATING BAR
@@ -1310,6 +1713,8 @@
     } else {
       state.selectedAccounts.delete(accountId);
     }
+    const rowEl = document.getElementById(`row-${accountId}`);
+    if (rowEl) rowEl.classList.toggle('is-selected', isChecked);
     updateBulkActionBar();
   };
 
@@ -1334,6 +1739,9 @@
     document.querySelectorAll('.attio-row-checkbox').forEach(cb => {
       cb.checked = isChecked;
     });
+    document.querySelectorAll('.attio-table tr.attio-row').forEach(row => {
+      row.classList.toggle('is-selected', isChecked);
+    });
     updateBulkActionBar();
   };
 
@@ -1341,6 +1749,9 @@
     state.selectedAccounts.clear();
     document.querySelectorAll('.attio-row-checkbox, #selectAllAccountsCheckbox').forEach(cb => {
       cb.checked = false;
+    });
+    document.querySelectorAll('.attio-table tr.attio-row').forEach(row => {
+      row.classList.remove('is-selected');
     });
     updateBulkActionBar();
   };
@@ -1358,6 +1769,8 @@
     } else {
       bar.classList.add('hidden');
       window.closeBulkGroupDropdown();
+      const moreDd = document.getElementById('bulkMoreDropdown');
+      if (moreDd) moreDd.classList.add('hidden');
     }
 
     if (selectAllCb) {
@@ -1371,9 +1784,8 @@
     const dropdown = document.getElementById('bulkGroupDropdown');
     if (!dropdown) return;
     const isShowing = !dropdown.classList.contains('hidden');
-    if (isShowing) {
-      dropdown.classList.add('hidden');
-    } else {
+    document.querySelectorAll('.attio-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    if (!isShowing) {
       renderBulkGroupDropdownList();
       dropdown.classList.remove('hidden');
       const closeHandler = (e) => {
@@ -1399,12 +1811,12 @@
       return;
     }
     listEl.innerHTML = state.accountGroups.map(group => `
-      <div class="dropdown-item" onclick="window.assignSelectedAccountsToGroup(${group.id});">
-        <div class="dropdown-item-left">
+      <div class="attio-dropdown-item" onclick="window.assignSelectedAccountsToGroup(${group.id});">
+        <div class="attio-dropdown-item-left">
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           <span>${escapeHtml(group.name)}</span>
         </div>
-        <span class="list-count" style="font-size: 11px;">${group.accounts_count || 0}</span>
+        <span class="attio-dropdown-count">${group.accounts_count || 0}</span>
       </div>
     `).join('');
   }
@@ -1463,6 +1875,65 @@
     window.openAssignRuleModal(selected[0]);
   };
 
+  window.toggleBulkMoreDropdown = function (event) {
+    if (event) event.stopPropagation();
+    const dd = document.getElementById('bulkMoreDropdown');
+    if (!dd) return;
+    const isHidden = dd.classList.contains('hidden');
+    document.querySelectorAll('.attio-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    if (isHidden) {
+      dd.classList.remove('hidden');
+      const closeHandler = (e) => {
+        if (!dd.contains(e.target)) {
+          dd.classList.add('hidden');
+          document.removeEventListener('click', closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closeHandler), 10);
+    }
+  };
+
+  window.bulkCopyAccountIds = function () {
+    const selected = Array.from(state.selectedAccounts);
+    if (!selected.length) return;
+    const text = selected.join(', ');
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(`Скопировано ${selected.length} ID кабинетов`, 'success');
+    }).catch(() => {
+      showToast('Ошибка копирования', 'error');
+    });
+    const dd = document.getElementById('bulkMoreDropdown');
+    if (dd) dd.classList.add('hidden');
+  };
+
+  window.bulkToggleAutomationPrompt = async function () {
+    const selected = Array.from(state.selectedAccounts);
+    if (!selected.length) return;
+    
+    const selectedAccs = state.accounts.filter(a => state.selectedAccounts.has(a.account_id));
+    const anyEnabled = selectedAccs.some(a => a.rules_enabled);
+    const targetState = !anyEnabled;
+    const actionName = targetState ? 'включить' : 'приостановить';
+    
+    if (!confirm(`Вы действительно хотите ${actionName} автоматику для ${selected.length} выбранных кабинетов?`)) return;
+
+    try {
+      showLoading();
+      for (const acc of selectedAccs) {
+        await apiRequest(`/api/accounts/${acc.account_id}/toggle-rules`, {
+          method: 'POST',
+          body: JSON.stringify({ enabled: targetState })
+        }).catch(() => {});
+      }
+      showToast(`Автоматика ${targetState ? 'включена' : 'приостановлена'} для ${selected.length} кабинетов`, 'success');
+      await loadAccounts();
+    } catch (e) {
+      showToast(e.message || 'Ошибка изменения автоматики', 'error');
+    } finally {
+      hideLoading();
+    }
+  };
+
   window.bulkDeleteSelectedAccounts = async function () {
     const selected = Array.from(state.selectedAccounts);
     if (!selected.length) return;
@@ -1484,7 +1955,108 @@
   };
 
   // ==========================================================
-  // RENDER ACCOUNTS (ALL OR FILTERED BY GROUP)
+  // RENDER CELL HELPER FOR DYNAMIC ACCOUNTS TABLE
+  // ==========================================================
+  function renderAccountCell(acc, colId, isSelected, displayName, metaState, noteText, spendVal, leadsVal, cplVal, activeRules, autoPillClass, autoPillText) {
+    const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
+    const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 120;
+    
+    switch (colId) {
+      case 'name':
+        return `
+          <td class="attio-td sticky-col" style="width: ${width}px; min-width: ${colDef.minWidth || 200}px;">
+            <div class="cell-entity-wrapper">
+              <div class="cell-icon-container">
+                <div class="cell-entity-icon rk-icon" title="Рекламный кабинет">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                </div>
+                <div class="cell-checkbox-wrapper">
+                  <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)">
+                </div>
+              </div>
+              <div style="min-width: 0; overflow: hidden; flex: 1;">
+                <div class="account-text-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
+                <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID" style="cursor:pointer;">
+                  ${escapeHtml(acc.account_id)} · <span class="mono">${escapeHtml(acc.currency || 'USD')}</span>
+                </div>
+              </div>
+            </div>
+          </td>
+        `;
+      case 'status':
+        const metaPillClass = metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red');
+        return `
+          <td class="attio-td" style="width: ${width}px;">
+            <span class="status-pill ${metaPillClass}">
+              <span class="status-dot"></span>
+              ${escapeHtml(metaState.label)}
+            </span>
+          </td>
+        `;
+      case 'note':
+        return `
+          <td class="attio-td" style="width: ${width}px; max-width: ${width}px; overflow: hidden; text-overflow: ellipsis;">
+            <span style="color: ${noteText ? 'var(--text-primary)' : 'var(--text-muted)'}; font-size: 12px;">
+              ${escapeHtml(noteText || '—')}
+            </span>
+          </td>
+        `;
+      case 'spend':
+        return `
+          <td class="attio-td" style="width: ${width}px;">
+            <span class="num-bold">${escapeHtml(spendVal)}</span>
+          </td>
+        `;
+      case 'leads':
+        return `
+          <td class="attio-td" style="width: ${width}px;">
+            <span class="num-bold">${escapeHtml(String(leadsVal))}</span>
+          </td>
+        `;
+      case 'cpl':
+        return `
+          <td class="attio-td" style="width: ${width}px;">
+            <span>${escapeHtml(String(cplVal))}</span>
+          </td>
+        `;
+      case 'automation':
+        return `
+          <td class="attio-td" style="width: ${width}px;">
+            <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules('${escapeHtml(acc.account_id)}', ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit;" title="Нажмите, чтобы переключить автоматику">
+              <span class="status-dot"></span>
+              ${autoPillText}
+            </button>
+          </td>
+        `;
+      case 'rules':
+        return `
+          <td class="attio-td" style="width: ${width}px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="status-pill ${activeRules.length > 0 ? 'green' : 'amber'}" style="font-size: 11px;">
+                ${activeRules.length > 0 ? `${activeRules.length} ${pluralize(activeRules.length, 'правило', 'правила', 'правил')}` : 'Без правил'}
+              </span>
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAssignRuleModal('${escapeHtml(acc.account_id)}')" style="padding: 2px 7px; font-size: 11px;">
+                Настроить
+              </button>
+            </div>
+          </td>
+        `;
+      case 'actions':
+        return `
+          <td class="attio-td" style="width: ${width}px; text-align: right;">
+            <div style="display: inline-flex; align-items: center; gap: 4px;">
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" title="Изменить заметку и название" style="padding: 2px 6px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')" title="Подробнее" style="padding: 2px 7px; font-size: 11px;">Инфо</button>
+            </div>
+          </td>
+        `;
+      default:
+        return `<td class="attio-td">—</td>`;
+    }
+  }
+
+  // ==========================================================
+  // RENDER ACCOUNTS (ATTIO GRID WITH DRAG & DROP AND SORTING)
   // ==========================================================
   function renderAccounts() {
     const listEl = document.getElementById('accountsList');
@@ -1492,7 +2064,7 @@
     const query = state.searchQuery.toLowerCase().trim();
 
     // Filter by search, chips, and group
-    const filtered = state.accounts.filter(acc => {
+    let filtered = state.accounts.filter(acc => {
       const searchText = [acc.name, acc.custom_name, acc.note, acc.account_id]
         .filter(Boolean)
         .join(' ')
@@ -1508,6 +2080,9 @@
       return true;
     });
 
+    // Apply sorting
+    filtered = sortAccountsList(filtered);
+
     // Update chip counters
     const totalCount = state.accounts.length;
     const rulesCount = state.accounts.filter(a => a.rules_enabled).length;
@@ -1518,22 +2093,57 @@
     const elCountActive = document.getElementById('countActive');
     const elCountRules = document.getElementById('countRules');
     const elCountIssue = document.getElementById('countIssue');
+    const elViewCountAll = document.getElementById('viewCountAll');
     const sbTotal = document.getElementById('sidebarTotalCount');
 
     if (elCountAll) elCountAll.textContent = totalCount;
     if (elCountActive) elCountActive.textContent = activeCount;
     if (elCountRules) elCountRules.textContent = rulesCount;
     if (elCountIssue) elCountIssue.textContent = issueCount;
+    if (elViewCountAll) elViewCountAll.textContent = totalCount;
     if (sbTotal) sbTotal.textContent = totalCount;
 
     if (filtered.length === 0) {
       if (listEl) listEl.innerHTML = '';
       if (emptyEl) emptyEl.classList.remove('hidden');
+      updateBulkActionBar();
       return;
     }
 
     if (emptyEl) emptyEl.classList.add('hidden');
 
+    // Build Table Headers dynamically based on state.accountsColumnOrder
+    const colOrder = state.accountsColumnOrder || ['name', 'status', 'note', 'spend', 'leads', 'cpl', 'automation', 'rules', 'actions'];
+    
+    const theadHtml = colOrder.map(colId => {
+      const colDef = ACCOUNTS_COLUMNS_DEF[colId] || { id: colId, label: colId, type: 'text', minWidth: 100, defaultWidth: 120 };
+      const isSticky = colDef.sticky;
+      const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 120;
+      const isSorted = state.accountsSortColumn === colId;
+      const sortArrow = isSorted ? (state.accountsSortDirection === 'asc' ? ' ↑' : ' ↓') : '';
+
+      return `
+        <th class="attio-th ${isSticky ? 'sticky-col' : ''}" 
+            data-col-id="${colId}" 
+            style="width: ${width}px; min-width: ${colDef.minWidth || 70}px;"
+            ${!isSticky ? `draggable="true" ondragstart="window.handleColumnDragStart(event, '${colId}')" ondragover="window.handleColumnDragOver(event, '${colId}')" ondragleave="window.handleColumnDragLeave(event)" ondrop="window.handleColumnDrop(event, '${colId}')" ondragend="window.handleColumnDragEnd(event)"` : ''}>
+          <div class="attio-th-content">
+            <div class="attio-th-left" onclick="${colDef.sortable ? `window.setAccountsSort('${colId}')` : ''}" style="${colDef.sortable ? 'cursor: pointer;' : ''}" title="${colDef.sortable ? 'Нажмите для сортировки' : ''}">
+              ${!isSticky ? `
+                <span class="attio-th-drag-handle" title="Перетащите для изменения порядка">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                </span>
+              ` : ''}
+              <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
+              <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
+            </div>
+            <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" title="Потяните для изменения ширины"></div>
+          </div>
+        </th>
+      `;
+    }).join('');
+
+    // Build Rows
     const rowsHtml = filtered.map(acc => {
       const metaState = getAccountMetaState(acc);
       const activeRules = Array.isArray(acc.active_rules) ? acc.active_rules : [];
@@ -1544,89 +2154,28 @@
       const leadsVal = acc.today_leads !== undefined ? acc.today_leads : (acc.insights?.leads !== undefined ? acc.insights.leads : '—');
       const cplVal = acc.today_cpl !== undefined ? formatMoneyOrDash(acc.today_cpl, acc.currency || 'USD') : (acc.insights?.cpl !== undefined ? formatMoneyOrDash(acc.insights.cpl, acc.currency || 'USD') : '—');
       
-      const metaPillClass = metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red');
       const autoPillClass = acc.rules_enabled ? 'green' : 'amber';
       const autoPillText = acc.rules_enabled ? 'Включена' : 'На паузе';
       const isSelected = state.selectedAccounts.has(acc.account_id);
 
+      const cellsHtml = colOrder.map(colId => 
+        renderAccountCell(acc, colId, isSelected, displayName, metaState, noteText, spendVal, leadsVal, cplVal, activeRules, autoPillClass, autoPillText)
+      ).join('');
+
       return `
-        <tr id="row-${escapeHtml(acc.account_id)}" class="attio-row">
-          <td style="width: 36px; text-align: center;">
-            <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)">
-          </td>
-          <td style="min-width: 240px;">
-            <div class="cell-account-box">
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color:var(--text-muted); flex-shrink: 0;"><rect x="3" y="3" width="18" height="18" rx="2" stroke-width="1.8"/><path d="M3 9h18M9 21V9" stroke-width="1.8"/></svg>
-              <div>
-                <div class="account-text-name">${escapeHtml(displayName)}</div>
-                <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID" style="cursor:pointer;">
-                  ${escapeHtml(acc.account_id)} · <span class="mono">${escapeHtml(acc.currency || 'USD')}</span>
-                </div>
-              </div>
-            </div>
-          </td>
-          <td>
-            <span class="status-pill ${metaPillClass}">
-              <span class="status-dot"></span>
-              ${escapeHtml(metaState.label)}
-            </span>
-          </td>
-          <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis;">
-            <span style="color: ${noteText ? 'var(--text-primary)' : 'var(--text-muted)'}; font-size: 12px;">
-              ${escapeHtml(noteText || '—')}
-            </span>
-          </td>
-          <td>
-            <span class="num-bold">${escapeHtml(spendVal)}</span>
-          </td>
-          <td>
-            <span class="num-bold">${escapeHtml(String(leadsVal))}</span>
-          </td>
-          <td>
-            <span>${escapeHtml(String(cplVal))}</span>
-          </td>
-          <td>
-            <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules('${escapeHtml(acc.account_id)}', ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit;" title="Нажмите, чтобы переключить автоматику">
-              <span class="status-dot"></span>
-              ${autoPillText}
-            </button>
-          </td>
-          <td>
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span class="status-pill ${activeRules.length > 0 ? 'green' : 'amber'}" style="font-size: 11px;">
-                ${activeRules.length > 0 ? `${activeRules.length} ${pluralize(activeRules.length, 'правило', 'правила', 'правил')}` : 'Без правил'}
-              </span>
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAssignRuleModal('${escapeHtml(acc.account_id)}')" style="padding: 2px 7px; font-size: 11px;">
-                Настроить
-              </button>
-            </div>
-          </td>
-          <td>
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountProfileEditor('${escapeHtml(acc.account_id)}')" title="Изменить заметку и название" style="padding: 2px 6px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAccountDetails('${escapeHtml(acc.account_id)}')" title="Подробнее" style="padding: 2px 7px; font-size: 11px;">Инфо</button>
-            </div>
-          </td>
+        <tr id="row-${escapeHtml(acc.account_id)}" class="attio-row ${isSelected ? 'is-selected' : ''}">
+          ${cellsHtml}
         </tr>
       `;
     }).join('');
 
     if (listEl) {
       listEl.innerHTML = `
-        <div class="table-viewport" style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; box-shadow: var(--shadow-sm); overflow: auto;">
-          <table class="attio-grid">
+        <div class="attio-table-viewport">
+          <table class="attio-table">
             <thead>
               <tr>
-                <th style="width: 36px; text-align: center;"><input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" onchange="window.toggleSelectAllAccounts(this.checked)"></th>
-                <th style="width: 240px;"><div class="grid-th-left"><span>Кабинет</span></div></th>
-                <th style="width: 130px;"><div class="grid-th-left"><span>Статус Meta</span></div></th>
-                <th style="width: 180px;"><div class="grid-th-left"><span>Заметка</span></div></th>
-                <th style="width: 120px;"><div class="grid-th-left"><span>Spend</span></div></th>
-                <th style="width: 80px;"><div class="grid-th-left"><span>Лиды</span></div></th>
-                <th style="width: 90px;"><div class="grid-th-left"><span>CPL</span></div></th>
-                <th style="width: 130px;"><div class="grid-th-left"><span>Автоматика</span></div></th>
-                <th style="width: 160px;"><div class="grid-th-left"><span>Правила</span></div></th>
-                <th style="width: 120px;"><div class="grid-th-left"><span>Действия</span></div></th>
+                ${theadHtml}
               </tr>
             </thead>
             <tbody>
@@ -1640,7 +2189,7 @@
   }
 
   // ==========================================================
-  // TAB: FACEBOOK ACCOUNTS (PROFILES, BMS, TOKENS - PHOTO 2)
+  // TAB: FACEBOOK ACCOUNTS (PROFILES, BMS, TOKENS - ATTIO STYLE)
   // ==========================================================
   async function loadFacebookAccounts() {
     const tableBody = document.getElementById('fbAccountsTableBody');
@@ -1700,50 +2249,48 @@
       const spendFormatted = totalSpend > 0 ? `$${totalSpend.toFixed(2)}` : '$0.00';
 
       const isTokenActive = conn.status === 'active';
-      const tokenClass = isTokenActive ? 'active' : 'issue';
+      const tokenClass = isTokenActive ? 'green' : 'amber';
       const tokenText = isTokenActive ? 'Активен' : 'Требует внимания';
 
       return `
-        <tr>
-          <td>
-            <div class="fb-profile-cell">
-              <div class="fb-avatar">${escapeHtml(initial)}</div>
-              <div class="fb-profile-info">
-                <div class="fb-name-row">
-                  <span class="fb-profile-name">${escapeHtml(name)}</span>
-                  <span class="fb-rk-badge">${rkCount} рк</span>
+        <tr class="attio-row">
+          <td class="attio-td sticky-col" style="width: 280px;">
+            <div class="cell-entity-wrapper">
+              <div class="cell-icon-container">
+                <div class="cell-entity-icon fb-icon" title="Facebook Профиль">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 </div>
-                <div class="fb-profile-sub">${escapeHtml(uid)}</div>
+              </div>
+              <div style="min-width: 0; overflow: hidden; flex: 1;">
+                <div class="account-text-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                <div class="account-text-id">UID: ${escapeHtml(uid)} · <span class="fb-rk-badge" style="display:inline-block; margin-left:2px;">${rkCount} рк</span></div>
               </div>
             </div>
           </td>
-          <td>
-            <div style="font-weight: 500; font-size: 13px; color: var(--text-primary);">${escapeHtml(name)}</div>
-            <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px;">
+          <td class="attio-td" style="width: 220px;">
+            <div style="font-weight: 500; font-size: 12.5px; color: var(--text-primary);">${escapeHtml(name)}</div>
+            <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 1px;">
               ID: ${escapeHtml(uid)}
             </div>
-            <div style="margin-top: 4px;">
-              <span class="status-pill green" style="font-size: 10px; padding: 1px 6px;">ACTIVE · USD</span>
-            </div>
           </td>
-          <td>
+          <td class="attio-td" style="width: 220px;">
             <div>
               <span class="fb-bm-chip">${escapeHtml(name)} <b style="color: var(--text-muted); font-size: 10px; margin-left: 2px;">${rkCount} рк</b></span>
             </div>
           </td>
-          <td>
-            <span style="font-weight: 700; font-size: 13px; color: var(--text-primary);">${escapeHtml(spendFormatted)}</span>
+          <td class="attio-td" style="width: 140px;">
+            <span class="num-bold">${escapeHtml(spendFormatted)}</span>
           </td>
-          <td>
-            <span class="token-chip ${tokenClass}">
-              <span class="status-dot ${isTokenActive ? 'dot-success' : 'dot-danger'}"></span>
+          <td class="attio-td" style="width: 160px;">
+            <span class="status-pill ${tokenClass}">
+              <span class="status-dot"></span>
               ${tokenText}
             </span>
           </td>
-          <td style="text-align: right;">
+          <td class="attio-td" style="width: 110px; text-align: right;">
             <div style="display: inline-flex; align-items: center; gap: 4px;">
-              <button class="btn btn-secondary btn-xs" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты" style="padding: 3px 6px;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
-              <button class="btn btn-secondary btn-xs" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение" style="padding: 3px 6px; color: #BA2525;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+              <button class="btn btn-secondary btn-xs" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты" style="padding: 2px 6px;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
+              <button class="btn btn-secondary btn-xs" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение" style="padding: 2px 6px; color: #BA2525;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
           </td>
         </tr>
