@@ -1922,7 +1922,7 @@ input:checked + .slider:before { transform: translateX(16px); }
 .attio-th {
   background: #FBFBFB;
   height: 38px;
-  padding: 0 10px;
+  padding: 0 6px;
   font-size: 12px;
   font-weight: 500;
   color: #505155;
@@ -1934,9 +1934,9 @@ input:checked + .slider:before { transform: translateX(16px); }
   z-index: 10;
   user-select: none;
   box-sizing: border-box;
-  overflow: visible !important;
-  text-overflow: ellipsis;
-  min-width: 0;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-width: 0 !important;
   transition: background-color 0.15s;
 }
 .attio-grid th:last-child,
@@ -1946,7 +1946,7 @@ input:checked + .slider:before { transform: translateX(16px); }
 
 .attio-th.attio-th-spacer,
 .attio-td.attio-td-spacer {
-  width: auto !important;
+  width: 100% !important;
   min-width: 0 !important;
   padding: 0 !important;
   border-right: none !important;
@@ -1978,20 +1978,20 @@ input:checked + .slider:before { transform: translateX(16px); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   height: 100%;
-  min-width: 0;
-  overflow: hidden;
+  min-width: 0 !important;
+  overflow: hidden !important;
 }
 .attio-th-left {
   display: flex;
   align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 1;
+  gap: 5px;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-width: 0 !important;
+  flex: 1 1 auto;
 }
 .attio-th-type-icon {
   display: flex;
@@ -2003,10 +2003,11 @@ input:checked + .slider:before { transform: translateX(16px); }
   font-size: 12px;
   font-weight: 500;
   color: #505155;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  min-width: 0 !important;
+  flex: 1 1 auto;
 }
 .attio-th-drag-handle {
   cursor: grab;
@@ -2058,13 +2059,13 @@ body.is-dragging-column * {
 /* Attio High-Precision Resizer & Vertical Guide Line */
 .attio-resizer {
   position: absolute;
-  right: -5px;
+  right: 0;
   top: 0;
   bottom: 0;
-  width: 10px;
+  width: 8px;
   cursor: col-resize;
   user-select: none;
-  z-index: 50;
+  z-index: 30;
   pointer-events: auto;
 }
 .attio-resizer::after {
@@ -2072,11 +2073,18 @@ body.is-dragging-column * {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 4px;
+  right: 0;
   width: 2px;
   background: transparent;
   transition: background-color 0.12s ease;
   pointer-events: none;
+}
+.attio-th:hover .attio-resizer::after {
+  background: rgba(38, 109, 240, 0.4);
+}
+.attio-resizer:hover::after,
+.attio-resizer.is-resizing::after {
+  background: #266DF0 !important;
 }
 .attio-th:hover .attio-resizer::after {
   background: rgba(38, 109, 240, 0.4);

@@ -1741,6 +1741,8 @@
   };
 
 
+  let lastResizerClick = { time: 0, colId: null };
+
   window.resetAccountsColumnOrder = function () {
     state.accountsColumnOrder = [...DEFAULT_ACCOUNTS_COLUMN_ORDER];
     state.accountsColumnWidths = {};
@@ -1755,7 +1757,7 @@
       e.preventDefault();
       e.stopPropagation();
     }
-    if (state.accountsColumnWidths && state.accountsColumnWidths[colId] !== undefined) {
+    if (state.accountsColumnWidths) {
       delete state.accountsColumnWidths[colId];
       localStorage.setItem('buyerly_accounts_col_widths', JSON.stringify(state.accountsColumnWidths));
       const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
@@ -1769,11 +1771,20 @@
     e.preventDefault();
     e.stopPropagation();
 
+    // Programmatic double-click detector (guaranteed to trigger)
+    const now = Date.now();
+    if (lastResizerClick.colId === colId && (now - lastResizerClick.time) < 350) {
+      lastResizerClick = { time: 0, colId: null };
+      window.resetSingleColumnWidth(e, colId);
+      return;
+    }
+    lastResizerClick = { time: now, colId: colId };
+
     const startX = e.clientX;
     const th = document.getElementById(`th-col-${colId}`) || e.currentTarget.closest('th');
     const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
     const startWidth = th ? th.offsetWidth : (state.accountsColumnWidths[colId] || colDef.defaultWidth || 120);
-    const minWidth = 24; 
+    const minWidth = 20; // Zero-floor minimum: 20px
     const colTrack = document.getElementById(`col-track-${colId}`);
     const resizer = e.currentTarget;
     const viewport = document.querySelector('.attio-table-viewport');
@@ -1809,9 +1820,14 @@
 
       if (rafId) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
-        if (colTrack) colTrack.style.width = `${currentWidth}px`;
+        if (colTrack) {
+          colTrack.style.width = `${currentWidth}px`;
+          colTrack.style.maxWidth = `${currentWidth}px`;
+          colTrack.style.minWidth = `${currentWidth}px`;
+        }
         if (th) {
           th.style.width = `${currentWidth}px`;
+          th.style.maxWidth = `${currentWidth}px`;
           th.style.minWidth = `${currentWidth}px`;
         }
         if (guide && th && viewport) {
@@ -2838,7 +2854,7 @@
     const allSelected = totalFiltered > 0 && selectedCount >= totalFiltered;
     
     const theadHtml = colOrder.map(colId => {
-      const colDef = ACCOUNTS_COLUMNS_DEF[colId] || { id: colId, label: colId, type: 'text', minWidth: 28, defaultWidth: 130 };
+      const colDef = ACCOUNTS_COLUMNS_DEF[colId] || { id: colId, label: colId, type: 'text', minWidth: 20, defaultWidth: 130 };
       const isSticky = colDef.sticky;
       const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
       const isSorted = state.accountsSortColumn === colId;
@@ -2849,7 +2865,8 @@
         return `
           <th class="attio-th sticky-col ${isHeaderSelectedClass}" 
               data-col-id="${colId}" 
-              id="th-col-${colId}">
+              id="th-col-${colId}"
+              style="width: ${width}px; max-width: ${width}px; min-width: ${width}px;">
             <div class="attio-th-content" onclick="window.setAccountsSort('name')" style="cursor: pointer;" title="Нажмите для сортировки">
               <div class="attio-th-left">
                 <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
@@ -2859,7 +2876,7 @@
                 <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
               </div>
             </div>
-            <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" ondblclick="window.resetSingleColumnWidth(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
+            <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
           </th>
         `;
       }
@@ -2868,6 +2885,7 @@
         <th class="attio-th" 
             data-col-id="${colId}" 
             id="th-col-${colId}"
+            style="width: ${width}px; max-width: ${width}px; min-width: ${width}px;"
             onmousedown="window.handleHeaderPointerDown(event, '${colId}')">
           <div class="attio-th-content">
             <div class="attio-th-left">
@@ -2875,7 +2893,7 @@
               <span class="attio-th-title">${escapeHtml(colDef.label)}${sortArrow}</span>
             </div>
           </div>
-          <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" ondblclick="window.resetSingleColumnWidth(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
+          <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
         </th>
       `;
     }).join('');
@@ -2906,8 +2924,8 @@
       const colgroupHtml = colOrder.map(colId => {
         const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
         const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
-        return `<col id="col-track-${colId}" style="width: ${width}px;">`;
-      }).join('') + '<col style="width: 120px;"><col class="col-track-spacer" style="width: auto;">';
+        return `<col id="col-track-${colId}" style="width: ${width}px; max-width: ${width}px; min-width: ${width}px;">`;
+      }).join('') + '<col style="width: 120px; max-width: 120px; min-width: 120px;"><col class="col-track-spacer" style="width: 100%;">';
 
       listEl.innerHTML = `
         <div class="attio-table-viewport">
@@ -2918,7 +2936,7 @@
             <thead>
               <tr>
                 ${theadHtml}
-                <th class="attio-th attio-th-add-col" style="width: 120px; min-width: 120px;">
+                <th class="attio-th attio-th-add-col" style="width: 120px; max-width: 120px; min-width: 120px;">
                   <button type="button" class="attio-add-col-btn" onclick="window.toggleAddColumnPopover(event)" title="Добавить колонку в таблицу">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     <span>Add column</span>
