@@ -2447,7 +2447,6 @@ body.is-resizing-column * {
   scrollbar-width: thin;
 }
 .rules-kanban-board, .rule-groups-grid {
-.rules-kanban-board, .rule-groups-grid {
   display: flex !important;
   align-items: flex-start;
   gap: 16px;
