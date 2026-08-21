@@ -99,9 +99,11 @@
     collapsedSections: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_sections') || '[]')),
     accountGroupsSortMode: localStorage.getItem('buyerly_groups_sort_mode') || 'relevant',
     accountGroupsCustomOrder: JSON.parse(localStorage.getItem('buyerly_groups_custom_order') || '[]'),
+    selectedAccounts: new Set(),
     accountsColumnOrder: JSON.parse(localStorage.getItem('buyerly_accounts_col_order_v2') || 'null') || [
       'name', 'status', 'timezone', 'spend', 'cpm', 'cpc', 'ctr', 'leads', 'cpl', 'registrations', 'cpreg', 'purchases', 'cpp', 'automation'
     ],
+    accountsSortColumn: localStorage.getItem('buyerly_accounts_sort_col') || 'name',
     accountsSortDirection: localStorage.getItem('buyerly_accounts_sort_dir') || 'asc',
     accountsColumnWidths: JSON.parse(localStorage.getItem('buyerly_accounts_col_widths') || '{}'),
     fbConnections: [],
@@ -2245,6 +2247,7 @@
     const countEl = document.getElementById('bulkSelectedCount');
     const selectAllCb = document.getElementById('selectAllAccountsCheckbox');
     const thName = document.getElementById('th-col-name');
+    if (!state.selectedAccounts) state.selectedAccounts = new Set();
     if (!bar) return;
 
     const count = state.selectedAccounts.size;
@@ -2757,6 +2760,8 @@
     }
 
     if (emptyEl) emptyEl.classList.add('hidden');
+
+    if (!state.selectedAccounts) state.selectedAccounts = new Set();
 
     // Build Table Headers dynamically based on state.accountsColumnOrder
     const colOrder = state.accountsColumnOrder || DEFAULT_ACCOUNTS_COLUMN_ORDER;
