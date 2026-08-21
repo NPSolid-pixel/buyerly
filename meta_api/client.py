@@ -591,8 +591,10 @@ class MetaClient:
 
         # 3. Объединяем статус и метрики с канонической дедупликацией
         unified_adsets = []
+        processed_ids = set()
         for adset in adsets_list:
-            a_id = adset["id"]
+            a_id = str(adset["id"])
+            processed_ids.add(a_id)
             a_name = adset["name"]
             status = adset.get("status", "UNKNOWN")
             effective_status = adset.get("effective_status", status)
@@ -604,6 +606,15 @@ class MetaClient:
             clicks = normalized["clicks"]
             cpc = self._safe_float(insight.get("cpc", 0.0))
             ctr = self._safe_float(insight.get("ctr", 0.0))
+
+            # Безопасный пропуск: мертвые архивные/удаленные адсеты без активности за отчетный период
+            if (
+                effective_status in ("ARCHIVED", "DELETED")
+                and spend == 0
+                and impressions == 0
+                and clicks == 0
+            ):
+                continue
 
             unified_adsets.append({
                 "adset_id": a_id,
@@ -621,6 +632,29 @@ class MetaClient:
                 "daily_budget": from_meta_budget_units(adset.get("daily_budget", 0), currency),
                 "currency": normalize_currency(currency),
             })
+
+        # Дополнительная страховка: адсеты со спендом из инсайтов, которых нет в списке активных
+        for a_id, insight in insights_data.items():
+            if str(a_id) not in processed_ids:
+                normalized = self._normalize_basic_insight(insight)
+                spend = normalized["spend"]
+                if spend > 0 or normalized["impressions"] > 0:
+                    unified_adsets.append({
+                        "adset_id": str(a_id),
+                        "adset_name": insight.get("adset_name") or f"AdSet {a_id}",
+                        "status": "ARCHIVED",
+                        "effective_status": "ARCHIVED",
+                        "spend": spend,
+                        "clicks": normalized["clicks"],
+                        "leads": normalized["leads"],
+                        "registrations": normalized["registrations"],
+                        "purchases": normalized["purchases"],
+                        "impressions": normalized["impressions"],
+                        "cpc": round(self._safe_float(insight.get("cpc", 0.0)), 2),
+                        "ctr": round(self._safe_float(insight.get("ctr", 0.0)), 2),
+                        "daily_budget": 0.0,
+                        "currency": normalize_currency(currency),
+                    })
 
         return unified_adsets
 
