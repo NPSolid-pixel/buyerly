@@ -176,6 +176,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="ruleGroupColorPalette"',
             'id="newColumnColorPalette"',
             'id="ruleGroupSelect"',
+            'id="modalLinkRuleAccounts"',
+            'id="btnOpenLinkAccounts"',
             'rules-kanban-board',
         ):
             self.assertIn(contract, self.index)
@@ -203,6 +205,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.toggleSelectRule',
             'window.clearRuleSelection',
             'window.bulkDeleteSelectedRules',
+            'window.openLinkRuleAccountsModal',
+            'window.saveLinkRuleAccounts',
+            'window.detachRuleFromAccountDirectly',
         ):
             self.assertIn(script_contract, self.script)
 
@@ -228,6 +233,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             '.attio-popover',
             '.choose-rule-card',
             '.color-swatch',
+            '.record-accounts-toolbar',
+            '.record-account-detach-btn',
         ):
             self.assertIn(style_contract, self.styles)
 

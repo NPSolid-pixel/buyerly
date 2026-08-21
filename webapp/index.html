@@ -879,6 +879,16 @@
 
               <!-- Tab 3: Accounts -->
               <div id="recordTabAccounts" class="record-tab-content hidden">
+                <div class="record-accounts-toolbar">
+                  <div class="record-accounts-toolbar-left">
+                    <span class="record-accounts-toolbar-title">Привязанные кабинеты</span>
+                    <span id="recordAccountsCountBadge" class="tab-badge">0</span>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btnOpenLinkAccounts" onclick="window.openLinkRuleAccountsModal()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span>Привязать кабинеты</span>
+                  </button>
+                </div>
                 <div class="record-accounts-list" id="recordAccountsList">
                   <!-- List of ad accounts with active status toggle -->
                 </div>
@@ -2536,6 +2546,47 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- Modal: Link Rule to Accounts (Attio Style) -->
+    <div id="modalLinkRuleAccounts" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalLinkRuleAccounts')">
+      <div class="choose-group-modal-card" style="width: 520px;" onclick="event.stopPropagation()">
+        <div class="choose-group-header">
+          <div class="choose-group-breadcrumb">
+            <span class="choose-group-title">Привязка кабинетов</span>
+            <span id="linkRuleAccountsSelectedBadge" class="choose-group-selected-pill">0 выбрано</span>
+          </div>
+          <button class="choose-group-close-btn" type="button" onclick="window.closeModal('modalLinkRuleAccounts')" title="Закрыть (ESC)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+
+        <div class="choose-group-search-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" id="linkRuleAccountsSearchInput" class="choose-group-search-input" placeholder="Поиск кабинетов по названию или ID..." autocomplete="off" oninput="window.filterLinkRuleAccountsList(this.value)">
+        </div>
+
+        <div class="choose-group-body" style="max-height: 340px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div class="choose-group-section-label" style="margin: 0;">РЕКЛАМНЫЕ КАБИНЕТЫ ВОРКСПЕЙСА</div>
+            <button type="button" class="btn-link-action" style="font-size: 11.5px;" onclick="window.toggleSelectAllLinkRuleAccounts()">Выбрать все</button>
+          </div>
+          <div id="linkRuleAccountsList" class="choose-group-list" role="listbox">
+            <!-- Dynamically populated accounts with checkboxes -->
+          </div>
+        </div>
+
+        <div class="choose-group-footer">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="window.closeModal('modalLinkRuleAccounts')">
+            <span>Отмена</span>
+            <kbd class="btn-kbd-sec">ESC</kbd>
+          </button>
+          <button type="button" id="btnSaveLinkRuleAccounts" class="choose-group-btn-primary" onclick="window.saveLinkRuleAccounts()">
+            <span>Сохранить привязки</span>
+            <kbd class="btn-kbd">↵</kbd>
+          </button>
+        </div>
       </div>
     </div>
 

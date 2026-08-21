@@ -131,6 +131,8 @@
     chooseRuleTargetGroupId: null,
     chooseRuleSelectedIndex: 0,
     chooseRuleFilteredList: [],
+    linkRuleModalPresetId: null,
+    linkRuleSelectedAccountIds: new Set(),
     activePresetId: null,
     templatePresetId: null,
     ruleBuilderMode: 'create',
@@ -4532,7 +4534,7 @@
     // Calculate Linked Accounts
     let linkedAccounts = [];
     (state.accounts || []).forEach(acc => {
-      if (acc.rules_enabled && (acc.active_rules || []).some(r => r.preset_id === preset.id)) {
+      if ((acc.active_rules || []).some(r => r.preset_id === preset.id)) {
         linkedAccounts.push(acc);
       }
     });
@@ -4545,19 +4547,36 @@
     if (accountsContainer) {
       if (linkedAccounts.length === 0) {
         accountsContainer.innerHTML = `
-          <div style="text-align:center; padding: 30px; color: var(--text-muted); font-size: 13px;">
-            Правило пока не привязано ни к одному активному кабинету.<br>
-            Включите его в настройках кабинета или назначьте группу.
+          <div class="record-empty-state" style="text-align:center; padding: 40px 20px;">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom: 10px; opacity: 0.6;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+            <div style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Правило не привязано к кабинетам</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Привяжите правило к рекламным кабинетам, чтобы воркер начал проверять условия.</div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="window.openLinkRuleAccountsModal(${preset.id})">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>Привязать к кабинетам</span>
+            </button>
           </div>
         `;
       } else {
         accountsContainer.innerHTML = linkedAccounts.map(acc => `
-          <div class="record-account-row">
-            <div>
-              <div class="record-account-name">${escapeHtml(acc.name)}</div>
-              <div class="record-account-id">ID: ${escapeHtml(acc.account_id)} &bull; ${acc.currency || 'USD'}</div>
+          <div class="record-account-row" id="recordAccRow_${escapeHtml(acc.account_id)}">
+            <div class="record-account-left">
+              <div class="record-account-name">
+                <span>${escapeHtml(acc.custom_name || acc.name)}</span>
+                ${acc.custom_name ? `<span style="font-size:11px; color:var(--text-muted); font-weight:400;">(${escapeHtml(acc.name)})</span>` : ''}
+              </div>
+              <div class="record-account-id">
+                ID: ${escapeHtml(acc.account_id)} &bull; ${acc.currency || 'USD'} ${acc.batch_name ? `&bull; ${escapeHtml(acc.batch_name)}` : ''}
+              </div>
             </div>
-            <span class="badge badge-success">Активно</span>
+            <div class="record-account-right">
+              <span class="badge ${acc.rules_enabled ? 'badge-success' : 'badge-neutral'}">
+                ${acc.rules_enabled ? 'Автоматика вкл.' : 'На паузе'}
+              </span>
+              <button type="button" class="record-account-detach-btn" title="Отвязать правило от кабинета" onclick="window.detachRuleFromAccountDirectly('${escapeHtml(acc.account_id)}', ${preset.id})">
+                Отвязать
+              </button>
+            </div>
           </div>
         `).join('');
       }
@@ -4570,6 +4589,192 @@
     window.renderRecordHighlights(preset, linkedAccounts.length);
 
     window.setRecordActiveTab('overview');
+  };
+
+  // Direct Detach from Rule Record View
+  window.detachRuleFromAccountDirectly = async function (accountId, presetId) {
+    if (!confirm('Отвязать это правило от кабинета?')) return;
+    try {
+      await apiRequest(`/api/accounts/${accountId}/detach-rule/${presetId}`, {
+        method: 'POST'
+      });
+      // Update local state
+      const acc = state.accounts.find(a => a.account_id === accountId);
+      if (acc && acc.active_rules) {
+        acc.active_rules = acc.active_rules.filter(r => r.preset_id !== presetId);
+      }
+      showToast('Правило отвязано от кабинета', 'success');
+      haptic('notification', 'success');
+      const preset = state.presets.find(p => p.id === presetId);
+      if (preset) populateRecordView(preset);
+      if (state.activeTab === 'accounts') renderAccounts();
+      if (state.activeTab === 'rules') renderRulesTab();
+    } catch (e) {
+      showToast(`Ошибка отвязки: ${e.message}`, 'error');
+    }
+  };
+
+  // Open Link Rule to Accounts Modal
+  window.openLinkRuleAccountsModal = function (presetId) {
+    const targetPresetId = presetId || state.currentRecordPresetId;
+    const preset = state.presets.find(p => p.id === targetPresetId);
+    if (!preset) return;
+
+    state.linkRuleModalPresetId = preset.id;
+    state.linkRuleSelectedAccountIds = new Set(
+      (state.accounts || [])
+        .filter(acc => (acc.active_rules || []).some(r => r.preset_id === preset.id))
+        .map(acc => acc.account_id)
+    );
+
+    const searchInput = document.getElementById('linkRuleAccountsSearchInput');
+    if (searchInput) searchInput.value = '';
+
+    window.renderLinkRuleAccountsList('');
+    window.openModal('modalLinkRuleAccounts');
+  };
+
+  window.renderLinkRuleAccountsList = function (query) {
+    const listEl = document.getElementById('linkRuleAccountsList');
+    const badgeEl = document.getElementById('linkRuleAccountsSelectedBadge');
+    if (!listEl) return;
+
+    const q = (query || '').toLowerCase().trim();
+    const filteredAccounts = (state.accounts || []).filter(acc => {
+      if (!q) return true;
+      const name = (acc.name || '').toLowerCase();
+      const customName = (acc.custom_name || '').toLowerCase();
+      const accId = (acc.account_id || '').toLowerCase();
+      const batch = (acc.batch_name || '').toLowerCase();
+      return name.includes(q) || customName.includes(q) || accId.includes(q) || batch.includes(q);
+    });
+
+    if (badgeEl) {
+      badgeEl.textContent = `${state.linkRuleSelectedAccountIds.size} выбрано`;
+    }
+
+    if (filteredAccounts.length === 0) {
+      listEl.innerHTML = `
+        <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">
+          ${q ? 'Кабинеты не найдены' : 'В этом воркспейсе пока нет рекламных кабинетов'}
+        </div>
+      `;
+      return;
+    }
+
+    listEl.innerHTML = filteredAccounts.map(acc => {
+      const isSelected = state.linkRuleSelectedAccountIds.has(acc.account_id);
+      const attachedRulesCount = (acc.active_rules || []).length;
+      return `
+        <div class="choose-group-item ${isSelected ? 'selected' : ''}" style="cursor: pointer;" onclick="window.toggleLinkAccountSelection('${escapeHtml(acc.account_id)}')">
+          <div class="choose-group-item-left" style="gap: 12px;">
+            <input type="checkbox" class="link-account-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); window.toggleLinkAccountSelection('${escapeHtml(acc.account_id)}')">
+            <div>
+              <div class="choose-group-item-name" style="font-weight: 600;">
+                ${escapeHtml(acc.custom_name || acc.name)}
+                ${acc.custom_name ? `<span style="font-size:11px; color:var(--text-muted); font-weight:400;">(${escapeHtml(acc.name)})</span>` : ''}
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted);">
+                ${escapeHtml(acc.account_id)} &bull; ${acc.currency || 'USD'} ${acc.batch_name ? `&bull; ${escapeHtml(acc.batch_name)}` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="choose-group-item-right">
+            <span class="choose-group-count-badge" title="Всего правил привязано к кабинету">
+              ${attachedRulesCount} ${attachedRulesCount === 1 ? 'правило' : 'правил'}
+            </span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  window.filterLinkRuleAccountsList = function (query) {
+    window.renderLinkRuleAccountsList(query);
+  };
+
+  window.toggleLinkAccountSelection = function (accountId) {
+    if (state.linkRuleSelectedAccountIds.has(accountId)) {
+      state.linkRuleSelectedAccountIds.delete(accountId);
+    } else {
+      state.linkRuleSelectedAccountIds.add(accountId);
+    }
+    const searchInput = document.getElementById('linkRuleAccountsSearchInput');
+    window.renderLinkRuleAccountsList(searchInput ? searchInput.value : '');
+  };
+
+  window.toggleSelectAllLinkRuleAccounts = function () {
+    const searchInput = document.getElementById('linkRuleAccountsSearchInput');
+    const q = (searchInput ? searchInput.value : '').toLowerCase().trim();
+    const visibleAccounts = (state.accounts || []).filter(acc => {
+      if (!q) return true;
+      const name = (acc.name || '').toLowerCase();
+      const customName = (acc.custom_name || '').toLowerCase();
+      const accId = (acc.account_id || '').toLowerCase();
+      const batch = (acc.batch_name || '').toLowerCase();
+      return name.includes(q) || customName.includes(q) || accId.includes(q) || batch.includes(q);
+    });
+
+    const allVisibleSelected = visibleAccounts.every(acc => state.linkRuleSelectedAccountIds.has(acc.account_id));
+    if (allVisibleSelected) {
+      visibleAccounts.forEach(acc => state.linkRuleSelectedAccountIds.delete(acc.account_id));
+    } else {
+      visibleAccounts.forEach(acc => state.linkRuleSelectedAccountIds.add(acc.account_id));
+    }
+    window.renderLinkRuleAccountsList(searchInput ? searchInput.value : '');
+  };
+
+  window.saveLinkRuleAccounts = async function () {
+    const presetId = state.linkRuleModalPresetId;
+    const preset = state.presets.find(p => p.id === presetId);
+    if (!preset) return;
+
+    const previouslyAttached = new Set(
+      (state.accounts || [])
+        .filter(acc => (acc.active_rules || []).some(r => r.preset_id === preset.id))
+        .map(acc => acc.account_id)
+    );
+
+    const toAttach = [...state.linkRuleSelectedAccountIds].filter(id => !previouslyAttached.has(id));
+    const toDetach = [...previouslyAttached].filter(id => !state.linkRuleSelectedAccountIds.has(id));
+
+    window.closeModal('modalLinkRuleAccounts');
+
+    if (toAttach.length === 0 && toDetach.length === 0) {
+      showToast('Привязки не изменились', 'info');
+      return;
+    }
+
+    const btnSave = document.getElementById('btnSaveLinkRuleAccounts');
+    if (btnSave) btnSave.disabled = true;
+
+    try {
+      const promises = [
+        ...toAttach.map(accId => apiRequest(`/api/accounts/${accId}/assign-rule`, {
+          method: 'POST',
+          body: JSON.stringify({ preset_id: preset.id })
+        })),
+        ...toDetach.map(accId => apiRequest(`/api/accounts/${accId}/detach-rule/${preset.id}`, {
+          method: 'POST'
+        }))
+      ];
+
+      await Promise.allSettled(promises);
+
+      // Reload fresh accounts
+      await loadAccounts(false);
+
+      populateRecordView(preset);
+      if (state.activeTab === 'accounts') renderAccounts();
+      if (state.activeTab === 'rules') renderRulesTab();
+
+      showToast(`Привязки обновлены: +${toAttach.length}, -${toDetach.length}`, 'success');
+      haptic('notification', 'success');
+    } catch (e) {
+      showToast(`Ошибка сохранения: ${e.message}`, 'error');
+    } finally {
+      if (btnSave) btnSave.disabled = false;
+    }
   };
 
   window.loadRuleRecordActivity = async function (presetId, presetName) {

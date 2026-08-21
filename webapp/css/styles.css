@@ -4468,6 +4468,27 @@ input[type="text"].attio-popover-name-input:focus,
   flex-shrink: 0;
 }
 
+.record-accounts-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.record-accounts-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-accounts-toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .record-accounts-list {
   display: flex;
   flex-direction: column;
@@ -4483,16 +4504,69 @@ input[type="text"].attio-popover-name-input:focus,
   background: var(--bg-canvas);
   border: 1px solid var(--border-subtle);
   font-size: 13px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.record-account-row:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+}
+
+.record-account-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .record-account-name {
   font-weight: 600;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .record-account-id {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.record-account-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.record-account-detach-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.record-account-detach-btn:hover {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.2);
+  color: #DC2626;
+}
+
+.link-account-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.link-account-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  accent-color: var(--brand-accent, #F5A300);
+  cursor: pointer;
 }
 
 .edit-rule-header-title-block {
