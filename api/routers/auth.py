@@ -52,6 +52,26 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
         raise HTTPException(status_code=400, detail="Некорректный адрес электронной почты")
 
     async with async_session_maker() as session:
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        # Rate limiting: max 1 request per 60 seconds per email
+        recent_otp = (
+            await session.execute(
+                select(EmailVerificationCode)
+                .where(
+                    (func.lower(EmailVerificationCode.email) == email_clean)
+                    & (EmailVerificationCode.created_at > now_dt - timedelta(seconds=60))
+                )
+                .order_by(EmailVerificationCode.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if recent_otp:
+            raise HTTPException(
+                status_code=429,
+                detail="Код уже был отправлен недавно. Подождите 1 минуту перед повторным запросом.",
+            )
+
         stmt = select(TelegramUser).where(
             (func.lower(TelegramUser.email) == email_clean)
             | (func.lower(TelegramUser.username) == email_clean)
@@ -67,7 +87,7 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
                 is_approved=True,
                 onboarding_completed=False,
                 onboarding_step="personal_details",
-                auth_token=str(uuid.uuid4()),
+                auth_token=secrets.token_urlsafe(32),
             )
             session.add(user)
             await session.flush()
@@ -76,7 +96,6 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
 
         # Generate 6-digit random code
         code = str(secrets.randbelow(900000) + 100000)
-        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
         expires_at = now_dt + timedelta(minutes=15)
 
         otp_record = EmailVerificationCode(
@@ -84,6 +103,8 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
             code=code,
             expires_at=expires_at,
             is_used=False,
+            failed_attempts=0,
+            created_at=now_dt,
         )
         session.add(otp_record)
         await session.commit()
@@ -132,7 +153,6 @@ async def login_user(req: LoginRequest):
                 select(EmailVerificationCode)
                 .where(
                     (func.lower(EmailVerificationCode.email) == check_email)
-                    & (EmailVerificationCode.code == req.password.strip())
                     & (EmailVerificationCode.is_used == False)
                     & (EmailVerificationCode.expires_at > now_dt)
                 )
@@ -142,8 +162,21 @@ async def login_user(req: LoginRequest):
             otp_res = await session.execute(otp_stmt)
             otp_record = otp_res.scalar_one_or_none()
             if otp_record:
-                otp_record.is_used = True
-                otp_valid = True
+                import hmac
+                entered_code = req.password.strip()
+                if hmac.compare_digest(otp_record.code, entered_code):
+                    otp_record.is_used = True
+                    otp_valid = True
+                else:
+                    otp_record.failed_attempts = (otp_record.failed_attempts or 0) + 1
+                    if otp_record.failed_attempts >= 5:
+                        otp_record.is_used = True
+                        await session.commit()
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Превышено максимальное количество попыток ввода кода. Запросите новый код.",
+                        )
+                    await session.commit()
 
         if not user or (not is_password_valid and not otp_valid):
             raise HTTPException(status_code=401, detail="Неверный логин или пароль")
@@ -157,7 +190,7 @@ async def login_user(req: LoginRequest):
             credentials_changed = True
 
         if not user.auth_token:
-            user.auth_token = str(uuid.uuid4())
+            user.auth_token = secrets.token_urlsafe(32)
             credentials_changed = True
 
         if credentials_changed or otp_valid:
@@ -271,7 +304,7 @@ async def logout_user(user: TelegramUser = Depends(get_current_user)):
         res = await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
         db_user = res.scalar_one_or_none()
         if db_user:
-            db_user.auth_token = str(uuid.uuid4())
+            db_user.auth_token = secrets.token_urlsafe(32)
             await session.commit()
     return {"message": "Успешный выход"}
 

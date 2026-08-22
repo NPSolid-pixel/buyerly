@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     API_HOST: str = Field(default="0.0.0.0", description="Web API host")
     SERVE_STATIC: bool = Field(default=True, description="Serve the bundled web app from FastAPI in local/legacy mode")
     ENABLE_DEV_AUTH: bool = Field(default=False, description="Enable dev auth fallback for local tests")
+    CORS_ORIGINS: str = Field(
+        default="",
+        description="Comma-separated list of allowed CORS origins (e.g. https://buyerly.app)",
+    )
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: int = Field(
         default=86400,
         ge=60,

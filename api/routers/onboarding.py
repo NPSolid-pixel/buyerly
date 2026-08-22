@@ -138,8 +138,8 @@ async def upload_onboarding_avatar(
     """Upload custom avatar image for the user during or after onboarding."""
     filename = file.filename or "avatar.png"
     ext = os.path.splitext(filename)[1].lower()
-    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".svg"):
-        raise HTTPException(status_code=400, detail="Поддерживаются только форматы PNG, JPG, WEBP, SVG")
+    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+        raise HTTPException(status_code=400, detail="Поддерживаются только форматы PNG, JPG, WEBP")
 
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:
@@ -283,8 +283,8 @@ async def upload_workspace_logo(
     """Upload workspace logo image."""
     filename = file.filename or "logo.png"
     ext = os.path.splitext(filename)[1].lower()
-    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".svg"):
-        raise HTTPException(status_code=400, detail="Поддерживаются только форматы PNG, JPG, WEBP, SVG")
+    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+        raise HTTPException(status_code=400, detail="Поддерживаются только форматы PNG, JPG, WEBP")
 
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:

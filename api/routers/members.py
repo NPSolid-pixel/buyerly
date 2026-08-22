@@ -640,6 +640,19 @@ async def accept_workspace_invite(
         if not ws:
             raise HTTPException(status_code=404, detail="Воркспейс не найден")
 
+        # Targeted invite protection: verify user email if invite is addressed to a specific email
+        if invite.email:
+            target_email = invite.email.strip().lower()
+            user_email = (user.email or "").strip().lower()
+            if not user_email:
+                db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+                db_user.email = target_email
+            elif user_email != target_email:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Это приглашение предназначено для другого email-адреса.",
+                )
+
         existing_m = (
             await session.execute(
                 select(WorkspaceMember).where(
