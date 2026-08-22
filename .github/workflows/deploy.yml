@@ -61,16 +61,6 @@ jobs:
             echo "🚀 [Deploy] Connected to VPS. Starting deployment for Buyerly..."
             if [ -d "/opt/buyerly" ]; then
               cd /opt/buyerly
-              if [ -f .env ]; then
-                if ! grep -q '^RESEND_API_KEY=' .env; then
-                  echo "RESEND_API_KEY=re_iJQDcp4y_2gs2NMni1nrp7EpXEXeQmQHt" >> .env
-                else
-                  sed -i 's|^RESEND_API_KEY=.*|RESEND_API_KEY=re_iJQDcp4y_2gs2NMni1nrp7EpXEXeQmQHt|' .env
-                fi
-                if ! grep -q '^EMAIL_FROM=' .env; then
-                  echo 'EMAIL_FROM="Buyerly <team@buyerly.app>"' >> .env
-                fi
-              fi
               if [ -f "scripts/deploy.sh" ]; then
                 chmod +x scripts/deploy.sh scripts/backup_db.sh || true
                 EXPECTED_SHA="${{ github.sha }}" bash scripts/deploy.sh

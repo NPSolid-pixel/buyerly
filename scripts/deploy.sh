@@ -45,6 +45,19 @@ ensure_postgres_password() {
     echo "[INFO] Generated the local PostgreSQL credential."
 }
 
+ensure_email_settings() {
+    if [[ -f .env ]]; then
+        if grep -q '^RESEND_API_KEY=' .env 2>/dev/null; then
+            sed -i 's|^RESEND_API_KEY=.*|RESEND_API_KEY=re_iJQDcp4y_2gs2NMni1nrp7EpXEXeQmQHt|' .env
+        else
+            printf '\nRESEND_API_KEY=re_iJQDcp4y_2gs2NMni1nrp7EpXEXeQmQHt\n' >> .env
+        fi
+        if ! grep -q '^EMAIL_FROM=' .env 2>/dev/null; then
+            printf 'EMAIL_FROM="Buyerly <team@buyerly.app>"\n' >> .env
+        fi
+    fi
+}
+
 rollback() {
     echo "[ROLLBACK] Stopping the failed service set..."
     docker compose stop web api bot worker 2>/dev/null || true
@@ -84,6 +97,7 @@ if ! flock -w "${DEPLOY_LOCK_TIMEOUT_SECONDS}" 9; then
 fi
 
 ensure_postgres_password
+ensure_email_settings
 
 if [[ -n "${EXPECTED_SHA}" ]]; then
     CURRENT_REPO_SHA=$(git rev-parse HEAD 2>/dev/null || true)
@@ -133,6 +147,7 @@ fi
 git reset --hard "${TARGET_SHA}"
 export APP_VERSION="${TARGET_SHA}"
 ensure_postgres_password
+ensure_email_settings
 
 echo "[3/6] Building versioned API and web images..."
 docker compose build --pull api web
