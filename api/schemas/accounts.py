@@ -79,7 +79,9 @@ class AccountGroupItem(BaseModel):
 
 
 class ParseRawRequest(BaseModel):
-    raw_text: str
+    model_config = ConfigDict(extra="forbid")
+
+    raw_text: str = Field(..., min_length=1, max_length=65536)
 
 
 class ParsedAccountItem(BaseModel):
@@ -88,11 +90,15 @@ class ParsedAccountItem(BaseModel):
 
 
 class BatchAddAccountEntry(BaseModel):
-    account_id: str
-    name: Optional[str] = ""
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: str = Field(..., min_length=1, max_length=60)
+    name: Optional[str] = Field(default="", max_length=120)
 
 
 class BatchAddRequest(BaseModel):
-    accounts: List[BatchAddAccountEntry]
-    batch_name: Optional[str] = "-"
-    access_token: str
+    model_config = ConfigDict(extra="forbid")
+
+    accounts: List[BatchAddAccountEntry] = Field(..., min_length=1, max_length=500)
+    batch_name: Optional[str] = Field(default="-", max_length=120)
+    access_token: str = Field(..., min_length=1, max_length=1024)

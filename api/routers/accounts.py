@@ -30,6 +30,7 @@ from api.schemas import (
 from bot.handlers import parse_fb_raw_accounts
 from core.currency import normalize_currency
 from core.ownership import owned_by
+from core.rate_limit import rate_limit_dep
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
 from database.models import (
@@ -284,7 +285,11 @@ async def delete_account(account_id: str, user: TelegramUser = Depends(get_curre
         return {"success": True, "message": f"Кабинет {acc_id} удален"}
 
 
-@router.post("/accounts/parse-raw", response_model=List[ParsedAccountItem])
+@router.post(
+    "/accounts/parse-raw",
+    response_model=List[ParsedAccountItem],
+    dependencies=[Depends(rate_limit_dep(limit=20, window_seconds=60, scope="parse_raw"))],
+)
 async def parse_raw_text(payload: ParseRawRequest, user: TelegramUser = Depends(get_current_user)):
     parsed = parse_fb_raw_accounts(payload.raw_text)
     return [ParsedAccountItem(account_id=p["account_id"], parsed_name=p["parsed_name"]) for p in parsed]
