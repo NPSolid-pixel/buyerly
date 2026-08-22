@@ -36,6 +36,7 @@ Production: `https://buyerly.app`.
 | `POST /api/auth/update-profile` | `full_name?`, `telegram_id?` | обновляет профиль и адрес Telegram-доставки |
 | `POST /api/auth/logout` | — | ротирует web token |
 | `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `role`, `is_approved`, `active_workspace`, `workspaces` |
+| `GET /api/admin/overview` | — | сводная таблица всех пользователей, воркспейсов и инвайтов (только админ) |
 
 Изменение `telegram_id` не меняет внутреннего владельца данных: кабинеты, правила, сводки и история продолжают принадлежать тому же `telegram_users.id`.
 

@@ -1730,6 +1730,69 @@ async def get_me(user: TelegramUser = Depends(get_current_user)):
         )
 
 
+@router.get("/admin/overview")
+async def get_admin_overview(user: TelegramUser = Depends(get_current_user)):
+    """Return all users, workspaces, members, and invites for administrative inspection."""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ только для администраторов")
+    async with async_session_maker() as session:
+        users = (await session.execute(select(TelegramUser).order_by(TelegramUser.id))).scalars().all()
+        workspaces = (await session.execute(select(Workspace).order_by(Workspace.id))).scalars().all()
+        members = (await session.execute(select(WorkspaceMember).order_by(WorkspaceMember.id))).scalars().all()
+        invites = (await session.execute(select(WorkspaceInvite).order_by(WorkspaceInvite.id))).scalars().all()
+
+        return {
+            "users": [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "full_name": u.full_name,
+                    "first_name": getattr(u, "first_name", "") or "",
+                    "last_name": getattr(u, "last_name", "") or "",
+                    "email": u.email,
+                    "role": u.role,
+                    "is_approved": u.is_approved,
+                    "onboarding_completed": u.onboarding_completed,
+                    "active_workspace_id": u.active_workspace_id,
+                    "created_at": _utc_iso(u.created_at),
+                }
+                for u in users
+            ],
+            "workspaces": [
+                {
+                    "id": w.id,
+                    "name": w.name,
+                    "slug": w.slug,
+                    "badge_text": w.badge_text,
+                    "badge_color": w.badge_color,
+                    "owner_user_id": w.owner_user_id,
+                    "created_at": _utc_iso(w.created_at),
+                }
+                for w in workspaces
+            ],
+            "members": [
+                {
+                    "workspace_id": m.workspace_id,
+                    "user_id": m.user_id,
+                    "role": m.role,
+                    "joined_at": _utc_iso(m.joined_at),
+                }
+                for m in members
+            ],
+            "invites": [
+                {
+                    "id": inv.id,
+                    "workspace_id": inv.workspace_id,
+                    "email": inv.email,
+                    "role": inv.role,
+                    "status": inv.status,
+                    "created_at": _utc_iso(inv.created_at),
+                }
+                for inv in invites
+            ]
+        }
+
+
 # ----------------------------------------------------
 # Workspace Endpoints
 # ----------------------------------------------------
