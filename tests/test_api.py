@@ -23,6 +23,7 @@ from database.models import (
     AccountGroupMember,
     AppSettings,
     AuditEvent,
+    EmailVerificationCode,
     RuleGroup,
     RuleGroupItem,
     RulePreset,
@@ -1973,3 +1974,87 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             # Request without Telegram initData header
             resp = await client.get("/api/me")
             self.assertEqual(resp.status_code, 401)
+
+    async def test_security_headers_present(self):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/health/live")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.headers.get("x-content-type-options"), "nosniff")
+            self.assertEqual(resp.headers.get("referrer-policy"), "strict-origin-when-cross-origin")
+            self.assertEqual(resp.headers.get("x-xss-protection"), "1; mode=block")
+
+    async def test_otp_request_rate_limiting(self):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            with patch("api.routers.auth.send_otp_verification_email", new=AsyncMock()):
+                first = await client.post(
+                    "/api/auth/request-temporary-password",
+                    json={"email": "ratelimit@example.com"},
+                )
+                self.assertEqual(first.status_code, 200)
+
+                second = await client.post(
+                    "/api/auth/request-temporary-password",
+                    json={"email": "ratelimit@example.com"},
+                )
+                self.assertEqual(second.status_code, 429)
+
+    async def test_otp_brute_force_lockout(self):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            with patch("api.routers.auth.send_otp_verification_email", new=AsyncMock()):
+                req = await client.post(
+                    "/api/auth/request-temporary-password",
+                    json={"email": "bruteforce@example.com"},
+                )
+                self.assertEqual(req.status_code, 200)
+
+            # 4 failed attempts
+            for _ in range(4):
+                failed = await client.post(
+                    "/api/auth/login",
+                    json={"username": "bruteforce@example.com", "password": "000000"},
+                )
+                self.assertEqual(failed.status_code, 401)
+
+            # 5th failed attempt locks out the OTP
+            fifth = await client.post(
+                "/api/auth/login",
+                json={"username": "bruteforce@example.com", "password": "000000"},
+            )
+            self.assertEqual(fifth.status_code, 401)
+            self.assertIn("Превышено максимальное количество попыток", fifth.json()["detail"])
+
+            # Verify the code is now marked is_used in the database
+            async with self.test_session_maker() as session:
+                code_record = (
+                    await session.execute(
+                        select(EmailVerificationCode).where(
+                            EmailVerificationCode.email == "bruteforce@example.com"
+                        )
+                    )
+                ).scalar_one()
+                self.assertTrue(code_record.is_used)
+
+    async def test_avatar_and_logo_disallow_svg(self):
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            avatar_svg = await client.post(
+                "/api/onboarding/avatar",
+                headers=headers,
+                files={"file": ("avatar.svg", b"<svg onload=alert(1)>", "image/svg+xml")},
+            )
+            self.assertEqual(avatar_svg.status_code, 400)
+
+            logo_svg = await client.post(
+                "/api/onboarding/workspace/logo",
+                headers=headers,
+                files={"file": ("logo.svg", b"<svg onload=alert(1)>", "image/svg+xml")},
+            )
+            self.assertEqual(logo_svg.status_code, 400)

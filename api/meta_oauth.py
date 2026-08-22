@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select, update
 
 from api.auth import get_current_user
+from api.deps import get_user_workspace
 from core.config import settings
 from core.currency import normalize_currency
 from core.meta_tokens import (
@@ -441,6 +442,7 @@ async def import_accounts(
     errors: list[dict] = []
     async with async_session_maker() as session:
         connection = await _owned_connection(session, connection_id, user)
+        ws = await get_user_workspace(session, user)
         if connection.status != "active":
             raise HTTPException(status_code=409, detail="Сначала переподключите профиль Meta")
         try:
@@ -480,14 +482,23 @@ async def import_accounts(
                             select(Account).where(Account.account_id == account_id)
                         )
                     ).scalar_one_or_none()
-                    if existing and not entity_is_owned_by(existing, user):
-                        raise RuntimeError("Кабинет уже принадлежит другому пользователю Buyerly")
+                    if existing:
+                        if (
+                            existing.workspace_id is not None
+                            and ws is not None
+                            and existing.workspace_id != ws.id
+                            and user.role != "admin"
+                        ):
+                            raise RuntimeError("Кабинет уже подключён в другом рабочем пространстве.")
+                        if not entity_is_owned_by(existing, user) and user.role != "admin":
+                            raise RuntimeError("Кабинет уже принадлежит другому пользователю Buyerly")
 
                     status_code = int(account_info.get("account_status") or 0)
                     status_label = str(account_info.get("status_label") or f"Статус #{status_code}")
                     account = existing or Account(
                         account_id=account_id,
                         name=str(account_info.get("name") or asset.name or account_id),
+                        workspace_id=ws.id if ws else None,
                         owner_id=str(user.telegram_id or ""),
                         owner_user_id=user.id,
                         access_token="",
@@ -497,6 +508,7 @@ async def import_accounts(
                     if existing and existing.timezone_name != timezone_name:
                         existing.last_day_start_date = ""
                     account.name = str(account_info.get("name") or asset.name or account_id)
+                    account.workspace_id = ws.id if ws else account.workspace_id
                     account.owner_id = str(user.telegram_id or "")
                     account.owner_user_id = user.id
                     account.batch_name = asset.business_name if asset.business_id else ""

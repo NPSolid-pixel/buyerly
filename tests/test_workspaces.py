@@ -685,6 +685,74 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(acc.owner_id, '777000111')
             self.assertEqual(acc.name, 'Buyerly Account 1')
 
+    async def test_targeted_workspace_invite_rejects_mismatched_email(self):
+        artem_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000111, 'first_name': 'Artem', 'username': 'artem'},
+        )
+        artem_headers = {'Authorization': f'tma {artem_data}'}
+
+        async with self.test_session_maker() as session:
+            imposter = TelegramUser(
+                telegram_id='777000888',
+                username='imposter',
+                email='imposter@evil.com',
+                full_name='Imposter User',
+                password_hash=hash_password('imposter-password'),
+                role='buyer',
+                is_approved=True,
+            )
+            recipient = TelegramUser(
+                telegram_id='777000777',
+                username='recipient',
+                email='legit@company.com',
+                full_name='Legit User',
+                password_hash=hash_password('legit-password'),
+                role='buyer',
+                is_approved=True,
+            )
+            session.add_all([imposter, recipient])
+            ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+            ws_id = ws.id
+            await session.commit()
+
+        imposter_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000888, 'first_name': 'Imposter', 'username': 'imposter'},
+        )
+        imposter_headers = {'Authorization': f'tma {imposter_data}'}
+
+        recipient_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000777, 'first_name': 'Legit', 'username': 'recipient'},
+        )
+        recipient_headers = {'Authorization': f'tma {recipient_data}'}
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+            create_res = await client.post(
+                f'/api/workspaces/{ws_id}/invites',
+                json={
+                    'email': 'legit@company.com',
+                    'role': 'buyer',
+                    'expires_in_days': 7,
+                    'max_uses': 1,
+                },
+                headers=artem_headers,
+            )
+            self.assertEqual(create_res.status_code, 200)
+            token = create_res.json()['token']
+
+            # Imposter tries to accept targeted invite -> 403 Forbidden
+            imposter_accept = await client.post(f'/api/invites/{token}/accept', headers=imposter_headers)
+            self.assertEqual(imposter_accept.status_code, 403)
+            self.assertIn('предназначено для другого email-адреса', imposter_accept.json()['detail'])
+
+            # Intended recipient accepts -> 200 OK
+            recipient_accept = await client.post(f'/api/invites/{token}/accept', headers=recipient_headers)
+            self.assertEqual(recipient_accept.status_code, 200)
+            self.assertEqual(recipient_accept.json()['status'], 'ok')
+
 
 
 

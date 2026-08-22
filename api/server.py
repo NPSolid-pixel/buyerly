@@ -21,10 +21,13 @@ def create_app() -> FastAPI:
         description="FastAPI Backend & Telegram Mini App for Buyerly AI Media Buyer"
     )
 
-    # Disable caching for static assets in Telegram WebViews
+    # Security and caching headers middleware
     @app.middleware("http")
-    async def add_no_cache_headers(request: Request, call_next):
+    async def add_security_and_cache_headers(request: Request, call_next):
         response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
         if request.url.path.startswith("/static/") or request.url.path == "/":
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
@@ -32,13 +35,23 @@ def create_app() -> FastAPI:
         return response
 
     # CORS support
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # API routes
     app.include_router(api_router)

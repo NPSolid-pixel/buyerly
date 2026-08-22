@@ -174,6 +174,7 @@ class EmailVerificationCode(Base):
     code = Column(String(10), nullable=False, doc="6-значный одноразовый OTP-пароль")
     expires_at = Column(DateTime, nullable=False, index=True, doc="Срок действия кода (UTC)")
     is_used = Column(Boolean, default=False, nullable=False, doc="Был ли код использован")
+    failed_attempts = Column(Integer, default=0, nullable=False, doc="Количество неудачных попыток ввода кода")
     created_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
     def __repr__(self):
