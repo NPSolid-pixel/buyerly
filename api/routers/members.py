@@ -18,6 +18,7 @@ from api.schemas import (
 )
 from core.config import settings
 from core.email import send_workspace_invitation_email
+from core.rate_limit import rate_limit_dep
 from database.db import async_session_maker
 from database.models import TelegramUser, Workspace, WorkspaceInvite, WorkspaceMember
 
@@ -538,7 +539,11 @@ async def revoke_workspace_invite(
         return {"status": "ok", "message": "Приглашение успешно отозвано"}
 
 
-@router.get("/invites/{token}", response_model=PublicInviteInfoResponse)
+@router.get(
+    "/invites/{token}",
+    response_model=PublicInviteInfoResponse,
+    dependencies=[Depends(rate_limit_dep(limit=30, window_seconds=60, scope="invite_info"))],
+)
 async def get_public_invite_info(token: str):
     """Public endpoint to inspect an invite before joining."""
     async with async_session_maker() as session:
@@ -609,7 +614,10 @@ async def get_public_invite_info(token: str):
         )
 
 
-@router.post("/invites/{token}/accept")
+@router.post(
+    "/invites/{token}/accept",
+    dependencies=[Depends(rate_limit_dep(limit=10, window_seconds=60, scope="invite_accept"))],
+)
 async def accept_workspace_invite(
     token: str,
     user: TelegramUser = Depends(get_current_user),

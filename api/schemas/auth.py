@@ -26,8 +26,10 @@ class RequestTemporaryPasswordRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=1, max_length=255)
 
 
 class LoginResponse(BaseModel):
@@ -35,18 +37,22 @@ class LoginResponse(BaseModel):
     username: str
     full_name: str
     role: str
-    message: str = "Успешный вход"
+    message: str = "Авторизация успешна"
 
 
 class ChangePasswordRequest(BaseModel):
-    old_password: str = ""
-    new_password: str
+    model_config = ConfigDict(extra="forbid")
+
+    old_password: str = Field(default="", max_length=255)
+    new_password: str = Field(..., min_length=8, max_length=255)
 
 
 class UpdateProfileRequest(BaseModel):
-    full_name: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    email: Optional[str] = None
-    avatar_url: Optional[str] = None
-    telegram_id: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: Optional[str] = Field(None, max_length=120)
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
+    email: Optional[str] = Field(None, max_length=255)
+    avatar_url: Optional[str] = Field(None, max_length=500)
+    telegram_id: Optional[str] = Field(None, max_length=64)

@@ -17,6 +17,7 @@ from api.schemas import (
     UserProfileResponse,
 )
 from core.email import send_otp_verification_email
+from core.rate_limit import rate_limit_dep
 from database.db import (
     async_session_maker,
     hash_password,
@@ -44,7 +45,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth & Profile"])
 
 
-@router.post("/auth/request-temporary-password")
+@router.post(
+    "/auth/request-temporary-password",
+    dependencies=[Depends(rate_limit_dep(limit=5, window_seconds=60, scope="otp_req"))],
+)
 async def request_temporary_password(req: RequestTemporaryPasswordRequest):
     """Generate and email a 6-digit one-time password (OTP) for login/registration."""
     email_clean = req.email.strip().lower()
@@ -118,7 +122,11 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
         return {"ok": True, "message": "Временный пароль отправлен на вашу почту"}
 
 
-@router.post("/auth/login", response_model=LoginResponse)
+@router.post(
+    "/auth/login",
+    response_model=LoginResponse,
+    dependencies=[Depends(rate_limit_dep(limit=10, window_seconds=60, scope="login"))],
+)
 async def login_user(req: LoginRequest):
     async with async_session_maker() as session:
         uname = req.username.strip()

@@ -145,8 +145,17 @@ async def cmd_start(message: Message, bot: Bot, state: FSMContext):
 def parse_fb_raw_accounts(raw_text: str) -> List[dict]:
     """
     Умный парсер: извлекает ID кабинетов и их имена даже из сырого текста Facebook Business Manager.
+    Безопасен к чрезмерно длинным входным данным (DoS / ReDoS mitigation).
     """
+    if not raw_text:
+        return []
+    if len(raw_text) > 65536:
+        raw_text = raw_text[:65536]
+
     lines = [l.strip() for l in raw_text.strip().split("\n") if l.strip()]
+    if len(lines) > 2000:
+        lines = lines[:2000]
+
     id_name_pairs = []
     
     for i, line in enumerate(lines):
@@ -155,7 +164,7 @@ def parse_fb_raw_accounts(raw_text: str) -> List[dict]:
             acc_id = f"act_{match.group(1)}"
             name = ""
             if i > 0 and not re.search(r"(?:Ad account ID|Owned by|info for|scope|permission)", lines[i-1], re.IGNORECASE):
-                name = lines[i-1]
+                name = lines[i-1][:120].strip()
             id_name_pairs.append((acc_id, name))
             
     if not id_name_pairs:
@@ -169,6 +178,8 @@ def parse_fb_raw_accounts(raw_text: str) -> List[dict]:
         if acc_id not in seen:
             seen.add(acc_id)
             final_list.append({"account_id": acc_id, "parsed_name": name})
+        if len(final_list) >= 500:
+            break
     return final_list
 
 

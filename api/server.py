@@ -21,9 +21,27 @@ def create_app() -> FastAPI:
         description="FastAPI Backend & Telegram Mini App for Buyerly AI Media Buyer"
     )
 
-    # Security and caching headers middleware
+    # Security, payload size limit, and caching headers middleware
     @app.middleware("http")
     async def add_security_and_cache_headers(request: Request, call_next):
+        # Enforce request body size limits to prevent memory exhaustion DoS
+        content_length_header = request.headers.get("content-length")
+        if content_length_header and request.url.path.startswith("/api/"):
+            try:
+                content_length = int(content_length_header)
+                is_upload_route = request.url.path in (
+                    "/api/onboarding/avatar",
+                    "/api/onboarding/workspace/logo",
+                )
+                max_allowed_bytes = (10 * 1024 * 1024) if is_upload_route else (1024 * 1024)
+                if content_length > max_allowed_bytes:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": "Размер тела запроса превышает допустимый лимит."},
+                    )
+            except ValueError:
+                pass
+
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"

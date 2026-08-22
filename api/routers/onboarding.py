@@ -28,6 +28,7 @@ from api.schemas import (
     WorkspaceItem,
 )
 from core.email import send_workspace_invitation_email
+from core.rate_limit import rate_limit_dep
 from database.db import async_session_maker
 from database.models import TelegramUser, Workspace, WorkspaceInvite, WorkspaceMember
 
@@ -174,7 +175,11 @@ async def delete_onboarding_avatar(user: TelegramUser = Depends(get_current_user
     return {"status": "ok", "avatar_url": ""}
 
 
-@router.get("/onboarding/check-slug", response_model=CheckSlugResponse)
+@router.get(
+    "/onboarding/check-slug",
+    response_model=CheckSlugResponse,
+    dependencies=[Depends(rate_limit_dep(limit=30, window_seconds=60, scope="check_slug"))],
+)
 async def check_workspace_slug(
     slug: str = Query(..., min_length=2, max_length=60),
     user: TelegramUser = Depends(get_current_user),

@@ -23,6 +23,7 @@ from core.meta_tokens import (
 )
 from core.logging_config import redact_secrets
 from core.ownership import entity_is_owned_by, owned_by
+from core.rate_limit import rate_limit_dep
 from core.timezones import canonical_timezone_name, resolve_account_clock
 from database.db import async_session_maker
 from database.models import (
@@ -138,7 +139,10 @@ async def oauth_config(user: TelegramUser = Depends(get_current_user)):
     }
 
 
-@router.post("/oauth/start")
+@router.post(
+    "/oauth/start",
+    dependencies=[Depends(rate_limit_dep(limit=10, window_seconds=60, scope="oauth_start"))],
+)
 async def start_oauth(
     return_path: str = Query(default="/add-accounts"),
     user: TelegramUser = Depends(get_current_user),
