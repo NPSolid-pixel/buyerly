@@ -1,6 +1,7 @@
 import json
 import time
 import unittest
+from unittest.mock import AsyncMock, patch
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -617,6 +618,72 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
             # 6. Victor is blocked from deleting accounts
             del_acc_res = await client.delete('/api/accounts/act_111111', headers=viewer_headers)
             self.assertEqual(del_acc_res.status_code, 403)
+
+    async def test_batch_add_accounts_cannot_take_over_account_from_another_workspace(self):
+        # Create second user in a separate workspace
+        async with self.test_session_maker() as session:
+            hacker = TelegramUser(
+                telegram_id='777000999',
+                username='hacker',
+                full_name='Hacker Buyer',
+                password_hash=hash_password('hacker-password'),
+                role='buyer',
+                is_approved=True,
+            )
+            session.add(hacker)
+            await session.flush()
+
+            ws_other = Workspace(
+                name='Other WS',
+                slug='other-ws',
+                badge_text='O',
+                badge_color='#10B981',
+                owner_user_id=hacker.id,
+            )
+            session.add(ws_other)
+            await session.flush()
+            session.add(WorkspaceMember(workspace_id=ws_other.id, user_id=hacker.id, role='owner'))
+            hacker.active_workspace_id = ws_other.id
+            await session.commit()
+
+        hacker_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000999, 'first_name': 'Hacker', 'username': 'hacker'},
+        )
+        hacker_headers = {'Authorization': f'tma {hacker_data}'}
+
+        mock_meta_info = {
+            'id': 'act_111111',
+            'name': 'Hijacked Account',
+            'account_status': 1,
+            'status_label': 'Активен',
+            'timezone_name': 'UTC',
+            'currency': 'USD',
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(api_routes_module.meta_client, 'get_account_info', new=AsyncMock(return_value=mock_meta_info)):
+            async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+                res = await client.post(
+                    '/api/accounts/batch-add',
+                    json={
+                        'accounts': [{'account_id': 'act_111111', 'name': 'Stolen'}],
+                        'access_token': 'hacker_token',
+                    },
+                    headers=hacker_headers,
+                )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data['success_count'], 0)
+        self.assertEqual(data['error_count'], 1)
+        self.assertIn('другом рабочем пространстве', data['errors'][0]['error'])
+
+        # Verify account in DB was NOT modified
+        async with self.test_session_maker() as session:
+            acc = (await session.execute(select(Account).where(Account.account_id == 'act_111111'))).scalar_one()
+            self.assertEqual(acc.owner_id, '777000111')
+            self.assertEqual(acc.name, 'Buyerly Account 1')
 
 
 

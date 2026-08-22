@@ -646,10 +646,10 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     ],
                 },
                 {
-                    "name": "Protected conversion",
+                    "name": "Non-integer count metric",
                     "action": "turn_off",
                     "conditions": [
-                        {"metric": "registrations", "operator": "gte", "value": 1, "time_window": "today"}
+                        {"metric": "registrations", "operator": "gte", "value": 1.5, "time_window": "today"}
                     ],
                 },
             ]

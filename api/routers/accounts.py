@@ -335,6 +335,18 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
 
                 ws = await get_user_workspace(session, user)
                 if existing:
+                    if (
+                        existing.workspace_id is not None
+                        and ws is not None
+                        and existing.workspace_id != ws.id
+                        and user.role != "admin"
+                    ):
+                        error_list.append({
+                            "account_id": acc_id,
+                            "error": "Кабинет уже подключён в другом рабочем пространстве."
+                        })
+                        continue
+
                     if existing.timezone_name != timezone_name:
                         existing.last_day_start_date = ""
                     existing.name = display_name
