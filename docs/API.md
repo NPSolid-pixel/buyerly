@@ -255,6 +255,36 @@ curl -fsS https://buyerly.app/api/me \
   -H 'Authorization: Bearer WEB_TOKEN_PLACEHOLDER'
 ```
 
+## Воркспейсы, Участники и Приглашения
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /api/workspaces/{workspace_id}/members` | получение списка участников воркспейса |
+| `PATCH /api/workspaces/{workspace_id}/members/{member_user_id}` | обновление роли участника в воркспейсе |
+| `DELETE /api/workspaces/{workspace_id}/members/{member_user_id}` | удаление участника из воркспейса |
+| `POST /api/workspaces/{workspace_id}/leave` | выход текущего пользователя из воркспейса |
+| `POST /api/workspaces/{workspace_id}/transfer-ownership` | передача прав владельца воркспейса |
+| `POST /api/workspaces/{workspace_id}/invites` | создание приглашения в воркспейс по email или ссылке |
+| `GET /api/workspaces/{workspace_id}/invites` | получение списка активных приглашений воркспейса |
+| `DELETE /api/workspaces/{workspace_id}/invites/{invite_id}` | отзыв/удаление приглашения |
+| `GET /api/invites/{token}` | получение публичной информации о приглашении по токену |
+| `POST /api/invites/{token}/accept` | принятие приглашения и вступление в воркспейс |
+
+## Онбординг и Профиль
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /api/onboarding/status` | текущий шаг и статус прохождения онбординга |
+| `POST /api/onboarding/personal-details` | сохранение персональных данных (имя, фамилия, email) |
+| `POST /api/onboarding/avatar` | загрузка аватара профиля |
+| `DELETE /api/onboarding/avatar` | удаление аватара профиля |
+| `GET /api/onboarding/check-slug` | проверка доступности slug воркспейса |
+| `POST /api/onboarding/workspace` | создание первого воркспейса на онбординге |
+| `POST /api/onboarding/workspace/logo` | загрузка логотипа создаваемого воркспейса |
+| `POST /api/onboarding/invites` | пакетная отправка приглашений на онбординге |
+| `POST /api/onboarding/skip` | быстрый пропуск шага онбординга |
+
 ## Совместимость
 
 Текущая OpenAPI-версия приложения — `1.0.0`; пути пока не имеют префикса версии. Добавление полей в ответы считается совместимым. Удаление/переименование полей, изменение смысла метрики или допустимых enum требует миграции данных, обновления web/bot/worker одним релизом, contract-тестов и явной записи в `DECISIONS.md` и `PRODUCT_BACKLOG.md`.
+
