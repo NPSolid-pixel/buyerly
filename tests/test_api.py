@@ -29,6 +29,7 @@ from database.models import (
     RulePreset,
     SummarySnapshot,
     AnalyticsViewPreference,
+    MetaConnection,
     StoppedAdSet,
     TelegramUser,
 )
@@ -483,13 +484,17 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     select(TelegramUser).where(TelegramUser.telegram_id == "8948797431")
                 )
             ).scalar_one()
-            account = (
-                await session.execute(
-                    select(Account).where(Account.account_id == "act_1018756607700064")
-                )
-            ).scalar_one()
+            conn_obj = MetaConnection(
+                owner_id="8948797431",
+                owner_user_id=buyer.id,
+                provider_user_id="provider_nick_1",
+                access_token_encrypted="encrypted_token",
+                status="active",
+            )
+            session.add(conn_obj)
+            await session.flush()
             account.owner_user_id = buyer.id
-            account.meta_connection_id = 77
+            account.meta_connection_id = conn_obj.id
             session.add(
                 SummarySnapshot(
                     owner_id="8948797431",
@@ -1011,7 +1016,21 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     select(Account).where(Account.account_id == account_id)
                 )
             ).scalar_one()
-            existing.meta_connection_id = 77
+            buyer = (
+                await session.execute(
+                    select(TelegramUser).where(TelegramUser.telegram_id == "8948797431")
+                )
+            ).scalar_one()
+            conn_obj = MetaConnection(
+                owner_id="8948797431",
+                owner_user_id=buyer.id,
+                provider_user_id="provider_nick_reimport",
+                access_token_encrypted="encrypted_token",
+                status="active",
+            )
+            session.add(conn_obj)
+            await session.flush()
+            existing.meta_connection_id = conn_obj.id
             await session.commit()
 
         meta_account = {
