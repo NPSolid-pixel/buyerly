@@ -97,8 +97,9 @@ class BatchAddAccountEntry(BaseModel):
 
 
 class BatchAddRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     accounts: List[BatchAddAccountEntry] = Field(..., min_length=1, max_length=500)
     batch_name: Optional[str] = Field(default="-", max_length=120)
     access_token: str = Field(..., min_length=1, max_length=1024)
+    rules_enabled: Optional[bool] = None
