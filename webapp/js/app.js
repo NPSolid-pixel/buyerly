@@ -200,6 +200,17 @@
     }
   }
 
+  function showLoading() {
+    // Optional global spinner / loading indicator
+  }
+
+  function hideLoading() {
+    // Optional global spinner / loading indicator
+  }
+
+  window.showLoading = showLoading;
+  window.hideLoading = hideLoading;
+
   // API Client with Bearer Token Authentication
   async function apiRequest(endpoint, options = {}) {
     const headers = {
