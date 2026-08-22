@@ -30,26 +30,60 @@ Production: `https://buyerly.app`.
 
 | Метод и путь | Тело | Результат |
 |---|---|---|
-| `POST /api/auth/request-temporary-password` | `email` | генерирует и высылает 6-значный одноразовый пароль на email |
+| `POST /api/auth/request-temporary-password` | `email` | генерирует и высылает 6-значный одноразовый пароль на email через Resend |
 | `POST /api/auth/login` | `username`, `password` | web token, профиль и роль (поддерживает пароль и OTP-код) |
 | `POST /api/auth/change-password` | `old_password`, `new_password` | меняет пароль; минимум 8 символов |
-| `POST /api/auth/update-profile` | `full_name?`, `telegram_id?` | обновляет профиль и адрес Telegram-доставки |
+| `POST /api/auth/update-profile` | `first_name?`, `last_name?`, `email?`, `avatar_url?`, `full_name?`, `telegram_id?` | обновляет персональные данные профиля и адрес Telegram-доставки |
 | `POST /api/auth/logout` | — | ротирует web token |
-| `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `role`, `is_approved`, `active_workspace`, `workspaces` |
+| `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `first_name`, `last_name`, `email`, `avatar_url`, `role`, `is_approved`, `active_workspace`, `workspaces` |
 | `GET /api/admin/overview` | — | сводная таблица всех пользователей, воркспейсов и инвайтов (только админ) |
 
-Изменение `telegram_id` не меняет внутреннего владельца данных: кабинеты, правила, сводки и история продолжают принадлежать тому же `telegram_users.id`.
+Изменение `telegram_id` не меняет внутреннего владельца данных: кабинеты, правила, сводки и история продолжают принадлежать тому же пользователю внутри воркспейса.
 
 ## Воркспейсы (Workspaces)
 
 | Метод и путь | Тело | Назначение |
 |---|---|---|
 | `GET /api/workspaces` | — | список всех доступных пользователю воркспейсов |
-| `POST /api/workspaces` | `name`, `slug?`, `badge_color?`, `badge_text?` | создаёт новый воркспейс и делает его активным |
+| `POST /api/workspaces` | `name`, `slug?`, `badge_color?`, `badge_text?`, `logo_url?` | создаёт новый воркспейс и делает его активным |
 | `GET /api/workspaces/current` | — | данные текущего активного воркспейса |
 | `POST /api/workspaces/switch` | `workspace_id?`, `slug?` | переключает активный воркспейс пользователя |
-| `PATCH /api/workspaces/{workspace_id}` | `name?`, `badge_color?`, `badge_text?` | обновляет настройки и оформление воркспейса |
+| `PATCH /api/workspaces/{workspace_id}` | `name?`, `badge_color?`, `badge_text?`, `logo_url?` | обновляет настройки и оформление воркспейса |
 | `DELETE /api/workspaces/{workspace_id}` | — | удаляет воркспейс (доступно владельцу при наличии других воркспейсов) |
+
+## Участники воркспейса (Members & RBAC)
+
+| Метод и путь | Тело | Назначение |
+|---|---|---|
+| `GET /api/workspaces/{id}/members` | — | список участников воркспейса, их ролей, аватаров и даты вступления |
+| `PATCH /api/workspaces/{id}/members/{user_id}` | `role` (`admin`, `buyer`, `viewer`) | изменение роли участника (доступно `owner` и `admin`) |
+| `DELETE /api/workspaces/{id}/members/{user_id}` | — | исключение участника из воркспейса (доступно `owner` и `admin`) |
+| `POST /api/workspaces/{id}/leave` | — | добровольный выход текущего пользователя из воркспейса |
+| `POST /api/workspaces/{id}/transfer-ownership` | `new_owner_user_id` | передача прав владельца воркспейса другому участнику (только `owner`) |
+
+## Приглашения (Invites)
+
+| Метод и путь | Тело | Назначение |
+|---|---|---|
+| `POST /api/workspaces/{id}/invites` | `email?`, `role`, `max_uses?`, `expires_in_days?` | создание персонального инвайта (с письмом через Resend) или публичной ссылки |
+| `GET /api/workspaces/{id}/invites` | — | список активных и истекших приглашений воркспейса |
+| `DELETE /api/workspaces/{id}/invites/{invite_id}` | — | отзыв активного приглашения |
+| `GET /api/invites/{token}` | — | публичная проверка валидности токена приглашения перед вступлением |
+| `POST /api/invites/{token}/accept` | — | принятие инвайта авторизованным пользователем и добавление в команду |
+
+## Онбординг (Onboarding Flow)
+
+| Метод и путь | Тело | Назначение |
+|---|---|---|
+| `GET /api/onboarding/status` | — | проверка текущего шага онбординга и профиля пользователя |
+| `POST /api/onboarding/personal-details` | `first_name`, `last_name`, `email?` | сохранение персональных данных на шаге 3 |
+| `POST /api/onboarding/avatar` | `file` (multipart) | загрузка фотографии профиля (PNG, JPG, WEBP до 5 МБ) |
+| `DELETE /api/onboarding/avatar` | — | удаление аватара и возврат к инициальному бейджу |
+| `GET /api/onboarding/check-slug` | `slug` (query) | живая проверка доступности слага воркспейса в реальном времени |
+| `POST /api/onboarding/workspace` | `name`, `slug?`, `badge_color?`, `badge_text?`, `logo_url?` | создание воркспейса на шаге 4 онбординга |
+| `POST /api/onboarding/workspace/logo` | `file` (multipart) | загрузка логотипа компании для воркспейса (до 5 МБ) |
+| `POST /api/onboarding/invites` | `invites[]` (`email`, `role`) | массовая отправка инвайтов на шаге 5 и завершение онбординга |
+| `POST /api/onboarding/skip` | — | быстрый пропуск шага инвайтов и завершение онбординга |
 
 ## Кабинеты
 
