@@ -15,6 +15,7 @@ from database.models import (
     Account,
     TelegramUser,
     Workspace,
+    WorkspaceInvite,
     WorkspaceMember,
     RulePreset,
 )
@@ -236,3 +237,56 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
             for r in routes:
                 res = await client.get(r)
                 self.assertEqual(res.status_code, 200, f'Route {r} should return 200')
+
+    async def test_workspace_invite_model_schema_and_persistence(self):
+        async with self.test_session_maker() as session:
+            # 1. Retrieve Artem and his workspace
+            artem = (await session.execute(select(TelegramUser).where(TelegramUser.username == 'artem'))).scalar_one()
+            ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+
+            # 2. Create a targeted single-use invite
+            invite = WorkspaceInvite(
+                workspace_id=ws.id,
+                token="inv_test_token_12345",
+                email="colleague@agency.com",
+                role="buyer",
+                inviter_user_id=artem.id,
+                status="pending",
+                max_uses=1,
+                used_count=0,
+            )
+            session.add(invite)
+            await session.commit()
+            await session.refresh(invite)
+
+            self.assertIsNotNone(invite.id)
+            self.assertEqual(invite.workspace_id, ws.id)
+            self.assertEqual(invite.token, "inv_test_token_12345")
+            self.assertEqual(invite.email, "colleague@agency.com")
+            self.assertEqual(invite.role, "buyer")
+            self.assertEqual(invite.inviter_user_id, artem.id)
+            self.assertEqual(invite.status, "pending")
+            self.assertEqual(invite.max_uses, 1)
+            self.assertEqual(invite.used_count, 0)
+            self.assertIsNotNone(invite.created_at)
+            self.assertIsNotNone(invite.updated_at)
+
+            # 3. Create a public multi-use invite link
+            public_link = WorkspaceInvite(
+                workspace_id=ws.id,
+                token="inv_public_link_67890",
+                role="viewer",
+                inviter_user_id=artem.id,
+                status="pending",
+                max_uses=0,
+                used_count=0,
+            )
+            session.add(public_link)
+            await session.commit()
+            await session.refresh(public_link)
+
+            self.assertIsNotNone(public_link.id)
+            self.assertIsNone(public_link.email)
+            self.assertEqual(public_link.role, "viewer")
+            self.assertEqual(public_link.max_uses, 0)
+

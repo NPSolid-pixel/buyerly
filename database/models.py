@@ -72,6 +72,82 @@ class WorkspaceMember(Base):
         return f"<WorkspaceMember(workspace_id={self.workspace_id}, user_id={self.user_id}, role='{self.role}')>"
 
 
+class WorkspaceInvite(Base):
+    __tablename__ = "workspace_invites"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="ID воркспейса, куда приглашают",
+    )
+    token = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True,
+        doc="Уникальный защищённый токен приглашения",
+    )
+    email = Column(
+        String,
+        nullable=True,
+        index=True,
+        doc="Email приглашённого (для персональных инвайтов)",
+    )
+    role = Column(
+        String,
+        default="buyer",
+        nullable=False,
+        doc="Роль при вступлении: 'admin', 'buyer', 'viewer'",
+    )
+    inviter_user_id = Column(
+        Integer,
+        ForeignKey("telegram_users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="ID пользователя, создавшего инвайт",
+    )
+    status = Column(
+        String,
+        default="pending",
+        nullable=False,
+        index=True,
+        doc="Статус инвайта ('pending', 'accepted', 'revoked', 'expired')",
+    )
+    max_uses = Column(
+        Integer,
+        default=1,
+        nullable=False,
+        doc="Максимум использований (1 - разовый, 0 - безлимитный)",
+    )
+    used_count = Column(
+        Integer,
+        default=0,
+        nullable=False,
+        doc="Количество фактических использований инвайта",
+    )
+    expires_at = Column(
+        DateTime,
+        nullable=True,
+        index=True,
+        doc="Срок действия приглашения (UTC)",
+    )
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+    def __repr__(self):
+        return (
+            f"<WorkspaceInvite(id={self.id}, workspace_id={self.workspace_id}, "
+            f"role='{self.role}', status='{self.status}')>"
+        )
+
 
 class AppSettings(Base):
     __tablename__ = "app_settings"
