@@ -166,6 +166,20 @@ class WorkspaceInvite(Base):
         )
 
 
+class EmailVerificationCode(Base):
+    __tablename__ = "email_verification_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String, nullable=False, index=True, doc="Email получателя кода")
+    code = Column(String(10), nullable=False, doc="6-значный одноразовый OTP-пароль")
+    expires_at = Column(DateTime, nullable=False, index=True, doc="Срок действия кода (UTC)")
+    is_used = Column(Boolean, default=False, nullable=False, doc="Был ли код использован")
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+
+    def __repr__(self):
+        return f"<EmailVerificationCode(email='{self.email}', used={self.is_used})>"
+
+
 class AppSettings(Base):
     __tablename__ = "app_settings"
 

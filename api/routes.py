@@ -44,6 +44,7 @@ from database.models import (
     Workspace,
     WorkspaceMember,
     WorkspaceInvite,
+    EmailVerificationCode,
     EventLog,
     RulePreset,
     RuleGroup,
@@ -57,6 +58,7 @@ from database.models import (
     ActionUndoState,
     AutomationRuntimeState,
 )
+from core.email import send_otp_verification_email, send_workspace_invitation_email
 from meta_api.client import MetaClient
 from bot.handlers import parse_fb_raw_accounts, get_short_account_label
 from api.auth import get_current_user
@@ -271,6 +273,10 @@ class OnboardingBulkInvitesResponse(BaseModel):
     invites: List[WorkspaceInviteItem]
     onboarding_completed: bool
     redirect_url: str = "/"
+
+class RequestTemporaryPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(..., min_length=3, max_length=255)
 
 class LoginRequest(BaseModel):
     username: str
@@ -1460,6 +1466,59 @@ async def _load_group_presets(session, group_ids: List[int]) -> Dict[int, List[R
 # Endpoints
 # ----------------------------------------------------
 
+@router.post("/auth/request-temporary-password")
+async def request_temporary_password(req: RequestTemporaryPasswordRequest):
+    """Generate and email a 6-digit one-time password (OTP) for login/registration."""
+    email_clean = req.email.strip().lower()
+    if "@" not in email_clean or "." not in email_clean:
+        raise HTTPException(status_code=400, detail="Некорректный адрес электронной почты")
+
+    async with async_session_maker() as session:
+        stmt = select(TelegramUser).where(
+            (func.lower(TelegramUser.email) == email_clean) |
+            (func.lower(TelegramUser.username) == email_clean)
+        )
+        res = await session.execute(stmt)
+        user = res.scalar_one_or_none()
+
+        if not user:
+            user = TelegramUser(
+                username=email_clean,
+                email=email_clean,
+                role="buyer",
+                is_approved=True,
+                onboarding_completed=False,
+                onboarding_step="personal_details",
+                auth_token=str(uuid.uuid4()),
+            )
+            session.add(user)
+            await session.flush()
+        elif not user.email:
+            user.email = email_clean
+
+        # Generate 6-digit random code
+        code = str(secrets.randbelow(900000) + 100000)
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires_at = now_dt + timedelta(minutes=15)
+
+        otp_record = EmailVerificationCode(
+            email=email_clean,
+            code=code,
+            expires_at=expires_at,
+            is_used=False,
+        )
+        session.add(otp_record)
+        await session.commit()
+
+        # Send email via Resend / SMTP
+        try:
+            await send_otp_verification_email(email_clean, code)
+        except Exception as e:
+            logger.error("Failed to send OTP email to %s: %s", email_clean, e)
+
+        return {"ok": True, "message": "Временный пароль отправлен на вашу почту"}
+
+
 @router.post("/auth/login", response_model=LoginResponse)
 async def login_user(req: LoginRequest):
     async with async_session_maker() as session:
@@ -1484,14 +1543,38 @@ async def login_user(req: LoginRequest):
             if len(display_name_matches) == 1:
                 user = display_name_matches[0]
 
-        if not user or not verify_password(req.password, user.password_hash):
+        is_password_valid = user and verify_password(req.password, user.password_hash)
+        otp_valid = False
+
+        if not is_password_valid and user:
+            # Check for valid unexpired OTP code
+            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+            check_email = (user.email or uname).lower()
+            otp_stmt = (
+                select(EmailVerificationCode)
+                .where(
+                    (func.lower(EmailVerificationCode.email) == check_email) &
+                    (EmailVerificationCode.code == req.password.strip()) &
+                    (EmailVerificationCode.is_used == False) &
+                    (EmailVerificationCode.expires_at > now_dt)
+                )
+                .order_by(EmailVerificationCode.id.desc())
+                .limit(1)
+            )
+            otp_res = await session.execute(otp_stmt)
+            otp_record = otp_res.scalar_one_or_none()
+            if otp_record:
+                otp_record.is_used = True
+                otp_valid = True
+
+        if not user or (not is_password_valid and not otp_valid):
             raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
         if not user.is_approved:
             raise HTTPException(status_code=403, detail="Ваш аккаунт ожидает одобрения администратора.")
 
         credentials_changed = False
-        if password_needs_rehash(user.password_hash):
+        if is_password_valid and password_needs_rehash(user.password_hash):
             user.password_hash = hash_password(req.password)
             credentials_changed = True
 
@@ -1499,7 +1582,7 @@ async def login_user(req: LoginRequest):
             user.auth_token = str(uuid.uuid4())
             credentials_changed = True
 
-        if credentials_changed:
+        if credentials_changed or otp_valid:
             await session.commit()
 
         return LoginResponse(
@@ -2167,6 +2250,19 @@ async def create_workspace_invite(
         await session.commit()
         await session.refresh(invite)
 
+        if target_email:
+            try:
+                inviter_name = user.full_name or user.username or "Коллега"
+                await send_workspace_invitation_email(
+                    to_email=target_email,
+                    workspace_name=ws.name,
+                    inviter_name=inviter_name,
+                    role=invite.role,
+                    invite_token=invite.token,
+                )
+            except Exception as e:
+                logger.error("Failed to send invitation email to %s: %s", target_email, e)
+
         base_url = settings.WEBAPP_URL.rstrip("/") if settings.WEBAPP_URL else ""
         invite_url = f"{base_url}/invite/{invite.token}" if base_url else f"/invite/{invite.token}"
 
@@ -2759,6 +2855,19 @@ async def submit_onboarding_invites(
                     created_at=_utc_iso(invite.created_at),
                 )
             )
+
+            if clean_email:
+                try:
+                    inviter_name = db_user.full_name or db_user.username or "Коллега"
+                    await send_workspace_invitation_email(
+                        to_email=clean_email,
+                        workspace_name=active_ws.name,
+                        inviter_name=inviter_name,
+                        role=invite.role,
+                        invite_token=invite.token,
+                    )
+                except Exception as e:
+                    logger.error("Failed to send onboarding invite email to %s: %s", clean_email, e)
 
         db_user.onboarding_step = "completed"
         db_user.onboarding_completed = True

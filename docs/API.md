@@ -30,7 +30,8 @@ Production: `https://buyerly.app`.
 
 | Метод и путь | Тело | Результат |
 |---|---|---|
-| `POST /api/auth/login` | `username`, `password` | web token, профиль и роль |
+| `POST /api/auth/request-temporary-password` | `email` | генерирует и высылает 6-значный одноразовый пароль на email |
+| `POST /api/auth/login` | `username`, `password` | web token, профиль и роль (поддерживает пароль и OTP-код) |
 | `POST /api/auth/change-password` | `old_password`, `new_password` | меняет пароль; минимум 8 символов |
 | `POST /api/auth/update-profile` | `full_name?`, `telegram_id?` | обновляет профиль и адрес Telegram-доставки |
 | `POST /api/auth/logout` | — | ротирует web token |

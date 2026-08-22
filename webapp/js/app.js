@@ -10904,6 +10904,51 @@
     }
   };
 
+  window.requestTemporaryPassword = async function (isResend = false) {
+    const emailInput = document.getElementById('onboardingSignInEmail');
+    let email = (emailInput?.value ? emailInput.value.trim() : '') || state.onboardingEmail || '';
+
+    if (!email) {
+      const errorEl = document.getElementById('onboardingSignInError');
+      if (errorEl) {
+        errorEl.textContent = 'Please enter your work email address';
+        errorEl.classList.remove('hidden');
+      }
+      emailInput?.focus();
+      return;
+    }
+
+    state.onboardingEmail = email;
+
+    const resendBtn = document.getElementById('btnResendTemporaryPassword');
+    if (resendBtn && isResend) {
+      resendBtn.disabled = true;
+      resendBtn.textContent = 'Sending...';
+    }
+
+    try {
+      const res = await fetch('/api/auth/request-temporary-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to send temporary password');
+      }
+
+      showToast(`Verification code sent to ${email}`, 'success');
+      window.showOnboardingStep('verify');
+    } catch (err) {
+      showToast(err.message || 'Error sending temporary password', 'error');
+    } finally {
+      if (resendBtn && isResend) {
+        resendBtn.disabled = false;
+        resendBtn.textContent = 'Resend code';
+      }
+    }
+  };
+
   window.submitOnboardingSignIn = async function () {
     const emailInput = document.getElementById('onboardingSignInEmail');
     const passwordInput = document.getElementById('onboardingSignInPassword');
@@ -10926,7 +10971,7 @@
 
     // If password is not provided, seamlessly transition to temporary password verification step
     if (!password) {
-      window.showOnboardingStep('verify');
+      await window.requestTemporaryPassword();
       return;
     }
 
