@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
-from sqlalchemy import select, delete, func, or_, and_, update
+from sqlalchemy import select, delete, func, or_, and_, update, case
 
 from core.audit import build_audit_event
 from core.action_undo import (
@@ -40,6 +40,7 @@ from database.models import (
     TelegramUser,
     Workspace,
     WorkspaceMember,
+    WorkspaceInvite,
     EventLog,
     RulePreset,
     RuleGroup,
@@ -156,6 +157,22 @@ class UpdateWorkspaceRequest(BaseModel):
 class SwitchWorkspaceRequest(BaseModel):
     workspace_id: Optional[int] = None
     slug: Optional[str] = None
+
+class WorkspaceMemberItem(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    full_name: str
+    telegram_id: Optional[str] = None
+    role: str
+    joined_at: str
+    is_current_user: bool = False
+
+class UpdateMemberRoleRequest(BaseModel):
+    role: str = Field(..., pattern="^(admin|buyer|viewer)$")
+
+class TransferOwnershipRequest(BaseModel):
+    new_owner_user_id: int
 
 class UserProfileResponse(BaseModel):
     telegram_id: Optional[str] = None
@@ -1567,6 +1584,325 @@ async def delete_workspace(workspace_id: int, user: TelegramUser = Depends(get_c
         db_user.active_workspace_id = other_member.workspace_id
         await session.commit()
         return {"status": "ok", "message": "Воркспейс удалён", "next_workspace_id": other_member.workspace_id}
+
+
+# ----------------------------------------------------
+# Workspace Members Management Endpoints
+# ----------------------------------------------------
+
+@router.get("/workspaces/{workspace_id}/members", response_model=List[WorkspaceMemberItem])
+async def list_workspace_members(
+    workspace_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """List all members of a workspace with their roles and profile information."""
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        caller_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not caller_member and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+
+        rows = (
+            await session.execute(
+                select(WorkspaceMember, TelegramUser)
+                .join(TelegramUser, TelegramUser.id == WorkspaceMember.user_id)
+                .where(WorkspaceMember.workspace_id == workspace_id)
+                .order_by(
+                    case(
+                        (WorkspaceMember.role == "owner", 1),
+                        (WorkspaceMember.role == "admin", 2),
+                        (WorkspaceMember.role == "buyer", 3),
+                        else_=4,
+                    ),
+                    WorkspaceMember.joined_at.asc(),
+                )
+            )
+        ).all()
+
+        return [
+            WorkspaceMemberItem(
+                id=member.id,
+                user_id=u.id,
+                username=u.username or "",
+                full_name=u.full_name or u.username or "",
+                telegram_id=u.telegram_id,
+                role=member.role,
+                joined_at=_utc_iso(member.joined_at),
+                is_current_user=(u.id == user.id),
+            )
+            for member, u in rows
+        ]
+
+
+@router.patch("/workspaces/{workspace_id}/members/{member_user_id}", response_model=WorkspaceMemberItem)
+async def update_workspace_member_role(
+    workspace_id: int,
+    member_user_id: int,
+    req: UpdateMemberRoleRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Change the role of an existing workspace member."""
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        caller_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not caller_member and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+
+        caller_role = caller_member.role if caller_member else "admin"
+        if caller_role not in ("owner", "admin") and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Недостаточно прав для изменения ролей участников")
+
+        if member_user_id == user.id:
+            raise HTTPException(status_code=400, detail="Нельзя изменить собственную роль")
+
+        target_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == member_user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not target_member:
+            raise HTTPException(status_code=404, detail="Участник не найден в воркспейсе")
+
+        if target_member.role == "owner":
+            raise HTTPException(status_code=400, detail="Нельзя изменить роль владельца. Используйте передачу владения.")
+
+        if caller_role == "admin" and target_member.role == "admin" and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Только владелец может менять роль администратора")
+
+        target_member.role = req.role
+        await session.commit()
+
+        target_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == member_user_id))).scalar_one()
+        return WorkspaceMemberItem(
+            id=target_member.id,
+            user_id=target_user.id,
+            username=target_user.username or "",
+            full_name=target_user.full_name or target_user.username or "",
+            telegram_id=target_user.telegram_id,
+            role=target_member.role,
+            joined_at=_utc_iso(target_member.joined_at),
+            is_current_user=False,
+        )
+
+
+@router.delete("/workspaces/{workspace_id}/members/{member_user_id}")
+async def remove_workspace_member(
+    workspace_id: int,
+    member_user_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Remove a member from the workspace."""
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        caller_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not caller_member and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+
+        caller_role = caller_member.role if caller_member else "admin"
+        if caller_role not in ("owner", "admin") and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Недостаточно прав для исключения участников")
+
+        if member_user_id == user.id:
+            raise HTTPException(status_code=400, detail="Для выхода из воркспейса используйте метод leave")
+
+        target_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == member_user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not target_member:
+            raise HTTPException(status_code=404, detail="Участник не найден в воркспейсе")
+
+        if target_member.role == "owner":
+            raise HTTPException(status_code=400, detail="Нельзя исключить владельца воркспейса")
+
+        if caller_role == "admin" and target_member.role == "admin" and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Только владелец может исключить администратора")
+
+        await session.execute(
+            delete(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == workspace_id,
+                WorkspaceMember.user_id == member_user_id,
+            )
+        )
+
+        target_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == member_user_id))).scalar_one_or_none()
+        if target_user and target_user.active_workspace_id == workspace_id:
+            other_m = (
+                await session.execute(
+                    select(WorkspaceMember).where(WorkspaceMember.user_id == member_user_id).limit(1)
+                )
+            ).scalar_one_or_none()
+            if other_m:
+                target_user.active_workspace_id = other_m.workspace_id
+            else:
+                def_slug = f"buyerly-{target_user.id}"
+                new_ws = Workspace(
+                    name="Buyerly",
+                    slug=def_slug,
+                    badge_text="B",
+                    badge_color="#F5A300",
+                    owner_user_id=target_user.id,
+                )
+                session.add(new_ws)
+                await session.flush()
+                session.add(WorkspaceMember(workspace_id=new_ws.id, user_id=target_user.id, role="owner"))
+                target_user.active_workspace_id = new_ws.id
+
+        await session.commit()
+        return {"status": "ok", "message": "Участник успешно исключён из воркспейса"}
+
+
+@router.post("/workspaces/{workspace_id}/leave")
+async def leave_workspace(
+    workspace_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Leave the workspace voluntarily."""
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        caller_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not caller_member:
+            raise HTTPException(status_code=404, detail="Вы не являетесь участником данного воркспейса")
+
+        if caller_member.role == "owner":
+            raise HTTPException(
+                status_code=400,
+                detail="Владелец не может покинуть воркспейс. Передайте права владения или удалите воркспейс.",
+            )
+
+        await session.execute(
+            delete(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == workspace_id,
+                WorkspaceMember.user_id == user.id,
+            )
+        )
+
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        next_ws_id = None
+        if db_user.active_workspace_id == workspace_id:
+            other_m = (
+                await session.execute(
+                    select(WorkspaceMember).where(WorkspaceMember.user_id == user.id).limit(1)
+                )
+            ).scalar_one_or_none()
+            if other_m:
+                db_user.active_workspace_id = other_m.workspace_id
+                next_ws_id = other_m.workspace_id
+            else:
+                def_slug = f"buyerly-{user.id}"
+                new_ws = Workspace(
+                    name="Buyerly",
+                    slug=def_slug,
+                    badge_text="B",
+                    badge_color="#F5A300",
+                    owner_user_id=user.id,
+                )
+                session.add(new_ws)
+                await session.flush()
+                session.add(WorkspaceMember(workspace_id=new_ws.id, user_id=user.id, role="owner"))
+                db_user.active_workspace_id = new_ws.id
+                next_ws_id = new_ws.id
+
+        await session.commit()
+        return {"status": "ok", "message": "Вы вышли из воркспейса", "next_workspace_id": next_ws_id}
+
+
+@router.post("/workspaces/{workspace_id}/transfer-ownership")
+async def transfer_workspace_ownership(
+    workspace_id: int,
+    req: TransferOwnershipRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Transfer workspace ownership to another member."""
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        if ws.owner_user_id != user.id and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Только владелец может передать права владения воркспейсом")
+
+        if req.new_owner_user_id == user.id:
+            raise HTTPException(status_code=400, detail="Вы уже являетесь владельцем этого воркспейса")
+
+        target_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == req.new_owner_user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not target_member:
+            raise HTTPException(status_code=404, detail="Новый владелец должен состоять в данном воркспейсе")
+
+        caller_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+
+        ws.owner_user_id = req.new_owner_user_id
+        target_member.role = "owner"
+        if caller_member:
+            caller_member.role = "admin"
+
+        await session.commit()
+        return {
+            "status": "ok",
+            "message": "Права владения успешно переданы",
+            "new_owner_user_id": req.new_owner_user_id,
+        }
 
 
 @router.get("/accounts", response_model=List[AccountItem])

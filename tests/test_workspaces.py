@@ -290,3 +290,132 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(public_link.role, "viewer")
             self.assertEqual(public_link.max_uses, 0)
 
+    async def test_workspace_members_api_lifecycle(self):
+        artem_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000111, 'first_name': 'Artem', 'username': 'artem'},
+        )
+        artem_headers = {'Authorization': f'tma {artem_data}'}
+
+        bob_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000222, 'first_name': 'Bob', 'username': 'bob'},
+        )
+        bob_headers = {'Authorization': f'tma {bob_data}'}
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+            # Create Bob and Charlie in DB
+            async with self.test_session_maker() as session:
+                bob = TelegramUser(
+                    telegram_id='777000222',
+                    username='bob',
+                    full_name='Bob Buyer',
+                    password_hash=hash_password('bob-password'),
+                    role='buyer',
+                    is_approved=True,
+                )
+                charlie = TelegramUser(
+                    telegram_id='777000333',
+                    username='charlie',
+                    full_name='Charlie Viewer',
+                    password_hash=hash_password('charlie-password'),
+                    role='buyer',
+                    is_approved=True,
+                )
+                session.add_all([bob, charlie])
+                await session.flush()
+
+                ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+                session.add(WorkspaceMember(workspace_id=ws.id, user_id=bob.id, role='buyer'))
+                session.add(WorkspaceMember(workspace_id=ws.id, user_id=charlie.id, role='viewer'))
+                bob.active_workspace_id = ws.id
+                charlie.active_workspace_id = ws.id
+                await session.commit()
+                ws_id = ws.id
+                bob_id = bob.id
+                charlie_id = charlie.id
+
+            # 1. GET members as Artem (owner)
+            res = await client.get(f'/api/workspaces/{ws_id}/members', headers=artem_headers)
+            self.assertEqual(res.status_code, 200)
+            members = res.json()
+            self.assertEqual(len(members), 3)
+            self.assertEqual(members[0]['username'], 'artem')
+            self.assertEqual(members[0]['role'], 'owner')
+            self.assertTrue(members[0]['is_current_user'])
+
+            # 2. PATCH Bob role to admin as Artem
+            patch_res = await client.patch(
+                f'/api/workspaces/{ws_id}/members/{bob_id}',
+                json={'role': 'admin'},
+                headers=artem_headers,
+            )
+            self.assertEqual(patch_res.status_code, 200)
+            self.assertEqual(patch_res.json()['role'], 'admin')
+
+            # 3. Artem cannot change own role via PATCH
+            artem_id = members[0]['user_id']
+            patch_self = await client.patch(
+                f'/api/workspaces/{ws_id}/members/{artem_id}',
+                json={'role': 'buyer'},
+                headers=artem_headers,
+            )
+            self.assertEqual(patch_self.status_code, 400)
+
+            # 4. Bob (admin) promotes Charlie to admin
+            patch_charlie = await client.patch(
+                f'/api/workspaces/{ws_id}/members/{charlie_id}',
+                json={'role': 'admin'},
+                headers=bob_headers,
+            )
+            self.assertEqual(patch_charlie.status_code, 200)
+            self.assertEqual(patch_charlie.json()['role'], 'admin')
+
+            # 5. Bob (admin) tries to delete Charlie (admin) -> 403 Forbidden
+            del_admin = await client.delete(
+                f'/api/workspaces/{ws_id}/members/{charlie_id}',
+                headers=bob_headers,
+            )
+            self.assertEqual(del_admin.status_code, 403)
+
+            # 6. Artem (owner) deletes Charlie -> 200 OK
+            del_owner = await client.delete(
+                f'/api/workspaces/{ws_id}/members/{charlie_id}',
+                headers=artem_headers,
+            )
+            self.assertEqual(del_owner.status_code, 200)
+
+            # 7. Artem (owner) tries to leave -> 400 Bad Request
+            leave_owner = await client.post(f'/api/workspaces/{ws_id}/leave', headers=artem_headers)
+            self.assertEqual(leave_owner.status_code, 400)
+
+            # 8. Bob leaves -> 200 OK
+            leave_bob = await client.post(f'/api/workspaces/{ws_id}/leave', headers=bob_headers)
+            self.assertEqual(leave_bob.status_code, 200)
+            self.assertEqual(leave_bob.json()['status'], 'ok')
+
+            # 9. Transfer ownership test
+            # Re-add Bob as buyer
+            async with self.test_session_maker() as session:
+                session.add(WorkspaceMember(workspace_id=ws_id, user_id=bob_id, role='buyer'))
+                await session.commit()
+
+            transfer_res = await client.post(
+                f'/api/workspaces/{ws_id}/transfer-ownership',
+                json={'new_owner_user_id': bob_id},
+                headers=artem_headers,
+            )
+            self.assertEqual(transfer_res.status_code, 200)
+            self.assertEqual(transfer_res.json()['status'], 'ok')
+
+            # Verify in DB: Bob is now owner, Artem is admin
+            async with self.test_session_maker() as session:
+                updated_ws = (await session.execute(select(Workspace).where(Workspace.id == ws_id))).scalar_one()
+                self.assertEqual(updated_ws.owner_user_id, bob_id)
+                bob_m = (await session.execute(select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws_id, WorkspaceMember.user_id == bob_id))).scalar_one()
+                self.assertEqual(bob_m.role, 'owner')
+                artem_m = (await session.execute(select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws_id, WorkspaceMember.user_id == artem_id))).scalar_one()
+                self.assertEqual(artem_m.role, 'admin')
+
+
