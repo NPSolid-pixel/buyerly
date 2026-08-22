@@ -1806,7 +1806,7 @@
       label: 'Кабинет / Имя',
       category: 'account',
       type: 'entity',
-      iconSvg: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>`,
+      iconSvg: '',
       minWidth: 40,
       defaultWidth: 260,
       sticky: true,
@@ -3324,9 +3324,6 @@
               <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
                 <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)" title="Выбрать кабинет">
               </div>
-              <div class="attio-entity-avatar">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              </div>
               <div class="attio-entity-text-block">
                 <div class="account-text-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
                 <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID">
@@ -3646,7 +3643,7 @@
                 <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
                   <input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" ${allSelected ? 'checked' : ''} onchange="window.toggleSelectAllAccounts(this.checked)" title="Выбрать все кабинеты">
                 </div>
-                <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
+                ${colDef.iconSvg ? `<span class="attio-th-type-icon">${colDef.iconSvg}</span>` : ''}
                 <span class="attio-th-title">${escapeHtml(colDef.label)}</span>
               </div>
               <div class="attio-th-right">
@@ -3668,7 +3665,7 @@
             onmousedown="window.handleHeaderPointerDown(event, '${colId}')">
           <div class="attio-th-content">
             <div class="attio-th-left">
-              <span class="attio-th-type-icon">${colDef.iconSvg || ''}</span>
+              ${colDef.iconSvg ? `<span class="attio-th-type-icon">${colDef.iconSvg}</span>` : ''}
               <span class="attio-th-title">${escapeHtml(colDef.label)}</span>
             </div>
             <div class="attio-th-right">
