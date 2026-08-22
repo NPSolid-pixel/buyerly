@@ -4753,11 +4753,6 @@
                ondrop="window.onRuleColumnDrop(event, null)">
             ${ungroupedCardsHtml || '<div class="rules-column-empty">Нет одиночных правил</div>'}
           </div>
-          <div class="rules-column-footer">
-            <button type="button" class="rules-column-add-calc-btn" onclick="window.openCreateRuleFromTab()">
-              <span>+ Add calculation</span>
-            </button>
-          </div>
         </div>
       `;
     }
@@ -4840,11 +4835,6 @@
                ondragleave="window.onRuleColumnDragLeave(event)"
                ondrop="window.onRuleColumnDrop(event, ${group.id})">
             ${cardsHtml || '<div class="rules-column-empty">Нет правил</div>'}
-          </div>
-          <div class="rules-column-footer">
-            <button type="button" class="rules-column-add-calc-btn" onclick="window.openCreateRuleFromTab()">
-              <span>+ Add calculation</span>
-            </button>
           </div>
         </div>
       `;
