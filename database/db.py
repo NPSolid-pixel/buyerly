@@ -608,35 +608,19 @@ async def migrate_workspaces_contract(conn) -> int:
                 ws_slug = f"buyerly-{u_id}"
 
             now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
-            if conn.dialect.name == "postgresql":
-                res = await conn.execute(
-                    text(
-                        "INSERT INTO workspaces (name, slug, badge_text, badge_color, owner_user_id, created_at, updated_at) "
-                        "VALUES (:name, :slug, :badge_text, :badge_color, :owner_user_id, :now, :now) RETURNING id"
-                    ),
-                    {"name": ws_name, "slug": ws_slug, "badge_text": "B", "badge_color": "#F5A300", "owner_user_id": u_id, "now": now_dt}
-                )
-                ws_id = res.scalar()
-            else:
-                await conn.execute(
-                    text(
-                        "INSERT INTO workspaces (name, slug, badge_text, badge_color, owner_user_id, created_at, updated_at) "
-                        "VALUES (:name, :slug, :badge_text, :badge_color, :owner_user_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-                    ),
-                    {"name": ws_name, "slug": ws_slug, "badge_text": "B", "badge_color": "#F5A300", "owner_user_id": u_id}
-                )
-                ws_id = (await conn.execute(text("SELECT last_insert_rowid()"))).scalar()
+            res = await conn.execute(
+                text(
+                    "INSERT INTO workspaces (name, slug, badge_text, badge_color, owner_user_id, created_at, updated_at) "
+                    "VALUES (:name, :slug, :badge_text, :badge_color, :owner_user_id, :now, :now) RETURNING id"
+                ),
+                {"name": ws_name, "slug": ws_slug, "badge_text": "B", "badge_color": "#F5A300", "owner_user_id": u_id, "now": now_dt}
+            )
+            ws_id = res.scalar()
 
-            if conn.dialect.name == "postgresql":
-                await conn.execute(
-                    text("INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (:ws_id, :u_id, 'owner', :now)"),
-                    {"ws_id": ws_id, "u_id": u_id, "now": now_dt}
-                )
-            else:
-                await conn.execute(
-                    text("INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (:ws_id, :u_id, 'owner', CURRENT_TIMESTAMP)"),
-                    {"ws_id": ws_id, "u_id": u_id}
-                )
+            await conn.execute(
+                text("INSERT INTO workspace_members (workspace_id, user_id, role, joined_at) VALUES (:ws_id, :u_id, 'owner', :now)"),
+                {"ws_id": ws_id, "u_id": u_id, "now": now_dt}
+            )
 
             await conn.execute(
                 text("UPDATE telegram_users SET active_workspace_id = :ws_id WHERE id = :u_id"),
@@ -706,10 +690,7 @@ async def migrate_onboarding_contract(conn) -> bool:
             await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_step VARCHAR DEFAULT 'personal_details'"))
             migrated = True
         if "onboarding_completed" not in user_columns:
-            if conn.dialect.name == "postgresql":
-                await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE"))
-            else:
-                await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0"))
+            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE"))
             migrated = True
 
     if "workspaces" in table_names:
@@ -800,50 +781,7 @@ async def init_schema():
                 "Disabled unsafe runtime rules for %s account(s).",
                 safety_migration,
             )
-        # These statements support the historical SQLite schema. PostgreSQL is
-        # initialized from current metadata and must not receive SQLite defaults.
-        legacy_sqlite_columns = [
-            "ALTER TABLE telegram_users ADD COLUMN password_hash VARCHAR DEFAULT '';",
-            "ALTER TABLE telegram_users ADD COLUMN auth_token VARCHAR;",
-            "ALTER TABLE telegram_users ADD COLUMN first_name VARCHAR DEFAULT '';",
-            "ALTER TABLE telegram_users ADD COLUMN last_name VARCHAR DEFAULT '';",
-            "ALTER TABLE telegram_users ADD COLUMN email VARCHAR;",
-            "ALTER TABLE telegram_users ADD COLUMN avatar_url VARCHAR DEFAULT '';",
-            "ALTER TABLE telegram_users ADD COLUMN onboarding_step VARCHAR DEFAULT 'personal_details';",
-            "ALTER TABLE telegram_users ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0;",
-            "ALTER TABLE workspaces ADD COLUMN logo_url VARCHAR DEFAULT '';",
-            "ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;",
-            "ALTER TABLE accounts ADD COLUMN account_status INTEGER DEFAULT 1;",
-            "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT 'Активен (ACTIVE)';",
-            "ALTER TABLE accounts ADD COLUMN currency VARCHAR DEFAULT 'UNKNOWN';",
-            "ALTER TABLE accounts ADD COLUMN last_day_start_date VARCHAR DEFAULT '';",
-            "ALTER TABLE accounts ADD COLUMN custom_name VARCHAR DEFAULT '';",
-            "ALTER TABLE accounts ADD COLUMN note TEXT DEFAULT '';",
-            "ALTER TABLE accounts ADD COLUMN preset_id INTEGER;",
-            "ALTER TABLE accounts ADD COLUMN preset_name VARCHAR DEFAULT '';",
-            "ALTER TABLE accounts ADD COLUMN rule_action VARCHAR DEFAULT 'turn_off';",
-            "ALTER TABLE accounts ADD COLUMN rule_conditions TEXT DEFAULT '[]';",
-            "ALTER TABLE accounts ADD COLUMN rule_condition_logic VARCHAR DEFAULT 'and';",
-            "ALTER TABLE accounts ADD COLUMN rule_cooldown_minutes INTEGER DEFAULT 0;",
-            "ALTER TABLE accounts ADD COLUMN rule_check_interval INTEGER DEFAULT 5;",
-            "ALTER TABLE accounts ADD COLUMN rule_notify_tg BOOLEAN DEFAULT 1;",
-            "ALTER TABLE accounts ADD COLUMN rule_budget_change_percent FLOAT DEFAULT 0.0;",
-            "ALTER TABLE accounts ADD COLUMN rule_budget_max_daily FLOAT DEFAULT 0.0;",
-            "ALTER TABLE rule_presets ADD COLUMN cooldown_minutes INTEGER DEFAULT 0;",
-            "ALTER TABLE rule_presets ADD COLUMN check_interval_minutes INTEGER DEFAULT 5;",
-            "ALTER TABLE rule_presets ADD COLUMN notify_tg BOOLEAN DEFAULT 1;",
-            "ALTER TABLE rule_presets ADD COLUMN condition_logic VARCHAR DEFAULT 'and';",
-            "ALTER TABLE rule_presets ADD COLUMN budget_change_percent FLOAT DEFAULT 0.0;",
-            "ALTER TABLE rule_presets ADD COLUMN budget_max_daily FLOAT DEFAULT 0.0;",
-            "ALTER TABLE rule_groups ADD COLUMN position INTEGER DEFAULT 0;",
-            "ALTER TABLE email_verification_codes ADD COLUMN failed_attempts INTEGER DEFAULT 0;"
-        ]
-        if conn.dialect.name == "sqlite":
-            for col_sql in legacy_sqlite_columns:
-                try:
-                    await conn.execute(text(col_sql))
-                except Exception:
-                    pass
+
 
 async def ensure_bootstrap_admin():
     if settings.BOOTSTRAP_ADMIN_USERNAME and settings.BOOTSTRAP_ADMIN_PASSWORD:

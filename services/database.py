@@ -9,16 +9,12 @@ from database.db import (
     init_schema,
     migrate_rule_metric_contract,
 )
-from database.migrate_sqlite import migrate_sqlite_to_postgres
 
 
 async def main() -> None:
     logger = configure_logging("database-migration")
     logger.info("Preparing Buyerly database schema")
     await init_schema()
-    await migrate_sqlite_to_postgres(settings.LEGACY_SQLITE_PATH)
-    # A first-time SQLite copy happens after init_schema(), so normalize copied
-    # rule payloads once more. The migration is idempotent on regular deploys.
     async with engine.begin() as conn:
         await migrate_rule_metric_contract(conn)
     await ensure_bootstrap_admin()

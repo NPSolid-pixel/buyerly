@@ -152,16 +152,11 @@ ensure_email_settings
 echo "[3/6] Building versioned API and web images..."
 docker compose build --pull api web
 
-echo "[4/6] Preparing PostgreSQL and migrating legacy data..."
+echo "[4/6] Preparing PostgreSQL database..."
 docker compose up -d db
 if ! wait_for_container buyerly-db; then
     docker compose logs --tail=120 db
     exit 1
-fi
-if [[ "${HAD_LEGACY}" == "true" ]]; then
-    # Freeze SQLite before the one-time copy so every table comes from one
-    # stable application state. The old image remains available for rollback.
-    docker stop buyerly-bot
 fi
 if ! docker compose run --rm migrate; then
     docker compose logs --tail=120 migrate db
