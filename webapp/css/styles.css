@@ -1661,15 +1661,43 @@ input:checked + .slider:before { transform: translateX(16px); }
    ATTIO TABLE SYSTEM (VIEW HEADER, FILTER BAR & GRID)
    ========================================================== */
 
-/* Attio View Header & Toolbar */
+/* Full-bleed Attio Accounts Tab Layout */
+#tab-accounts.tab-content {
+  padding: 0 !important;
+  margin: 0 !important;
+  height: calc(100vh - 48px);
+  display: none;
+  flex-direction: column;
+  overflow: hidden !important;
+  background: var(--bg-surface);
+}
+#tab-accounts.tab-content.active {
+  display: flex !important;
+}
+
+#accountsList {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  height: calc(100% - 44px);
+}
+
+/* Attio View Header & Toolbar (Seamless Bar) */
 .attio-view-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
-  padding: 0 2px;
-  flex-wrap: wrap;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  margin: 0 !important;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 .attio-view-header-left {
   display: flex;
@@ -1895,14 +1923,17 @@ input:checked + .slider:before { transform: translateX(16px); }
 .table-viewport,
 .attio-table-viewport {
   width: 100%;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--bg-surface);
   overflow-x: auto;
   overflow-y: auto;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  box-shadow: 0px 1px 3px 0px rgba(0, 0, 0, 0.04);
   position: relative;
-  min-height: calc(100vh - 190px);
   display: flex;
   flex-direction: column;
   scrollbar-width: none !important;
