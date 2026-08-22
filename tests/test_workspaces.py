@@ -536,5 +536,88 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                 dave_member = (await session.execute(select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws_id, WorkspaceMember.user_id == dave_db.id))).scalar_one()
                 self.assertEqual(dave_member.role, 'viewer')
 
+    async def test_workspace_resource_scoping_and_viewer_rbac_protection(self):
+        artem_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000111, 'first_name': 'Artem', 'username': 'artem'},
+        )
+        artem_headers = {'Authorization': f'tma {artem_data}'}
+
+        viewer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000555, 'first_name': 'Victor', 'username': 'victor_viewer'},
+        )
+        viewer_headers = {'Authorization': f'tma {viewer_data}'}
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+            # Create Victor (viewer in Buyerly)
+            async with self.test_session_maker() as session:
+                victor = TelegramUser(
+                    telegram_id='777000555',
+                    username='victor_viewer',
+                    full_name='Victor Viewer',
+                    password_hash=hash_password('victor-password'),
+                    role='buyer',
+                    is_approved=True,
+                )
+                session.add(victor)
+                ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+                session.add(WorkspaceMember(workspace_id=ws.id, user_id=victor.id, role='viewer'))
+                victor.active_workspace_id = ws.id
+                await session.commit()
+                ws_id = ws.id
+
+            # 1. Victor can read accounts and presets
+            accs_res = await client.get('/api/accounts', headers=viewer_headers)
+            self.assertEqual(accs_res.status_code, 200)
+
+            presets_res = await client.get('/api/presets', headers=viewer_headers)
+            self.assertEqual(presets_res.status_code, 200)
+
+            groups_res = await client.get('/api/account-groups', headers=viewer_headers)
+            self.assertEqual(groups_res.status_code, 200)
+
+            # 2. Victor (viewer) is blocked from creating presets
+            create_preset_res = await client.post(
+                '/api/presets',
+                json={
+                    'name': 'Viewer Rule',
+                    'action': 'turn_off',
+                    'conditions': [{'metric': 'cpa', 'operator': 'gt', 'value': 25.0}],
+                },
+                headers=viewer_headers,
+            )
+            self.assertEqual(create_preset_res.status_code, 403)
+            self.assertIn('Viewer', create_preset_res.json()['detail'])
+
+            # 3. Victor is blocked from creating account groups
+            create_group_res = await client.post(
+                '/api/account-groups',
+                json={'name': 'Viewer Group', 'account_ids': []},
+                headers=viewer_headers,
+            )
+            self.assertEqual(create_group_res.status_code, 403)
+
+            # 4. Victor is blocked from batch-adding accounts
+            batch_add_res = await client.post(
+                '/api/accounts/batch-add',
+                json={
+                    'accounts': [{'account_id': 'act_999999', 'name': 'Viewer Acc'}],
+                    'access_token': 'fake_token',
+                },
+                headers=viewer_headers,
+            )
+            self.assertEqual(batch_add_res.status_code, 403)
+
+            # 5. Victor is blocked from mutating account rules
+            toggle_res = await client.post('/api/accounts/act_111111/toggle-rules', headers=viewer_headers)
+            self.assertEqual(toggle_res.status_code, 403)
+
+            # 6. Victor is blocked from deleting accounts
+            del_acc_res = await client.delete('/api/accounts/act_111111', headers=viewer_headers)
+            self.assertEqual(del_acc_res.status_code, 403)
+
+
 
 

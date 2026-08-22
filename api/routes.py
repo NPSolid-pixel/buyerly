@@ -559,6 +559,43 @@ async def get_user_workspaces_list(session, user: TelegramUser) -> List[Workspac
     return items
 
 
+async def get_user_workspace_member(
+    session,
+    user: TelegramUser,
+    workspace_id: Optional[int] = None,
+) -> tuple[Optional[Workspace], Optional[WorkspaceMember]]:
+    """Resolve active workspace and user membership with role."""
+    ws = await get_user_workspace(session, user, workspace_id=workspace_id)
+    if not ws:
+        return None, None
+    member = (
+        await session.execute(
+            select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == ws.id,
+                WorkspaceMember.user_id == user.id,
+            )
+        )
+    ).scalar_one_or_none()
+    return ws, member
+
+
+def ensure_workspace_write_access(
+    user: TelegramUser,
+    member: Optional[WorkspaceMember],
+    action_description: str = "изменения данных",
+) -> None:
+    """Ensure user has write access to workspace (owner, admin, buyer). Viewers are blocked."""
+    if user.role == "admin":
+        return
+    if not member:
+        raise HTTPException(status_code=403, detail=f"Нет доступа к воркспейсу для {action_description}")
+    if member.role == "viewer":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Роль Наблюдатель (Viewer) имеет доступ только для чтения и не может выполнять {action_description}",
+        )
+
+
 # ----------------------------------------------------
 # Helper to filter user accounts
 # ----------------------------------------------------
@@ -585,15 +622,22 @@ async def get_user_accounts(session, user: TelegramUser, workspace_id: Optional[
 async def _account_group_ids_by_account(
     session,
     user: TelegramUser,
+    workspace_id: Optional[int] = None,
 ) -> Dict[str, List[int]]:
-    """Return live owner-scoped group membership keyed by Meta account ID."""
+    """Return live workspace/owner-scoped group membership keyed by Meta account ID."""
+    ws = await get_user_workspace(session, user, workspace_id=workspace_id)
+    scope_clause = (
+        or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
+        if ws
+        else owned_by(AccountGroup, user)
+    )
 
     rows = (
         await session.execute(
             select(Account.account_id, AccountGroupMember.group_id)
             .join(AccountGroupMember, AccountGroupMember.account_id == Account.id)
             .join(AccountGroup, AccountGroup.id == AccountGroupMember.group_id)
-            .where(owned_by(AccountGroup, user))
+            .where(scope_clause)
             .order_by(AccountGroupMember.position, AccountGroupMember.id)
         )
     ).all()
@@ -606,11 +650,19 @@ async def _account_group_ids_by_account(
 async def _account_group_items(
     session,
     user: TelegramUser,
+    workspace_id: Optional[int] = None,
 ) -> List[AccountGroupItem]:
+    ws = await get_user_workspace(session, user, workspace_id=workspace_id)
+    scope_clause = (
+        or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
+        if ws
+        else owned_by(AccountGroup, user)
+    )
+
     groups = (
         await session.execute(
             select(AccountGroup)
-            .where(owned_by(AccountGroup, user))
+            .where(scope_clause)
             .order_by(AccountGroup.name.asc(), AccountGroup.id.asc())
         )
     ).scalars().all()
@@ -2313,10 +2365,18 @@ async def create_account_group(
     if not name:
         raise HTTPException(status_code=422, detail="Название группы не может быть пустым")
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "создания групп кабинетов")
+
+        scope_clause = (
+            or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
+            if ws
+            else owned_by(AccountGroup, user)
+        )
         duplicate = (
             await session.execute(
                 select(AccountGroup.id).where(
-                    owned_by(AccountGroup, user),
+                    scope_clause,
                     func.lower(AccountGroup.name) == name.lower(),
                 )
             )
@@ -2325,7 +2385,6 @@ async def create_account_group(
             raise HTTPException(status_code=409, detail="Группа с таким названием уже существует")
 
         accounts = await _validate_account_group_members(session, user, payload.account_ids)
-        ws = await get_user_workspace(session, user)
         group = AccountGroup(
             workspace_id=ws.id if ws else None,
             owner_id=str(user.telegram_id or ""),
@@ -2352,11 +2411,19 @@ async def update_account_group(
     if not name:
         raise HTTPException(status_code=422, detail="Название группы не может быть пустым")
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "редактирования групп кабинетов")
+
+        scope_clause = (
+            or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
+            if ws
+            else owned_by(AccountGroup, user)
+        )
         group = (
             await session.execute(
                 select(AccountGroup).where(
                     AccountGroup.id == group_id,
-                    owned_by(AccountGroup, user),
+                    scope_clause,
                 )
             )
         ).scalar_one_or_none()
@@ -2365,7 +2432,7 @@ async def update_account_group(
         duplicate = (
             await session.execute(
                 select(AccountGroup.id).where(
-                    owned_by(AccountGroup, user),
+                    scope_clause,
                     func.lower(AccountGroup.name) == name.lower(),
                     AccountGroup.id != group_id,
                 )
@@ -2392,11 +2459,19 @@ async def delete_account_group(
     user: TelegramUser = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "удаления групп кабинетов")
+
+        scope_clause = (
+            or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
+            if ws
+            else owned_by(AccountGroup, user)
+        )
         group = (
             await session.execute(
                 select(AccountGroup).where(
                     AccountGroup.id == group_id,
-                    owned_by(AccountGroup, user),
+                    scope_clause,
                 )
             )
         ).scalar_one_or_none()
@@ -2417,7 +2492,13 @@ async def delete_account_group(
 async def list_presets(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
         await ensure_rule_examples(session, user)
-        stmt = select(RulePreset).where(owned_by(RulePreset, user)).order_by(RulePreset.id.desc())
+        ws = await get_user_workspace(session, user)
+        scope_clause = (
+            or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
+            if ws
+            else owned_by(RulePreset, user)
+        )
+        stmt = select(RulePreset).where(scope_clause).order_by(RulePreset.id.desc())
         res = await session.execute(stmt)
         presets = res.scalars().all()
         return [_preset_response(preset) for preset in presets]
@@ -2426,9 +2507,11 @@ async def list_presets(user: TelegramUser = Depends(get_current_user)):
 @router.post("/presets", response_model=RulePresetItem)
 async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "создания правил")
+
         condition_payloads = _validated_condition_payloads(payload.conditions)
         conds_json = json.dumps(condition_payloads)
-        ws = await get_user_workspace(session, user)
         preset = RulePreset(
             workspace_id=ws.id if ws else None,
             owner_id=user.telegram_id,
@@ -2464,10 +2547,18 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
 @router.put("/presets/{preset_id}", response_model=RulePresetItem)
 async def update_preset(preset_id: int, payload: CreatePresetRequest, user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "редактирования правил")
+
         condition_payloads = _validated_condition_payloads(payload.conditions)
         stmt = select(RulePreset).where(RulePreset.id == preset_id)
         if user.role != "admin":
-            stmt = stmt.where(owned_by(RulePreset, user))
+            scope_clause = (
+                or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
+                if ws
+                else owned_by(RulePreset, user)
+            )
+            stmt = stmt.where(scope_clause)
         res = await session.execute(stmt)
         preset = res.scalar_one_or_none()
         if not preset:
@@ -2522,9 +2613,17 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
 @router.delete("/presets/{preset_id}")
 async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "удаления правил")
+
         stmt = select(RulePreset).where(RulePreset.id == preset_id)
         if user.role != "admin":
-            stmt = stmt.where(owned_by(RulePreset, user))
+            scope_clause = (
+                or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
+                if ws
+                else owned_by(RulePreset, user)
+            )
+            stmt = stmt.where(scope_clause)
         res = await session.execute(stmt)
         preset = res.scalar_one_or_none()
         if not preset:
@@ -2550,10 +2649,16 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
 async def list_rule_groups(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
         await ensure_rule_examples(session, user)
+        ws = await get_user_workspace(session, user)
+        scope_clause = (
+            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
+            if ws
+            else owned_by(RuleGroup, user)
+        )
         groups = (
             await session.execute(
                 select(RuleGroup)
-                .where(owned_by(RuleGroup, user))
+                .where(scope_clause)
                 .order_by(RuleGroup.position.asc(), RuleGroup.id.asc())
             )
         ).scalars().all()
@@ -2570,9 +2675,15 @@ async def reorder_rule_groups(
     user: TelegramUser = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
+        ws = await get_user_workspace(session, user)
+        scope_clause = (
+            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
+            if ws
+            else owned_by(RuleGroup, user)
+        )
         groups = (
             await session.execute(
-                select(RuleGroup).where(owned_by(RuleGroup, user))
+                select(RuleGroup).where(scope_clause)
             )
         ).scalars().all()
         group_map = {g.id: g for g in groups}
@@ -2586,7 +2697,7 @@ async def reorder_rule_groups(
         ordered_groups = (
             await session.execute(
                 select(RuleGroup)
-                .where(owned_by(RuleGroup, user))
+                .where(scope_clause)
                 .order_by(RuleGroup.position.asc(), RuleGroup.id.asc())
             )
         ).scalars().all()
@@ -2603,9 +2714,16 @@ async def create_rule_group(
     user: TelegramUser = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "создания групп правил")
+
         presets = await _get_owned_presets(session, user, payload.preset_ids)
         _ensure_compatible_presets(presets)
-        ws = await get_user_workspace(session, user)
+        scope_clause = (
+            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
+            if ws
+            else owned_by(RuleGroup, user)
+        )
         if payload.position is not None:
             position = payload.position
         else:
@@ -2699,10 +2817,18 @@ async def assign_rule_to_account(
 ):
     """Добавляет правило/пресет к списку правил кабинета."""
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "привязки правил к кабинету")
+
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(owned_by(Account, user))
+            stmt = stmt.where(scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -2712,10 +2838,14 @@ async def assign_rule_to_account(
 
         # If preset_id provided, load preset
         if payload.preset_id:
-            p_stmt = select(RulePreset).where(
-                RulePreset.id == payload.preset_id,
-                owned_by_ids(RulePreset, acc.owner_user_id, acc.owner_id),
-            )
+            p_stmt = select(RulePreset).where(RulePreset.id == payload.preset_id)
+            if user.role != "admin":
+                p_scope = (
+                    or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
+                    if ws
+                    else owned_by(RulePreset, user)
+                )
+                p_stmt = p_stmt.where(p_scope)
             p_res = await session.execute(p_stmt)
             preset = p_res.scalar_one_or_none()
             if not preset:
@@ -2759,23 +2889,32 @@ async def assign_rule_group_to_account(
     """Atomically attach every rule in a reusable group, skipping duplicates."""
 
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "назначения группы правил")
+
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
         account_stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            account_stmt = account_stmt.where(owned_by(Account, user))
+            account_stmt = account_stmt.where(scope_clause)
         account = (await session.execute(account_stmt)).scalar_one_or_none()
         if not account:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
         await _ensure_stable_account_owner(session, account)
 
-        group = (
-            await session.execute(
-                select(RuleGroup).where(
-                    RuleGroup.id == group_id,
-                    owned_by_ids(RuleGroup, account.owner_user_id, account.owner_id),
-                )
-            )
-        ).scalar_one_or_none()
+        group_scope = (
+            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
+            if ws
+            else owned_by(RuleGroup, user)
+        )
+        group_stmt = select(RuleGroup).where(RuleGroup.id == group_id)
+        if user.role != "admin":
+            group_stmt = group_stmt.where(group_scope)
+        group = (await session.execute(group_stmt)).scalar_one_or_none()
         if not group:
             raise HTTPException(status_code=404, detail="Группа правил не найдена.")
 
@@ -2837,10 +2976,18 @@ async def detach_rule_from_account(
 ):
     """Удаляет конкретное правило из списка кабинета."""
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "отвязки правил от кабинета")
+
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(owned_by(Account, user))
+            stmt = stmt.where(scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -2866,10 +3013,18 @@ async def detach_rule_from_account(
 @router.post("/accounts/{account_id}/toggle-rules")
 async def toggle_rules(account_id: str, user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "включения/выключения правил")
+
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(owned_by(Account, user))
+            stmt = stmt.where(scope_clause)
         
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -2904,10 +3059,18 @@ async def update_account_profile(
     """Update owner-only Buyerly labels without changing the Meta account name."""
 
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "редактирования кабинета")
+
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(owned_by(Account, user))
+            stmt = stmt.where(scope_clause)
         account = (await session.execute(stmt)).scalar_one_or_none()
         if not account:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
@@ -2926,10 +3089,18 @@ async def update_account_profile(
 @router.delete("/accounts/{account_id}")
 async def delete_account(account_id: str, user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "удаления кабинета")
+
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
         stmt = select(Account).where(Account.account_id == acc_id)
         if user.role != "admin":
-            stmt = stmt.where(owned_by(Account, user))
+            stmt = stmt.where(scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -2963,6 +3134,8 @@ async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depe
     error_list = []
 
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "добавления рекламных кабинетов")
         for idx, item in enumerate(payload.accounts, start=1):
             acc_id = item.account_id if item.account_id.startswith("act_") else f"act_{item.account_id}"
             custom_name = item.name.strip() if item.name else ""

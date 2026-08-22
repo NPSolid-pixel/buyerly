@@ -61,9 +61,9 @@
   - `GET /api/v1/invites/{token}` — публичная проверка токена (возвращает имя воркспейса, логотип, автора приглашения и назначенную роль).
   - `POST /api/v1/invites/{token}/accept` — принятие инвайта авторизованным пользователем и автоматическое добавление в `WorkspaceMember`.
 
-#### Задача 1.4: Строгая изоляция ресурсов (Workspace Resource Scoping)
-- [ ] Проверить и перевести запросы кабинетов ([`get_user_accounts`](file:///home/hiurano/Projects/ai-mediabuyer/api/routes.py#L513)), пресетов, групп и логов аудита на строгий скоупинг `Account.workspace_id == current_workspace.id`.
-- [ ] Реализовать проверку прав на уровне эндпоинтов (запрет роли `viewer` на мутации кабинетов и правил).
+#### Задача 1.4: Строгая изоляция ресурсов (Workspace Resource Scoping) ✅
+- [x] Проверить и перевести запросы кабинетов ([`get_user_accounts`](file:///home/hiurano/Projects/ai-mediabuyer/api/routes.py#L513)), пресетов, групп и логов аудита на строгий скоупинг `Account.workspace_id == current_workspace.id`.
+- [x] Реализовать проверку прав на уровне эндпоинтов (запрет роли `viewer` на мутации кабинетов и правил).
 
 ---
 
