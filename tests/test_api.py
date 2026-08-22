@@ -493,6 +493,11 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             )
             session.add(conn_obj)
             await session.flush()
+            account = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_1018756607700064")
+                )
+            ).scalar_one()
             account.owner_user_id = buyer.id
             account.meta_connection_id = conn_obj.id
             session.add(
