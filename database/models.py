@@ -18,6 +18,22 @@ class TelegramUser(Base):
     telegram_id = Column(String, unique=True, nullable=True, index=True, doc="Telegram User ID (для пушей)")
     username = Column(String, unique=True, nullable=False, index=True, doc="Логин пользователя (e.g. Artem)")
     full_name = Column(String, default="", nullable=False)
+    first_name = Column(String, default="", nullable=False, doc="Имя пользователя")
+    last_name = Column(String, default="", nullable=False, doc="Фамилия пользователя")
+    email = Column(String, nullable=True, index=True, doc="Рабочий Email пользователя")
+    avatar_url = Column(String, default="", nullable=False, doc="URL или путь к аватару")
+    onboarding_step = Column(
+        String,
+        default="personal_details",
+        nullable=False,
+        doc="Текущий шаг онбординга ('personal_details', 'workspace', 'invites', 'completed')",
+    )
+    onboarding_completed = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="Завершен ли полный онбординг пользователя",
+    )
     password_hash = Column(String, default="", nullable=False, doc="Версионированный защищённый хэш пароля")
     auth_token = Column(String, unique=True, nullable=True, index=True, doc="Постоянный токен авторизации веб-интерфейса")
     role = Column(String, default="admin", nullable=False, doc="'admin' или 'buyer'")
@@ -48,6 +64,7 @@ class Workspace(Base):
     slug = Column(String, unique=True, nullable=False, index=True, doc="URL slug (e.g. 'buyerly', 'canada-traffic')")
     badge_text = Column(String, default="B", nullable=False, doc="Символ или буква бейджа")
     badge_color = Column(String, default="#F5A300", nullable=False, doc="Цвет бейджа (#F5A300, #7C3AED, etc.)")
+    logo_url = Column(String, default="", nullable=False, doc="URL или путь к логотипу компании")
     owner_user_id = Column(Integer, ForeignKey("telegram_users.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(DateTime, default=utcnow_naive, nullable=False)
     updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
@@ -668,3 +685,8 @@ class ActionUndoState(Base):
     last_error = Column(Text, default="", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
+
+
+# Modern semantic alias for TelegramUser
+User = TelegramUser
+

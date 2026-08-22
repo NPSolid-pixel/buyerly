@@ -678,6 +678,53 @@ async def migrate_rule_groups_position(conn) -> bool:
     return False
 
 
+async def migrate_onboarding_contract(conn) -> bool:
+    """Ensure user profile columns and workspace logo column exist."""
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    migrated = False
+    if "telegram_users" in table_names:
+        user_columns = await conn.run_sync(
+            lambda sync_conn: {
+                column["name"] for column in inspect(sync_conn).get_columns("telegram_users")
+            }
+        )
+        if "first_name" not in user_columns:
+            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN first_name VARCHAR DEFAULT ''"))
+            migrated = True
+        if "last_name" not in user_columns:
+            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN last_name VARCHAR DEFAULT ''"))
+            migrated = True
+        if "email" not in user_columns:
+            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN email VARCHAR"))
+            migrated = True
+        if "avatar_url" not in user_columns:
+            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN avatar_url VARCHAR DEFAULT ''"))
+            migrated = True
+        if "onboarding_step" not in user_columns:
+            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_step VARCHAR DEFAULT 'personal_details'"))
+            migrated = True
+        if "onboarding_completed" not in user_columns:
+            if conn.dialect.name == "postgresql":
+                await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE"))
+            else:
+                await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0"))
+            migrated = True
+
+    if "workspaces" in table_names:
+        ws_columns = await conn.run_sync(
+            lambda sync_conn: {
+                column["name"] for column in inspect(sync_conn).get_columns("workspaces")
+            }
+        )
+        if "logo_url" not in ws_columns:
+            await conn.execute(text("ALTER TABLE workspaces ADD COLUMN logo_url VARCHAR DEFAULT ''"))
+            migrated = True
+
+    return migrated
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -687,6 +734,8 @@ async def init_schema():
         await conn.run_sync(Base.metadata.create_all)
         if await migrate_rule_groups_position(conn):
             logger.info("Added position column to rule_groups.")
+        if await migrate_onboarding_contract(conn):
+            logger.info("Migrated onboarding profile and workspace contracts.")
         audit_undo_migrated = await migrate_audit_undo_contract(conn)
         if audit_undo_migrated:
             logger.info("Added immutable audit reversal links.")
@@ -730,6 +779,13 @@ async def init_schema():
         legacy_sqlite_columns = [
             "ALTER TABLE telegram_users ADD COLUMN password_hash VARCHAR DEFAULT '';",
             "ALTER TABLE telegram_users ADD COLUMN auth_token VARCHAR;",
+            "ALTER TABLE telegram_users ADD COLUMN first_name VARCHAR DEFAULT '';",
+            "ALTER TABLE telegram_users ADD COLUMN last_name VARCHAR DEFAULT '';",
+            "ALTER TABLE telegram_users ADD COLUMN email VARCHAR;",
+            "ALTER TABLE telegram_users ADD COLUMN avatar_url VARCHAR DEFAULT '';",
+            "ALTER TABLE telegram_users ADD COLUMN onboarding_step VARCHAR DEFAULT 'personal_details';",
+            "ALTER TABLE telegram_users ADD COLUMN onboarding_completed BOOLEAN DEFAULT 0;",
+            "ALTER TABLE workspaces ADD COLUMN logo_url VARCHAR DEFAULT '';",
             "ALTER TABLE accounts ADD COLUMN rules_enabled BOOLEAN DEFAULT 0;",
             "ALTER TABLE accounts ADD COLUMN account_status INTEGER DEFAULT 1;",
             "ALTER TABLE accounts ADD COLUMN status_label VARCHAR DEFAULT 'Активен (ACTIVE)';",
