@@ -20,7 +20,7 @@ from core.config import settings
 from core.email import send_workspace_invitation_email
 from core.rate_limit import rate_limit_dep
 from database.db import async_session_maker
-from database.models import TelegramUser, Workspace, WorkspaceInvite, WorkspaceMember
+from database.models import User, Workspace, WorkspaceInvite, WorkspaceMember
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Members & Invites"])
@@ -29,7 +29,7 @@ router = APIRouter(tags=["Members & Invites"])
 @router.get("/workspaces/{workspace_id}/members", response_model=List[WorkspaceMemberItem])
 async def list_workspace_members(
     workspace_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """List all members of a workspace with their roles and profile information."""
     async with async_session_maker() as session:
@@ -50,8 +50,8 @@ async def list_workspace_members(
 
         rows = (
             await session.execute(
-                select(WorkspaceMember, TelegramUser)
-                .join(TelegramUser, TelegramUser.id == WorkspaceMember.user_id)
+                select(WorkspaceMember, User)
+                .join(User, User.id == WorkspaceMember.user_id)
                 .where(WorkspaceMember.workspace_id == workspace_id)
                 .order_by(
                     case(
@@ -89,7 +89,7 @@ async def update_workspace_member_role(
     workspace_id: int,
     member_user_id: int,
     req: UpdateMemberRoleRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Change the role of an existing workspace member."""
     async with async_session_maker() as session:
@@ -135,7 +135,7 @@ async def update_workspace_member_role(
         target_member.role = req.role
         await session.commit()
 
-        target_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == member_user_id))).scalar_one()
+        target_user = (await session.execute(select(User).where(User.id == member_user_id))).scalar_one()
         return WorkspaceMemberItem(
             id=target_member.id,
             user_id=target_user.id,
@@ -156,7 +156,7 @@ async def update_workspace_member_role(
 async def remove_workspace_member(
     workspace_id: int,
     member_user_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Remove a member from the workspace."""
     async with async_session_maker() as session:
@@ -206,7 +206,7 @@ async def remove_workspace_member(
             )
         )
 
-        target_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == member_user_id))).scalar_one_or_none()
+        target_user = (await session.execute(select(User).where(User.id == member_user_id))).scalar_one_or_none()
         if target_user and target_user.active_workspace_id == workspace_id:
             other_m = (
                 await session.execute(
@@ -236,7 +236,7 @@ async def remove_workspace_member(
 @router.post("/workspaces/{workspace_id}/leave")
 async def leave_workspace(
     workspace_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Leave the workspace voluntarily."""
     async with async_session_maker() as session:
@@ -268,7 +268,7 @@ async def leave_workspace(
             )
         )
 
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         next_ws_id = None
         if db_user.active_workspace_id == workspace_id:
             other_m = (
@@ -302,7 +302,7 @@ async def leave_workspace(
 async def transfer_workspace_ownership(
     workspace_id: int,
     req: TransferOwnershipRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Transfer workspace ownership to another member."""
     async with async_session_maker() as session:
@@ -353,7 +353,7 @@ async def transfer_workspace_ownership(
 async def create_workspace_invite(
     workspace_id: int,
     req: CreateWorkspaceInviteRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Create a new workspace invitation (targeted email or public link)."""
     async with async_session_maker() as session:
@@ -432,7 +432,7 @@ async def create_workspace_invite(
 @router.get("/workspaces/{workspace_id}/invites", response_model=List[WorkspaceInviteItem])
 async def list_workspace_invites(
     workspace_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """List all invites of a workspace."""
     async with async_session_maker() as session:
@@ -457,8 +457,8 @@ async def list_workspace_invites(
 
         rows = (
             await session.execute(
-                select(WorkspaceInvite, TelegramUser)
-                .outerjoin(TelegramUser, TelegramUser.id == WorkspaceInvite.inviter_user_id)
+                select(WorkspaceInvite, User)
+                .outerjoin(User, User.id == WorkspaceInvite.inviter_user_id)
                 .where(WorkspaceInvite.workspace_id == workspace_id)
                 .order_by(WorkspaceInvite.id.desc())
             )
@@ -500,7 +500,7 @@ async def list_workspace_invites(
 async def revoke_workspace_invite(
     workspace_id: int,
     invite_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Revoke an active invitation."""
     async with async_session_maker() as session:
@@ -593,7 +593,7 @@ async def get_public_invite_info(token: str):
         if invite.inviter_user_id:
             inviter = (
                 await session.execute(
-                    select(TelegramUser).where(TelegramUser.id == invite.inviter_user_id)
+                    select(User).where(User.id == invite.inviter_user_id)
                 )
             ).scalar_one_or_none()
 
@@ -620,7 +620,7 @@ async def get_public_invite_info(token: str):
 )
 async def accept_workspace_invite(
     token: str,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Accept a workspace invite and join the workspace."""
     async with async_session_maker() as session:
@@ -653,7 +653,7 @@ async def accept_workspace_invite(
             target_email = invite.email.strip().lower()
             user_email = (user.email or "").strip().lower()
             if not user_email:
-                db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+                db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
                 db_user.email = target_email
             elif user_email != target_email:
                 raise HTTPException(
@@ -670,7 +670,7 @@ async def accept_workspace_invite(
             )
         ).scalar_one_or_none()
 
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = ws.id
 
         if not existing_m:

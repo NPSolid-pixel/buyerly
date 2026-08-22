@@ -40,7 +40,7 @@
 #### Задача 1.1: Модель `WorkspaceInvite` и схема БД ✅
 - [x] Создать модель `WorkspaceInvite` в [`database/models.py`](file:///home/hiurano/Projects/ai-mediabuyer/database/models.py):
   - `id`, `workspace_id` (FK), `email` (опционально), `role` (`admin`, `buyer`, `viewer`),
-  - `token` (уникальный безопасный URL-токен), `inviter_user_id` (FK на `TelegramUser`),
+  - `token` (уникальный безопасный URL-токен), `inviter_user_id` (FK на `User`),
   - `max_uses` (лимит использований, по дефолту 1 или безлимит для ссылок),
   - `used_count`, `expires_at`, `created_at`.
 - [x] Добавить миграцию / безопасную инициализацию таблицы в базе данных.
@@ -70,7 +70,7 @@
 ### 🔹 ЭТАП 2: Бэкенд — Профиль пользователя и шаги онбординга
 
 #### Задача 2.1: API персональных данных онбординга ✅
-- [x] Расширить профиль `TelegramUser` (алиас `User`) полями `first_name`, `last_name`, `email`, `avatar_url`, `onboarding_step`, `onboarding_completed`.
+- [x] Расширить профиль `User` (алиас `User`) полями `first_name`, `last_name`, `email`, `avatar_url`, `onboarding_step`, `onboarding_completed`.
 - [x] Реализовать эндпоинты:
   - `GET /api/v1/onboarding/status` — статус онбординга, текущий шаг и профиль.
   - `POST /api/v1/onboarding/personal-details` — сохранение имени, фамилии, email и автоперевод на шаг воркспейса.

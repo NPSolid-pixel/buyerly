@@ -39,7 +39,7 @@ from database.models import (
     RuleGroup,
     RuleGroupItem,
     RulePreset,
-    TelegramUser,
+    User,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ router = APIRouter(tags=["Rules & Presets"])
 
 
 @router.get("/presets", response_model=List[RulePresetItem])
-async def list_presets(user: TelegramUser = Depends(get_current_user)):
+async def list_presets(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         await ensure_rule_examples(session, user)
         ws = await get_user_workspace(session, user)
@@ -63,7 +63,7 @@ async def list_presets(user: TelegramUser = Depends(get_current_user)):
 
 
 @router.post("/presets", response_model=RulePresetItem)
-async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depends(get_current_user)):
+async def create_preset(payload: CreatePresetRequest, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "создания правил")
@@ -103,7 +103,7 @@ async def create_preset(payload: CreatePresetRequest, user: TelegramUser = Depen
 
 
 @router.put("/presets/{preset_id}", response_model=RulePresetItem)
-async def update_preset(preset_id: int, payload: CreatePresetRequest, user: TelegramUser = Depends(get_current_user)):
+async def update_preset(preset_id: int, payload: CreatePresetRequest, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "редактирования правил")
@@ -174,7 +174,7 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
 
 
 @router.delete("/presets/{preset_id}")
-async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current_user)):
+async def delete_preset(preset_id: int, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "удаления правил")
@@ -214,7 +214,7 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
 
 
 @router.get("/rule-groups", response_model=List[RuleGroupResponse])
-async def list_rule_groups(user: TelegramUser = Depends(get_current_user)):
+async def list_rule_groups(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         await ensure_rule_examples(session, user)
         ws = await get_user_workspace(session, user)
@@ -240,7 +240,7 @@ async def list_rule_groups(user: TelegramUser = Depends(get_current_user)):
 @router.put("/rule-groups/reorder", response_model=List[RuleGroupResponse])
 async def reorder_rule_groups(
     payload: RuleGroupsReorderRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
         ws = await get_user_workspace(session, user)
@@ -279,7 +279,7 @@ async def reorder_rule_groups(
 @router.post("/rule-groups", response_model=RuleGroupResponse)
 async def create_rule_group(
     payload: RuleGroupWriteRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
@@ -325,7 +325,7 @@ async def create_rule_group(
 async def update_rule_group(
     group_id: int,
     payload: RuleGroupWriteRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
         group = (
@@ -358,7 +358,7 @@ async def update_rule_group(
 @router.delete("/rule-groups/{group_id}")
 async def delete_rule_group(
     group_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
         group = (
@@ -381,7 +381,7 @@ async def delete_rule_group(
 async def assign_rule_to_account(
     account_id: str,
     payload: ApplyPresetRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Добавляет правило/пресет к списку правил кабинета."""
     async with async_session_maker() as session:
@@ -452,7 +452,7 @@ async def assign_rule_to_account(
 async def assign_rule_group_to_account(
     account_id: str,
     group_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Atomically attach every rule in a reusable group, skipping duplicates."""
     async with async_session_maker() as session:
@@ -539,7 +539,7 @@ async def assign_rule_group_to_account(
 async def detach_rule_from_account(
     account_id: str,
     preset_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Удаляет конкретное правило из списка кабинета."""
     async with async_session_maker() as session:
@@ -583,7 +583,7 @@ async def detach_rule_from_account(
 
 
 @router.post("/accounts/{account_id}/toggle-rules")
-async def toggle_rules(account_id: str, user: TelegramUser = Depends(get_current_user)):
+async def toggle_rules(account_id: str, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "включения/выключения правил")

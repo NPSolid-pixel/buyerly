@@ -31,7 +31,7 @@ from database.models import (
     MetaConnection,
     MetaConnectionAsset,
     MetaOAuthState,
-    TelegramUser,
+    User,
 )
 from meta_api.client import MetaClient
 from meta_api.oauth import MetaOAuthClient, MetaOAuthRemoteError, meta_token_expiry
@@ -94,7 +94,7 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-async def _owned_connection(session, connection_id: int, user: TelegramUser) -> MetaConnection:
+async def _owned_connection(session, connection_id: int, user: User) -> MetaConnection:
     connection = (
         await session.execute(
             select(MetaConnection).where(
@@ -123,7 +123,7 @@ def _serialize_asset(asset: MetaConnectionAsset, imported_ids: set[str]) -> dict
 
 
 @router.get("/oauth/config")
-async def oauth_config(user: TelegramUser = Depends(get_current_user)):
+async def oauth_config(user: User = Depends(get_current_user)):
     required = {
         "app_id": bool(settings.META_APP_ID.strip()),
         "app_secret": bool(settings.META_APP_SECRET.strip()),
@@ -145,7 +145,7 @@ async def oauth_config(user: TelegramUser = Depends(get_current_user)):
 )
 async def start_oauth(
     return_path: str = Query(default="/add-accounts"),
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     client = _oauth_client()
     raw_state = secrets.token_urlsafe(32)
@@ -231,7 +231,7 @@ async def oauth_callback(
         scopes = debug.get("scopes") if isinstance(debug.get("scopes"), list) else []
 
         async with async_session_maker() as session:
-            owner = await session.get(TelegramUser, owner_user_id)
+            owner = await session.get(User, owner_user_id)
             if not owner:
                 raise MetaOAuthRemoteError("Buyerly user no longer exists")
             existing = (
@@ -284,7 +284,7 @@ async def oauth_callback(
 
 
 @router.get("/connections")
-async def list_connections(user: TelegramUser = Depends(get_current_user)):
+async def list_connections(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         rows = (
             await session.execute(
@@ -312,7 +312,7 @@ async def list_connections(user: TelegramUser = Depends(get_current_user)):
 @router.post("/connections/{connection_id}/discover")
 async def discover_accounts(
     connection_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     now = datetime.now(timezone.utc)
     async with async_session_maker() as session:
@@ -389,7 +389,7 @@ async def discover_accounts(
 @router.get("/connections/{connection_id}/assets")
 async def list_connection_assets(
     connection_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
         connection = await _owned_connection(session, connection_id, user)
@@ -428,7 +428,7 @@ async def list_connection_assets(
 async def import_accounts(
     connection_id: int,
     payload: MetaAccountImportRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     requested_ids: list[str] = []
     seen: set[str] = set()

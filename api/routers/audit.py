@@ -16,7 +16,7 @@ from core.action_undo import (
 )
 from core.ownership import owned_by
 from database.db import async_session_maker
-from database.models import AuditEvent, TelegramUser
+from database.models import AuditEvent, User
 from meta_api.client import MetaClient
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ async def list_audit_events(
     search: Optional[str] = Query(None, max_length=100),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Return an owner-isolated, filterable audit history for the web UI."""
     filters = []
@@ -229,7 +229,7 @@ async def list_audit_events(
 @router.post("/audit-events/{event_id}/undo")
 async def undo_audit_event(
     event_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
         try:

@@ -9,7 +9,7 @@ import bot.handlers as bot_handlers
 from bot.handlers import _can_manage_account, _is_admin_user, check_user_access
 from core.config import settings
 from database.db import Base
-from database.models import Account, TelegramUser
+from database.models import Account, User
 
 
 from tests.test_db_helper import create_test_engine, init_test_db
@@ -29,19 +29,19 @@ class TestBotAccessChecks(unittest.IsolatedAsyncioTestCase):
 
         async with self.sessions() as session:
             session.add_all([
-                TelegramUser(
+                User(
                     telegram_id="owner",
                     username="owner",
                     role="buyer",
                     is_approved=True,
                 ),
-                TelegramUser(
+                User(
                     telegram_id="other",
                     username="other",
                     role="buyer",
                     is_approved=True,
                 ),
-                TelegramUser(
+                User(
                     telegram_id="admin-test",
                     username="admin-test",
                     role="admin",
@@ -88,8 +88,8 @@ class TestBotAccessChecks(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(settings.ADMIN_CHAT_ID, "")
         async with self.sessions() as session:
             result = await session.execute(
-                select(TelegramUser).where(
-                    TelegramUser.telegram_id == "123456789"
+                select(User).where(
+                    User.telegram_id == "123456789"
                 )
             )
             created_user = result.scalar_one()

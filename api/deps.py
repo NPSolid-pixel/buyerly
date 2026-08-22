@@ -35,7 +35,7 @@ from database.models import (
     RuleGroupItem,
     RulePreset,
     SummarySnapshot,
-    TelegramUser,
+    User,
     Workspace,
     WorkspaceMember,
 )
@@ -150,7 +150,7 @@ def slugify(text: str) -> str:
 
 async def get_user_workspace(
     session,
-    user: TelegramUser,
+    user: User,
     workspace_id: Optional[int] = None,
     slug: Optional[str] = None,
 ) -> Optional[Workspace]:
@@ -223,7 +223,7 @@ async def get_user_workspace(
     return ws
 
 
-async def get_user_workspaces_list(session, user: TelegramUser) -> List[WorkspaceItem]:
+async def get_user_workspaces_list(session, user: User) -> List[WorkspaceItem]:
     """Return all workspaces accessible to the user with live stats."""
     active_ws = await get_user_workspace(session, user)
     active_id = active_ws.id if active_ws else None
@@ -269,7 +269,7 @@ async def get_user_workspaces_list(session, user: TelegramUser) -> List[Workspac
 
 async def get_user_workspace_member(
     session,
-    user: TelegramUser,
+    user: User,
     workspace_id: Optional[int] = None,
 ) -> tuple[Optional[Workspace], Optional[WorkspaceMember]]:
     """Resolve active workspace and user membership with role."""
@@ -288,7 +288,7 @@ async def get_user_workspace_member(
 
 
 def ensure_workspace_write_access(
-    user: TelegramUser,
+    user: User,
     member: Optional[WorkspaceMember],
     action_description: str = "изменения данных",
 ) -> None:
@@ -307,7 +307,7 @@ def ensure_workspace_write_access(
 # ----------------------------------------------------
 # Account & AccountGroup Helpers
 # ----------------------------------------------------
-async def get_user_accounts(session, user: TelegramUser, workspace_id: Optional[int] = None) -> List[Account]:
+async def get_user_accounts(session, user: User, workspace_id: Optional[int] = None) -> List[Account]:
     if user.role == "admin" and not workspace_id:
         stmt = select(Account).order_by(Account.id.desc())
         res = await session.execute(stmt)
@@ -329,7 +329,7 @@ async def get_user_accounts(session, user: TelegramUser, workspace_id: Optional[
 
 async def _account_group_ids_by_account(
     session,
-    user: TelegramUser,
+    user: User,
     workspace_id: Optional[int] = None,
 ) -> Dict[str, List[int]]:
     """Return live workspace/owner-scoped group membership keyed by Meta account ID."""
@@ -357,7 +357,7 @@ async def _account_group_ids_by_account(
 
 async def _account_group_items(
     session,
-    user: TelegramUser,
+    user: User,
     workspace_id: Optional[int] = None,
 ) -> List[AccountGroupItem]:
     ws = await get_user_workspace(session, user, workspace_id=workspace_id)
@@ -406,7 +406,7 @@ async def _account_group_items(
 
 async def _validate_account_group_members(
     session,
-    user: TelegramUser,
+    user: User,
     requested_account_ids: List[str],
 ) -> List[Account]:
     unique_ids = list(dict.fromkeys(str(value).strip() for value in requested_account_ids if str(value).strip()))
@@ -426,7 +426,7 @@ async def _ensure_stable_account_owner(session, account: Account) -> None:
         return
     owner_user_id = (
         await session.execute(
-            select(TelegramUser.id).where(TelegramUser.telegram_id == account.owner_id)
+            select(User.id).where(User.telegram_id == account.owner_id)
         )
     ).scalar_one_or_none()
     if owner_user_id is not None:
@@ -565,7 +565,7 @@ def _clean_rule_group_name(value: str) -> str:
 
 async def _get_owned_presets(
     session,
-    user: TelegramUser,
+    user: User,
     preset_ids: List[int],
     *,
     owner_user_id: Optional[int] = None,
@@ -701,7 +701,7 @@ def _summary_with_cache_metadata(
     }
 
 
-def _summary_owner_key(user: TelegramUser) -> str:
+def _summary_owner_key(user: User) -> str:
     return f"user:{user.id}"
 
 
@@ -927,7 +927,7 @@ def _latest_account_metrics_by_id(summary: Optional[Dict[str, Any]]) -> Dict[str
 async def _enrich_summary_account_metadata(
     session,
     payload: Dict[str, Any],
-    user: TelegramUser,
+    user: User,
 ) -> Dict[str, Any]:
     """Overlay live Buyerly labels and groups on cached Meta metric rows."""
     accounts = await get_user_accounts(session, user)
@@ -1084,11 +1084,11 @@ async def _persist_summary(
 # ----------------------------------------------------
 # Settings Helpers
 # ----------------------------------------------------
-async def _confirm_admin_password(session, user: TelegramUser, password: SecretStr) -> TelegramUser:
+async def _confirm_admin_password(session, user: User, password: SecretStr) -> User:
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Только администратор может изменять автоматику.")
     db_user = (
-        await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
+        await session.execute(select(User).where(User.id == user.id))
     ).scalar_one_or_none()
     if not db_user or not verify_password(password.get_secret_value(), db_user.password_hash):
         raise HTTPException(status_code=403, detail="Неверный пароль учётной записи.")

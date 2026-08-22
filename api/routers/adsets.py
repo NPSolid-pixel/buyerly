@@ -12,7 +12,7 @@ from core.currency import UNKNOWN_CURRENCY, normalize_currency
 from core.meta_tokens import resolve_account_access_token
 from core.ownership import entity_is_owned_by
 from database.db import async_session_maker
-from database.models import Account, StoppedAdSet, TelegramUser
+from database.models import Account, StoppedAdSet, User
 from meta_api.client import MetaClient
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ meta_client = MetaClient()
 
 
 @router.get("/adsets/stopped")
-async def list_stopped_adsets(user: TelegramUser = Depends(get_current_user)):
+async def list_stopped_adsets(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         user_accounts = await get_user_accounts(session, user)
         acc_ids = [a.account_id for a in user_accounts]
@@ -60,7 +60,7 @@ async def list_stopped_adsets(user: TelegramUser = Depends(get_current_user)):
 
 
 @router.post("/adsets/{adset_id}/reactivate")
-async def reactivate_adset(adset_id: str, user: TelegramUser = Depends(get_current_user)):
+async def reactivate_adset(adset_id: str, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         stopped_res = await session.execute(select(StoppedAdSet).where(StoppedAdSet.adset_id == adset_id))
         stopped_entry = stopped_res.scalar_one_or_none()
@@ -138,7 +138,7 @@ async def reactivate_adset(adset_id: str, user: TelegramUser = Depends(get_curre
 
 
 @router.post("/adsets/{adset_id}/dismiss")
-async def dismiss_adset(adset_id: str, user: TelegramUser = Depends(get_current_user)):
+async def dismiss_adset(adset_id: str, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         stopped_res = await session.execute(select(StoppedAdSet).where(StoppedAdSet.adset_id == adset_id))
         stopped_entry = stopped_res.scalar_one_or_none()

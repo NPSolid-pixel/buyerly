@@ -11,8 +11,8 @@ def utcnow_aware():
     """UTC for PostgreSQL TIMESTAMP WITH TIME ZONE columns."""
     return datetime.now(timezone.utc)
 
-class TelegramUser(Base):
-    __tablename__ = "telegram_users"
+class User(Base):
+    __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     telegram_id = Column(String, unique=True, nullable=True, index=True, doc="Telegram User ID (для пушей)")
@@ -43,7 +43,7 @@ class TelegramUser(Base):
         ForeignKey(
             "workspaces.id",
             use_alter=True,
-            name="fk_telegram_users_active_workspace",
+            name="fk_users_active_workspace",
             ondelete="SET NULL",
         ),
         nullable=True,
@@ -53,7 +53,11 @@ class TelegramUser(Base):
     created_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
     def __repr__(self):
-        return f"<TelegramUser(username='{self.username}', role='{self.role}', approved={self.is_approved})>"
+        return f"<User(username='{self.username}', role='{self.role}', approved={self.is_approved})>"
+
+
+# Backwards compatibility alias
+TelegramUser = User
 
 
 class Workspace(Base):
@@ -65,7 +69,7 @@ class Workspace(Base):
     badge_text = Column(String, default="B", nullable=False, doc="Символ или буква бейджа")
     badge_color = Column(String, default="#F5A300", nullable=False, doc="Цвет бейджа (#F5A300, #7C3AED, etc.)")
     logo_url = Column(String, default="", nullable=False, doc="URL или путь к логотипу компании")
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(DateTime, default=utcnow_naive, nullable=False)
     updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
 
@@ -81,7 +85,7 @@ class WorkspaceMember(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("telegram_users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, default="owner", nullable=False, doc="'owner', 'admin', 'buyer', 'viewer'")
     joined_at = Column(DateTime, default=utcnow_naive, nullable=False)
 
@@ -121,7 +125,7 @@ class WorkspaceInvite(Base):
     )
     inviter_user_id = Column(
         Integer,
-        ForeignKey("telegram_users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
         doc="ID пользователя, создавшего инвайт",
@@ -262,7 +266,7 @@ class RulePreset(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True, doc="Legacy-метка владельца для совместимости")
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPL выше порога')")
     action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only', 'increase_budget', 'decrease_budget'")
     conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
@@ -287,7 +291,7 @@ class RuleGroup(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
     position = Column(Integer, default=0, nullable=False)
@@ -324,7 +328,7 @@ class RuleExamplesBootstrap(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_user_id = Column(
         Integer,
-        ForeignKey("telegram_users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
         index=True,
@@ -354,7 +358,7 @@ class MetaConnection(Base):
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(
         Integer,
-        ForeignKey("telegram_users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -386,7 +390,7 @@ class MetaOAuthState(Base):
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(
         Integer,
-        ForeignKey("telegram_users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -418,7 +422,7 @@ class MetaConnectionAsset(Base):
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(
         Integer,
-        ForeignKey("telegram_users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -462,7 +466,7 @@ class Account(Base):
     
     # Привязка к владельцу (мульти-пользовательская изоляция)
     owner_id = Column(String, nullable=False, index=True, doc="Legacy-метка владельца для совместимости")
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     batch_name = Column(String, default="", nullable=False, doc="Имя пачки кабинетов (если добавлялось пачкой)")
     currency = Column(String, default="UNKNOWN", nullable=False, doc="ISO 4217 валюта рекламного кабинета из Meta")
     
@@ -497,7 +501,7 @@ class AccountGroup(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
     created_at = Column(DateTime, default=utcnow_naive, nullable=False)
@@ -541,7 +545,7 @@ class SummarySnapshot(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     period = Column(String, nullable=False, index=True)
     payload = Column(Text, nullable=False, doc="Безопасный JSON сводки без access token")
     schema_version = Column(Integer, default=1, nullable=False)
@@ -562,7 +566,7 @@ class AnalyticsViewPreference(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_id = Column(String, nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     scope = Column(String, default="summary", nullable=False, index=True)
     config = Column(Text, default="{}", nullable=False, doc="Безопасный JSON настроек представления")
     created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
@@ -615,7 +619,7 @@ class AuditEvent(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_id = Column(String, default="", nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     actor_type = Column(String, default="system", nullable=False, index=True)
     actor_id = Column(String, default="monitoring_worker", nullable=False)
     category = Column(String, default="RULE_ACTION", nullable=False, index=True)
@@ -652,7 +656,7 @@ class AutomationScheduleState(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     state_key = Column(String, unique=True, nullable=False, index=True)
     owner_id = Column(String, default="", nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     account_id = Column(String, default="", nullable=False, index=True)
     rule_key = Column(String, default="", nullable=False, index=True)
     last_checked_at = Column(Float, default=0.0, nullable=False)
@@ -667,7 +671,7 @@ class RuleExecutionState(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     execution_key = Column(String, unique=True, nullable=False, index=True)
     owner_id = Column(String, default="", nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     account_id = Column(String, default="", nullable=False, index=True)
     adset_id = Column(String, default="", nullable=False, index=True)
     rule_key = Column(String, default="", nullable=False, index=True)
@@ -691,7 +695,7 @@ class ActionUndoState(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     original_event_id = Column(Integer, ForeignKey("audit_events.id"), unique=True, nullable=False, index=True)
     owner_id = Column(String, default="", nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("telegram_users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     status = Column(String, default="PENDING", nullable=False, index=True)
     correlation_id = Column(String, default="", nullable=False, index=True)
     attempt_count = Column(Integer, default=1, nullable=False)

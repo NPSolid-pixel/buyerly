@@ -31,7 +31,7 @@ from core.metrics import SUMMARY_METRIC_DEFINITIONS
 from core.meta_tokens import resolve_account_access_token
 from core.ownership import owned_by
 from database.db import async_session_maker
-from database.models import AnalyticsViewPreference, TelegramUser
+from database.models import AnalyticsViewPreference, User
 from api.deps import get_user_accounts
 from meta_api.client import MetaClient
 
@@ -41,7 +41,7 @@ meta_client = MetaClient()
 
 
 @router.get("/analytics-view")
-async def get_analytics_view(user: TelegramUser = Depends(get_current_user)):
+async def get_analytics_view(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         row = (
             await session.execute(
@@ -77,7 +77,7 @@ async def get_analytics_view(user: TelegramUser = Depends(get_current_user)):
 @router.put("/analytics-view")
 async def save_analytics_view(
     payload: AnalyticsViewPreferenceRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     config = _normalize_summary_view_config(payload.model_dump())
     async with async_session_maker() as session:
@@ -109,7 +109,7 @@ async def save_analytics_view(
 async def get_summary_report(
     period: str = Query("today", pattern="^(today|yesterday|last_3d|last_7d)$"),
     force: bool = Query(False),
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     owner_key = _summary_owner_key(user)
     cache_key = f"{owner_key}:{period}"

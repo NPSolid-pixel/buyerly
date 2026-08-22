@@ -14,20 +14,20 @@ from api.schemas import (
     WorkspaceItem,
 )
 from database.db import async_session_maker
-from database.models import TelegramUser, Workspace, WorkspaceMember
+from database.models import User, Workspace, WorkspaceMember
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Workspaces"])
 
 
 @router.get("/workspaces", response_model=List[WorkspaceItem])
-async def list_workspaces(user: TelegramUser = Depends(get_current_user)):
+async def list_workspaces(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         return await get_user_workspaces_list(session, user)
 
 
 @router.post("/workspaces", response_model=WorkspaceItem)
-async def create_workspace(req: CreateWorkspaceRequest, user: TelegramUser = Depends(get_current_user)):
+async def create_workspace(req: CreateWorkspaceRequest, user: User = Depends(get_current_user)):
     name = req.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Название воркспейса обязательно")
@@ -66,7 +66,7 @@ async def create_workspace(req: CreateWorkspaceRequest, user: TelegramUser = Dep
             member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
             session.add(member)
 
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = ws.id
         db_user.onboarding_completed = True
         db_user.onboarding_step = "completed"
@@ -87,7 +87,7 @@ async def create_workspace(req: CreateWorkspaceRequest, user: TelegramUser = Dep
 
 
 @router.get("/workspaces/current", response_model=WorkspaceItem)
-async def get_current_workspace_info(user: TelegramUser = Depends(get_current_user)):
+async def get_current_workspace_info(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         workspaces = await get_user_workspaces_list(session, user)
         active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
@@ -97,7 +97,7 @@ async def get_current_workspace_info(user: TelegramUser = Depends(get_current_us
 
 
 @router.post("/workspaces/switch")
-async def switch_workspace(req: SwitchWorkspaceRequest, user: TelegramUser = Depends(get_current_user)):
+async def switch_workspace(req: SwitchWorkspaceRequest, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         target_ws = None
         if req.workspace_id:
@@ -119,7 +119,7 @@ async def switch_workspace(req: SwitchWorkspaceRequest, user: TelegramUser = Dep
         if not member and user.role != "admin":
             raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
 
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = target_ws.id
         await session.commit()
 
@@ -132,7 +132,7 @@ async def switch_workspace(req: SwitchWorkspaceRequest, user: TelegramUser = Dep
 async def update_workspace(
     workspace_id: int,
     req: UpdateWorkspaceRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
         ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
@@ -165,7 +165,7 @@ async def update_workspace(
 
 
 @router.delete("/workspaces/{workspace_id}")
-async def delete_workspace(workspace_id: int, user: TelegramUser = Depends(get_current_user)):
+async def delete_workspace(workspace_id: int, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
         if not ws:
@@ -189,7 +189,7 @@ async def delete_workspace(workspace_id: int, user: TelegramUser = Depends(get_c
 
         await session.execute(delete(WorkspaceMember).where(WorkspaceMember.workspace_id == workspace_id))
         await session.execute(delete(Workspace).where(Workspace.id == workspace_id))
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = other_member.workspace_id
         await session.commit()
         return {
