@@ -1,10 +1,11 @@
 import logging
+import os
 import secrets
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any, Literal
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body, UploadFile, File
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 from sqlalchemy import select, delete, func, or_, and_, update, case
 
@@ -39,6 +40,7 @@ from database.models import (
     StoppedAdSet,
     AppSettings,
     TelegramUser,
+    User,
     Workspace,
     WorkspaceMember,
     WorkspaceInvite,
@@ -139,6 +141,7 @@ class WorkspaceItem(BaseModel):
     slug: str
     badge_text: str
     badge_color: str
+    logo_url: str = ""
     role: str
     is_active: bool
     accounts_count: int = 0
@@ -149,11 +152,13 @@ class CreateWorkspaceRequest(BaseModel):
     slug: Optional[str] = Field(None, max_length=60)
     badge_color: Optional[str] = Field("#F5A300", max_length=30)
     badge_text: Optional[str] = Field(None, max_length=5)
+    logo_url: Optional[str] = Field(None, max_length=500)
 
 class UpdateWorkspaceRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=60)
     badge_color: Optional[str] = Field(None, max_length=30)
     badge_text: Optional[str] = Field(None, max_length=5)
+    logo_url: Optional[str] = Field(None, max_length=500)
 
 class SwitchWorkspaceRequest(BaseModel):
     workspace_id: Optional[int] = None
@@ -164,6 +169,10 @@ class WorkspaceMemberItem(BaseModel):
     user_id: int
     username: str
     full_name: str
+    first_name: str = ""
+    last_name: str = ""
+    email: Optional[str] = None
+    avatar_url: str = ""
     telegram_id: Optional[str] = None
     role: str
     joined_at: str
@@ -213,10 +222,55 @@ class UserProfileResponse(BaseModel):
     telegram_id: Optional[str] = None
     username: str
     full_name: str
+    first_name: str = ""
+    last_name: str = ""
+    email: Optional[str] = None
+    avatar_url: str = ""
     role: str
     is_approved: bool
+    onboarding_step: str = "completed"
+    onboarding_completed: bool = False
     active_workspace: Optional[WorkspaceItem] = None
     workspaces: List[WorkspaceItem] = Field(default_factory=list)
+
+# ----------------------------------------------------
+# Onboarding Schemas
+# ----------------------------------------------------
+class OnboardingStatusResponse(BaseModel):
+    onboarding_step: str
+    onboarding_completed: bool
+    user: UserProfileResponse
+    active_workspace: Optional[WorkspaceItem] = None
+
+class PersonalDetailsRequest(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=60)
+    last_name: str = Field(..., min_length=1, max_length=60)
+    email: Optional[str] = Field(None, max_length=255)
+
+class CheckSlugResponse(BaseModel):
+    slug: str
+    available: bool
+    message: str
+
+class OnboardingWorkspaceRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    slug: Optional[str] = Field(None, max_length=60)
+    badge_color: Optional[str] = Field("#F5A300", max_length=30)
+    badge_text: Optional[str] = Field(None, max_length=5)
+    logo_url: Optional[str] = Field(None, max_length=500)
+
+class BulkInviteItem(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    role: str = Field(default="buyer", pattern="^(admin|buyer|viewer)$")
+
+class OnboardingBulkInvitesRequest(BaseModel):
+    invites: List[BulkInviteItem] = Field(default_factory=list)
+
+class OnboardingBulkInvitesResponse(BaseModel):
+    sent_count: int
+    invites: List[WorkspaceInviteItem]
+    onboarding_completed: bool
+    redirect_url: str = "/"
 
 class LoginRequest(BaseModel):
     username: str
@@ -235,6 +289,10 @@ class ChangePasswordRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    avatar_url: Optional[str] = None
     telegram_id: Optional[str] = None
 
 
@@ -456,6 +514,33 @@ def slugify(text: str) -> str:
     return text or "workspace"
 
 
+RESERVED_WORKSPACE_SLUGS = {
+    "api",
+    "admin",
+    "app",
+    "auth",
+    "static",
+    "uploads",
+    "settings",
+    "terms",
+    "privacy",
+    "data-deletion",
+    "onboarding",
+    "login",
+    "sign-in",
+    "dashboard",
+    "accounts",
+    "rules",
+    "chats",
+    "summary",
+    "logs",
+    "invite",
+    "invites",
+    "null",
+    "undefined",
+}
+
+
 async def get_user_workspace(
     session,
     user: TelegramUser,
@@ -512,6 +597,7 @@ async def get_user_workspace(
         slug=ws_slug,
         badge_text="B",
         badge_color="#F5A300",
+        logo_url="",
         owner_user_id=user.id
     )
     session.add(ws)
@@ -551,6 +637,7 @@ async def get_user_workspaces_list(session, user: TelegramUser) -> List[Workspac
             slug=ws.slug,
             badge_text=ws.badge_text or ws.name[:1].upper(),
             badge_color=ws.badge_color or "#F5A300",
+            logo_url=ws.logo_url or "",
             role=role or "owner",
             is_active=(ws.id == active_id),
             accounts_count=int(acc_count),
@@ -1452,8 +1539,20 @@ async def update_profile(req: UpdateProfileRequest, user: TelegramUser = Depends
         if not db_user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
 
+        if req.first_name is not None:
+            db_user.first_name = req.first_name.strip()
+        if req.last_name is not None:
+            db_user.last_name = req.last_name.strip()
+        if req.email is not None:
+            clean_email = req.email.strip().lower() if req.email.strip() else None
+            db_user.email = clean_email
+        if req.avatar_url is not None:
+            db_user.avatar_url = req.avatar_url.strip()
         if req.full_name is not None:
             db_user.full_name = req.full_name.strip()
+        elif req.first_name is not None or req.last_name is not None:
+            db_user.full_name = f"{db_user.first_name} {db_user.last_name}".strip()
+
         if req.telegram_id is not None:
             new_telegram_id = req.telegram_id.strip()
             if not new_telegram_id:
@@ -1496,6 +1595,10 @@ async def update_profile(req: UpdateProfileRequest, user: TelegramUser = Depends
             "message": "Профиль успешно обновлен",
             "username": db_user.username,
             "full_name": db_user.full_name,
+            "first_name": db_user.first_name,
+            "last_name": db_user.last_name,
+            "email": db_user.email,
+            "avatar_url": db_user.avatar_url,
             "telegram_id": db_user.telegram_id
         }
 
@@ -1515,14 +1618,21 @@ async def logout_user(user: TelegramUser = Depends(get_current_user)):
 @router.get("/me", response_model=UserProfileResponse)
 async def get_me(user: TelegramUser = Depends(get_current_user)):
     async with async_session_maker() as session:
-        workspaces = await get_user_workspaces_list(session, user)
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        workspaces = await get_user_workspaces_list(session, db_user)
         active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
         return UserProfileResponse(
-            telegram_id=user.telegram_id,
-            username=user.username or "",
-            full_name=user.full_name or "",
-            role=user.role,
-            is_approved=user.is_approved,
+            telegram_id=db_user.telegram_id,
+            username=db_user.username or "",
+            full_name=db_user.full_name or "",
+            first_name=getattr(db_user, "first_name", "") or "",
+            last_name=getattr(db_user, "last_name", "") or "",
+            email=db_user.email,
+            avatar_url=getattr(db_user, "avatar_url", "") or "",
+            role=db_user.role,
+            is_approved=db_user.is_approved,
+            onboarding_step=getattr(db_user, "onboarding_step", "completed") or "completed",
+            onboarding_completed=bool(getattr(db_user, "onboarding_completed", False)),
             active_workspace=active_ws,
             workspaces=workspaces
         )
@@ -1546,6 +1656,7 @@ async def create_workspace(req: CreateWorkspaceRequest, user: TelegramUser = Dep
     slug = slugify(req.slug.strip()) if req.slug else slugify(name)
     badge_color = req.badge_color or "#F5A300"
     badge_text = req.badge_text.strip() if req.badge_text else name[:1].upper()
+    logo_url = req.logo_url.strip() if req.logo_url else ""
 
     async with async_session_maker() as session:
         existing = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
@@ -1557,6 +1668,7 @@ async def create_workspace(req: CreateWorkspaceRequest, user: TelegramUser = Dep
             slug=slug,
             badge_text=badge_text,
             badge_color=badge_color,
+            logo_url=logo_url,
             owner_user_id=user.id
         )
         session.add(ws)
@@ -1575,6 +1687,7 @@ async def create_workspace(req: CreateWorkspaceRequest, user: TelegramUser = Dep
             slug=ws.slug,
             badge_text=ws.badge_text,
             badge_color=ws.badge_color,
+            logo_url=ws.logo_url,
             role="owner",
             is_active=True,
             accounts_count=0,
@@ -1641,6 +1754,8 @@ async def update_workspace(workspace_id: int, req: UpdateWorkspaceRequest, user:
             ws.badge_color = req.badge_color.strip()
         if req.badge_text and req.badge_text.strip():
             ws.badge_text = req.badge_text.strip()
+        if req.logo_url is not None:
+            ws.logo_url = req.logo_url.strip()
 
         await session.commit()
         workspaces = await get_user_workspaces_list(session, user)
@@ -1722,6 +1837,10 @@ async def list_workspace_members(
                 user_id=u.id,
                 username=u.username or "",
                 full_name=u.full_name or u.username or "",
+                first_name=getattr(u, "first_name", "") or "",
+                last_name=getattr(u, "last_name", "") or "",
+                email=getattr(u, "email", None),
+                avatar_url=getattr(u, "avatar_url", "") or "",
                 telegram_id=u.telegram_id,
                 role=member.role,
                 joined_at=_utc_iso(member.joined_at),
@@ -1788,6 +1907,10 @@ async def update_workspace_member_role(
             user_id=target_user.id,
             username=target_user.username or "",
             full_name=target_user.full_name or target_user.username or "",
+            first_name=getattr(target_user, "first_name", "") or "",
+            last_name=getattr(target_user, "last_name", "") or "",
+            email=getattr(target_user, "email", None),
+            avatar_url=getattr(target_user, "avatar_url", "") or "",
             telegram_id=target_user.telegram_id,
             role=target_member.role,
             joined_at=_utc_iso(target_member.joined_at),
@@ -2306,6 +2429,357 @@ async def accept_workspace_invite(
             "workspace_slug": ws.slug,
             "role": existing_m.role if existing_m else invite.role,
         }
+
+
+# ----------------------------------------------------
+# Onboarding & Profile Flow Endpoints
+# ----------------------------------------------------
+
+@router.get("/onboarding/status", response_model=OnboardingStatusResponse)
+async def get_onboarding_status(user: TelegramUser = Depends(get_current_user)):
+    """Return the current onboarding status and progress step for the user."""
+    async with async_session_maker() as session:
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        workspaces = await get_user_workspaces_list(session, db_user)
+        active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
+
+        step = db_user.onboarding_step or "personal_details"
+        if not db_user.first_name and not db_user.full_name:
+            step = "personal_details"
+        elif not workspaces:
+            step = "workspace"
+        elif not db_user.onboarding_completed:
+            step = "invites"
+        else:
+            step = "completed"
+
+        profile = UserProfileResponse(
+            telegram_id=db_user.telegram_id,
+            username=db_user.username or "",
+            full_name=db_user.full_name or "",
+            first_name=getattr(db_user, "first_name", "") or "",
+            last_name=getattr(db_user, "last_name", "") or "",
+            email=db_user.email,
+            avatar_url=getattr(db_user, "avatar_url", "") or "",
+            role=db_user.role,
+            is_approved=db_user.is_approved,
+            onboarding_step=step,
+            onboarding_completed=bool(db_user.onboarding_completed),
+            active_workspace=active_ws,
+            workspaces=workspaces,
+        )
+
+        return OnboardingStatusResponse(
+            onboarding_step=step,
+            onboarding_completed=bool(db_user.onboarding_completed),
+            user=profile,
+            active_workspace=active_ws,
+        )
+
+
+@router.post("/onboarding/personal-details", response_model=OnboardingStatusResponse)
+async def submit_onboarding_personal_details(
+    req: PersonalDetailsRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Save user first name, last name, and optional email during onboarding."""
+    first_name = req.first_name.strip()
+    last_name = req.last_name.strip()
+    if not first_name:
+        raise HTTPException(status_code=400, detail="Имя обязательно для заполнения")
+
+    clean_email = req.email.strip().lower() if req.email and req.email.strip() else None
+
+    async with async_session_maker() as session:
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.first_name = first_name
+        db_user.last_name = last_name
+        db_user.full_name = f"{first_name} {last_name}".strip()
+        if clean_email:
+            db_user.email = clean_email
+
+        if db_user.onboarding_step in ("personal_details", ""):
+            db_user.onboarding_step = "workspace"
+
+        await session.commit()
+
+        workspaces = await get_user_workspaces_list(session, db_user)
+        active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
+
+        profile = UserProfileResponse(
+            telegram_id=db_user.telegram_id,
+            username=db_user.username or "",
+            full_name=db_user.full_name or "",
+            first_name=db_user.first_name or "",
+            last_name=db_user.last_name or "",
+            email=db_user.email,
+            avatar_url=db_user.avatar_url or "",
+            role=db_user.role,
+            is_approved=db_user.is_approved,
+            onboarding_step=db_user.onboarding_step,
+            onboarding_completed=bool(db_user.onboarding_completed),
+            active_workspace=active_ws,
+            workspaces=workspaces,
+        )
+
+        return OnboardingStatusResponse(
+            onboarding_step=db_user.onboarding_step,
+            onboarding_completed=bool(db_user.onboarding_completed),
+            user=profile,
+            active_workspace=active_ws,
+        )
+
+
+@router.post("/onboarding/avatar")
+async def upload_onboarding_avatar(
+    file: UploadFile = File(...),
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Upload custom avatar image for the user during or after onboarding."""
+    filename = file.filename or "avatar.png"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".svg"):
+        raise HTTPException(status_code=400, detail="Поддерживаются только форматы PNG, JPG, WEBP, SVG")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Размер файла не должен превышать 5 МБ")
+
+    upload_dir = os.path.join("webapp", "uploads", "avatars")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    unique_filename = f"avatar_{user.id}_{int(time.time())}_{secrets.token_hex(4)}{ext}"
+    target_path = os.path.join(upload_dir, unique_filename)
+
+    with open(target_path, "wb") as f:
+        f.write(content)
+
+    avatar_url = f"/uploads/avatars/{unique_filename}"
+
+    async with async_session_maker() as session:
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.avatar_url = avatar_url
+        await session.commit()
+
+    return {"status": "ok", "avatar_url": avatar_url}
+
+
+@router.delete("/onboarding/avatar")
+async def delete_onboarding_avatar(user: TelegramUser = Depends(get_current_user)):
+    """Reset user avatar to default initial badge."""
+    async with async_session_maker() as session:
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.avatar_url = ""
+        await session.commit()
+    return {"status": "ok", "avatar_url": ""}
+
+
+@router.get("/onboarding/check-slug", response_model=CheckSlugResponse)
+async def check_workspace_slug(
+    slug: str = Query(..., min_length=2, max_length=60),
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Check availability and validity of workspace slug in real-time."""
+    raw_slug = slug.strip().lower()
+    cleaned_slug = slugify(raw_slug)
+
+    if not cleaned_slug or len(cleaned_slug) < 2:
+        return CheckSlugResponse(
+            slug=raw_slug,
+            available=False,
+            message="Слаг должен содержать минимум 2 символа (латиница, цифры, дефис)",
+        )
+
+    if cleaned_slug in RESERVED_WORKSPACE_SLUGS:
+        return CheckSlugResponse(
+            slug=cleaned_slug,
+            available=False,
+            message="Этот слаг зарезервирован системой",
+        )
+
+    async with async_session_maker() as session:
+        existing = (await session.execute(select(Workspace).where(Workspace.slug == cleaned_slug))).scalar_one_or_none()
+        if existing:
+            return CheckSlugResponse(
+                slug=cleaned_slug,
+                available=False,
+                message="Этот адрес воркспейса уже занят",
+            )
+
+    return CheckSlugResponse(
+        slug=cleaned_slug,
+        available=True,
+        message="Адрес доступен",
+    )
+
+
+@router.post("/onboarding/workspace", response_model=WorkspaceItem)
+async def submit_onboarding_workspace(
+    req: OnboardingWorkspaceRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Create a new workspace during onboarding and set it as active."""
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Название воркспейса обязательно")
+
+    raw_slug = req.slug.strip().lower() if req.slug else slugify(name)
+    slug = slugify(raw_slug) if raw_slug else "workspace"
+    if not slug or len(slug) < 2:
+        slug = f"ws-{secrets.token_hex(3)}"
+
+    if slug in RESERVED_WORKSPACE_SLUGS:
+        slug = f"{slug}-{secrets.token_hex(3)}"
+
+    badge_color = req.badge_color or "#F5A300"
+    badge_text = req.badge_text.strip() if req.badge_text else name[:1].upper()
+    logo_url = req.logo_url.strip() if req.logo_url else ""
+
+    async with async_session_maker() as session:
+        existing = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
+        if existing:
+            slug = f"{slug}-{secrets.token_hex(3)}"
+
+        ws = Workspace(
+            name=name,
+            slug=slug,
+            badge_text=badge_text,
+            badge_color=badge_color,
+            logo_url=logo_url,
+            owner_user_id=user.id,
+        )
+        session.add(ws)
+        await session.flush()
+
+        member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
+        session.add(member)
+
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.active_workspace_id = ws.id
+        if db_user.onboarding_step in ("personal_details", "workspace", ""):
+            db_user.onboarding_step = "invites"
+
+        await session.commit()
+
+        return WorkspaceItem(
+            id=ws.id,
+            name=ws.name,
+            slug=ws.slug,
+            badge_text=ws.badge_text,
+            badge_color=ws.badge_color,
+            logo_url=ws.logo_url,
+            role="owner",
+            is_active=True,
+            accounts_count=0,
+            members_count=1,
+        )
+
+
+@router.post("/onboarding/workspace/logo")
+async def upload_workspace_logo(
+    file: UploadFile = File(...),
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Upload workspace logo image."""
+    filename = file.filename or "logo.png"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".svg"):
+        raise HTTPException(status_code=400, detail="Поддерживаются только форматы PNG, JPG, WEBP, SVG")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Размер файла не должен превышать 5 МБ")
+
+    upload_dir = os.path.join("webapp", "uploads", "workspaces")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    unique_filename = f"logo_{user.id}_{int(time.time())}_{secrets.token_hex(4)}{ext}"
+    target_path = os.path.join(upload_dir, unique_filename)
+
+    with open(target_path, "wb") as f:
+        f.write(content)
+
+    logo_url = f"/uploads/workspaces/{unique_filename}"
+    return {"status": "ok", "logo_url": logo_url}
+
+
+@router.post("/onboarding/invites", response_model=OnboardingBulkInvitesResponse)
+async def submit_onboarding_invites(
+    req: OnboardingBulkInvitesRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Create bulk team member invitations and finalize onboarding."""
+    async with async_session_maker() as session:
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        active_ws = await get_user_workspace(session, db_user)
+        if not active_ws:
+            raise HTTPException(status_code=400, detail="Не найден активный воркспейс для создания приглашений")
+
+        created_invites: List[WorkspaceInviteItem] = []
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires_at = now_dt + timedelta(days=7)
+
+        for item in req.invites:
+            clean_email = item.email.strip().lower()
+            if not clean_email or "@" not in clean_email:
+                continue
+
+            role = item.role if item.role in ("admin", "buyer", "viewer") else "buyer"
+            token = f"inv_{secrets.token_urlsafe(24)}"
+            invite = WorkspaceInvite(
+                workspace_id=active_ws.id,
+                token=token,
+                email=clean_email,
+                role=role,
+                inviter_user_id=db_user.id,
+                status="pending",
+                max_uses=1,
+                used_count=0,
+                expires_at=expires_at,
+                created_at=now_dt,
+            )
+            session.add(invite)
+            await session.flush()
+
+            created_invites.append(
+                WorkspaceInviteItem(
+                    id=invite.id,
+                    workspace_id=active_ws.id,
+                    workspace_name=active_ws.name,
+                    token=invite.token,
+                    invite_url=f"/invite/{invite.token}",
+                    email=invite.email,
+                    role=invite.role,
+                    status=invite.status,
+                    max_uses=invite.max_uses,
+                    used_count=invite.used_count,
+                    inviter_name=db_user.full_name or db_user.username or "Команда",
+                    expires_at=_utc_iso(invite.expires_at),
+                    created_at=_utc_iso(invite.created_at),
+                )
+            )
+
+        db_user.onboarding_step = "completed"
+        db_user.onboarding_completed = True
+        await session.commit()
+
+        return OnboardingBulkInvitesResponse(
+            sent_count=len(created_invites),
+            invites=created_invites,
+            onboarding_completed=True,
+            redirect_url="/",
+        )
+
+
+@router.post("/onboarding/skip")
+async def skip_onboarding(user: TelegramUser = Depends(get_current_user)):
+    """Skip remaining onboarding steps and mark onboarding completed."""
+    async with async_session_maker() as session:
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.onboarding_step = "completed"
+        db_user.onboarding_completed = True
+        await session.commit()
+    return {"status": "ok", "onboarding_completed": True, "redirect_url": "/"}
 
 
 @router.get("/accounts", response_model=List[AccountItem])

@@ -67,9 +67,13 @@ def create_app() -> FastAPI:
     # Static Web App files (local development and legacy fallback only).
     webapp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "webapp")
     os.makedirs(webapp_dir, exist_ok=True)
+    uploads_dir = os.path.join(webapp_dir, "uploads")
+    os.makedirs(os.path.join(uploads_dir, "avatars"), exist_ok=True)
+    os.makedirs(os.path.join(uploads_dir, "workspaces"), exist_ok=True)
 
     if os.path.exists(webapp_dir):
         app.mount("/static", StaticFiles(directory=webapp_dir), name="static")
+        app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
         public_documents = {
             "/privacy": "privacy.html",
@@ -92,6 +96,9 @@ def create_app() -> FastAPI:
         @app.get("/")
         @app.get("/sign-in")
         @app.get("/login")
+        @app.get("/onboarding")
+        @app.get("/onboarding/{step}")
+        @app.get("/invite/{token}")
         @app.get("/home")
         @app.get("/dashboard")
         @app.get("/facebook-accounts")
@@ -128,7 +135,7 @@ def create_app() -> FastAPI:
         @app.get("/{workspace_slug}/add-accounts")
         @app.get("/{workspace_slug}/settings")
         @app.get("/{workspace_slug}")
-        async def serve_index(workspace_slug: str = "", group_id: str = "", view_id: str = "", chat_id: str = "", rule_id: str = ""):
+        async def serve_index(workspace_slug: str = "", group_id: str = "", view_id: str = "", chat_id: str = "", rule_id: str = "", step: str = "", token: str = ""):
             index_path = os.path.join(webapp_dir, "index.html")
             if os.path.exists(index_path):
                 return FileResponse(index_path, headers={
