@@ -418,4 +418,123 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                 artem_m = (await session.execute(select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws_id, WorkspaceMember.user_id == artem_id))).scalar_one()
                 self.assertEqual(artem_m.role, 'admin')
 
+    async def test_workspace_invites_api_lifecycle(self):
+        artem_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000111, 'first_name': 'Artem', 'username': 'artem'},
+        )
+        artem_headers = {'Authorization': f'tma {artem_data}'}
+
+        dave_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000444, 'first_name': 'Dave', 'username': 'dave'},
+        )
+        dave_headers = {'Authorization': f'tma {dave_data}'}
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+            # Create Dave in DB
+            async with self.test_session_maker() as session:
+                dave = TelegramUser(
+                    telegram_id='777000444',
+                    username='dave',
+                    full_name='Dave Analyst',
+                    password_hash=hash_password('dave-password'),
+                    role='buyer',
+                    is_approved=True,
+                )
+                session.add(dave)
+                ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+                ws_id = ws.id
+                await session.commit()
+
+            # 1. Artem creates a targeted email invite
+            create_res = await client.post(
+                f'/api/workspaces/{ws_id}/invites',
+                json={
+                    'email': 'dave@buyerly.app',
+                    'role': 'buyer',
+                    'expires_in_days': 7,
+                    'max_uses': 1,
+                },
+                headers=artem_headers,
+            )
+            self.assertEqual(create_res.status_code, 200)
+            invite_data = create_res.json()
+            self.assertEqual(invite_data['email'], 'dave@buyerly.app')
+            self.assertEqual(invite_data['role'], 'buyer')
+            self.assertEqual(invite_data['status'], 'pending')
+            self.assertTrue(invite_data['token'].startswith('inv_'))
+            self.assertIn(invite_data['token'], invite_data['invite_url'])
+            invite_id = invite_data['id']
+            invite_token = invite_data['token']
+
+            # 2. Artem creates a public multi-use invite link
+            public_create_res = await client.post(
+                f'/api/workspaces/{ws_id}/invites',
+                json={
+                    'role': 'viewer',
+                    'expires_in_days': 30,
+                    'max_uses': 0,
+                },
+                headers=artem_headers,
+            )
+            self.assertEqual(public_create_res.status_code, 200)
+            public_token = public_create_res.json()['token']
+
+            # 3. List invites as Artem
+            list_res = await client.get(f'/api/workspaces/{ws_id}/invites', headers=artem_headers)
+            self.assertEqual(list_res.status_code, 200)
+            invites_list = list_res.json()
+            self.assertGreaterEqual(len(invites_list), 2)
+            self.assertEqual(invites_list[0]['inviter_name'], 'Артем')
+
+            # 4. Public check of token (without auth)
+            check_res = await client.get(f'/api/invites/{invite_token}')
+            self.assertEqual(check_res.status_code, 200)
+            check_data = check_res.json()
+            self.assertTrue(check_data['valid'])
+            self.assertEqual(check_data['workspace_name'], 'Buyerly')
+            self.assertEqual(check_data['role'], 'buyer')
+            self.assertEqual(check_data['target_email'], 'dave@buyerly.app')
+
+            # Check invalid token
+            check_invalid = await client.get('/api/invites/inv_does_not_exist')
+            self.assertEqual(check_invalid.status_code, 200)
+            self.assertFalse(check_invalid.json()['valid'])
+
+            # 5. Revoke the targeted invite as Artem
+            del_invite_res = await client.delete(f'/api/workspaces/{ws_id}/invites/{invite_id}', headers=artem_headers)
+            self.assertEqual(del_invite_res.status_code, 200)
+
+            # Public check now shows revoked
+            check_revoked = await client.get(f'/api/invites/{invite_token}')
+            self.assertEqual(check_revoked.status_code, 200)
+            self.assertFalse(check_revoked.json()['valid'])
+            self.assertEqual(check_revoked.json()['status'], 'revoked')
+
+            # Dave tries to accept revoked token -> 400
+            accept_revoked = await client.post(f'/api/invites/{invite_token}/accept', headers=dave_headers)
+            self.assertEqual(accept_revoked.status_code, 400)
+
+            # 6. Dave accepts the public viewer link -> 200 OK
+            accept_res = await client.post(f'/api/invites/{public_token}/accept', headers=dave_headers)
+            self.assertEqual(accept_res.status_code, 200)
+            self.assertEqual(accept_res.json()['status'], 'ok')
+            self.assertEqual(accept_res.json()['role'], 'viewer')
+            self.assertEqual(accept_res.json()['workspace_id'], ws_id)
+
+            # 7. Dave accepts same link again (already member) -> 200 OK
+            accept_again = await client.post(f'/api/invites/{public_token}/accept', headers=dave_headers)
+            self.assertEqual(accept_again.status_code, 200)
+            self.assertEqual(accept_again.json()['status'], 'ok')
+
+            # 8. Verify Dave in DB
+            async with self.test_session_maker() as session:
+                dave_db = (await session.execute(select(TelegramUser).where(TelegramUser.username == 'dave'))).scalar_one()
+                self.assertEqual(dave_db.active_workspace_id, ws_id)
+                dave_member = (await session.execute(select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws_id, WorkspaceMember.user_id == dave_db.id))).scalar_one()
+                self.assertEqual(dave_member.role, 'viewer')
+
+
 

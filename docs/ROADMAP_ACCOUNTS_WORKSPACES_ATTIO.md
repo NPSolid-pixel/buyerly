@@ -53,8 +53,8 @@
   - `POST /api/v1/workspaces/{id}/leave` — выход пользователя из воркспейса по собственному желанию.
   - `POST /api/v1/workspaces/{id}/transfer-ownership` — передача владения воркспейсом.
 
-#### Задача 1.3: API приглашений и ссылок (Invites API)
-- [ ] Реализовать эндпоинты:
+#### Задача 1.3: API приглашений и ссылок (Invites API) ✅
+- [x] Реализовать эндпоинты:
   - `POST /api/v1/workspaces/{id}/invites` — создание персонализированного инвайта (по email/юзернейму) или публичной инвайт-ссылки с ролью.
   - `GET /api/v1/workspaces/{id}/invites` — список активных приглашений воркспейса.
   - `DELETE /api/v1/workspaces/{id}/invites/{invite_id}` — отзыв приглашения.

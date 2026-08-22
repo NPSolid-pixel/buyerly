@@ -1,7 +1,8 @@
 import logging
+import secrets
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
@@ -173,6 +174,40 @@ class UpdateMemberRoleRequest(BaseModel):
 
 class TransferOwnershipRequest(BaseModel):
     new_owner_user_id: int
+
+class CreateWorkspaceInviteRequest(BaseModel):
+    email: Optional[str] = Field(None, max_length=255)
+    role: str = Field(default="buyer", pattern="^(admin|buyer|viewer)$")
+    expires_in_days: int = Field(default=7, ge=1, le=365)
+    max_uses: int = Field(default=1, ge=0, le=1000)
+
+class WorkspaceInviteItem(BaseModel):
+    id: int
+    workspace_id: int
+    workspace_name: str
+    token: str
+    invite_url: str
+    email: Optional[str] = None
+    role: str
+    status: str
+    max_uses: int
+    used_count: int
+    inviter_name: str
+    expires_at: Optional[str] = None
+    created_at: str
+
+class PublicInviteInfoResponse(BaseModel):
+    valid: bool
+    status: str
+    workspace_name: Optional[str] = None
+    workspace_slug: Optional[str] = None
+    workspace_badge_text: Optional[str] = None
+    workspace_badge_color: Optional[str] = None
+    inviter_name: Optional[str] = None
+    role: Optional[str] = None
+    target_email: Optional[str] = None
+    expires_at: Optional[str] = None
+    message: Optional[str] = None
 
 class UserProfileResponse(BaseModel):
     telegram_id: Optional[str] = None
@@ -1902,6 +1937,322 @@ async def transfer_workspace_ownership(
             "status": "ok",
             "message": "Права владения успешно переданы",
             "new_owner_user_id": req.new_owner_user_id,
+        }
+
+
+# ----------------------------------------------------
+# Workspace Invites Endpoints
+# ----------------------------------------------------
+
+@router.post("/workspaces/{workspace_id}/invites", response_model=WorkspaceInviteItem)
+async def create_workspace_invite(
+    workspace_id: int,
+    req: CreateWorkspaceInviteRequest,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Create a new workspace invitation (targeted email or public link)."""
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        caller_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not caller_member and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+
+        caller_role = caller_member.role if caller_member else "admin"
+        if caller_role not in ("owner", "admin") and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Недостаточно прав для создания приглашений")
+
+        token = f"inv_{secrets.token_urlsafe(24)}"
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        expires_at = now_dt + timedelta(days=req.expires_in_days) if req.expires_in_days > 0 else None
+        target_email = req.email.strip().lower() if req.email and req.email.strip() else None
+
+        invite = WorkspaceInvite(
+            workspace_id=workspace_id,
+            token=token,
+            email=target_email,
+            role=req.role,
+            inviter_user_id=user.id,
+            status="pending",
+            max_uses=req.max_uses,
+            used_count=0,
+            expires_at=expires_at,
+        )
+        session.add(invite)
+        await session.commit()
+        await session.refresh(invite)
+
+        base_url = settings.WEBAPP_URL.rstrip("/") if settings.WEBAPP_URL else ""
+        invite_url = f"{base_url}/invite/{invite.token}" if base_url else f"/invite/{invite.token}"
+
+        return WorkspaceInviteItem(
+            id=invite.id,
+            workspace_id=ws.id,
+            workspace_name=ws.name,
+            token=invite.token,
+            invite_url=invite_url,
+            email=invite.email,
+            role=invite.role,
+            status=invite.status,
+            max_uses=invite.max_uses,
+            used_count=invite.used_count,
+            inviter_name=user.full_name or user.username or "",
+            expires_at=_utc_iso(invite.expires_at),
+            created_at=_utc_iso(invite.created_at),
+        )
+
+
+@router.get("/workspaces/{workspace_id}/invites", response_model=List[WorkspaceInviteItem])
+async def list_workspace_invites(
+    workspace_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """List all invites of a workspace."""
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        caller_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not caller_member and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+
+        caller_role = caller_member.role if caller_member else "admin"
+        if caller_role not in ("owner", "admin") and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Недостаточно прав для просмотра приглашений")
+
+        rows = (
+            await session.execute(
+                select(WorkspaceInvite, TelegramUser)
+                .outerjoin(TelegramUser, TelegramUser.id == WorkspaceInvite.inviter_user_id)
+                .where(WorkspaceInvite.workspace_id == workspace_id)
+                .order_by(WorkspaceInvite.id.desc())
+            )
+        ).all()
+
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        items = []
+        base_url = settings.WEBAPP_URL.rstrip("/") if settings.WEBAPP_URL else ""
+
+        for invite, inviter in rows:
+            current_status = invite.status
+            if current_status == "pending" and invite.expires_at and now_dt > invite.expires_at:
+                current_status = "expired"
+
+            invite_url = f"{base_url}/invite/{invite.token}" if base_url else f"/invite/{invite.token}"
+            inviter_name = (inviter.full_name or inviter.username) if inviter else ""
+
+            items.append(
+                WorkspaceInviteItem(
+                    id=invite.id,
+                    workspace_id=ws.id,
+                    workspace_name=ws.name,
+                    token=invite.token,
+                    invite_url=invite_url,
+                    email=invite.email,
+                    role=invite.role,
+                    status=current_status,
+                    max_uses=invite.max_uses,
+                    used_count=invite.used_count,
+                    inviter_name=inviter_name,
+                    expires_at=_utc_iso(invite.expires_at),
+                    created_at=_utc_iso(invite.created_at),
+                )
+            )
+        return items
+
+
+@router.delete("/workspaces/{workspace_id}/invites/{invite_id}")
+async def revoke_workspace_invite(
+    workspace_id: int,
+    invite_id: int,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Revoke an active invitation."""
+    async with async_session_maker() as session:
+        ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        caller_member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not caller_member and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+
+        caller_role = caller_member.role if caller_member else "admin"
+        if caller_role not in ("owner", "admin") and user.role != "admin":
+            raise HTTPException(status_code=403, detail="Недостаточно прав для отзыва приглашений")
+
+        invite = (
+            await session.execute(
+                select(WorkspaceInvite).where(
+                    WorkspaceInvite.id == invite_id,
+                    WorkspaceInvite.workspace_id == workspace_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if not invite:
+            raise HTTPException(status_code=404, detail="Приглашение не найдено")
+
+        invite.status = "revoked"
+        await session.commit()
+        return {"status": "ok", "message": "Приглашение успешно отозвано"}
+
+
+@router.get("/invites/{token}", response_model=PublicInviteInfoResponse)
+async def get_public_invite_info(token: str):
+    """Public endpoint to inspect an invite before joining."""
+    async with async_session_maker() as session:
+        invite = (
+            await session.execute(
+                select(WorkspaceInvite).where(WorkspaceInvite.token == token)
+            )
+        ).scalar_one_or_none()
+        if not invite:
+            return PublicInviteInfoResponse(
+                valid=False,
+                status="not_found",
+                message="Приглашение не найдено или ссылка недействительна",
+            )
+
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        if invite.status == "revoked":
+            return PublicInviteInfoResponse(
+                valid=False,
+                status="revoked",
+                message="Это приглашение было отозвано администратором",
+            )
+
+        if invite.expires_at and now_dt > invite.expires_at:
+            return PublicInviteInfoResponse(
+                valid=False,
+                status="expired",
+                message="Срок действия приглашения истёк",
+            )
+
+        if invite.max_uses > 0 and invite.used_count >= invite.max_uses:
+            return PublicInviteInfoResponse(
+                valid=False,
+                status="accepted",
+                message="Лимит использований данного приглашения исчерпан",
+            )
+
+        ws = (await session.execute(select(Workspace).where(Workspace.id == invite.workspace_id))).scalar_one_or_none()
+        if not ws:
+            return PublicInviteInfoResponse(
+                valid=False,
+                status="not_found",
+                message="Воркспейс больше не существует",
+            )
+
+        inviter = None
+        if invite.inviter_user_id:
+            inviter = (
+                await session.execute(
+                    select(TelegramUser).where(TelegramUser.id == invite.inviter_user_id)
+                )
+            ).scalar_one_or_none()
+
+        inviter_name = (inviter.full_name or inviter.username) if inviter else "Команда"
+
+        return PublicInviteInfoResponse(
+            valid=True,
+            status="pending",
+            workspace_name=ws.name,
+            workspace_slug=ws.slug,
+            workspace_badge_text=ws.badge_text or ws.name[:1].upper(),
+            workspace_badge_color=ws.badge_color or "#F5A300",
+            inviter_name=inviter_name,
+            role=invite.role,
+            target_email=invite.email,
+            expires_at=_utc_iso(invite.expires_at),
+            message="Приглашение действительно",
+        )
+
+
+@router.post("/invites/{token}/accept")
+async def accept_workspace_invite(
+    token: str,
+    user: TelegramUser = Depends(get_current_user),
+):
+    """Accept a workspace invite and join the workspace."""
+    async with async_session_maker() as session:
+        invite = (
+            await session.execute(
+                select(WorkspaceInvite).where(WorkspaceInvite.token == token)
+            )
+        ).scalar_one_or_none()
+        if not invite:
+            raise HTTPException(status_code=404, detail="Приглашение не найдено")
+
+        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        if invite.status == "revoked":
+            raise HTTPException(status_code=400, detail="Это приглашение было отозвано")
+
+        if invite.expires_at and now_dt > invite.expires_at:
+            invite.status = "expired"
+            await session.commit()
+            raise HTTPException(status_code=400, detail="Срок действия приглашения истёк")
+
+        if invite.max_uses > 0 and invite.used_count >= invite.max_uses:
+            raise HTTPException(status_code=400, detail="Лимит использований приглашения исчерпан")
+
+        ws = (await session.execute(select(Workspace).where(Workspace.id == invite.workspace_id))).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status_code=404, detail="Воркспейс не найден")
+
+        existing_m = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == invite.workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+
+        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user.active_workspace_id = ws.id
+
+        if not existing_m:
+            member = WorkspaceMember(
+                workspace_id=invite.workspace_id,
+                user_id=user.id,
+                role=invite.role,
+            )
+            session.add(member)
+            invite.used_count += 1
+            if invite.max_uses > 0 and invite.used_count >= invite.max_uses:
+                invite.status = "accepted"
+
+        await session.commit()
+        return {
+            "status": "ok",
+            "message": f"Вы успешно присоединились к воркспейсу {ws.name}",
+            "workspace_id": ws.id,
+            "workspace_slug": ws.slug,
+            "role": existing_m.role if existing_m else invite.role,
         }
 
 
