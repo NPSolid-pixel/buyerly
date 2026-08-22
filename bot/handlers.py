@@ -19,7 +19,7 @@ from core.ownership import entity_is_owned_by, owned_by
 from core.meta_tokens import resolve_account_access_token
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
-from database.models import Account, StoppedAdSet, AppSettings, TelegramUser
+from database.models import Account, StoppedAdSet, AppSettings, User
 from meta_api.client import MetaClient
 from bot.keyboards import (
     get_main_menu_keyboard,
@@ -57,11 +57,11 @@ async def check_user_access(message: Message, bot: Bot) -> bool:
     )
 
     async with async_session_maker() as session:
-        res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == tg_id))
+        res = await session.execute(select(User).where(User.telegram_id == tg_id))
         user = res.scalar_one_or_none()
 
         if not user:
-            user = TelegramUser(
+            user = User(
                 telegram_id=tg_id,
                 username=username or f"user_{tg_id}",
                 full_name=full_name,
@@ -74,10 +74,10 @@ async def check_user_access(message: Message, bot: Bot) -> bool:
             # Notify every approved database admin about a pending request.
             if not is_configured_admin:
                 admin_result = await session.execute(
-                    select(TelegramUser.telegram_id).where(
-                        TelegramUser.role == "admin",
-                        TelegramUser.is_approved == True,
-                        TelegramUser.telegram_id.is_not(None),
+                    select(User.telegram_id).where(
+                        User.role == "admin",
+                        User.is_approved == True,
+                        User.telegram_id.is_not(None),
                     )
                 )
                 admin_ids = list(dict.fromkeys(admin_result.scalars().all()))
@@ -286,7 +286,7 @@ async def process_token_and_save(message: Message, state: FSMContext):
     async with async_session_maker() as session:
         owner_user = (
             await session.execute(
-                select(TelegramUser).where(TelegramUser.telegram_id == owner_id)
+                select(User).where(User.telegram_id == owner_id)
             )
         ).scalar_one_or_none()
         if not owner_user or not owner_user.is_approved:
@@ -415,7 +415,7 @@ def get_short_account_label(name: str, account_id: str) -> str:
 async def get_user_accounts(session, user_id: str) -> List[Account]:
     user = (
         await session.execute(
-            select(TelegramUser).where(TelegramUser.telegram_id == user_id)
+            select(User).where(User.telegram_id == user_id)
         )
     ).scalar_one_or_none()
     if user and user.is_approved and user.role == "admin":
@@ -430,7 +430,7 @@ async def get_user_accounts(session, user_id: str) -> List[Account]:
 
 async def _is_admin_user(session, user_id: str) -> bool:
     result = await session.execute(
-        select(TelegramUser).where(TelegramUser.telegram_id == user_id)
+        select(User).where(User.telegram_id == user_id)
     )
     user = result.scalar_one_or_none()
     return bool(user and user.is_approved and user.role == "admin")
@@ -438,7 +438,7 @@ async def _is_admin_user(session, user_id: str) -> bool:
 
 async def _can_manage_account(session, user_id: str, account: Account) -> bool:
     result = await session.execute(
-        select(TelegramUser).where(TelegramUser.telegram_id == user_id)
+        select(User).where(User.telegram_id == user_id)
     )
     user = result.scalar_one_or_none()
     if not user or not user.is_approved:
@@ -817,7 +817,7 @@ async def cmd_admin_panel(message: Message, bot: Bot, state: FSMContext):
             return
 
         # Список пользователей
-        u_res = await session.execute(select(TelegramUser))
+        u_res = await session.execute(select(User))
         users = u_res.scalars().all()
 
         # Список всех кабинетов команды
@@ -877,7 +877,7 @@ async def cb_approve_user(callback: CallbackQuery, bot: Bot):
         if not await _is_admin_user(session, actor_id):
             await callback.answer("⛔️ Недостаточно прав.", show_alert=True)
             return
-        res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == target_tg_id))
+        res = await session.execute(select(User).where(User.telegram_id == target_tg_id))
         user = res.scalar_one_or_none()
 
         if user:
@@ -911,7 +911,7 @@ async def cb_reject_user(callback: CallbackQuery):
         if not await _is_admin_user(session, actor_id):
             await callback.answer("⛔️ Недостаточно прав.", show_alert=True)
             return
-        await session.execute(delete(TelegramUser).where(TelegramUser.telegram_id == target_tg_id))
+        await session.execute(delete(User).where(User.telegram_id == target_tg_id))
         await session.commit()
 
     await callback.message.edit_text(f"❌ <b>Запрос на доступ (ID: <code>{target_tg_id}</code>) отклонен.</b>", parse_mode="HTML")
@@ -1161,7 +1161,7 @@ async def cb_undo_action(callback: CallbackQuery):
     async with async_session_maker() as session:
         user = (
             await session.execute(
-                select(TelegramUser).where(TelegramUser.telegram_id == user_id)
+                select(User).where(User.telegram_id == user_id)
             )
         ).scalar_one_or_none()
         if not user or not user.is_approved:

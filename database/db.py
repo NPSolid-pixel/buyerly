@@ -409,8 +409,8 @@ async def migrate_stable_owner_contract(conn) -> dict[str, int]:
         result = await conn.execute(
             text(
                 f"UPDATE {table_name} SET owner_user_id = ("
-                "SELECT telegram_users.id FROM telegram_users "
-                f"WHERE telegram_users.telegram_id = {table_name}.owner_id LIMIT 1"
+                "SELECT users.id FROM users "
+                f"WHERE users.telegram_id = {table_name}.owner_id LIMIT 1"
                 ") WHERE owner_user_id IS NULL AND owner_id IS NOT NULL"
             )
         )
@@ -561,6 +561,17 @@ async def migrate_automation_settings_contract(conn) -> list[str]:
     return added
 
 
+async def migrate_users_table_contract(conn) -> bool:
+    """Safely rename legacy telegram_users table to users if it exists."""
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "telegram_users" in table_names and "users" not in table_names:
+        await conn.execute(text("ALTER TABLE telegram_users RENAME TO users"))
+        return True
+    return False
+
+
 async def migrate_workspaces_contract(conn) -> int:
     """Ensure workspaces table exists and backfill a default workspace for each user."""
     from datetime import datetime, timezone
@@ -568,16 +579,16 @@ async def migrate_workspaces_contract(conn) -> int:
     table_names = await conn.run_sync(
         lambda sync_conn: set(inspect(sync_conn).get_table_names())
     )
-    if "workspaces" not in table_names or "telegram_users" not in table_names:
+    if "workspaces" not in table_names or "users" not in table_names:
         return 0
 
     user_columns = await conn.run_sync(
         lambda sync_conn: {
-            column["name"] for column in inspect(sync_conn).get_columns("telegram_users")
+            column["name"] for column in inspect(sync_conn).get_columns("users")
         }
     )
     if "active_workspace_id" not in user_columns:
-        await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN active_workspace_id INTEGER"))
+        await conn.execute(text("ALTER TABLE users ADD COLUMN active_workspace_id INTEGER"))
 
     for tbl in ("rule_presets", "rule_groups", "account_groups", "accounts", "meta_connections", "summary_snapshots", "audit_events"):
         if tbl in table_names:
@@ -588,7 +599,7 @@ async def migrate_workspaces_contract(conn) -> int:
                 await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN workspace_id INTEGER"))
                 await conn.execute(text(f"CREATE INDEX IF NOT EXISTS ix_{tbl}_workspace_id ON {tbl} (workspace_id)"))
 
-    users = (await conn.execute(text("SELECT id, username FROM telegram_users"))).mappings().all()
+    users = (await conn.execute(text("SELECT id, username FROM users"))).mappings().all()
     created_workspaces = 0
     for u in users:
         u_id = u["id"]
@@ -623,14 +634,14 @@ async def migrate_workspaces_contract(conn) -> int:
             )
 
             await conn.execute(
-                text("UPDATE telegram_users SET active_workspace_id = :ws_id WHERE id = :u_id"),
+                text("UPDATE users SET active_workspace_id = :ws_id WHERE id = :u_id"),
                 {"ws_id": ws_id, "u_id": u_id}
             )
             created_workspaces += 1
             has_membership = ws_id
 
         await conn.execute(
-            text("UPDATE telegram_users SET active_workspace_id = :ws_id WHERE id = :u_id AND active_workspace_id IS NULL"),
+            text("UPDATE users SET active_workspace_id = :ws_id WHERE id = :u_id AND active_workspace_id IS NULL"),
             {"ws_id": has_membership, "u_id": u_id}
         )
 
@@ -668,29 +679,29 @@ async def migrate_onboarding_contract(conn) -> bool:
         lambda sync_conn: set(inspect(sync_conn).get_table_names())
     )
     migrated = False
-    if "telegram_users" in table_names:
+    if "users" in table_names:
         user_columns = await conn.run_sync(
             lambda sync_conn: {
-                column["name"] for column in inspect(sync_conn).get_columns("telegram_users")
+                column["name"] for column in inspect(sync_conn).get_columns("users")
             }
         )
         if "first_name" not in user_columns:
-            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN first_name VARCHAR DEFAULT ''"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN first_name VARCHAR DEFAULT ''"))
             migrated = True
         if "last_name" not in user_columns:
-            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN last_name VARCHAR DEFAULT ''"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN last_name VARCHAR DEFAULT ''"))
             migrated = True
         if "email" not in user_columns:
-            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN email VARCHAR"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR"))
             migrated = True
         if "avatar_url" not in user_columns:
-            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN avatar_url VARCHAR DEFAULT ''"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR DEFAULT ''"))
             migrated = True
         if "onboarding_step" not in user_columns:
-            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_step VARCHAR DEFAULT 'personal_details'"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN onboarding_step VARCHAR DEFAULT 'personal_details'"))
             migrated = True
         if "onboarding_completed" not in user_columns:
-            await conn.execute(text("ALTER TABLE telegram_users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE"))
+            await conn.execute(text("ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE"))
             migrated = True
 
     if "workspaces" in table_names:
@@ -736,6 +747,8 @@ async def init_schema():
     import database.models  # noqa: F401
 
     async with engine.begin() as conn:
+        if await migrate_users_table_contract(conn):
+            logger.info("Migrated legacy telegram_users table to users.")
         await conn.run_sync(Base.metadata.create_all)
         if await migrate_otp_security_contract(conn):
             logger.info("Added failed_attempts to email_verification_codes.")
@@ -786,17 +799,17 @@ async def init_schema():
 async def ensure_bootstrap_admin():
     if settings.BOOTSTRAP_ADMIN_USERNAME and settings.BOOTSTRAP_ADMIN_PASSWORD:
         from sqlalchemy import select
-        from database.models import TelegramUser
+        from database.models import User
 
         async with async_session_maker() as session:
             result = await session.execute(
-                select(TelegramUser).where(
-                    TelegramUser.username.ilike(settings.BOOTSTRAP_ADMIN_USERNAME)
+                select(User).where(
+                    User.username.ilike(settings.BOOTSTRAP_ADMIN_USERNAME)
                 )
             )
             if not result.scalar_one_or_none():
                 session.add(
-                    TelegramUser(
+                    User(
                         telegram_id=settings.ADMIN_CHAT_ID or None,
                         username=settings.BOOTSTRAP_ADMIN_USERNAME,
                         full_name=settings.BOOTSTRAP_ADMIN_USERNAME,

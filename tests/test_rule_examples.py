@@ -11,7 +11,7 @@ from database.models import (
     RuleGroup,
     RuleGroupItem,
     RulePreset,
-    TelegramUser,
+    User,
 )
 
 
@@ -33,7 +33,7 @@ class TestRuleExamples(unittest.IsolatedAsyncioTestCase):
 
     async def test_examples_are_owned_unassigned_and_created_only_once(self):
         async with self.sessions() as session:
-            user = TelegramUser(
+            user = User(
                 telegram_id="111",
                 username="example_owner",
                 is_approved=True,
@@ -119,8 +119,8 @@ class TestRuleExamples(unittest.IsolatedAsyncioTestCase):
 
     async def test_each_user_receives_an_isolated_library(self):
         async with self.sessions() as session:
-            first = TelegramUser(telegram_id="201", username="first", is_approved=True)
-            second = TelegramUser(telegram_id="202", username="second", is_approved=True)
+            first = User(telegram_id="201", username="first", is_approved=True)
+            second = User(telegram_id="202", username="second", is_approved=True)
             session.add_all([first, second])
             await session.commit()
             await session.refresh(first)

@@ -31,7 +31,7 @@ from database.models import (
     AnalyticsViewPreference,
     MetaConnection,
     StoppedAdSet,
-    TelegramUser,
+    User,
 )
 
 
@@ -72,7 +72,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
         # Populate initial test user & account
         async with self.test_session_maker() as session:
-            admin_user = TelegramUser(
+            admin_user = User(
                 telegram_id="8634201356",
                 username="admin_user",
                 full_name="Admin Test",
@@ -82,7 +82,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             )
             session.add(admin_user)
 
-            buyer_user = TelegramUser(
+            buyer_user = User(
                 telegram_id="8948797431",
                 username="buyer_nick",
                 full_name="Buyer Nick",
@@ -177,7 +177,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         legacy_password = "legacy-password"
         async with self.test_session_maker() as session:
             result = await session.execute(
-                select(TelegramUser).where(TelegramUser.username == "buyer_nick")
+                select(User).where(User.username == "buyer_nick")
             )
             buyer = result.scalar_one()
             buyer.password_hash = hashlib.sha256(legacy_password.encode()).hexdigest()
@@ -205,7 +205,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
         async with self.test_session_maker() as session:
             result = await session.execute(
-                select(TelegramUser).where(TelegramUser.username == "buyer_nick")
+                select(User).where(User.username == "buyer_nick")
             )
             upgraded_buyer = result.scalar_one()
             self.assertTrue(upgraded_buyer.password_hash.startswith("pbkdf2_sha256$"))
@@ -216,7 +216,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         new_password = "new-password"
         async with self.test_session_maker() as session:
             result = await session.execute(
-                select(TelegramUser).where(TelegramUser.username == "buyer_nick")
+                select(User).where(User.username == "buyer_nick")
             )
             buyer = result.scalar_one()
             buyer.password_hash = hashlib.sha256(old_password.encode()).hexdigest()
@@ -248,7 +248,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
         async with self.test_session_maker() as session:
             result = await session.execute(
-                select(TelegramUser).where(TelegramUser.username == "buyer_nick")
+                select(User).where(User.username == "buyer_nick")
             )
             changed_buyer = result.scalar_one()
             self.assertTrue(verify_password(new_password, changed_buyer.password_hash))
@@ -313,7 +313,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         async with self.test_session_maker() as session:
             user = (
                 await session.execute(
-                    select(TelegramUser).where(TelegramUser.telegram_id == "9000000001")
+                    select(User).where(User.telegram_id == "9000000001")
                 )
             ).scalar_one()
             account = (
@@ -481,7 +481,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         async with self.test_session_maker() as session:
             buyer = (
                 await session.execute(
-                    select(TelegramUser).where(TelegramUser.telegram_id == "8948797431")
+                    select(User).where(User.telegram_id == "8948797431")
                 )
             ).scalar_one()
             conn_obj = MetaConnection(
@@ -1023,7 +1023,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             buyer = (
                 await session.execute(
-                    select(TelegramUser).where(TelegramUser.telegram_id == "8948797431")
+                    select(User).where(User.telegram_id == "8948797431")
                 )
             ).scalar_one()
             conn_obj = MetaConnection(

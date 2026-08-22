@@ -10,7 +10,7 @@ from database.models import (
     RuleGroup,
     RuleGroupItem,
     RulePreset,
-    TelegramUser,
+    User,
 )
 
 
@@ -140,7 +140,7 @@ def _runtime_payload(definition: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def ensure_rule_examples(session, user: TelegramUser) -> bool:
+async def ensure_rule_examples(session, user: User) -> bool:
     """Create safe, unassigned examples once; deletion remains permanent."""
 
     existing = (

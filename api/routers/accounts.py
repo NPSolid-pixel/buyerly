@@ -37,7 +37,7 @@ from database.models import (
     Account,
     AccountGroup,
     AccountGroupMember,
-    TelegramUser,
+    User,
 )
 from meta_api.client import MetaClient
 
@@ -47,7 +47,7 @@ meta_client = MetaClient()
 
 
 @router.get("/accounts", response_model=List[AccountItem])
-async def list_accounts(user: TelegramUser = Depends(get_current_user)):
+async def list_accounts(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         accounts = await get_user_accounts(session, user)
         group_ids_by_account = await _account_group_ids_by_account(session, user)
@@ -91,7 +91,7 @@ async def list_accounts(user: TelegramUser = Depends(get_current_user)):
 
 
 @router.get("/account-groups", response_model=List[AccountGroupItem])
-async def list_account_groups(user: TelegramUser = Depends(get_current_user)):
+async def list_account_groups(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         return await _account_group_items(session, user)
 
@@ -99,7 +99,7 @@ async def list_account_groups(user: TelegramUser = Depends(get_current_user)):
 @router.post("/account-groups", response_model=AccountGroupItem, status_code=status.HTTP_201_CREATED)
 async def create_account_group(
     payload: AccountGroupRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     name = payload.name.strip()
     if not name:
@@ -145,7 +145,7 @@ async def create_account_group(
 async def update_account_group(
     group_id: int,
     payload: AccountGroupRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     name = payload.name.strip()
     if not name:
@@ -196,7 +196,7 @@ async def update_account_group(
 @router.delete("/account-groups/{group_id}")
 async def delete_account_group(
     group_id: int,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
@@ -227,7 +227,7 @@ async def delete_account_group(
 async def update_account_profile(
     account_id: str,
     payload: AccountProfileUpdateRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Update owner-only Buyerly labels without changing the Meta account name."""
     async with async_session_maker() as session:
@@ -259,7 +259,7 @@ async def update_account_profile(
 
 
 @router.delete("/accounts/{account_id}")
-async def delete_account(account_id: str, user: TelegramUser = Depends(get_current_user)):
+async def delete_account(account_id: str, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "удаления кабинета")
@@ -290,13 +290,13 @@ async def delete_account(account_id: str, user: TelegramUser = Depends(get_curre
     response_model=List[ParsedAccountItem],
     dependencies=[Depends(rate_limit_dep(limit=20, window_seconds=60, scope="parse_raw"))],
 )
-async def parse_raw_text(payload: ParseRawRequest, user: TelegramUser = Depends(get_current_user)):
+async def parse_raw_text(payload: ParseRawRequest, user: User = Depends(get_current_user)):
     parsed = parse_fb_raw_accounts(payload.raw_text)
     return [ParsedAccountItem(account_id=p["account_id"], parsed_name=p["parsed_name"]) for p in parsed]
 
 
 @router.post("/accounts/batch-add")
-async def batch_add_accounts(payload: BatchAddRequest, user: TelegramUser = Depends(get_current_user)):
+async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_current_user)):
     if not payload.accounts:
         raise HTTPException(status_code=400, detail="Список кабинетов пуст.")
     if not payload.access_token.strip():

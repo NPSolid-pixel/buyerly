@@ -7,7 +7,7 @@
 ## 1. Обзор архитектуры
 
 Платформа Buyerly построена по принципу **Workspace-First**:
-- Каждый пользователь (`User` / `TelegramUser`) входит в систему через один из каналов аутентификации (Email OTP, Email + пароль или Telegram Mini App).
+- Каждый пользователь (`User` / `User`) входит в систему через один из каналов аутентификации (Email OTP, Email + пароль или Telegram Mini App).
 - Все рабочие сущности (Meta-кабинеты, пресеты автоправил, группы кабинетов, журнал аудита и сводки) изолированы внутри конкретного рабочего пространства (`Workspace`).
 - Доступ пользователя к ресурсам воркспейса определяется его членством (`WorkspaceMember`) и назначенной ролью (`owner`, `admin`, `buyer`, `viewer`).
 
@@ -20,7 +20,7 @@ flowchart TD
     end
 
     subgraph User["Пользователь и Профиль"]
-        TU["TelegramUser (User)"]
+        TU["User (User)"]
         Prof["Имя, Фамилия, Email, Аватар"]
         Onb["Онбординг (personal_details -> workspace -> invites)"]
     end
@@ -95,7 +95,7 @@ erDiagram
         string badge_text "символ или буква бейджа"
         string badge_color "HEX-код цвета (#F5A300)"
         string logo_url "URL логотипа компании"
-        int owner_user_id FK "TelegramUser.id"
+        int owner_user_id FK "User.id"
         datetime created_at
         datetime updated_at
     }
@@ -177,7 +177,7 @@ erDiagram
 
 3. **Telegram Mini App (TMA)**:
    - При открытии веб-приложения внутри Telegram проверяется криптографическая подпись `initData` с использованием токена бота.
-   - Пользователь бесшовно связывается с записью `TelegramUser` по `telegram_id`.
+   - Пользователь бесшовно связывается с записью `User` по `telegram_id`.
 
 ### 4.2. Безопасность и Rate Limiting
 - **Защита от DoS и Brute-Force**: Все эндпоинты входа, запроса OTP, проверки слагов и инвайтов защищены sliding-window rate-лимитером (`core/rate_limit.py`).
@@ -290,7 +290,7 @@ core/
 ├── email.py             # Клиент Resend REST API и HTML-шаблоны писем
 ├── rate_limit.py        # Sliding-window защита от перебора и DoS
 database/
-├── models.py            # SQLAlchemy модели (TelegramUser, Workspace, WorkspaceMember, WorkspaceInvite, EmailVerificationCode)
+├── models.py            # SQLAlchemy модели (User, Workspace, WorkspaceMember, WorkspaceInvite, EmailVerificationCode)
 webapp/
 ├── js/app.js            # Фронтенд: Onboarding Flow, Workspace Switcher, Members Modal, Live Preview
 ├── index.html           # Разметка экранов Sign In, Verify, Personal Details, Workspace Details

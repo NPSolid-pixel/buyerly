@@ -13,7 +13,7 @@ from api.server import create_app
 from core.config import settings
 from core.meta_tokens import encrypt_meta_token
 from database.db import Base
-from database.models import Account, MetaConnection, TelegramUser
+from database.models import Account, MetaConnection, User
 
 
 from tests.test_db_helper import create_test_engine, init_test_db
@@ -51,7 +51,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
         settings.WEBAPP_URL = "https://buyerly.app"
 
         async with self.sessions() as session:
-            user = TelegramUser(
+            user = User(
                 telegram_id="10001",
                 username="oauth-owner",
                 full_name="OAuth Owner",

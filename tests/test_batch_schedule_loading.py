@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 
 from cryptography.fernet import Fernet
 from database.db import Base
-from database.models import Account, AppSettings, AutomationScheduleState, MetaConnection, TelegramUser
+from database.models import Account, AppSettings, AutomationScheduleState, MetaConnection, User
 from core.config import settings
 from core.meta_tokens import encrypt_meta_token, resolve_account_access_token
 from scheduler.worker import MonitoringWorker
@@ -58,7 +58,7 @@ class TestBatchScheduleLoading(unittest.IsolatedAsyncioTestCase):
 
     async def test_resolve_account_access_token_cache(self):
         async with self.session_maker() as session:
-            user = TelegramUser(id=1, telegram_id="123", username="testuser", full_name="Test")
+            user = User(id=1, telegram_id="123", username="testuser", full_name="Test")
             session.add(user)
             await session.flush()
 

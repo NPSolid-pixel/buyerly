@@ -393,15 +393,40 @@ class TestAutomationSettingsContractMigration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second, [])
 
 
+class TestUsersTableMigration(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_test_engine()
+        async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS users CASCADE"))
+            await conn.execute(text("DROP TABLE IF EXISTS telegram_users CASCADE"))
+            await conn.execute(
+                text("CREATE TABLE telegram_users (id SERIAL PRIMARY KEY, username VARCHAR UNIQUE)")
+            )
+
+    async def asyncTearDown(self):
+        await self.engine.dispose()
+
+    async def test_renames_telegram_users_to_users(self):
+        from database.db import migrate_users_table_contract
+        async with self.engine.begin() as conn:
+            migrated = await migrate_users_table_contract(conn)
+            second = await migrate_users_table_contract(conn)
+            tables = await conn.run_sync(lambda sync_conn: set(inspect(sync_conn).get_table_names()))
+        self.assertTrue(migrated)
+        self.assertFalse(second)
+        self.assertIn("users", tables)
+        self.assertNotIn("telegram_users", tables)
+
+
 class TestStableOwnerContractMigration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.engine = create_test_engine()
         async with self.engine.begin() as conn:
             await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
-            await conn.execute(text("DROP TABLE IF EXISTS telegram_users CASCADE"))
+            await conn.execute(text("DROP TABLE IF EXISTS users CASCADE"))
             await conn.execute(
                 text(
-                    "CREATE TABLE telegram_users ("
+                    "CREATE TABLE users ("
                     "id SERIAL PRIMARY KEY, telegram_id VARCHAR UNIQUE)"
                 )
             )
@@ -412,7 +437,7 @@ class TestStableOwnerContractMigration(unittest.IsolatedAsyncioTestCase):
                 )
             )
             await conn.execute(
-                text("INSERT INTO telegram_users (id, telegram_id) VALUES (7, 'tg-old')")
+                text("INSERT INTO users (id, telegram_id) VALUES (7, 'tg-old')")
             )
             await conn.execute(
                 text("INSERT INTO accounts (id, owner_id) VALUES (1, 'tg-old')")

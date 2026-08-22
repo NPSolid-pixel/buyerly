@@ -12,7 +12,7 @@ from api.server import create_app
 from core.config import settings
 from core.rate_limit import RateLimiter, limiter
 from database.db import Base, hash_password
-from database.models import TelegramUser, Workspace
+from database.models import User, Workspace
 
 
 class TestRateLimiterCore(unittest.IsolatedAsyncioTestCase):
@@ -67,7 +67,7 @@ class TestApiRateLimitingAndDosProtection(unittest.IsolatedAsyncioTestCase):
         settings.ADMIN_CHAT_ID = "8634201356"
 
         async with self.test_session_maker() as session:
-            user = TelegramUser(
+            user = User(
                 telegram_id="8634201356",
                 username="test_buyer",
                 full_name="Test Buyer",

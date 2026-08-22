@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from core.config import settings
 from database.db import async_session_maker
-from database.models import TelegramUser
+from database.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ async def get_current_user(
     x_init_data: Optional[str] = Header(None),
     x_auth_token: Optional[str] = Header(None),
     dev_user_id: Optional[str] = Query(None, alias="dev_user_id")
-) -> TelegramUser:
+) -> User:
     """
     FastAPI dependency that extracts and validates the authenticated user from:
     1. Bearer <auth_token> (Web site direct login)
@@ -105,7 +105,7 @@ async def get_current_user(
     async with async_session_maker() as session:
         # Check Bearer Token (Direct Web Login)
         if token:
-            res = await session.execute(select(TelegramUser).where(TelegramUser.auth_token == token))
+            res = await session.execute(select(User).where(User.auth_token == token))
             user = res.scalar_one_or_none()
             if user:
                 if not user.is_approved:
@@ -140,11 +140,11 @@ async def get_current_user(
 
             is_super_admin = (tg_id == str(settings.ADMIN_CHAT_ID))
 
-            res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == tg_id))
+            res = await session.execute(select(User).where(User.telegram_id == tg_id))
             user = res.scalar_one_or_none()
 
             if not user:
-                user = TelegramUser(
+                user = User(
                     telegram_id=tg_id,
                     username=username or f"user_{tg_id}",
                     full_name=full_name,
@@ -173,20 +173,20 @@ async def get_current_user(
         # Dev / Local preview fallback (ONLY active when ENABLE_DEV_AUTH=True)
         target_tg_id = dev_user_id or str(settings.ADMIN_CHAT_ID)
         if target_tg_id:
-            res = await session.execute(select(TelegramUser).where(TelegramUser.telegram_id == target_tg_id))
+            res = await session.execute(select(User).where(User.telegram_id == target_tg_id))
             user = res.scalar_one_or_none()
             if user and user.is_approved:
                 return user
 
         # If no users exist yet in dev mode, check for any approved admin or create default
-        res = await session.execute(select(TelegramUser).where(TelegramUser.is_approved == True).limit(1))
+        res = await session.execute(select(User).where(User.is_approved == True).limit(1))
         any_user = res.scalar_one_or_none()
         if any_user:
             return any_user
 
         # Create fallback superadmin if DB is empty in dev mode
         fallback_id = str(settings.ADMIN_CHAT_ID) or "123456789"
-        fallback_user = TelegramUser(
+        fallback_user = User(
             telegram_id=fallback_id,
             username="admin",
             full_name="Administrator",

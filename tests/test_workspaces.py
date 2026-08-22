@@ -14,7 +14,7 @@ from core.config import settings
 from database.db import Base, hash_password
 from database.models import (
     Account,
-    TelegramUser,
+    User,
     Workspace,
     WorkspaceInvite,
     WorkspaceMember,
@@ -42,7 +42,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         settings.ADMIN_CHAT_ID = '8634201356'
 
         async with self.test_session_maker() as session:
-            artem = TelegramUser(
+            artem = User(
                 telegram_id='777000111',
                 username='artem',
                 full_name='Артем',
@@ -243,7 +243,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
     async def test_workspace_invite_model_schema_and_persistence(self):
         async with self.test_session_maker() as session:
             # 1. Retrieve Artem and his workspace
-            artem = (await session.execute(select(TelegramUser).where(TelegramUser.username == 'artem'))).scalar_one()
+            artem = (await session.execute(select(User).where(User.username == 'artem'))).scalar_one()
             ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
 
             # 2. Create a targeted single-use invite
@@ -309,7 +309,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
             # Create Bob and Charlie in DB
             async with self.test_session_maker() as session:
-                bob = TelegramUser(
+                bob = User(
                     telegram_id='777000222',
                     username='bob',
                     full_name='Bob Buyer',
@@ -317,7 +317,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                     role='buyer',
                     is_approved=True,
                 )
-                charlie = TelegramUser(
+                charlie = User(
                     telegram_id='777000333',
                     username='charlie',
                     full_name='Charlie Viewer',
@@ -437,7 +437,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
             # Create Dave in DB
             async with self.test_session_maker() as session:
-                dave = TelegramUser(
+                dave = User(
                     telegram_id='777000444',
                     username='dave',
                     full_name='Dave Analyst',
@@ -533,7 +533,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
 
             # 8. Verify Dave in DB
             async with self.test_session_maker() as session:
-                dave_db = (await session.execute(select(TelegramUser).where(TelegramUser.username == 'dave'))).scalar_one()
+                dave_db = (await session.execute(select(User).where(User.username == 'dave'))).scalar_one()
                 self.assertEqual(dave_db.active_workspace_id, ws_id)
                 dave_member = (await session.execute(select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws_id, WorkspaceMember.user_id == dave_db.id))).scalar_one()
                 self.assertEqual(dave_member.role, 'viewer')
@@ -555,7 +555,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
             # Create Victor (viewer in Buyerly)
             async with self.test_session_maker() as session:
-                victor = TelegramUser(
+                victor = User(
                     telegram_id='777000555',
                     username='victor_viewer',
                     full_name='Victor Viewer',
@@ -623,7 +623,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
     async def test_batch_add_accounts_cannot_take_over_account_from_another_workspace(self):
         # Create second user in a separate workspace
         async with self.test_session_maker() as session:
-            hacker = TelegramUser(
+            hacker = User(
                 telegram_id='777000999',
                 username='hacker',
                 full_name='Hacker Buyer',
@@ -694,7 +694,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         artem_headers = {'Authorization': f'tma {artem_data}'}
 
         async with self.test_session_maker() as session:
-            imposter = TelegramUser(
+            imposter = User(
                 telegram_id='777000888',
                 username='imposter',
                 email='imposter@evil.com',
@@ -703,7 +703,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                 role='buyer',
                 is_approved=True,
             )
-            recipient = TelegramUser(
+            recipient = User(
                 telegram_id='777000777',
                 username='recipient',
                 email='legit@company.com',

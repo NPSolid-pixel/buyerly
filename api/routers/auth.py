@@ -35,7 +35,7 @@ from database.models import (
     RuleGroup,
     RulePreset,
     SummarySnapshot,
-    TelegramUser,
+    User,
     Workspace,
     WorkspaceInvite,
     WorkspaceMember,
@@ -76,15 +76,15 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
                 detail="Код уже был отправлен недавно. Подождите 1 минуту перед повторным запросом.",
             )
 
-        stmt = select(TelegramUser).where(
-            (func.lower(TelegramUser.email) == email_clean)
-            | (func.lower(TelegramUser.username) == email_clean)
+        stmt = select(User).where(
+            (func.lower(User.email) == email_clean)
+            | (func.lower(User.username) == email_clean)
         )
         res = await session.execute(stmt)
         user = res.scalar_one_or_none()
 
         if not user:
-            user = TelegramUser(
+            user = User(
                 username=email_clean,
                 email=email_clean,
                 role="buyer",
@@ -132,18 +132,18 @@ async def login_user(req: LoginRequest):
         uname = req.username.strip()
 
         # Prefer stable identifiers (username, email, or telegram_id). A display name is accepted only when unique.
-        stmt = select(TelegramUser).where(
-            (func.lower(TelegramUser.username) == uname.lower())
-            | (func.lower(TelegramUser.email) == uname.lower())
-            | (TelegramUser.telegram_id == uname)
+        stmt = select(User).where(
+            (func.lower(User.username) == uname.lower())
+            | (func.lower(User.email) == uname.lower())
+            | (User.telegram_id == uname)
         )
         res = await session.execute(stmt)
         user = res.scalar_one_or_none()
 
         if not user and uname:
             display_name_result = await session.execute(
-                select(TelegramUser)
-                .where(func.lower(TelegramUser.full_name) == uname.lower())
+                select(User)
+                .where(func.lower(User.full_name) == uname.lower())
                 .limit(2)
             )
             display_name_matches = display_name_result.scalars().all()
@@ -214,13 +214,13 @@ async def login_user(req: LoginRequest):
 
 
 @router.post("/auth/change-password")
-async def change_password(req: ChangePasswordRequest, user: TelegramUser = Depends(get_current_user)):
+async def change_password(req: ChangePasswordRequest, user: User = Depends(get_current_user)):
     new_pw = req.new_password
     if len(new_pw) < 8:
         raise HTTPException(status_code=400, detail="Пароль должен содержать минимум 8 символов")
 
     async with async_session_maker() as session:
-        res = await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
+        res = await session.execute(select(User).where(User.id == user.id))
         db_user = res.scalar_one_or_none()
         if not db_user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -235,9 +235,9 @@ async def change_password(req: ChangePasswordRequest, user: TelegramUser = Depen
 
 
 @router.post("/auth/update-profile")
-async def update_profile(req: UpdateProfileRequest, user: TelegramUser = Depends(get_current_user)):
+async def update_profile(req: UpdateProfileRequest, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
-        res = await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
+        res = await session.execute(select(User).where(User.id == user.id))
         db_user = res.scalar_one_or_none()
         if not db_user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -262,9 +262,9 @@ async def update_profile(req: UpdateProfileRequest, user: TelegramUser = Depends
                 raise HTTPException(status_code=400, detail="Telegram ID не может быть пустым")
             collision = (
                 await session.execute(
-                    select(TelegramUser.id).where(
-                        TelegramUser.telegram_id == new_telegram_id,
-                        TelegramUser.id != db_user.id,
+                    select(User.id).where(
+                        User.telegram_id == new_telegram_id,
+                        User.id != db_user.id,
                     )
                 )
             ).scalar_one_or_none()
@@ -307,9 +307,9 @@ async def update_profile(req: UpdateProfileRequest, user: TelegramUser = Depends
 
 
 @router.post("/auth/logout")
-async def logout_user(user: TelegramUser = Depends(get_current_user)):
+async def logout_user(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
-        res = await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))
+        res = await session.execute(select(User).where(User.id == user.id))
         db_user = res.scalar_one_or_none()
         if db_user:
             db_user.auth_token = secrets.token_urlsafe(32)
@@ -318,9 +318,9 @@ async def logout_user(user: TelegramUser = Depends(get_current_user)):
 
 
 @router.get("/me", response_model=UserProfileResponse)
-async def get_me(user: TelegramUser = Depends(get_current_user)):
+async def get_me(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         workspaces = await get_user_workspaces_list(session, db_user)
         active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
 
@@ -349,12 +349,12 @@ async def get_me(user: TelegramUser = Depends(get_current_user)):
 
 
 @router.get("/admin/overview")
-async def get_admin_overview(user: TelegramUser = Depends(get_current_user)):
+async def get_admin_overview(user: User = Depends(get_current_user)):
     """Return all users, workspaces, members, and invites for administrative inspection."""
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Доступ только для администраторов")
     async with async_session_maker() as session:
-        users = (await session.execute(select(TelegramUser).order_by(TelegramUser.id))).scalars().all()
+        users = (await session.execute(select(User).order_by(User.id))).scalars().all()
         workspaces = (await session.execute(select(Workspace).order_by(Workspace.id))).scalars().all()
         members = (await session.execute(select(WorkspaceMember).order_by(WorkspaceMember.id))).scalars().all()
         invites = (await session.execute(select(WorkspaceInvite).order_by(WorkspaceInvite.id))).scalars().all()

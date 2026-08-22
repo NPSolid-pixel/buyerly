@@ -30,17 +30,17 @@ from api.schemas import (
 from core.email import send_workspace_invitation_email
 from core.rate_limit import rate_limit_dep
 from database.db import async_session_maker
-from database.models import TelegramUser, Workspace, WorkspaceInvite, WorkspaceMember
+from database.models import User, Workspace, WorkspaceInvite, WorkspaceMember
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Onboarding"])
 
 
 @router.get("/onboarding/status", response_model=OnboardingStatusResponse)
-async def get_onboarding_status(user: TelegramUser = Depends(get_current_user)):
+async def get_onboarding_status(user: User = Depends(get_current_user)):
     """Return the current onboarding status and progress step for the user."""
     async with async_session_maker() as session:
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         workspaces = await get_user_workspaces_list(session, db_user)
         active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
 
@@ -81,7 +81,7 @@ async def get_onboarding_status(user: TelegramUser = Depends(get_current_user)):
 @router.post("/onboarding/personal-details", response_model=OnboardingStatusResponse)
 async def submit_onboarding_personal_details(
     req: PersonalDetailsRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Save user first name, last name, and optional email during onboarding."""
     first_name = req.first_name.strip()
@@ -92,7 +92,7 @@ async def submit_onboarding_personal_details(
     clean_email = req.email.strip().lower() if req.email and req.email.strip() else None
 
     async with async_session_maker() as session:
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.first_name = first_name
         db_user.last_name = last_name
         db_user.full_name = f"{first_name} {last_name}".strip()
@@ -134,7 +134,7 @@ async def submit_onboarding_personal_details(
 @router.post("/onboarding/avatar")
 async def upload_onboarding_avatar(
     file: UploadFile = File(...),
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Upload custom avatar image for the user during or after onboarding."""
     filename = file.filename or "avatar.png"
@@ -158,7 +158,7 @@ async def upload_onboarding_avatar(
     avatar_url = f"/uploads/avatars/{unique_filename}"
 
     async with async_session_maker() as session:
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.avatar_url = avatar_url
         await session.commit()
 
@@ -166,10 +166,10 @@ async def upload_onboarding_avatar(
 
 
 @router.delete("/onboarding/avatar")
-async def delete_onboarding_avatar(user: TelegramUser = Depends(get_current_user)):
+async def delete_onboarding_avatar(user: User = Depends(get_current_user)):
     """Reset user avatar to default initial badge."""
     async with async_session_maker() as session:
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.avatar_url = ""
         await session.commit()
     return {"status": "ok", "avatar_url": ""}
@@ -182,7 +182,7 @@ async def delete_onboarding_avatar(user: TelegramUser = Depends(get_current_user
 )
 async def check_workspace_slug(
     slug: str = Query(..., min_length=2, max_length=60),
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Check availability and validity of workspace slug in real-time."""
     raw_slug = slug.strip().lower()
@@ -221,7 +221,7 @@ async def check_workspace_slug(
 @router.post("/onboarding/workspace", response_model=WorkspaceItem)
 async def submit_onboarding_workspace(
     req: OnboardingWorkspaceRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Create a new workspace during onboarding and set it as active."""
     name = req.name.strip()
@@ -259,7 +259,7 @@ async def submit_onboarding_workspace(
         member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
         session.add(member)
 
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = ws.id
         if db_user.onboarding_step in ("personal_details", "workspace", ""):
             db_user.onboarding_step = "invites"
@@ -283,7 +283,7 @@ async def submit_onboarding_workspace(
 @router.post("/onboarding/workspace/logo")
 async def upload_workspace_logo(
     file: UploadFile = File(...),
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Upload workspace logo image."""
     filename = file.filename or "logo.png"
@@ -311,11 +311,11 @@ async def upload_workspace_logo(
 @router.post("/onboarding/invites", response_model=OnboardingBulkInvitesResponse)
 async def submit_onboarding_invites(
     req: OnboardingBulkInvitesRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Create bulk team member invitations and finalize onboarding."""
     async with async_session_maker() as session:
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         active_ws = await get_user_workspace(session, db_user)
         if not active_ws:
             raise HTTPException(status_code=400, detail="Не найден активный воркспейс для создания приглашений")
@@ -390,10 +390,10 @@ async def submit_onboarding_invites(
 
 
 @router.post("/onboarding/skip")
-async def skip_onboarding(user: TelegramUser = Depends(get_current_user)):
+async def skip_onboarding(user: User = Depends(get_current_user)):
     """Skip remaining onboarding steps and mark onboarding completed."""
     async with async_session_maker() as session:
-        db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.onboarding_step = "completed"
         db_user.onboarding_completed = True
         await session.commit()

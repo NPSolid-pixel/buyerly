@@ -19,7 +19,7 @@ from database.models import (
     MetaConnection,
     RuleExecutionState,
     StoppedAdSet,
-    TelegramUser,
+    User,
 )
 from core.audit import build_audit_event
 from core.currency import normalize_currency
@@ -692,7 +692,7 @@ class MonitoringWorker:
             if owner_user_ids:
                 owners = (
                     await session.execute(
-                        select(TelegramUser).where(TelegramUser.id.in_(owner_user_ids))
+                        select(User).where(User.id.in_(owner_user_ids))
                     )
                 ).scalars().all()
                 owner_chat_ids = {
@@ -842,7 +842,7 @@ class MonitoringWorker:
             if owner_user_ids:
                 owner_rows = (
                     await session.execute(
-                        select(TelegramUser).where(TelegramUser.id.in_(owner_user_ids))
+                        select(User).where(User.id.in_(owner_user_ids))
                     )
                 ).scalars().all()
                 owner_chat_ids = {

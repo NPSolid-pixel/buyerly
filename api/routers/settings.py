@@ -8,14 +8,14 @@ from api.deps import _confirm_admin_password, _load_json_object, _utc_iso
 from api.schemas import AutomationSettingsUpdateRequest, SetIntervalRequest
 from core.config import settings
 from database.db import async_session_maker
-from database.models import AppSettings, AutomationRuntimeState, TelegramUser
+from database.models import AppSettings, AutomationRuntimeState, User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Settings"])
 
 
 @router.get("/settings")
-async def get_settings(user: TelegramUser = Depends(get_current_user)):
+async def get_settings(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         res = await session.execute(select(AppSettings).limit(1))
         app_settings = res.scalar_one_or_none()
@@ -57,7 +57,7 @@ async def get_settings(user: TelegramUser = Depends(get_current_user)):
 @router.post("/settings/automation")
 async def update_automation_settings(
     payload: AutomationSettingsUpdateRequest,
-    user: TelegramUser = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     """Update global polling controls after explicit account-password confirmation."""
     async with async_session_maker() as session:
@@ -91,7 +91,7 @@ async def update_automation_settings(
 
 
 @router.post("/settings/interval")
-async def set_poll_interval(payload: SetIntervalRequest, user: TelegramUser = Depends(get_current_user)):
+async def set_poll_interval(payload: SetIntervalRequest, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
         await _confirm_admin_password(session, user, payload.current_password)
         res = await session.execute(select(AppSettings).limit(1))
