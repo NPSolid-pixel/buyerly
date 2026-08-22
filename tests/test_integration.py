@@ -434,7 +434,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             self.assertEqual(pending_event.status, "WAITING")
 
-    async def test_stop_confirmation_restarts_when_funnel_guard_breaks_the_match(self):
+    async def test_stop_confirmation_restarts_when_condition_match_breaks(self):
         now = [2_000.0]
         async with self.test_session_maker() as session:
             session.add(
@@ -452,13 +452,13 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["stop_confirmations_waiting"], 1)
 
         now[0] += 4 * 60
-        mock_meta.adsets_state["adset_1"]["registrations"] = 1
-        guarded = await worker.run_cycle()
-        self.assertEqual(guarded["adsets_stopped"], 0)
+        mock_meta.adsets_state["adset_1"]["leads"] = 1
+        unmatched = await worker.run_cycle()
+        self.assertEqual(unmatched["adsets_stopped"], 0)
         self.assertEqual(mock_meta.status_changes, [])
 
         now[0] += 2 * 60
-        mock_meta.adsets_state["adset_1"]["registrations"] = 0
+        mock_meta.adsets_state["adset_1"]["leads"] = 0
         restarted = await worker.run_cycle()
         self.assertEqual(restarted["adsets_stopped"], 0)
         self.assertEqual(restarted["stop_confirmations_waiting"], 1)

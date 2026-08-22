@@ -309,6 +309,16 @@ async def process_token_and_save(message: Message, state: FSMContext):
                 existing = res.scalar_one_or_none()
 
                 if existing:
+                    if (
+                        existing.owner_user_id is not None
+                        and existing.owner_user_id != owner_user.id
+                        and not is_admin
+                    ):
+                        error_results.append(
+                            f"• <code>{acc_id}</code>: Кабинет уже привязан к другому пользователю."
+                        )
+                        continue
+
                     if existing.timezone_name != timezone_name:
                         existing.last_day_start_date = ""
                     existing.name = display_name

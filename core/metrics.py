@@ -375,20 +375,6 @@ def _or_group_is_always_true(conditions: Sequence[Mapping[str, Any]]) -> bool:
     )
 
 
-def _stop_condition_requires_deep_conversion(condition: Mapping[str, Any]) -> bool:
-    metric = canonical_rule_metric(condition.get("metric"))
-    if metric in {"cpreg", "cpp"}:
-        return True
-    if metric not in {"registrations", "purchases"}:
-        return False
-    operator = str(condition.get("operator", ""))
-    value = float(condition.get("value", 0.0))
-    return (
-        operator == "gt"
-        or (operator in {"gte", "eq"} and value > 0)
-    )
-
-
 def validate_rule_semantics(
     conditions: Sequence[Mapping[str, Any]],
     logic: str,
@@ -406,11 +392,6 @@ def validate_rule_semantics(
         value = float(condition.get("value", 0.0))
         if metric in count_metrics and not value.is_integer():
             raise ValueError("Лиды, регистрации и покупки указываются только целыми числами.")
-        if action == "turn_off" and _stop_condition_requires_deep_conversion(condition):
-            raise ValueError(
-                "Это условие не может выключить группу объявлений: регистрация или покупка "
-                "всегда защищает её от выключения. Используйте уведомление или правило включения."
-            )
 
     grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
     for condition in conditions:

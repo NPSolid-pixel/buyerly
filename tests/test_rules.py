@@ -1,5 +1,6 @@
 import json
 import unittest
+from core.metrics import validate_rule_semantics
 from database.models import Account
 from rules.engine import RuleEngine, RuleAction
 
@@ -199,8 +200,8 @@ class TestRuleEngine(unittest.TestCase):
         self.assertEqual(res.action, RuleAction.NOTIFY_ONLY)
         self.assertIn("Цена покупки (CPP) (11.00 USD) > 10.00 USD", res.reason)
 
-    def test_lead_stop_is_blocked_when_registration_exists(self):
-        """A delayed lead-based STOP must not erase a deeper funnel result."""
+    def test_lead_stop_executes_even_when_registration_exists(self):
+        """Explicit STOP conditions are honored even when registrations or purchases exist."""
         self.set_rule(
             conditions=[
                 {"metric": "spend", "operator": "gte", "value": 2.0},
@@ -220,10 +221,9 @@ class TestRuleEngine(unittest.TestCase):
 
         result = RuleEngine.evaluate(adset, self.account)
 
-        self.assertEqual(result.action, RuleAction.NOOP)
-        self.assertIn("Защита воронки", result.reason)
+        self.assertEqual(result.action, RuleAction.STOP)
 
-    def test_lead_stop_is_blocked_when_purchase_exists(self):
+    def test_lead_stop_executes_even_when_purchase_exists(self):
         self.set_rule(
             conditions=[
                 {"metric": "spend", "operator": "gte", "value": 2.0},
@@ -243,11 +243,10 @@ class TestRuleEngine(unittest.TestCase):
 
         result = RuleEngine.evaluate(adset, self.account)
 
-        self.assertEqual(result.action, RuleAction.NOOP)
-        self.assertIn("покупки (1)", result.reason)
+        self.assertEqual(result.action, RuleAction.STOP)
 
-    def test_explicit_deep_funnel_stop_is_also_blocked(self):
-        """A registration protects the ad set even from an explicit deep-funnel STOP."""
+    def test_explicit_deep_funnel_stop_executes(self):
+        """Explicit deep-funnel STOP conditions (e.g. CPReg or Registrations limit) are evaluated."""
         self.set_rule(
             conditions=[
                 {"metric": "spend", "operator": "gte", "value": 20.0},
@@ -266,8 +265,7 @@ class TestRuleEngine(unittest.TestCase):
         }
 
         result = RuleEngine.evaluate(adset, self.account)
-        self.assertEqual(result.action, RuleAction.NOOP)
-        self.assertIn("Защита воронки", result.reason)
+        self.assertEqual(result.action, RuleAction.STOP)
 
     def test_zero_event_cost_is_unavailable(self):
         """Нулевые лиды не превращают Spend в CPL и не запускают масштабирование."""
@@ -489,6 +487,19 @@ class TestRuleEngine(unittest.TestCase):
         # No insights_by_window → fallback to today data
         res = RuleEngine.evaluate(adset_today, self.account)
         self.assertEqual(res.action, RuleAction.STOP)
+
+    def test_cpreg_and_cpp_turn_off_validation_allowed(self):
+        """Validating turn_off action with cpreg / cpp must succeed without throwing."""
+        validate_rule_semantics(
+            [{"metric": "cpreg", "operator": "gte", "value": 15.0}],
+            logic="and",
+            action="turn_off",
+        )
+        validate_rule_semantics(
+            [{"metric": "cpp", "operator": "gt", "value": 30.0}],
+            logic="and",
+            action="turn_off",
+        )
 
 
 if __name__ == "__main__":

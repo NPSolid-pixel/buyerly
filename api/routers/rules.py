@@ -139,7 +139,12 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: Tele
             preset.budget_max_daily = payload.budget_max_daily
 
         updated_snapshot = _preset_snapshot(preset)
-        account_res = await session.execute(select(Account))
+        acc_stmt = select(Account)
+        if ws:
+            acc_stmt = acc_stmt.where(or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user))))
+        else:
+            acc_stmt = acc_stmt.where(owned_by(Account, user))
+        account_res = await session.execute(acc_stmt)
         for account in account_res.scalars().all():
             active_rules = _load_active_rules(account.active_rules)
             changed = False
@@ -187,8 +192,13 @@ async def delete_preset(preset_id: int, user: TelegramUser = Depends(get_current
         if not preset:
             raise HTTPException(status_code=404, detail="Пресет не найден")
 
-        # Remove the exact preset ID from every linked account snapshot.
-        acc_res = await session.execute(select(Account))
+        # Remove the exact preset ID from linked account snapshots in this workspace.
+        acc_stmt = select(Account)
+        if ws:
+            acc_stmt = acc_stmt.where(or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user))))
+        else:
+            acc_stmt = acc_stmt.where(owned_by(Account, user))
+        acc_res = await session.execute(acc_stmt)
         for acc in acc_res.scalars().all():
             active_rules = _load_active_rules(acc.active_rules)
             remaining_rules = [r for r in active_rules if r.get("preset_id") != preset_id]
