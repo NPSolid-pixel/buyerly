@@ -1941,6 +1941,126 @@
     renderAccounts();
   };
 
+  let scrollbarCleanup = null;
+
+  function setupAttioTableScrollbar() {
+    if (scrollbarCleanup) {
+      try { scrollbarCleanup(); } catch (e) {}
+      scrollbarCleanup = null;
+    }
+
+    const viewport = document.getElementById('accountsTableViewport');
+    const track = document.getElementById('accountsScrollbarTrack');
+    const thumb = document.getElementById('accountsScrollbarThumb');
+    if (!viewport || !track || !thumb) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+
+    function updateThumb() {
+      const scrollWidth = viewport.scrollWidth;
+      const clientWidth = viewport.clientWidth;
+      const trackWidth = track.clientWidth;
+
+      if (scrollWidth <= clientWidth + 2) {
+        track.classList.add('is-hidden');
+        return;
+      }
+      track.classList.remove('is-hidden');
+
+      const thumbWidth = Math.max(36, (clientWidth / scrollWidth) * trackWidth);
+      const maxScrollLeft = scrollWidth - clientWidth;
+      const maxThumbTranslate = trackWidth - thumbWidth;
+      const scrollRatio = maxScrollLeft > 0 ? (viewport.scrollLeft / maxScrollLeft) : 0;
+      const thumbX = Math.max(0, Math.min(maxThumbTranslate, scrollRatio * maxThumbTranslate));
+
+      thumb.style.width = `${thumbWidth}px`;
+      thumb.style.transform = `translate3d(${thumbX}px, 0px, 0px)`;
+    }
+
+    const onScroll = () => {
+      if (!isDragging) {
+        updateThumb();
+      }
+    };
+
+    const onPointerDown = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      isDragging = true;
+      startX = e.clientX;
+      startScrollLeft = viewport.scrollLeft;
+      thumb.classList.add('is-dragging');
+      document.body.style.userSelect = 'none';
+
+      const onPointerMove = (moveEvent) => {
+        if (!isDragging) return;
+        const deltaX = moveEvent.clientX - startX;
+        const trackWidth = track.clientWidth;
+        const scrollWidth = viewport.scrollWidth;
+        const clientWidth = viewport.clientWidth;
+        const thumbWidth = parseFloat(thumb.style.width) || 40;
+        const maxThumbTranslate = trackWidth - thumbWidth;
+        const maxScrollLeft = scrollWidth - clientWidth;
+
+        if (maxThumbTranslate > 0) {
+          const deltaScroll = (deltaX / maxThumbTranslate) * maxScrollLeft;
+          viewport.scrollLeft = Math.max(0, Math.min(maxScrollLeft, startScrollLeft + deltaScroll));
+          updateThumb();
+        }
+      };
+
+      const onPointerUp = () => {
+        isDragging = false;
+        thumb.classList.remove('is-dragging');
+        document.body.style.userSelect = '';
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', onPointerUp);
+      };
+
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', onPointerUp);
+    };
+
+    const onTrackClick = (e) => {
+      if (e.target === thumb) return;
+      const rect = track.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const trackWidth = track.clientWidth;
+      const scrollWidth = viewport.scrollWidth;
+      const clientWidth = viewport.clientWidth;
+      const ratio = Math.max(0, Math.min(1, clickX / trackWidth));
+      viewport.scrollLeft = ratio * (scrollWidth - clientWidth);
+      updateThumb();
+    };
+
+    viewport.addEventListener('scroll', onScroll, { passive: true });
+    thumb.addEventListener('pointerdown', onPointerDown);
+    track.addEventListener('click', onTrackClick);
+
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        updateThumb();
+      });
+      resizeObserver.observe(viewport);
+    }
+
+    const onWindowResize = () => updateThumb();
+    window.addEventListener('resize', onWindowResize, { passive: true });
+
+    updateThumb();
+
+    scrollbarCleanup = () => {
+      viewport.removeEventListener('scroll', onScroll);
+      thumb.removeEventListener('pointerdown', onPointerDown);
+      track.removeEventListener('click', onTrackClick);
+      window.removeEventListener('resize', onWindowResize);
+      if (resizeObserver) resizeObserver.disconnect();
+    };
+  }
+
   let lastResizerClick = { time: 0, colId: null };
 
   window.resetAccountsColumnOrder = function () {
@@ -3183,7 +3303,7 @@
       }).join('') + '<col style="width: 120px; max-width: 120px; min-width: 120px;"><col class="col-track-spacer" style="width: 100%;">';
 
       listEl.innerHTML = `
-        <div class="attio-table-viewport">
+        <div class="attio-table-viewport" id="accountsTableViewport">
           <table class="attio-table">
             <colgroup>
               ${colgroupHtml}
@@ -3211,8 +3331,12 @@
               </tr>
             </tfoot>
           </table>
+          <div data-orientation="horizontal" data-state="visible" class="attio-scroll-area-scrollbar" id="accountsScrollbarTrack">
+            <div data-state="visible" class="attio-scroll-area-thumb" id="accountsScrollbarThumb"></div>
+          </div>
         </div>
       `;
+      setupAttioTableScrollbar();
     }
     updateBulkActionBar();
   }
