@@ -69,21 +69,25 @@
 
 ### 🔹 ЭТАП 2: Бэкенд — Профиль пользователя и шаги онбординга
 
-#### Задача 2.1: API персональных данных онбординга
-- [ ] Расширить профиль `TelegramUser` полями `first_name`, `last_name`, `avatar_url`, `email`.
-- [ ] Реализовать эндпоинт `POST /api/v1/onboarding/personal-details`:
-  - Сохранение имени, фамилии, email.
-  - Загрузка аватарки пользователя (хранение в локальном хранилище медиа или base64/SVG).
+#### Задача 2.1: API персональных данных онбординга ✅
+- [x] Расширить профиль `TelegramUser` (алиас `User`) полями `first_name`, `last_name`, `email`, `avatar_url`, `onboarding_step`, `onboarding_completed`.
+- [x] Реализовать эндпоинты:
+  - `GET /api/v1/onboarding/status` — статус онбординга, текущий шаг и профиль.
+  - `POST /api/v1/onboarding/personal-details` — сохранение имени, фамилии, email и автоперевод на шаг воркспейса.
+  - `POST /api/v1/onboarding/avatar` — загрузка аватара пользователя в локальное хранилище медиа (`webapp/uploads/avatars/`).
+  - `DELETE /api/v1/onboarding/avatar` — сброс аватара.
 
-#### Задача 2.2: API создания воркспейса с логотипом и настройками
-- [ ] Реализовать эндпоинт `POST /api/v1/onboarding/workspace`:
-  - Приём `name`, `slug` (с проверкой уникальности), `billing_country`, `currency`, `timezone`.
-  - Загрузка кастомного логотипа компании или автоматическая генерация бейджа с инициалом.
+#### Задача 2.2: API создания воркспейса с логотипом и проверкой слага ✅
+- [x] Расширить модель `Workspace` полем `logo_url`.
+- [x] Реализовать эндпоинты:
+  - `GET /api/v1/onboarding/check-slug` — проверка доступности слага воркспейса в реальном времени с валидацией зарезервированных имен.
+  - `POST /api/v1/onboarding/workspace` — создание воркспейса, привязка пользователя овнером в `WorkspaceMember`, установка `active_workspace_id`.
+  - `POST /api/v1/onboarding/workspace/logo` — загрузка кастомного логотипа компании (`webapp/uploads/workspaces/`).
 
-#### Задача 2.3: API массовых инвайтов на онбординге
-- [ ] Реализовать эндпоинт `POST /api/v1/onboarding/invites`:
-  - Приём списка email + ролей (`[{ email: "...", role: "buyer" }]`).
-  - Генерация инвайтов и отправка уведомлений/ссылок.
+#### Задача 2.3: API массовых инвайтов на онбординге ✅
+- [x] Реализовать эндпоинты:
+  - `POST /api/v1/onboarding/invites` — приём списка email + ролей (`[{ email: "...", role: "buyer" }]`), генерация инвайтов и фиксация завершения онбординга.
+  - `POST /api/v1/onboarding/skip` — быстрый пропуск шага ("Skip for now") и фиксация `onboarding_completed = True`.
 
 ---
 
