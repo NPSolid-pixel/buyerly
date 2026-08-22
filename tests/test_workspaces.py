@@ -584,7 +584,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                 json={
                     'name': 'Viewer Rule',
                     'action': 'turn_off',
-                    'conditions': [{'metric': 'cpa', 'operator': 'gt', 'value': 25.0}],
+                    'conditions': [{'metric': 'cpl', 'operator': 'gt', 'value': 25.0}],
                 },
                 headers=viewer_headers,
             )
