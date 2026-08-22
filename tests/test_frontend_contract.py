@@ -510,10 +510,6 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="currentWorkspaceName"',
             'id="workspaceDropdown"',
             'id="workspaceDropdownList"',
-            'Новый воркспейс',
-            'Настройки аккаунта',
-            'Настройки воркспейса',
-            'Пригласить участников',
             'id="createWorkspaceScreen"',
             'id="createWsLogoFileInput"',
             'id="createWsLogoBadge"',
@@ -523,13 +519,14 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="modalWorkspaceSettings"',
             'id="editWorkspaceNameInput"',
             'id="btnDeleteCurrentWorkspace"',
+            'id="modalInviteMembers"',
+            'id="inviteMemberEmailInput"',
+            'id="inviteMemberRoleSelect"',
+            'id="inviteAcceptScreen"',
         ):
             self.assertIn(contract, self.index)
 
         for obsolete in (
-            'Account settings',
-            'Workspace settings',
-            'Invite team members',
             'Apps and integrations',
             '+ + New workspace',
             'id="pageWorkspaceColorPicker"',
