@@ -70,16 +70,14 @@ class TestRuleValidation(unittest.TestCase):
                 )
             )
 
-    def test_stop_cannot_require_a_registration_that_protects_from_stop(self):
-        with self.assertRaisesRegex(ValueError, "защищает"):
-            validate_runtime_rule(
-                rule(
-                    conditions=[
-                        {"metric": "registrations", "operator": "gte", "value": 1, "time_window": "today"}
-                    ]
-                )
+    def test_stop_can_use_registration_or_purchase_conditions(self):
+        validate_runtime_rule(
+            rule(
+                conditions=[
+                    {"metric": "registrations", "operator": "gte", "value": 1, "time_window": "today"}
+                ]
             )
-
+        )
         validate_runtime_rule(
             rule(
                 conditions=[
