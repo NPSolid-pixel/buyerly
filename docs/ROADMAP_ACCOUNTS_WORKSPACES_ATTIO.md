@@ -93,38 +93,36 @@
 
 ### 🔹 ЭТАП 3: Фронтенд — Полный Onboarding Flow в стиле Attio
 
-#### Задача 3.1: Дизайн-система и базовые лейауты онбординга
-- [ ] Создать CSS-стили для страниц онбординга по эталону Attio:
+#### Задача 3.1: Дизайн-система и базовые лейауты онбординга ✅
+- [x] Создать CSS-стили для страниц онбординга по эталону Attio:
   - Центрированный минималистичный контейнер.
-  - 2-колоночная карточка: левая часть — форма ввода, правая — визуальная плашка превью.
+  - Точная карточка и поля ввода по спецификации Attio.
   - Аккуратная типографика (шрифт Inter, правильные отступы, micro-interactions).
-  - Стили для полей ввода с иконками, бейджей, тогл-переключателей и кнопок.
+  - Стили для полей ввода с иконками, аватара, тогл-переключателей и кнопок.
 
-#### Задача 3.2: Экран 1 — `Sign In` ([`photo_1`](file:///home/hiurano/Projects/ai-mediabuyer/app.attio-structure-login-workspaces/photo_1_2026-08-22_18-02-42.jpg))
-- [ ] Минималистичный экран входа:
+#### Задача 3.2: Экран 1 — `Sign In` ([`photo_1`](file:///home/hiurano/Projects/ai-mediabuyer/app.attio-structure-login-workspaces/photo_1_2026-08-22_18-02-42.jpg)) ✅
+- [x] Минималистичный экран входа:
   - Логотип Buyerly по центру.
   - Заголовок `Sign in`.
-  - Кнопка быстрого входа через Telegram / Google.
-  - Поле `Enter your work email address / username` + кнопка `Continue`.
+  - Поле `Enter your work email address` + кнопка `Continue`.
+  - Вход по паролю / быстрому временному коду.
   - Футер со ссылками на политики и поддержку.
 
-#### Задача 3.3: Экран 2 — `Temporary Password / Verification` ([`photo_2`](file:///home/hiurano/Projects/ai-mediabuyer/app.attio-structure-login-workspaces/photo_2_2026-08-22_18-02-42.jpg))
-- [ ] Экран подтверждения:
-  - Заголовок `Check your inbox! / Проверьте сообщение`.
-  - Бейдж почты / Telegram аккаунта.
+#### Задача 3.3: Экран 2 — `Temporary Password / Verification` ([`photo_2`](file:///home/hiurano/Projects/ai-mediabuyer/app.attio-structure-login-workspaces/photo_2_2026-08-22_18-02-42.jpg)) ✅
+- [x] Экран подтверждения:
+  - Заголовок `Check your inbox!`.
+  - Поле с введенным email и кнопкой изменения адреса.
   - Поле ввода одноразового кода или временного пароля.
-  - Кнопка `Continue` с валидацией.
+  - Кнопка `Continue` с валидацией через API.
 
-#### Задача 3.4: Экран 3 — `Personal Details` ([`photo_3`](file:///home/hiurano/Projects/ai-mediabuyer/app.attio-structure-login-workspaces/photo_3_2026-08-22_18-02-42.jpg))
-- [ ] Двухколоночный экран персональных данных:
-  - Левая колонка:
-    - Заголовок `Let's get to know you`.
-    - Аватарка (круглый блок с кнопками `Upload image` и `Remove`, drag-and-drop).
-    - Инпуты `First name` и `Last name`.
-    - Поле `Email / Telegram ID` (read-only).
-    - Тоггл подписки на обновления.
-    - Кнопка `Continue`.
-  - Правая колонка: схематичный макет интерфейса Attio.
+#### Задача 3.4: Экран 3 — `Personal Details` ([`photo_3`](file:///home/hiurano/Projects/ai-mediabuyer/app.attio-structure-login-workspaces/photo_3_2026-08-22_18-02-42.jpg)) ✅
+- [x] Экран персональных данных:
+  - Заголовок `Let's get to know you`.
+  - Аватарка (круглый блок 64×64px с кнопками `Upload image` и `Remove`, загрузка и удаление через API).
+  - Инпуты `First name` и `Last name`.
+  - Поле `Email` (read-only).
+  - Тоггл подписки на обновления.
+  - Кнопка `Continue` и сохранение через `POST /api/onboarding/personal-details`.
 
 #### Задача 3.5: Экран 4 — `Workspace Details` с Live Preview ([`photo_4`](file:///home/hiurano/Projects/ai-mediabuyer/app.attio-structure-login-workspaces/photo_4_2026-08-22_18-02-42.jpg), [`photo_5`](file:///home/hiurano/Projects/ai-mediabuyer/app.attio-structure-login-workspaces/photo_5_2026-08-22_18-02-42.jpg))
 - [ ] Двухколоночный экран создания воркспейса:

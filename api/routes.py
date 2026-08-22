@@ -1465,9 +1465,10 @@ async def login_user(req: LoginRequest):
     async with async_session_maker() as session:
         uname = req.username.strip()
         
-        # Prefer stable identifiers. A display name is accepted only when unique.
+        # Prefer stable identifiers (username, email, or telegram_id). A display name is accepted only when unique.
         stmt = select(TelegramUser).where(
             (func.lower(TelegramUser.username) == uname.lower()) |
+            (func.lower(TelegramUser.email) == uname.lower()) |
             (TelegramUser.telegram_id == uname)
         )
         res = await session.execute(stmt)

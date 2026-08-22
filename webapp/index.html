@@ -16,64 +16,165 @@
 </head>
 
 <body>
-  <!-- Standalone Web Login Screen -->
-  <div id="loginScreen" class="login-screen-wrapper">
-    <div class="login-card">
-      <div class="login-logo-row">
-        <div class="brand-logo" style="width: 48px; height: 48px;">
-          <svg width="30" height="30" viewBox="0 0 512 512" fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <defs>
-              <linearGradient id="loginLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#FFD000" />
-                <stop offset="50%" stop-color="#FF8A00" />
-                <stop offset="100%" stop-color="#FF5100" />
-              </linearGradient>
-            </defs>
-            <path d="M 256 280 C 315 280, 370 240, 370 185 C 370 130, 315 95, 256 95 C 197 95, 142 140, 142 205" stroke="#FFFFFF" stroke-width="56" />
-            <path d="M 142 95 L 142 320 C 142 375, 197 417, 256 417 C 315 417, 370 375, 370 320 C 370 265, 315 225, 256 225 C 197 225, 142 265, 142 320" stroke="url(#loginLogoGrad)" stroke-width="56" />
-          </svg>
-        </div>
-        <div>
-          <h1 class="login-title">Buyerly</h1>
-          <p class="login-subtitle">AI Media Buyer Platform</p>
-        </div>
-      </div>
-      <p class="login-lead-desc" style="margin: 4px 0 16px; font-size: 12px; line-height: 1.45; color: rgba(255, 255, 255, 0.55); text-align: center;">Automated operations, monitoring and risk-control platform for Meta Ads campaigns.</p>
+  <!-- Attio Authentication & Onboarding Flow (100% Attio CRM Design) -->
+  <div id="loginScreen" class="attio-auth-wrapper">
+    <header class="attio-auth-top-header">
+      <a href="/" class="attio-auth-brand-logo" title="Buyerly">
+        <svg width="34" height="34" viewBox="0 0 512 512" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <defs>
+            <linearGradient id="attioAuthLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FFD000" />
+              <stop offset="50%" stop-color="#FF8A00" />
+              <stop offset="100%" stop-color="#FF5100" />
+            </linearGradient>
+          </defs>
+          <path d="M 256 280 C 315 280, 370 240, 370 185 C 370 130, 315 95, 256 95 C 197 95, 142 140, 142 205" stroke="#101112" stroke-width="56" />
+          <path d="M 142 95 L 142 320 C 142 375, 197 417, 256 417 C 315 417, 370 375, 370 320 C 370 265, 315 225, 256 225 C 197 225, 142 265, 142 320" stroke="url(#attioAuthLogoGrad)" stroke-width="56" />
+        </svg>
+      </a>
+    </header>
 
-      <form id="loginForm" class="login-form" onsubmit="event.preventDefault(); window.submitLogin(); return false;">
-        <div class="form-group">
-          <label class="form-label" for="loginUsername">Логин</label>
-          <input type="text" id="loginUsername" class="form-control" placeholder="Введите логин" required autocomplete="username" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitLogin();}">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="loginPassword">Пароль</label>
-          <div class="input-password-wrapper">
-            <input type="password" id="loginPassword" class="form-control" placeholder="Введите пароль" required autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitLogin();}">
-            <button type="button" id="btnLoginPasswordToggle" class="btn-eye" title="Показать/скрыть пароль" onclick="window.toggleLoginPassword()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            </button>
+    <!-- STEP 1: SIGN IN -->
+    <div id="onboardingSignInStep" class="attio-auth-card">
+      <h1 class="attio-auth-title">Sign in</h1>
+      <form id="onboardingSignInForm" onsubmit="event.preventDefault(); window.submitOnboardingSignIn(); return false;">
+        <div class="attio-field">
+          <div class="attio-input-wrapper">
+            <span class="attio-input-prefix">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 5l6 4 6-4"/></svg>
+            </span>
+            <input type="email" id="onboardingSignInEmail" class="attio-input has-prefix" placeholder="Enter your work email address" required autocomplete="email" autofocus onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingSignIn();}">
           </div>
         </div>
 
-        <div id="loginError" class="login-error-msg hidden"></div>
+        <div class="attio-field" id="onboardingSignInPasswordGroup" style="margin-top: -6px;">
+          <div class="attio-input-wrapper">
+            <span class="attio-input-prefix">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/></svg>
+            </span>
+            <input type="password" id="onboardingSignInPassword" class="attio-input has-prefix has-suffix" placeholder="Enter your password" required autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingSignIn();}">
+            <button type="button" id="btnOnboardingSignInPasswordToggle" class="attio-input-suffix-btn" title="Показать/скрыть пароль" onclick="window.toggleOnboardingSignInPassword()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <div id="onboardingSignInError" class="attio-error-text hidden"></div>
+        </div>
 
-        <button type="button" id="btnLoginSubmit" class="btn btn-primary btn-block btn-lg" style="margin-top: 14px;" onclick="window.submitLogin()">
-          <span>Войти в систему</span>
+        <button type="submit" id="btnOnboardingSignInSubmit" class="attio-btn-primary">
+          <span>Continue</span>
         </button>
 
+        <div style="margin-top: 12px; text-align: center;">
+          <button type="button" style="background:none; border:none; color:#266DF0; font-size:12.5px; cursor:pointer; font-family:inherit;" onclick="window.showOnboardingStep('verify')">Use temporary password</button>
+        </div>
       </form>
-      <nav class="login-legal-links" aria-label="Юридические документы Buyerly">
-        <a href="/privacy" target="_blank" rel="noopener">Privacy</a>
-        <a href="/terms" target="_blank" rel="noopener">Terms</a>
-        <a href="/data-deletion" target="_blank" rel="noopener">Data deletion</a>
-        <a href="mailto:contact@buyerly.app">Contact</a>
-      </nav>
-      <div style="margin-top: 14px; text-align: center; font-size: 10px; color: rgba(255, 255, 255, 0.38); line-height: 1.45;">
-        <div>Individual Entrepreneur Artem Petruchenko · Tax ID: 305879234</div>
-        <div style="margin-top: 2px;">Georgia, Tbilisi, Vake District, Besarion Zhgenti Street, No. 49, Apartment 20</div>
-      </div>
     </div>
+
+    <!-- STEP 2: TEMPORARY PASSWORD / VERIFICATION -->
+    <div id="onboardingVerifyStep" class="attio-auth-card hidden">
+      <h1 class="attio-auth-title">Check your inbox!</h1>
+      <div class="attio-field">
+        <div class="attio-input-wrapper">
+          <span class="attio-input-prefix">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 5l6 4 6-4"/></svg>
+          </span>
+          <input type="text" id="onboardingVerifyEmailDisplay" class="attio-input has-prefix has-suffix" disabled value="">
+          <button type="button" class="attio-input-suffix-btn" title="Change email" onclick="window.showOnboardingStep('signin')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <form id="onboardingVerifyForm" onsubmit="event.preventDefault(); window.submitOnboardingVerify(); return false;">
+        <div class="attio-field">
+          <div class="attio-input-wrapper">
+            <span class="attio-input-prefix">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/></svg>
+            </span>
+            <input type="password" id="onboardingVerifyCodeInput" class="attio-input has-prefix" placeholder="Enter temporary password..." required onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingVerify();}">
+          </div>
+          <div id="onboardingVerifyError" class="attio-error-text hidden">Please enter a valid temporary password</div>
+        </div>
+
+        <button type="submit" id="btnOnboardingVerifySubmit" class="attio-btn-primary">
+          <span>Continue</span>
+        </button>
+
+        <div style="margin-top: 14px; text-align: center;">
+          <button type="button" style="background:none; border:none; color:#898A8D; font-size:12px; cursor:pointer; font-family:inherit;" onclick="window.showOnboardingStep('signin')">&larr; Back to sign in</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- STEP 3: PERSONAL DETAILS -->
+    <div id="onboardingPersonalStep" class="attio-auth-card card-wide hidden">
+      <h1 class="attio-auth-title-personal">Let's get to know you</h1>
+
+      <!-- Profile picture section -->
+      <div class="attio-avatar-section">
+        <input type="file" id="onboardingAvatarFileInput" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none;" onchange="window.handleOnboardingAvatarUpload(event)">
+        <div class="attio-avatar-circle" id="onboardingAvatarBadge" title="Upload image" onclick="document.getElementById('onboardingAvatarFileInput').click()">
+          <span id="onboardingAvatarLetter">B</span>
+          <img id="onboardingAvatarImg" class="attio-avatar-img hidden" alt="Avatar">
+        </div>
+        <div class="attio-avatar-meta">
+          <div class="attio-avatar-title">Profile picture</div>
+          <div class="attio-avatar-btn-row">
+            <button type="button" class="attio-btn-secondary" onclick="document.getElementById('onboardingAvatarFileInput').click()">
+              Upload image
+            </button>
+            <button type="button" id="btnOnboardingAvatarRemove" class="attio-btn-secondary" disabled onclick="window.removeOnboardingAvatar()">
+              Remove
+            </button>
+          </div>
+          <div class="attio-avatar-hint">*.png, *.jpeg files up to 10MB at least 400px by 400px</div>
+        </div>
+      </div>
+
+      <form id="onboardingPersonalForm" onsubmit="event.preventDefault(); window.submitOnboardingPersonalDetails(); return false;">
+        <div class="attio-field">
+          <label class="attio-label" for="onboardingFirstName">First name</label>
+          <input type="text" id="onboardingFirstName" class="attio-input" placeholder="Enter your first name..." required maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingPersonalDetails();}">
+        </div>
+
+        <div class="attio-field">
+          <label class="attio-label" for="onboardingLastName">Last name</label>
+          <input type="text" id="onboardingLastName" class="attio-input" placeholder="Enter your last name..." maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingPersonalDetails();}">
+        </div>
+
+        <div class="attio-field">
+          <label class="attio-label" for="onboardingEmailDisplay">Email</label>
+          <input type="email" id="onboardingEmailDisplay" class="attio-input" disabled value="">
+        </div>
+
+        <div class="attio-subscribe-row">
+          <div class="attio-subscribe-text">
+            <div class="attio-subscribe-title">Subscribe to product update emails</div>
+            <div class="attio-subscribe-desc">Get the latest updates about features and product updates.</div>
+          </div>
+          <button type="button" id="onboardingSubscribeSwitch" class="attio-switch checked" role="switch" aria-checked="true" onclick="window.toggleOnboardingSubscribe()">
+            <span class="attio-switch-knob"></span>
+          </button>
+        </div>
+
+        <div id="onboardingPersonalError" class="attio-error-text hidden" style="margin-bottom: 8px;"></div>
+
+        <button type="submit" id="btnOnboardingPersonalSubmit" class="attio-btn-primary" style="margin-top: 10px;">
+          <span>Continue</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Clean Attio Footer -->
+    <footer class="attio-auth-footer">
+      <span>&copy; 2026 Buyerly</span>
+      <span class="attio-footer-dot">&middot;</span>
+      <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>
+      <span class="attio-footer-dot">&middot;</span>
+      <a href="mailto:support@buyerly.app">Support</a>
+      <span class="attio-footer-dot" id="onboardingSignOutDot" style="display:none;">&middot;</span>
+      <button type="button" id="btnOnboardingSignOut" style="display:none;" onclick="if(window.logoutUser) window.logoutUser();">Sign out</button>
+    </footer>
   </div>
 
   <!-- Standalone Create Workspace Screen (Attio Style) -->

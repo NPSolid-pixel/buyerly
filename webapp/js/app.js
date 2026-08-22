@@ -10242,6 +10242,7 @@
       if (loginScreen) {
         loginScreen.style.display = 'flex';
         loginScreen.classList.remove('hidden');
+        window.showOnboardingStep('signin');
       }
       return;
     }
@@ -10251,6 +10252,33 @@
       const user = await apiRequest('/api/me');
       state.user = user;
       
+      // If user has not completed onboarding, route them to their onboarding step
+      if (user && user.onboarding_completed === false) {
+        const appEl = document.getElementById('app');
+        if (appEl) {
+          appEl.style.display = 'none';
+          appEl.classList.add('hidden');
+        }
+        const loginScreen = document.getElementById('loginScreen');
+        if (loginScreen) {
+          loginScreen.style.display = 'flex';
+          loginScreen.classList.remove('hidden');
+        }
+
+        const step = user.onboarding_step || 'personal_details';
+        if (step === 'personal_details' || !user.first_name) {
+          window.showOnboardingStep('personal');
+          return;
+        } else if (step === 'workspace' && window.openCreateWorkspacePage) {
+          if (loginScreen) {
+            loginScreen.style.display = 'none';
+            loginScreen.classList.add('hidden');
+          }
+          window.openCreateWorkspacePage();
+          return;
+        }
+      }
+
       // Hide login screen & reveal app UI
       const loginScreen = document.getElementById('loginScreen');
       const appEl = document.getElementById('app');
@@ -10271,8 +10299,14 @@
 
         const uName = document.getElementById('userName');
         const uAvatar = document.getElementById('userAvatar');
-        if (uName) uName.textContent = user.full_name || user.username || 'Медиабайер';
-        if (uAvatar) uAvatar.textContent = (user.full_name || user.username || 'B').charAt(0).toUpperCase();
+        if (uName) uName.textContent = user.full_name || user.username || 'Media Buyer';
+        if (uAvatar) {
+          if (user.avatar_url) {
+            uAvatar.innerHTML = `<img src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="Avatar">`;
+          } else {
+            uAvatar.textContent = (user.first_name || user.full_name || user.username || 'B').charAt(0).toUpperCase();
+          }
+        }
 
         const currentPath = normalizeAppPath(window.location.pathname);
         const isLoginPath = currentPath === '/sign-in' || currentPath === '/login';
@@ -10335,7 +10369,6 @@
       rememberReturnRoute();
       setWebAuthToken('');
       const loginScreen = document.getElementById('loginScreen');
-      const loginError = document.getElementById('loginError');
       const appEl = document.getElementById('app');
       if (appEl) {
         appEl.style.display = 'none';
@@ -10344,52 +10377,108 @@
       if (loginScreen) {
         loginScreen.style.display = 'flex';
         loginScreen.classList.remove('hidden');
-        if (loginError) {
-          loginError.textContent = e.message || 'Доступ к Buyerly не подтверждён';
-          loginError.classList.remove('hidden');
+        window.showOnboardingStep('signin');
+        const errEl = document.getElementById('onboardingSignInError');
+        if (errEl) {
+          errEl.textContent = e.message || 'Access not authorized';
+          errEl.classList.remove('hidden');
         }
         try { window.history.replaceState({}, '', '/sign-in'); } catch (e) {}
       }
     }
   }
 
-  window.toggleLoginPassword = function () {
-    const pwInput = document.getElementById('loginPassword');
+  /* ==========================================================
+     ATTIO ONBOARDING & AUTH CONTROLLER (100% ATTIO SPEC)
+     ========================================================== */
+  state.onboardingEmail = '';
+  state.onboardingSubscribeUpdates = true;
+
+  window.showOnboardingStep = function (step) {
+    const signInStep = document.getElementById('onboardingSignInStep');
+    const verifyStep = document.getElementById('onboardingVerifyStep');
+    const personalStep = document.getElementById('onboardingPersonalStep');
+    const signOutDot = document.getElementById('onboardingSignOutDot');
+    const btnSignOut = document.getElementById('btnOnboardingSignOut');
+
+    if (signInStep) signInStep.classList.add('hidden');
+    if (verifyStep) verifyStep.classList.add('hidden');
+    if (personalStep) personalStep.classList.add('hidden');
+
+    if (step === 'signin') {
+      if (signInStep) {
+        signInStep.classList.remove('hidden');
+        const emailInput = document.getElementById('onboardingSignInEmail');
+        setTimeout(() => emailInput?.focus(), 100);
+      }
+      if (signOutDot) signOutDot.style.display = 'none';
+      if (btnSignOut) btnSignOut.style.display = 'none';
+    } else if (step === 'verify') {
+      if (verifyStep) {
+        verifyStep.classList.remove('hidden');
+        const emailDisplay = document.getElementById('onboardingVerifyEmailDisplay');
+        const codeInput = document.getElementById('onboardingVerifyCodeInput');
+        if (emailDisplay) emailDisplay.value = state.onboardingEmail || '';
+        if (codeInput) codeInput.value = '';
+        setTimeout(() => codeInput?.focus(), 100);
+      }
+      if (signOutDot) signOutDot.style.display = 'none';
+      if (btnSignOut) btnSignOut.style.display = 'none';
+    } else if (step === 'personal') {
+      if (personalStep) {
+        personalStep.classList.remove('hidden');
+        const fnInput = document.getElementById('onboardingFirstName');
+        const lnInput = document.getElementById('onboardingLastName');
+        const emailDisplay = document.getElementById('onboardingEmailDisplay');
+        
+        if (fnInput && state.user?.first_name) fnInput.value = state.user.first_name;
+        if (lnInput && state.user?.last_name) lnInput.value = state.user.last_name;
+        if (emailDisplay) emailDisplay.value = state.user?.email || state.onboardingEmail || '';
+
+        window.updateOnboardingAvatarPreview();
+        setTimeout(() => fnInput?.focus(), 100);
+      }
+      if (signOutDot) signOutDot.style.display = 'inline';
+      if (btnSignOut) btnSignOut.style.display = 'inline';
+    }
+  };
+
+  window.toggleOnboardingSignInPassword = function () {
+    const pwInput = document.getElementById('onboardingSignInPassword');
     if (pwInput) {
       pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
     }
   };
 
-  window.submitLogin = async function () {
-    const usernameInput = document.getElementById('loginUsername');
-    const passwordInput = document.getElementById('loginPassword');
-    const submitBtn = document.getElementById('btnLoginSubmit');
-    const errorEl = document.getElementById('loginError');
+  window.submitOnboardingSignIn = async function () {
+    const emailInput = document.getElementById('onboardingSignInEmail');
+    const passwordInput = document.getElementById('onboardingSignInPassword');
+    const submitBtn = document.getElementById('btnOnboardingSignInSubmit');
+    const errorEl = document.getElementById('onboardingSignInError');
 
-    const username = usernameInput?.value ? usernameInput.value.trim() : '';
+    const email = emailInput?.value ? emailInput.value.trim() : '';
     const password = passwordInput?.value || '';
 
-    if (!username) {
+    if (!email) {
       if (errorEl) {
-        errorEl.textContent = 'Введите логин';
+        errorEl.textContent = 'Please enter your work email address';
         errorEl.classList.remove('hidden');
       }
-      usernameInput?.focus();
+      emailInput?.focus();
       return;
     }
 
+    state.onboardingEmail = email;
+
+    // If password is not provided, seamlessly transition to temporary password verification step
     if (!password) {
-      if (errorEl) {
-        errorEl.textContent = 'Введите пароль';
-        errorEl.classList.remove('hidden');
-      }
-      passwordInput?.focus();
+      window.showOnboardingStep('verify');
       return;
     }
 
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<div class="spinner" style="width:18px;height:18px;margin:0 auto;"></div>';
+      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
     }
     if (errorEl) errorEl.classList.add('hidden');
 
@@ -10397,37 +10486,253 @@
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username: email, password })
       });
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.detail || 'Неверный логин или пароль');
+        throw new Error(data.detail || 'Invalid email address or password');
       }
 
       setWebAuthToken(data.token);
-      showToast(`Добро пожаловать, ${data.full_name || data.username}!`, 'success');
+      showToast(`Welcome back, ${data.full_name || data.username}!`, 'success');
       await initApp();
     } catch (err) {
       if (errorEl) {
-        errorEl.textContent = err.message || 'Ошибка входа';
+        errorEl.textContent = err.message || 'Sign in error';
         errorEl.classList.remove('hidden');
       }
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Войти в систему</span>';
+        submitBtn.innerHTML = '<span>Continue</span>';
       }
     }
   };
 
-  window.quickFillLogin = function (username, password) {
-    const uInput = document.getElementById('loginUsername');
-    const pInput = document.getElementById('loginPassword');
-    if (uInput) uInput.value = username;
-    if (pInput) pInput.value = password;
-    window.submitLogin();
+  window.submitOnboardingVerify = async function () {
+    const codeInput = document.getElementById('onboardingVerifyCodeInput');
+    const submitBtn = document.getElementById('btnOnboardingVerifySubmit');
+    const errorEl = document.getElementById('onboardingVerifyError');
+
+    const code = codeInput?.value ? codeInput.value.trim() : '';
+    const email = state.onboardingEmail || '';
+
+    if (!code) {
+      if (errorEl) {
+        errorEl.textContent = 'Please enter a valid temporary password';
+        errorEl.classList.remove('hidden');
+      }
+      codeInput?.focus();
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+    }
+    if (errorEl) errorEl.classList.add('hidden');
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: email, password: code })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.detail || 'Please enter a valid temporary password');
+      }
+
+      setWebAuthToken(data.token);
+      showToast(`Welcome, ${data.full_name || data.username}!`, 'success');
+      await initApp();
+    } catch (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || 'Please enter a valid temporary password';
+        errorEl.classList.remove('hidden');
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Continue</span>';
+      }
+    }
   };
+
+  window.updateOnboardingAvatarPreview = function () {
+    const imgEl = document.getElementById('onboardingAvatarImg');
+    const letterEl = document.getElementById('onboardingAvatarLetter');
+    const btnRemove = document.getElementById('btnOnboardingAvatarRemove');
+    const fnInput = document.getElementById('onboardingFirstName');
+
+    const avatarUrl = state.user?.avatar_url || '';
+    if (avatarUrl) {
+      if (imgEl) {
+        imgEl.src = avatarUrl;
+        imgEl.classList.remove('hidden');
+      }
+      if (letterEl) letterEl.style.display = 'none';
+      if (btnRemove) btnRemove.disabled = false;
+    } else {
+      if (imgEl) {
+        imgEl.src = '';
+        imgEl.classList.add('hidden');
+      }
+      if (letterEl) {
+        letterEl.style.display = 'block';
+        const initial = (fnInput?.value || state.user?.first_name || state.user?.username || 'B').charAt(0).toUpperCase();
+        letterEl.textContent = initial || 'B';
+      }
+      if (btnRemove) btnRemove.disabled = true;
+    }
+  };
+
+  window.handleOnboardingAvatarUpload = async function (event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Image file size must not exceed 10MB', 'error');
+      event.target.value = '';
+      return;
+    }
+
+    // Instant local preview
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const dataUrl = e.target.result;
+      const imgEl = document.getElementById('onboardingAvatarImg');
+      const letterEl = document.getElementById('onboardingAvatarLetter');
+      const btnRemove = document.getElementById('btnOnboardingAvatarRemove');
+      if (imgEl) {
+        imgEl.src = dataUrl;
+        imgEl.classList.remove('hidden');
+      }
+      if (letterEl) letterEl.style.display = 'none';
+      if (btnRemove) btnRemove.disabled = false;
+    };
+    reader.readAsDataURL(file);
+
+    // Upload to backend API
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const authToken = getWebAuthToken();
+      const res = await fetch('/api/onboarding/avatar', {
+        method: 'POST',
+        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Avatar upload failed');
+      }
+      if (!state.user) state.user = {};
+      state.user.avatar_url = data.avatar_url;
+      showToast('Profile photo updated', 'success');
+      window.updateOnboardingAvatarPreview();
+    } catch (err) {
+      showToast(err.message || 'Failed to upload photo', 'error');
+    }
+  };
+
+  window.removeOnboardingAvatar = async function () {
+    try {
+      await apiRequest('/api/onboarding/avatar', { method: 'DELETE' });
+      if (!state.user) state.user = {};
+      state.user.avatar_url = '';
+      const fileInput = document.getElementById('onboardingAvatarFileInput');
+      if (fileInput) fileInput.value = '';
+      window.updateOnboardingAvatarPreview();
+      showToast('Profile photo removed');
+    } catch (err) {
+      showToast(err.message || 'Failed to remove photo', 'error');
+    }
+  };
+
+  window.toggleOnboardingSubscribe = function () {
+    const sw = document.getElementById('onboardingSubscribeSwitch');
+    state.onboardingSubscribeUpdates = !state.onboardingSubscribeUpdates;
+    if (sw) {
+      sw.classList.toggle('checked', state.onboardingSubscribeUpdates);
+      sw.setAttribute('aria-checked', state.onboardingSubscribeUpdates ? 'true' : 'false');
+    }
+  };
+
+  window.submitOnboardingPersonalDetails = async function () {
+    const fnInput = document.getElementById('onboardingFirstName');
+    const lnInput = document.getElementById('onboardingLastName');
+    const emailDisplay = document.getElementById('onboardingEmailDisplay');
+    const submitBtn = document.getElementById('btnOnboardingPersonalSubmit');
+    const errorEl = document.getElementById('onboardingPersonalError');
+
+    const firstName = fnInput ? fnInput.value.trim() : '';
+    const lastName = lnInput ? lnInput.value.trim() : '';
+    const email = emailDisplay ? emailDisplay.value.trim() : '';
+
+    if (!firstName) {
+      if (errorEl) {
+        errorEl.textContent = 'First name is required';
+        errorEl.classList.remove('hidden');
+      }
+      fnInput?.focus();
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+    }
+    if (errorEl) errorEl.classList.add('hidden');
+
+    try {
+      const res = await apiRequest('/api/onboarding/personal-details', {
+        method: 'POST',
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+          email: email || undefined
+        })
+      });
+
+      if (!state.user) state.user = {};
+      state.user.first_name = firstName;
+      state.user.last_name = lastName;
+      state.user.full_name = `${firstName} ${lastName}`.trim();
+      state.user.onboarding_step = res.onboarding_step || 'workspace';
+
+      showToast('Personal details saved', 'success');
+
+      // Seamlessly advance to workspace step or home
+      if (res.onboarding_step === 'workspace' && window.openCreateWorkspacePage) {
+        const loginScreen = document.getElementById('loginScreen');
+        if (loginScreen) {
+          loginScreen.style.display = 'none';
+          loginScreen.classList.add('hidden');
+        }
+        window.openCreateWorkspacePage();
+      } else {
+        await initApp();
+      }
+    } catch (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || 'Failed to save details';
+        errorEl.classList.remove('hidden');
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Continue</span>';
+      }
+    }
+  };
+
+  // Backwards-compatible aliases
+  window.submitLogin = window.submitOnboardingSignIn;
+  window.toggleLoginPassword = window.toggleOnboardingSignInPassword;
 
   function setupModalListeners() {
     // Close modals on Escape key or return from Rule Record page
