@@ -249,6 +249,56 @@
     </footer>
   </div>
 
+  <!-- Attio Standalone Invite Acceptance Screen (app.attio.com-auth-join-buyerly-app.html) -->
+  <div id="inviteAcceptScreen" class="attio-auth-wrapper" style="display: none;">
+    <header class="attio-auth-top-header">
+      <a href="/" class="attio-auth-brand-logo" title="Buyerly">
+        <svg width="34" height="34" viewBox="0 0 512 512" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <defs>
+            <linearGradient id="attioAcceptLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FFD000" />
+              <stop offset="50%" stop-color="#FF8A00" />
+              <stop offset="100%" stop-color="#FF5100" />
+            </linearGradient>
+          </defs>
+          <path d="M 256 280 C 315 280, 370 240, 370 185 C 370 130, 315 95, 256 95 C 197 95, 142 140, 142 205" stroke="#101112" stroke-width="56" />
+          <path d="M 142 95 L 142 320 C 142 375, 197 417, 256 417 C 315 417, 370 375, 370 320 C 370 265, 315 225, 256 225 C 197 225, 142 265, 142 320" stroke="url(#attioAcceptLogoGrad)" stroke-width="56" />
+        </svg>
+      </a>
+    </header>
+
+    <div class="attio-auth-card card-wide">
+      <h1 class="attio-auth-title" style="text-align: center;">Almost there!</h1>
+      <p style="font-size: 13.5px; color: #505155; margin-top: -12px; margin-bottom: 20px; text-align: center;">You have been invited to collaborate in this workspace:</p>
+
+      <div class="attio-invite-target-card">
+        <div class="attio-invite-target-badge" id="inviteTargetBadge">B</div>
+        <div class="attio-invite-target-info">
+          <div class="attio-invite-target-name" id="inviteTargetName">Buyerly Workspace</div>
+          <div class="attio-invite-target-slug" id="inviteTargetSlug">buyerly.app/workspace</div>
+        </div>
+        <div class="attio-pill attio-pill-blue" id="inviteTargetRole">Member</div>
+      </div>
+
+      <div id="inviteAcceptError" class="attio-error-text hidden" style="margin-top: 8px; margin-bottom: 8px; text-align: center;"></div>
+
+      <div style="display: flex; gap: 10px; margin-top: 14px;">
+        <button type="button" class="attio-btn-secondary" style="flex: 1; height: 36px;" onclick="window.rejectInviteAccept()">Not now</button>
+        <button type="button" id="btnAcceptInviteSubmit" class="attio-btn-primary" style="flex: 1; height: 36px;" onclick="window.submitAcceptInvite()">
+          <span>Accept & Join</span>
+        </button>
+      </div>
+    </div>
+
+    <footer class="attio-auth-footer">
+      <span>&copy; 2026 Buyerly</span>
+      <span class="attio-footer-dot">&middot;</span>
+      <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>
+      <span class="attio-footer-dot">&middot;</span>
+      <a href="mailto:support@buyerly.app">Support</a>
+    </footer>
+  </div>
+
   <div id="app" class="attio-shell-body" style="display: none;">
     <!-- ================= LEFT SIDEBAR ================= -->
     <aside class="sidebar" id="mainSidebar">
@@ -284,10 +334,10 @@
             <span>Настройки воркспейса</span>
           </div>
         </div>
-        <div class="dropdown-item" onclick="window.switchTab('add');">
+        <div class="dropdown-item" onclick="window.openInviteMembersModal();">
           <div class="dropdown-item-left">
             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
-            <span>Пригласить участников</span>
+            <span>Invite team members</span>
           </div>
         </div>
         <div class="dropdown-divider"></div>
@@ -2756,20 +2806,83 @@
       </div>
     </div>
 
-    <!-- Workspace Settings Modal -->
+    <!-- Attio Invite Team Members Modal Dialog (invite-members-popup.html) -->
+    <div id="modalInviteMembers" class="modal-overlay hidden">
+      <div class="attio-dialog-card">
+        <div class="attio-dialog-header">
+          <div class="attio-dialog-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Invite team members</span>
+          </div>
+          <button class="btn-close" type="button" onclick="window.closeModal('modalInviteMembers')">&times;</button>
+        </div>
+
+        <div class="attio-dialog-tabs">
+          <button type="button" class="attio-dialog-tab active">Invite team members</button>
+        </div>
+
+        <form id="inviteMembersForm" class="attio-dialog-body" onsubmit="event.preventDefault(); window.submitSendInvites(); return false;">
+          <div class="attio-field">
+            <label class="attio-label" for="inviteMemberEmailInput">Send Invite to ...</label>
+            <input type="email" id="inviteMemberEmailInput" class="attio-input" placeholder="example@email.com" required autocomplete="email" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault(); window.submitSendInvites();}">
+          </div>
+
+          <div class="attio-field">
+            <label class="attio-label" for="inviteMemberRoleSelect">Invite as</label>
+            <select id="inviteMemberRoleSelect" class="attio-input attio-select">
+              <option value="buyer">Member — can edit</option>
+              <option value="admin">Admin — full access</option>
+              <option value="viewer">Viewer — read only</option>
+            </select>
+          </div>
+
+          <div class="attio-invite-link-box">
+            <div class="attio-invite-link-info">
+              <div class="attio-invite-link-title">Or share an invite link</div>
+              <div class="attio-invite-link-desc">Anyone with this link will be able to join this workspace.</div>
+            </div>
+            <button type="button" id="btnCopyInviteLink" class="attio-btn-secondary" onclick="window.copyWorkspaceInviteLink()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <span>Copy link</span>
+            </button>
+          </div>
+
+          <div id="inviteMembersError" class="attio-error-text hidden"></div>
+        </form>
+
+        <div class="attio-dialog-footer">
+          <span class="attio-dialog-footer-hint">Press <b>Ctrl + Enter</b> to send</span>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="attio-btn-secondary" onclick="window.closeModal('modalInviteMembers')">Cancel</button>
+            <button type="button" id="btnSendInvitesSubmit" class="attio-btn-primary" style="width:auto; min-width:110px;" onclick="window.submitSendInvites()">
+              <span>Send Invites</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attio Workspace Settings Modal (Tabs: General, Members & Roles) -->
     <div id="modalWorkspaceSettings" class="modal-overlay hidden">
-      <div class="modal-card" style="max-width: 480px;">
-        <div class="modal-header">
-          <h3>Настройки воркспейса</h3>
+      <div class="modal-card" style="max-width: 680px; width: 100%;">
+        <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+          <h3>Workspace settings</h3>
           <button class="btn-close" type="button" onclick="window.closeModal('modalWorkspaceSettings')">&times;</button>
         </div>
-        <div class="modal-body">
+
+        <div class="attio-dialog-tabs" style="padding: 0 24px; margin-top: 12px;">
+          <button type="button" id="wsTabBtnGeneral" class="attio-dialog-tab active" onclick="window.switchWorkspaceSettingsTab('general')">General</button>
+          <button type="button" id="wsTabBtnMembers" class="attio-dialog-tab" onclick="window.switchWorkspaceSettingsTab('members')">Members & Roles</button>
+        </div>
+
+        <!-- TAB 1: GENERAL -->
+        <div id="wsTabContentGeneral" class="modal-body" style="padding-top: 16px;">
           <div class="form-group">
-            <label class="form-label" for="editWorkspaceNameInput">Название</label>
+            <label class="form-label" for="editWorkspaceNameInput">Workspace name</label>
             <input type="text" id="editWorkspaceNameInput" class="form-control" maxlength="60">
           </div>
           <div class="form-group">
-            <label class="form-label">Цвет бейджа</label>
+            <label class="form-label">Badge color</label>
             <div class="color-picker-row" id="editWorkspaceColorPicker">
               <div class="color-swatch" data-color="#F5A300" style="background:#F5A300;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
               <div class="color-swatch" data-color="#7C3AED" style="background:#7C3AED;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
@@ -2780,15 +2893,63 @@
               <div class="color-swatch" data-color="#374151" style="background:#374151;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
             </div>
           </div>
-          <div class="form-group" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
-            <label class="form-label" style="color: #DC2626;">Опасная зона</label>
-            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Удаление воркспейса приведет к удалению всех связанных с ним настроек и кабинетов.</p>
-            <button id="btnDeleteCurrentWorkspace" class="btn btn-danger btn-sm" type="button" onclick="window.submitDeleteCurrentWorkspace()">Удалить этот воркспейс</button>
+          <div class="form-group" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
+            <label class="form-label" style="color: #DC2626;">Danger zone</label>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Deleting a workspace removes all associated presets, members and campaign scopes.</p>
+            <button id="btnDeleteCurrentWorkspace" class="btn btn-danger btn-sm" type="button" onclick="window.submitDeleteCurrentWorkspace()">Delete workspace</button>
+          </div>
+          <div class="modal-footer" style="padding: 16px 0 0; margin-top: 16px;">
+            <button class="btn btn-secondary" type="button" onclick="window.closeModal('modalWorkspaceSettings')">Cancel</button>
+            <button id="btnSaveWorkspaceSettings" class="btn btn-primary" type="button" onclick="window.submitSaveWorkspaceSettings()">Save changes</button>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" type="button" onclick="window.closeModal('modalWorkspaceSettings')">Закрыть</button>
-          <button id="btnSaveWorkspaceSettings" class="btn btn-primary" type="button" onclick="window.submitSaveWorkspaceSettings()">Сохранить</button>
+
+        <!-- TAB 2: MEMBERS & ROLES -->
+        <div id="wsTabContentMembers" class="modal-body hidden" style="padding-top: 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px;">
+            <div style="position: relative; flex: 1;">
+              <input type="text" id="wsMembersSearchInput" class="attio-input" placeholder="Search members..." style="height: 32px;" oninput="window.filterWorkspaceMembers(this.value)">
+            </div>
+            <button type="button" class="attio-btn-primary" style="height: 32px; width: auto; font-size: 12.5px; padding: 0 12px;" onclick="window.openInviteMembersModal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+              <span>Invite members</span>
+            </button>
+          </div>
+
+          <div class="attio-table-container" style="max-height: 280px; overflow-y: auto; border: 1px solid #E6E7EA; border-radius: 8px;">
+            <table class="attio-members-table">
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th>Role</th>
+                  <th>Joined</th>
+                  <th style="width: 40px; text-align: right;"></th>
+                </tr>
+              </thead>
+              <tbody id="wsMembersTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top: 20px;">
+            <h4 style="font-size: 13px; font-weight: 600; color: #101112; margin-bottom: 10px;">Pending invitations</h4>
+            <div class="attio-table-container" style="max-height: 180px; overflow-y: auto; border: 1px solid #E6E7EA; border-radius: 8px;">
+              <table class="attio-members-table">
+                <thead>
+                  <tr>
+                    <th>Email / Link</th>
+                    <th>Role</th>
+                    <th>Invited</th>
+                    <th style="width: 40px; text-align: right;"></th>
+                  </tr>
+                </thead>
+                <tbody id="wsPendingInvitesTableBody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>

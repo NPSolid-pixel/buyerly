@@ -304,6 +304,13 @@
 
     const parts = trimmed.split('/');
 
+    if (parts[0] === 'invite' || parts[0] === 'join') {
+      return { inviteToken: parts[1] || '', workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
+    }
+    if (parts[0] === 'auth' && (parts[1] === 'join' || parts[1] === 'invite')) {
+      return { inviteToken: parts[2] || '', workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
+    }
+
     // Paths with workspace slug e.g. /buyerly/groups/1 or /buyerly/accounts or /buyerly/facebook-accounts
     if (parts.length >= 2) {
       const slug = parts[0];
@@ -803,7 +810,13 @@
     return window.submitCreateWorkspaceFromPage();
   };
 
-  window.openWorkspaceSettings = function () {
+  /* ==========================================================
+     WORKSPACE SETTINGS & MEMBERS CONTROLLERS (STAGE 4)
+     ========================================================== */
+  state.currentWorkspaceMembers = [];
+  state.currentWorkspaceInvites = [];
+
+  window.openWorkspaceSettings = function (initialTab = 'general') {
     window.closeWorkspaceDropdown();
     const ws = state.activeWorkspace;
     if (!ws) return;
@@ -821,7 +834,377 @@
       deleteBtn.style.display = (state.workspaces && state.workspaces.length > 1) ? 'inline-flex' : 'none';
     }
 
+    window.switchWorkspaceSettingsTab(initialTab);
     window.openModal('modalWorkspaceSettings');
+  };
+
+  window.switchWorkspaceSettingsTab = function (tabName) {
+    const btnGeneral = document.getElementById('wsTabBtnGeneral');
+    const btnMembers = document.getElementById('wsTabBtnMembers');
+    const contentGeneral = document.getElementById('wsTabContentGeneral');
+    const contentMembers = document.getElementById('wsTabContentMembers');
+
+    if (btnGeneral) btnGeneral.classList.toggle('active', tabName === 'general');
+    if (btnMembers) btnMembers.classList.toggle('active', tabName === 'members');
+
+    if (contentGeneral) contentGeneral.classList.toggle('hidden', tabName !== 'general');
+    if (contentMembers) contentMembers.classList.toggle('hidden', tabName !== 'members');
+
+    if (tabName === 'members') {
+      window.loadWorkspaceMembers();
+    }
+  };
+
+  window.loadWorkspaceMembers = async function () {
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    const membersTbody = document.getElementById('wsMembersTableBody');
+    const invitesTbody = document.getElementById('wsPendingInvitesTableBody');
+
+    if (membersTbody) {
+      membersTbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#898A8D;padding:16px;">Loading members...</td></tr>';
+    }
+
+    try {
+      const [members, invites] = await Promise.all([
+        apiRequest(`/api/workspaces/${ws.id}/members`),
+        apiRequest(`/api/workspaces/${ws.id}/invites`).catch(() => [])
+      ]);
+
+      state.currentWorkspaceMembers = members || [];
+      state.currentWorkspaceInvites = invites || [];
+
+      renderWorkspaceMembersTable(state.currentWorkspaceMembers);
+      renderWorkspaceInvitesTable(state.currentWorkspaceInvites);
+    } catch (err) {
+      if (membersTbody) {
+        membersTbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#EB3B3B;padding:16px;">Failed to load members: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+  };
+
+  function renderWorkspaceMembersTable(members) {
+    const tbody = document.getElementById('wsMembersTableBody');
+    if (!tbody) return;
+
+    if (!members || members.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#898A8D;padding:16px;">No members found</td></tr>';
+      return;
+    }
+
+    const currentUserId = state.user?.id;
+    const isOwnerOrAdmin = members.some(m => m.user_id === currentUserId && (m.role === 'owner' || m.role === 'admin'));
+
+    tbody.innerHTML = members.map(m => {
+      const initial = (m.full_name || m.username || 'U').charAt(0).toUpperCase();
+      const isCurrentUser = m.user_id === currentUserId;
+      const isMemberOwner = m.role === 'owner';
+      const joinedFormatted = m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—';
+
+      return `
+        <tr>
+          <td>
+            <div class="attio-member-cell">
+              <div class="attio-member-avatar">
+                ${m.avatar_url ? `<img src="${m.avatar_url}" alt="">` : initial}
+              </div>
+              <div style="display:flex; flex-direction:column;">
+                <span class="attio-member-name">${escapeHtml(m.full_name || m.username)} ${isCurrentUser ? '<span style="color:#898A8D;font-weight:normal;">(you)</span>' : ''}</span>
+                <span class="attio-member-email">${escapeHtml(m.email || '')}</span>
+              </div>
+            </div>
+          </td>
+          <td>
+            ${isMemberOwner || !isOwnerOrAdmin || isCurrentUser ? `
+              <span class="attio-pill ${m.role === 'owner' ? 'attio-pill-blue' : 'attio-pill-gray'}">${escapeHtml(m.role)}</span>
+            ` : `
+              <select class="attio-role-select" onchange="window.updateMemberRole(${m.user_id}, this.value)">
+                <option value="admin" ${m.role === 'admin' ? 'selected' : ''}>Admin</option>
+                <option value="buyer" ${m.role === 'buyer' ? 'selected' : ''}>Member</option>
+                <option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>Viewer</option>
+              </select>
+            `}
+          </td>
+          <td style="color:#898A8D;">${joinedFormatted}</td>
+          <td style="text-align:right;">
+            ${!isMemberOwner && !isCurrentUser && isOwnerOrAdmin ? `
+              <button type="button" class="attio-btn-icon" title="Remove member" onclick="window.removeWorkspaceMember(${m.user_id}, '${escapeHtml(m.full_name || m.username)}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            ` : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function renderWorkspaceInvitesTable(invites) {
+    const tbody = document.getElementById('wsPendingInvitesTableBody');
+    if (!tbody) return;
+
+    if (!invites || invites.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#898A8D;padding:12px;">No pending invitations</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = invites.map(inv => {
+      const targetDisplay = inv.email ? inv.email : `Link: /invite/${inv.token.substring(0, 8)}...`;
+      const createdFormatted = inv.created_at ? new Date(inv.created_at).toLocaleDateString() : '—';
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:500; color:#101112;">${escapeHtml(targetDisplay)}</div>
+          </td>
+          <td>
+            <span class="attio-pill attio-pill-gray">${escapeHtml(inv.role)}</span>
+          </td>
+          <td style="color:#898A8D;">${createdFormatted}</td>
+          <td style="text-align:right;">
+            <button type="button" class="attio-btn-icon" title="Revoke invitation" onclick="window.revokeWorkspaceInvite(${inv.id})">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  window.filterWorkspaceMembers = function (query) {
+    if (!query) {
+      renderWorkspaceMembersTable(state.currentWorkspaceMembers);
+      return;
+    }
+    const q = query.toLowerCase();
+    const filtered = (state.currentWorkspaceMembers || []).filter(m => 
+      (m.full_name && m.full_name.toLowerCase().includes(q)) ||
+      (m.username && m.username.toLowerCase().includes(q)) ||
+      (m.email && m.email.toLowerCase().includes(q))
+    );
+    renderWorkspaceMembersTable(filtered);
+  };
+
+  window.updateMemberRole = async function (memberUserId, newRole) {
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    try {
+      await apiRequest(`/api/workspaces/${ws.id}/members/${memberUserId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role: newRole })
+      });
+      showToast('Role updated successfully', 'success');
+      await window.loadWorkspaceMembers();
+    } catch (err) {
+      showToast(err.message || 'Failed to update role', 'error');
+      await window.loadWorkspaceMembers();
+    }
+  };
+
+  window.removeWorkspaceMember = async function (memberUserId, memberName) {
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    if (!confirm(`Are you sure you want to remove ${memberName} from this workspace?`)) {
+      return;
+    }
+
+    try {
+      await apiRequest(`/api/workspaces/${ws.id}/members/${memberUserId}`, {
+        method: 'DELETE'
+      });
+      showToast(`${memberName} removed from workspace`, 'success');
+      await window.loadWorkspaceMembers();
+    } catch (err) {
+      showToast(err.message || 'Failed to remove member', 'error');
+    }
+  };
+
+  window.revokeWorkspaceInvite = async function (inviteId) {
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    try {
+      await apiRequest(`/api/workspaces/${ws.id}/invites/${inviteId}`, {
+        method: 'DELETE'
+      });
+      showToast('Invitation revoked', 'success');
+      await window.loadWorkspaceMembers();
+    } catch (err) {
+      showToast(err.message || 'Failed to revoke invitation', 'error');
+    }
+  };
+
+  /* ==========================================================
+     INVITE TEAM MEMBERS POPUP CONTROLLER (STAGE 4)
+     ========================================================== */
+  window.openInviteMembersModal = function () {
+    window.closeWorkspaceDropdown();
+    const emailInput = document.getElementById('inviteMemberEmailInput');
+    const roleSelect = document.getElementById('inviteMemberRoleSelect');
+    const errorEl = document.getElementById('inviteMembersError');
+
+    if (emailInput) emailInput.value = '';
+    if (roleSelect) roleSelect.value = 'buyer';
+    if (errorEl) errorEl.classList.add('hidden');
+
+    window.openModal('modalInviteMembers');
+    setTimeout(() => emailInput?.focus(), 100);
+  };
+
+  window.submitSendInvites = async function () {
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    const emailInput = document.getElementById('inviteMemberEmailInput');
+    const roleSelect = document.getElementById('inviteMemberRoleSelect');
+    const submitBtn = document.getElementById('btnSendInvitesSubmit');
+    const errorEl = document.getElementById('inviteMembersError');
+
+    const email = emailInput ? emailInput.value.trim() : '';
+    const role = roleSelect ? roleSelect.value : 'buyer';
+
+    if (!email) {
+      if (errorEl) {
+        errorEl.textContent = 'Please enter an email address';
+        errorEl.classList.remove('hidden');
+      }
+      emailInput?.focus();
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+    }
+    if (errorEl) errorEl.classList.add('hidden');
+
+    try {
+      await apiRequest(`/api/workspaces/${ws.id}/invites`, {
+        method: 'POST',
+        body: JSON.stringify({ email: email, role: role })
+      });
+
+      window.closeModal('modalInviteMembers');
+      showToast(`Invitation sent to ${email}`, 'success');
+
+      // If workspace settings modal is open on members tab, reload list
+      const settingsModal = document.getElementById('modalWorkspaceSettings');
+      if (settingsModal && !settingsModal.classList.contains('hidden')) {
+        window.loadWorkspaceMembers();
+      }
+    } catch (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || 'Failed to send invitation';
+        errorEl.classList.remove('hidden');
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Send Invites</span>';
+      }
+    }
+  };
+
+  window.copyWorkspaceInviteLink = async function () {
+    const ws = state.activeWorkspace;
+    if (!ws) return;
+
+    try {
+      // Create or fetch invite token
+      const res = await apiRequest(`/api/workspaces/${ws.id}/invites`, {
+        method: 'POST',
+        body: JSON.stringify({ role: 'buyer' })
+      });
+      const inviteUrl = `${window.location.origin}/invite/${res.token}`;
+      await navigator.clipboard.writeText(inviteUrl);
+      showToast('Invite link copied to clipboard!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to generate invite link', 'error');
+    }
+  };
+
+  /* ==========================================================
+     INVITE ACCEPTANCE CONTROLLER (STAGE 4)
+     ========================================================== */
+  state.currentInviteToken = '';
+
+  window.handleInviteRoute = async function (token) {
+    state.currentInviteToken = token;
+    const acceptScreen = document.getElementById('inviteAcceptScreen');
+    const loginScreen = document.getElementById('loginScreen');
+    const appEl = document.getElementById('app');
+
+    if (appEl) appEl.style.display = 'none';
+    if (loginScreen) loginScreen.style.display = 'none';
+
+    try {
+      const data = await apiRequest(`/api/invites/${token}`);
+      const nameEl = document.getElementById('inviteTargetName');
+      const slugEl = document.getElementById('inviteTargetSlug');
+      const badgeEl = document.getElementById('inviteTargetBadge');
+      const roleEl = document.getElementById('inviteTargetRole');
+
+      if (nameEl) nameEl.textContent = data.workspace_name || 'Buyerly Workspace';
+      if (slugEl) slugEl.textContent = `buyerly.app/${data.workspace_slug || ''}`;
+      if (badgeEl) {
+        badgeEl.textContent = data.badge_text || (data.workspace_name ? data.workspace_name.charAt(0).toUpperCase() : 'B');
+        badgeEl.style.backgroundColor = data.badge_color || '#266DF0';
+      }
+      if (roleEl) roleEl.textContent = data.role ? data.role.toUpperCase() : 'MEMBER';
+
+      if (acceptScreen) {
+        acceptScreen.style.display = 'flex';
+        acceptScreen.classList.remove('hidden');
+      }
+    } catch (err) {
+      showToast(err.message || 'Invitation is invalid or has expired', 'error');
+      if (acceptScreen) acceptScreen.style.display = 'none';
+      if (loginScreen) loginScreen.style.display = 'flex';
+    }
+  };
+
+  window.submitAcceptInvite = async function () {
+    if (!state.currentInviteToken) return;
+    const submitBtn = document.getElementById('btnAcceptInviteSubmit');
+    const errorEl = document.getElementById('inviteAcceptError');
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+    }
+    if (errorEl) errorEl.classList.add('hidden');
+
+    try {
+      const res = await apiRequest(`/api/invites/${state.currentInviteToken}/accept`, {
+        method: 'POST'
+      });
+
+      showToast(`Joined ${res.workspace?.name || 'workspace'}!`, 'success');
+      const acceptScreen = document.getElementById('inviteAcceptScreen');
+      if (acceptScreen) acceptScreen.style.display = 'none';
+
+      // Reload app
+      try { window.history.replaceState({}, '', '/'); } catch (e) {}
+      await initApp();
+    } catch (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || 'Failed to accept invitation';
+        errorEl.classList.remove('hidden');
+      }
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Accept & Join</span>';
+      }
+    }
+  };
+
+  window.rejectInviteAccept = function () {
+    const acceptScreen = document.getElementById('inviteAcceptScreen');
+    if (acceptScreen) acceptScreen.style.display = 'none';
+    try { window.history.replaceState({}, '', '/'); } catch (e) {}
+    initApp();
   };
 
   window.submitSaveWorkspaceSettings = async function () {
@@ -831,7 +1214,7 @@
     const input = document.getElementById('editWorkspaceNameInput');
     const name = input ? input.value.trim() : '';
     if (!name) {
-      showToast('Название не может быть пустым', 'error');
+      showToast('Name cannot be empty', 'error');
       input?.focus();
       return;
     }
@@ -853,9 +1236,9 @@
       const workspacesList = await apiRequest('/api/workspaces');
       state.workspaces = workspacesList;
       renderWorkspacesDropdown();
-      showToast('Настройки воркспейса сохранены');
+      showToast('Workspace settings saved', 'success');
     } catch (e) {
-      showToast(e.message || 'Ошибка сохранения настроек', 'error');
+      showToast(e.message || 'Failed to save settings', 'error');
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -865,7 +1248,7 @@
     const ws = state.activeWorkspace;
     if (!ws) return;
 
-    if (!confirm(`Вы действительно хотите удалить воркспейс "${ws.name}"?`)) {
+    if (!confirm(`Are you sure you want to delete workspace "${ws.name}"?`)) {
       return;
     }
 
@@ -878,7 +1261,7 @@
       });
 
       window.closeModal('modalWorkspaceSettings');
-      showToast('Воркспейс удален');
+      showToast('Workspace deleted', 'success');
 
       // Reload workspaces and switch
       const workspacesList = await apiRequest('/api/workspaces');
@@ -895,7 +1278,7 @@
         loadRuleGroups()
       ]);
     } catch (e) {
-      showToast(e.message || 'Ошибка удаления воркспейса', 'error');
+      showToast(e.message || 'Failed to delete workspace', 'error');
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -10225,6 +10608,13 @@
       window.Telegram?.WebApp?.ready();
       window.Telegram?.WebApp?.expand();
     } catch (e) {}
+
+    // Check for invite landing route
+    const parsedLocation = parsePathLocation();
+    if (parsedLocation.inviteToken) {
+      window.handleInviteRoute(parsedLocation.inviteToken);
+      return;
+    }
 
     // Direct browser login uses a token; Telegram Mini App uses signed initData.
     const authToken = getWebAuthToken();

@@ -6411,6 +6411,323 @@ input[type="text"].attio-popover-name-input:focus,
 }
 
 /* ==========================================================
+   ATTIO DIALOG, POPUPS & MEMBERS (STAGE 4)
+   ========================================================== */
+.attio-dialog-card {
+  width: 100%;
+  max-width: 480px;
+  background: #FFFFFF;
+  border: 1px solid #E6E7EA;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(28, 40, 64, 0.12);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: attioFadeIn 0.15s ease-out;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #101112;
+}
+
+.attio-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+}
+
+.attio-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #101112;
+  letter-spacing: -0.01em;
+}
+
+.attio-dialog-tabs {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #EEEFF1;
+  padding: 0 20px;
+}
+
+.attio-dialog-tab {
+  background: none;
+  border: none;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #898A8D;
+  padding: 8px 0;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.12s;
+}
+
+.attio-dialog-tab:hover {
+  color: #101112;
+}
+
+.attio-dialog-tab.active {
+  color: #101112;
+  font-weight: 600;
+}
+
+.attio-dialog-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #266DF0;
+  border-radius: 2px 2px 0 0;
+}
+
+.attio-dialog-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.attio-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: #FBFBFB;
+  border-top: 1px solid #EEEFF1;
+}
+
+.attio-dialog-footer-hint {
+  font-size: 11.5px;
+  color: #898A8D;
+}
+
+.attio-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23898A8D' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  padding-right: 30px;
+  cursor: pointer;
+}
+
+.attio-invite-link-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #F6F7F7;
+  border: 1px solid #E6E7EA;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+.attio-invite-link-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attio-invite-link-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #101112;
+}
+
+.attio-invite-link-desc {
+  font-size: 11px;
+  color: #898A8D;
+}
+
+/* Attio Table for Workspace Members */
+.attio-table-container {
+  width: 100%;
+  background: #FFFFFF;
+}
+
+.attio-members-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.attio-members-table th {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #898A8D;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #FBFBFB;
+  border-bottom: 1px solid #EEEFF1;
+}
+
+.attio-members-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #EEEFF1;
+  vertical-align: middle;
+  color: #101112;
+}
+
+.attio-members-table tr:last-child td {
+  border-bottom: none;
+}
+
+.attio-members-table tr:hover td {
+  background: #F6F7F7;
+}
+
+.attio-member-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.attio-member-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #266DF0;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.attio-member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attio-member-name {
+  font-weight: 500;
+  color: #101112;
+}
+
+.attio-member-email {
+  font-size: 11.5px;
+  color: #898A8D;
+}
+
+.attio-role-select {
+  height: 26px;
+  font-size: 12px;
+  padding: 0 20px 0 6px;
+  border: 1px solid #E6E7EA;
+  border-radius: 4px;
+  background-color: #FFFFFF;
+  color: #101112;
+  cursor: pointer;
+  outline: none;
+  font-family: 'Inter', sans-serif;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23898A8D' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  background-size: 12px;
+}
+
+.attio-role-select:focus {
+  border-color: #266DF0;
+}
+
+.attio-btn-icon {
+  background: none;
+  border: none;
+  color: #898A8D;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+
+.attio-btn-icon:hover {
+  color: #DC2626;
+  background: #FEE2E2;
+}
+
+/* Attio Pill */
+.attio-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.attio-pill-blue {
+  background: #EBF2FE;
+  color: #266DF0;
+}
+
+.attio-pill-gray {
+  background: #F6F7F7;
+  color: #505155;
+}
+
+/* Attio Target Workspace Card in Acceptance Screen */
+.attio-invite-target-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #FBFBFB;
+  border: 1px solid #E6E7EA;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.attio-invite-target-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #266DF0;
+  color: #FFFFFF;
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.attio-invite-target-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.attio-invite-target-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #101112;
+}
+
+.attio-invite-target-slug {
+  font-size: 12px;
+  color: #898A8D;
+}
+
+/* ==========================================================
    TOAST NOTIFICATIONS
    ========================================================== */
 .toast-container {
