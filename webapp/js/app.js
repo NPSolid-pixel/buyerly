@@ -642,7 +642,10 @@
   }
 
   window.toggleWorkspaceDropdown = function (event) {
-    if (event) event.stopPropagation();
+    if (event) {
+      if (typeof event.stopPropagation === 'function') event.stopPropagation();
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+    }
     const dropdown = document.getElementById('workspaceDropdown');
     if (!dropdown) return;
     const isShowing = dropdown.classList.contains('show');
@@ -7425,10 +7428,13 @@
     return validation;
   }
 
+  let ruleBuilderPreviewInitialized = false;
   function setupRuleBuilderPreview() {
+    if (ruleBuilderPreviewInitialized) return;
     const preview = document.getElementById('rulePlainPreview');
     if (!preview || preview.dataset.bound === 'true') return;
     preview.dataset.bound = 'true';
+    ruleBuilderPreviewInitialized = true;
 
     const builder = document.getElementById('modalEditLimits');
     builder?.addEventListener('input', event => {
@@ -7463,7 +7469,11 @@
     renderRuleDraftSummary();
   }
 
+  let settingsChipsInitialized = false;
   function setupSettingsChips() {
+    if (settingsChipsInitialized) return;
+    settingsChipsInitialized = true;
+
     document.querySelectorAll('#cooldownChipGroup .chip-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         haptic('selection');
@@ -7508,7 +7518,11 @@
     });
   }
 
+  let logicToggleInitialized = false;
   function setupLogicToggle() {
+    if (logicToggleInitialized) return;
+    logicToggleInitialized = true;
+
     document.querySelectorAll('#logicToggleGroup .chip-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         haptic('selection');
@@ -10585,7 +10599,11 @@
     renderQuickSearchResults('');
   };
 
+  let quickSearchListenersInitialized = false;
   function setupQuickSearchListeners() {
+    if (quickSearchListenersInitialized) return;
+    quickSearchListenersInitialized = true;
+
     const input = document.getElementById('quickSearchInput');
     const clearBtn = document.getElementById('quickSearchClearBtn');
 
@@ -11261,7 +11279,11 @@
   window.submitLogin = window.submitOnboardingSignIn;
   window.toggleLoginPassword = window.toggleOnboardingSignInPassword;
 
+  let modalListenersInitialized = false;
   function setupModalListeners() {
+    if (modalListenersInitialized) return;
+    modalListenersInitialized = true;
+
     // Close modals on Escape key or return from Rule Record page
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -11284,7 +11306,11 @@
     });
   }
 
+  let sidebarListenersInitialized = false;
   function setupSidebarListeners() {
+    if (sidebarListenersInitialized) return;
+    sidebarListenersInitialized = true;
+
     const mainSidebar = document.getElementById('mainSidebar');
     const collapseSidebarBtn = document.getElementById('collapseSidebarBtn');
     const expandSidebarBtn = document.getElementById('expandSidebarBtn');
@@ -11400,12 +11426,10 @@
       }
     });
 
-    if (workspaceBtn && workspaceDropdown) {
-      workspaceBtn.addEventListener('click', (e) => {
-        window.toggleWorkspaceDropdown(e);
-      });
+    if (workspaceDropdown) {
       document.addEventListener('click', (e) => {
-        if (!workspaceDropdown.contains(e.target) && !workspaceBtn.contains(e.target)) {
+        const btn = document.getElementById('workspaceBtn');
+        if (!workspaceDropdown.contains(e.target) && (!btn || !btn.contains(e.target))) {
           workspaceDropdown.classList.remove('show');
         }
       });
