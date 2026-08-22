@@ -15,16 +15,18 @@ from database.models import (
 )
 
 
+from tests.test_db_helper import create_test_engine, init_test_db
+
+
 class TestRuleExamples(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = create_test_engine()
         self.sessions = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
             expire_on_commit=False,
         )
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        await init_test_db(self.engine)
 
     async def asyncTearDown(self):
         await self.engine.dispose()

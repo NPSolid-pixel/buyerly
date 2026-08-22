@@ -2,21 +2,35 @@ name: CI/CD & Auto-Deploy
 
 on:
   push:
-    branches:
-      - main
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: buyerly-production
-  cancel-in-progress: false
+  group: buyerly-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     name: Run Unit & Integration Tests
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: buyerly
+          POSTGRES_PASSWORD: buyerly_secret
+          POSTGRES_DB: buyerly_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout Code
@@ -34,13 +48,16 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Test Suite
+        env:
+          DATABASE_URL: postgresql+asyncpg://buyerly:buyerly_secret@localhost:5432/buyerly_test
+          TEST_DATABASE_URL: postgresql+asyncpg://buyerly:buyerly_secret@localhost:5432/buyerly_test
         run: |
           python -m unittest discover tests -v
 
   deploy:
     name: Deploy to Production VPS
     needs: test
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production

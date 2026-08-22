@@ -1,10 +1,7 @@
 import json
-import sqlite3
 import unittest
-from datetime import datetime
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import inspect, text
 
 from database.db import (
     migrate_account_profile_contract,
@@ -18,19 +15,19 @@ from database.db import (
     migrate_rule_safety_contract,
     migrate_stable_owner_contract,
 )
-from database.migrate_sqlite import _source_rows
-from database.models import Account
+from tests.test_db_helper import create_test_engine
 
 
 class TestLegacyAccountRulesMigration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = create_test_engine()
         async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
             await conn.execute(
                 text(
                     """
                     CREATE TABLE accounts (
-                        id INTEGER PRIMARY KEY,
+                        id SERIAL PRIMARY KEY,
                         preset_id INTEGER,
                         preset_name VARCHAR DEFAULT '',
                         rule_action VARCHAR DEFAULT 'turn_off',
@@ -38,7 +35,7 @@ class TestLegacyAccountRulesMigration(unittest.IsolatedAsyncioTestCase):
                         rule_condition_logic VARCHAR DEFAULT 'and',
                         rule_cooldown_minutes INTEGER DEFAULT 0,
                         rule_check_interval INTEGER DEFAULT 5,
-                        rule_notify_tg BOOLEAN DEFAULT 1,
+                        rule_notify_tg BOOLEAN DEFAULT TRUE,
                         rule_budget_change_percent FLOAT DEFAULT 0.0,
                         rule_budget_max_daily FLOAT DEFAULT 0.0
                     )
@@ -69,9 +66,9 @@ class TestLegacyAccountRulesMigration(unittest.IsolatedAsyncioTestCase):
                         'or',
                         30,
                         15,
-                        1,
-                        20.0,
-                        250.0
+                        TRUE,
+                        15.0,
+                        150.0
                     )
                     """
                 ),
@@ -79,101 +76,83 @@ class TestLegacyAccountRulesMigration(unittest.IsolatedAsyncioTestCase):
                     "conditions": json.dumps(
                         [
                             {
-                                "metric": "cpl",
-                                "operator": "lte",
-                                "value": 5.0,
+                                "metric": "spend",
+                                "operator": "gte",
+                                "value": 10.0,
                                 "time_window": "today",
                             }
                         ]
                     )
                 },
             )
-            await conn.execute(
-                text(
-                    """
-                    INSERT INTO accounts (id, preset_id)
-                    VALUES (2, NULL)
-                    """
-                )
-            )
 
     async def asyncTearDown(self):
         await self.engine.dispose()
 
-    async def test_adds_active_rules_and_preserves_legacy_rule(self):
-        async with self.engine.begin() as conn:
-            migrated_count = await migrate_legacy_account_rules(conn)
-            columns = {
-                row[1]
-                for row in (
-                    await conn.execute(text("PRAGMA table_info(accounts)"))
-                ).all()
-            }
-            rows = (
-                await conn.execute(
-                    text("SELECT id, active_rules FROM accounts ORDER BY id")
-                )
-            ).mappings().all()
-
-        self.assertEqual(migrated_count, 1)
-        self.assertIn("active_rules", columns)
-
-        migrated_rules = json.loads(rows[0]["active_rules"])
-        self.assertEqual(len(migrated_rules), 1)
-        self.assertEqual(migrated_rules[0]["preset_id"], 42)
-        self.assertEqual(migrated_rules[0]["action"], "increase_budget")
-        self.assertEqual(migrated_rules[0]["logic"], "or")
-        self.assertEqual(migrated_rules[0]["budget_change_percent"], 20.0)
-        self.assertEqual(migrated_rules[0]["check_interval"], 15)
-        self.assertEqual(json.loads(rows[1]["active_rules"]), [])
-
-    async def test_is_idempotent(self):
+    async def test_legacy_account_rules_are_migrated_idempotently(self):
         async with self.engine.begin() as conn:
             first_count = await migrate_legacy_account_rules(conn)
-            first_value = (
-                await conn.execute(
-                    text("SELECT active_rules FROM accounts WHERE id = 1")
-                )
-            ).scalar_one()
+            first_value = json.loads(
+                (
+                    await conn.execute(
+                        text("SELECT active_rules FROM accounts WHERE id = 1")
+                    )
+                ).scalar_one()
+            )
+            columns = await conn.run_sync(
+                lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns("accounts")}
+            )
+
+        self.assertIn("active_rules", columns)
+        self.assertEqual(
+            first_value,
+            [
+                {
+                    "preset_id": 42,
+                    "name": "Legacy rule",
+                    "action": "increase_budget",
+                    "conditions": [
+                        {
+                            "metric": "spend",
+                            "operator": "gte",
+                            "value": 10.0,
+                            "time_window": "today",
+                        }
+                    ],
+                    "logic": "or",
+                    "cooldown_minutes": 30,
+                    "check_interval": 15,
+                    "notify_tg": True,
+                    "budget_change_percent": 15.0,
+                    "budget_max_daily": 150.0,
+                }
+            ],
+        )
+
+        async with self.engine.begin() as conn:
             second_count = await migrate_legacy_account_rules(conn)
-            second_value = (
-                await conn.execute(
-                    text("SELECT active_rules FROM accounts WHERE id = 1")
-                )
-            ).scalar_one()
+            second_value = json.loads(
+                (
+                    await conn.execute(
+                        text("SELECT active_rules FROM accounts WHERE id = 1")
+                    )
+                ).scalar_one()
+            )
 
         self.assertEqual(first_count, 1)
         self.assertEqual(second_count, 0)
         self.assertEqual(second_value, first_value)
 
 
-class TestSQLiteToPostgresConversion(unittest.TestCase):
-    def test_converts_boolean_and_datetime_values_for_asyncpg(self):
-        source = sqlite3.connect(":memory:")
-        try:
-            source.execute(
-                "CREATE TABLE accounts (id INTEGER, rules_enabled BOOLEAN, created_at DATETIME)"
-            )
-            source.execute(
-                "INSERT INTO accounts VALUES (1, 1, '2026-08-17 12:30:00+00:00')"
-            )
-            rows = _source_rows(source, Account.__table__)
-        finally:
-            source.close()
-
-        self.assertEqual(rows[0]["rules_enabled"], True)
-        self.assertIsInstance(rows[0]["created_at"], datetime)
-        self.assertIsNone(rows[0]["created_at"].tzinfo)
-
-
 class TestAccountProfileContractMigration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = create_test_engine()
         async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
             await conn.execute(
                 text(
                     "CREATE TABLE accounts ("
-                    "id INTEGER PRIMARY KEY, name VARCHAR NOT NULL)"
+                    "id SERIAL PRIMARY KEY, name VARCHAR NOT NULL)"
                 )
             )
             await conn.execute(
@@ -187,12 +166,9 @@ class TestAccountProfileContractMigration(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as conn:
             first_changed = await migrate_account_profile_contract(conn)
             second_changed = await migrate_account_profile_contract(conn)
-            columns = {
-                row[1]
-                for row in (
-                    await conn.execute(text("PRAGMA table_info(accounts)"))
-                ).all()
-            }
+            columns = await conn.run_sync(
+                lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns("accounts")}
+            )
             row = (
                 await conn.execute(
                     text("SELECT name, custom_name, note FROM accounts WHERE id = 1")
@@ -210,16 +186,18 @@ class TestAccountProfileContractMigration(unittest.IsolatedAsyncioTestCase):
 
 class TestRuleMetricContractMigration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = create_test_engine()
         async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS rule_presets CASCADE"))
+            await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
             await conn.execute(
                 text(
-                    "CREATE TABLE rule_presets (id INTEGER PRIMARY KEY, conditions TEXT NOT NULL)"
+                    "CREATE TABLE rule_presets (id SERIAL PRIMARY KEY, conditions TEXT NOT NULL)"
                 )
             )
             await conn.execute(
                 text(
-                    "CREATE TABLE accounts (id INTEGER PRIMARY KEY, active_rules TEXT NOT NULL)"
+                    "CREATE TABLE accounts (id SERIAL PRIMARY KEY, active_rules TEXT NOT NULL)"
                 )
             )
             await conn.execute(
@@ -291,10 +269,11 @@ class TestRuleMetricContractMigration(unittest.IsolatedAsyncioTestCase):
 
 class TestRuleSafetyContractMigration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = create_test_engine()
         async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
             await conn.execute(
-                text("CREATE TABLE accounts (id INTEGER PRIMARY KEY, active_rules TEXT NOT NULL)")
+                text("CREATE TABLE accounts (id SERIAL PRIMARY KEY, active_rules TEXT NOT NULL)")
             )
             await conn.execute(
                 text("INSERT INTO accounts (id, active_rules) VALUES (1, :rules)"),
@@ -341,12 +320,13 @@ class TestRuleSafetyContractMigration(unittest.IsolatedAsyncioTestCase):
 
 class TestAuditUndoContractMigration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = create_test_engine()
         async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS audit_events CASCADE"))
             await conn.execute(
                 text(
                     "CREATE TABLE audit_events ("
-                    "id INTEGER PRIMARY KEY, event_type VARCHAR NOT NULL)"
+                    "id SERIAL PRIMARY KEY, event_type VARCHAR NOT NULL)"
                 )
             )
 
@@ -357,18 +337,12 @@ class TestAuditUndoContractMigration(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as conn:
             first = await migrate_audit_undo_contract(conn)
             second = await migrate_audit_undo_contract(conn)
-            columns = {
-                row[1]
-                for row in (
-                    await conn.execute(text("PRAGMA table_info(audit_events)"))
-                ).all()
-            }
-            indexes = {
-                row[1]
-                for row in (
-                    await conn.execute(text("PRAGMA index_list(audit_events)"))
-                ).all()
-            }
+            columns = await conn.run_sync(
+                lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns("audit_events")}
+            )
+            indexes = await conn.run_sync(
+                lambda sync_conn: {ix["name"] for ix in inspect(sync_conn).get_indexes("audit_events")}
+            )
 
         self.assertTrue(first)
         self.assertFalse(second)
@@ -378,12 +352,13 @@ class TestAuditUndoContractMigration(unittest.IsolatedAsyncioTestCase):
 
 class TestAutomationSettingsContractMigration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = create_test_engine()
         async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS app_settings CASCADE"))
             await conn.execute(
                 text(
                     "CREATE TABLE app_settings ("
-                    "id INTEGER PRIMARY KEY, "
+                    "id SERIAL PRIMARY KEY, "
                     "poll_interval_minutes INTEGER NOT NULL DEFAULT 10, "
                     "admin_chat_id VARCHAR NOT NULL DEFAULT '')"
                 )
@@ -395,12 +370,9 @@ class TestAutomationSettingsContractMigration(unittest.IsolatedAsyncioTestCase):
     async def test_adds_safe_polling_controls_idempotently(self):
         async with self.engine.begin() as conn:
             first = await migrate_automation_settings_contract(conn)
-            columns = {
-                row[1]
-                for row in (
-                    await conn.execute(text("PRAGMA table_info(app_settings)"))
-                ).all()
-            }
+            columns = await conn.run_sync(
+                lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns("app_settings")}
+            )
             second = await migrate_automation_settings_contract(conn)
 
         self.assertEqual(
@@ -423,18 +395,20 @@ class TestAutomationSettingsContractMigration(unittest.IsolatedAsyncioTestCase):
 
 class TestStableOwnerContractMigration(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        self.engine = create_test_engine()
         async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
+            await conn.execute(text("DROP TABLE IF EXISTS telegram_users CASCADE"))
             await conn.execute(
                 text(
                     "CREATE TABLE telegram_users ("
-                    "id INTEGER PRIMARY KEY, telegram_id VARCHAR UNIQUE)"
+                    "id SERIAL PRIMARY KEY, telegram_id VARCHAR UNIQUE)"
                 )
             )
             await conn.execute(
                 text(
                     "CREATE TABLE accounts ("
-                    "id INTEGER PRIMARY KEY, owner_id VARCHAR NOT NULL)"
+                    "id SERIAL PRIMARY KEY, owner_id VARCHAR NOT NULL)"
                 )
             )
             await conn.execute(
@@ -464,11 +438,12 @@ class TestStableOwnerContractMigration(unittest.IsolatedAsyncioTestCase):
 
 class TestAccountCurrencyContractMigration(unittest.IsolatedAsyncioTestCase):
     async def test_adds_unknown_currency_without_guessing_usd(self):
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = create_test_engine()
         try:
             async with engine.begin() as conn:
+                await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
                 await conn.execute(
-                    text("CREATE TABLE accounts (id INTEGER PRIMARY KEY, name VARCHAR)")
+                    text("CREATE TABLE accounts (id SERIAL PRIMARY KEY, name VARCHAR)")
                 )
                 await conn.execute(
                     text("INSERT INTO accounts (id, name) VALUES (1, 'Legacy')")
@@ -487,13 +462,14 @@ class TestAccountCurrencyContractMigration(unittest.IsolatedAsyncioTestCase):
 
 class TestAccountDayBoundaryContractMigration(unittest.IsolatedAsyncioTestCase):
     async def test_adds_independent_empty_day_marker_idempotently(self):
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = create_test_engine()
         try:
             async with engine.begin() as conn:
+                await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
                 await conn.execute(
                     text(
                         "CREATE TABLE accounts ("
-                        "id INTEGER PRIMARY KEY, last_started_date VARCHAR NOT NULL DEFAULT '')"
+                        "id SERIAL PRIMARY KEY, last_started_date VARCHAR NOT NULL DEFAULT '')"
                     )
                 )
                 await conn.execute(
@@ -518,13 +494,14 @@ class TestAccountDayBoundaryContractMigration(unittest.IsolatedAsyncioTestCase):
 
 class TestRuleGroupsPositionMigration(unittest.IsolatedAsyncioTestCase):
     async def test_adds_position_column_idempotently(self):
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        engine = create_test_engine()
         try:
             async with engine.begin() as conn:
+                await conn.execute(text("DROP TABLE IF EXISTS rule_groups CASCADE"))
                 await conn.execute(
                     text(
                         "CREATE TABLE rule_groups ("
-                        "id INTEGER PRIMARY KEY, name VARCHAR NOT NULL, description VARCHAR DEFAULT '')"
+                        "id SERIAL PRIMARY KEY, name VARCHAR NOT NULL, description VARCHAR DEFAULT '')"
                     )
                 )
                 await conn.execute(

@@ -99,14 +99,15 @@ class MockMetaClient(MetaClient):
         return True
 
 
+from tests.test_db_helper import create_test_engine, init_test_db
+
+
 class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
-        self.test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+        self.test_engine = create_test_engine()
         self.test_session_maker = async_sessionmaker(self.test_engine, class_=AsyncSession, expire_on_commit=False)
-        
-        async with self.test_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        await init_test_db(self.test_engine)
 
         import scheduler.worker as sw
         sw.async_session_maker = self.test_session_maker

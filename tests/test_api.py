@@ -29,24 +29,25 @@ from database.models import (
     RulePreset,
     SummarySnapshot,
     AnalyticsViewPreference,
+    MetaConnection,
     StoppedAdSet,
     TelegramUser,
 )
 
 
-def generate_valid_telegram_init_data(
-    bot_token: str,
-    user_dict: dict,
-    *,
-    auth_date: int = None,
-) -> str:
+from tests.test_db_helper import create_test_engine, init_test_db
+
+
+def generate_valid_telegram_init_data(bot_token: str, user_dict: dict, auth_date: int = None) -> str:
+    if auth_date is None:
+        auth_date = int(time.time())
+    user_str = json.dumps(user_dict, separators=(",", ":"), ensure_ascii=False)
     params = {
-        "auth_date": str(int(time.time()) if auth_date is None else auth_date),
-        "query_id": "AAHdF6IQAAAAAN0XohD9KkG4",
-        "user": json.dumps(user_dict, separators=(',', ':'))
+        "auth_date": str(auth_date),
+        "query_id": "AAHdF6IQAAAAAN0XohDhrOrc",
+        "user": user_str
     }
-    data_check_list = [f"{k}={v}" for k, v in sorted(params.items())]
-    data_check_string = "\n".join(data_check_list)
+    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(params.items()))
     secret_key = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
     hash_val = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
     params["hash"] = hash_val
@@ -57,11 +58,9 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         api_routes_module._summary_cache.clear()
-        self.test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+        self.test_engine = create_test_engine()
         self.test_session_maker = async_sessionmaker(self.test_engine, class_=AsyncSession, expire_on_commit=False)
-
-        async with self.test_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        await init_test_db(self.test_engine)
 
         # Patch session maker in modules
         api_routes_module.async_session_maker = self.test_session_maker
@@ -485,13 +484,22 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     select(TelegramUser).where(TelegramUser.telegram_id == "8948797431")
                 )
             ).scalar_one()
+            conn_obj = MetaConnection(
+                owner_id="8948797431",
+                owner_user_id=buyer.id,
+                provider_user_id="provider_nick_1",
+                access_token_encrypted="encrypted_token",
+                status="active",
+            )
+            session.add(conn_obj)
+            await session.flush()
             account = (
                 await session.execute(
                     select(Account).where(Account.account_id == "act_1018756607700064")
                 )
             ).scalar_one()
             account.owner_user_id = buyer.id
-            account.meta_connection_id = 77
+            account.meta_connection_id = conn_obj.id
             session.add(
                 SummarySnapshot(
                     owner_id="8948797431",
@@ -1013,7 +1021,21 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     select(Account).where(Account.account_id == account_id)
                 )
             ).scalar_one()
-            existing.meta_connection_id = 77
+            buyer = (
+                await session.execute(
+                    select(TelegramUser).where(TelegramUser.telegram_id == "8948797431")
+                )
+            ).scalar_one()
+            conn_obj = MetaConnection(
+                owner_id="8948797431",
+                owner_user_id=buyer.id,
+                provider_user_id="provider_nick_reimport",
+                access_token_encrypted="encrypted_token",
+                status="active",
+            )
+            session.add(conn_obj)
+            await session.flush()
+            existing.meta_connection_id = conn_obj.id
             await session.commit()
 
         meta_account = {
