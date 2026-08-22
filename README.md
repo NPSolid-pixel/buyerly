@@ -15,10 +15,20 @@ Buyerly — сервис контроля, мониторинга и автом�
 - Пользовательское drag-and-drop переупорядочивание списков и групп кабинетов.
 - Плавающая панель массовых действий (Floating bulk action bar) при выборе нескольких кабинетов.
 
-### Мульти-воркспейсы (Workspaces)
-- Изолированные рабочие пространства с ролями пользователей (owner, admin, buyer, viewer).
-- Семантическая slug-маршрутизация URL (например, `/<workspace-slug>/lists/all`, `/<workspace-slug>/groups/<group-id>`, `/<workspace-slug>/rules`, `/<workspace-slug>/summary`, `/<workspace-slug>/logs`, `/<workspace-slug>/settings`).
-- Страница создания воркспейса (`/workspace/new`) с загрузкой логотипа (drag-and-drop / выбор файла), автогенерацией slug и выпадающим переключателем в сайдбаре.
+### Мульти-воркспейсы (Workspaces) и Команда
+- Изолированные рабочие пространства компаний/команд с гранулярным RBAC (`owner`, `admin`, `buyer`, `viewer`).
+- Строгая изоляция ресурсов: кабинеты, правила, группы, сводки и аудит привязаны к `workspace_id`.
+- Система приглашений (Team Invites): персональные инвайты по email и публичные ссылки с токенами (`/invite/<token>`).
+- Управление командой: назначение ролей, исключение, добровольный выход (`leave`) и передача владения (`transfer-ownership`).
+- Семантическая slug-маршрутизация URL (например, `/<workspace-slug>/lists/all`, `/<workspace-slug>/rules`, `/<workspace-slug>/summary`, `/<workspace-slug>/logs`, `/<workspace-slug>/settings`).
+- Интерактивное создание воркспейса (`/workspace/new` и `/welcome/workspace-details`) с проверкой доступности слага в реальном времени, загрузкой логотипа и Live Preview.
+- Выпадающий Workspace Switcher в сайдбаре с бейджами, ролями и переключением в 1 клик.
+
+### Аутентификация, Онбординг и Почта (Resend)
+- 5-шаговый онбординг в эталонном стиле Attio CRM: вход по email/паролю, ввод временного кода, персональные данные (имя/фамилия/аватар), создание воркспейса и приглашение команды.
+- Dual-Channel Auth: вход по постоянному паролю (bcrypt), одноразовому 6-значному OTP-паролю на email (Resend) и через Telegram Mini App (`initData`).
+- Интеграция с официальным REST API Resend для транзакционной отправки кодов верификации и приглашений в команду с адаптивными HTML-шаблонами.
+- Защита от брутфорса OTP (максимум 5 попыток) и sliding-window rate limiting.
 
 ### Управление кабинетами и подключение
 - Массовое добавление кабинетов из текстового экспорта Meta Business Manager.
@@ -71,7 +81,7 @@ flowchart LR
 
 ```bash
 cp .env.example .env
-# Заполните BOT_TOKEN, ADMIN_CHAT_ID, POSTGRES_PASSWORD и WEBAPP_URL
+# Заполните BOT_TOKEN, ADMIN_CHAT_ID, POSTGRES_PASSWORD, WEBAPP_URL, RESEND_API_KEY и EMAIL_FROM
 docker compose up -d --build
 curl -fsS http://127.0.0.1:8080/health/ready
 ```
@@ -114,7 +124,7 @@ nix-shell -p "python3.withPackages(ps: with ps; [ sqlalchemy httpx aiogram crypt
 ```text
 api/                 FastAPI приложение, эндпоинты аутентификации, воркспейсов, кабинетов, правил и сводок
 bot/                 Telegram-бот (aiogram 3), обработчики команд и сервис нотификаций
-core/                Конфигурация, аудит, валюты, метрики, часовые пояса и симметричное шифрование
+core/                Конфигурация, аудит, валюты, метрики, часовые пояса, почта Resend и симметричное шифрование
 database/            Модели SQLAlchemy, сессии, подключение к PostgreSQL и сиды данных
 docs/                Архитектурная, продуктовая и юридическая документация проекта
 meta_api/            Клиент Meta Marketing API, OAuth и парсинг квот
@@ -128,6 +138,7 @@ webapp/              Фронтенд SPA в стиле Attio CRM, стили, �
 
 ## Документация
 
+- [Воркспейсы, авторизация, инвайты и Resend](docs/WORKSPACES_AUTH_AND_INVITES.md)
 - [Архитектура системы](docs/ARCHITECTURE.md)
 - [Справочник HTTP API](docs/API.md)
 - [Развертывание и деплой](docs/DEPLOYMENT.md)
