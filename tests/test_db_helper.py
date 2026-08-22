@@ -20,5 +20,6 @@ def create_test_engine():
 
 async def init_test_db(engine):
     async with engine.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
         await conn.run_sync(Base.metadata.create_all)
