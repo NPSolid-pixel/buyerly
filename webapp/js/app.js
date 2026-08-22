@@ -310,6 +310,32 @@
     if (parts[0] === 'auth' && (parts[1] === 'join' || parts[1] === 'invite')) {
       return { inviteToken: parts[2] || '', workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
     }
+    if (parts[0] === 'auth') {
+      if (parts[1] === 'sign-in' || parts[1] === 'signin' || parts[1] === 'login') {
+        return { authRoute: 'signin', workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
+      }
+      if (parts[1] === 'temporary-password' || parts[1] === 'verify') {
+        let email = '';
+        if (search) {
+          try {
+            const sp = new URLSearchParams(search);
+            email = sp.get('email') || '';
+          } catch (e) {}
+        }
+        return { authRoute: 'verify', email: email, workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
+      }
+    }
+    if (parts[0] === 'welcome' || parts[0] === 'onboarding') {
+      if (parts[1] === 'personal-details' || parts[1] === 'personal') {
+        return { authRoute: 'personal', workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
+      }
+      if (parts[1] === 'workspace-details' || parts[1] === 'workspace') {
+        return { authRoute: 'workspace', workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
+      }
+    }
+    if (parts[0] === 'sign-in' || parts[0] === 'login') {
+      return { authRoute: 'signin', workspaceSlug: '', tab: 'home', groupFilter: groupFilter };
+    }
 
     // Paths with workspace slug e.g. /buyerly/groups/1 or /buyerly/accounts or /buyerly/facebook-accounts
     if (parts.length >= 2) {
@@ -667,6 +693,12 @@
       wsScreen.classList.remove('hidden');
     }
 
+    try {
+      if (window.location.pathname !== '/welcome/workspace-details') {
+        window.history.pushState(null, '', '/welcome/workspace-details');
+      }
+    } catch (e) {}
+
     const nameInput = document.getElementById('createWsNameInput');
     const slugInput = document.getElementById('createWsSlugInput');
     if (nameInput) nameInput.value = '';
@@ -732,6 +764,14 @@
     if (appEl) {
       appEl.style.display = 'flex';
     }
+    try {
+      const targetSlug = state.activeWorkspace?.slug || '';
+      if (targetSlug) {
+        window.history.replaceState(null, '', '/' + targetSlug);
+      } else {
+        window.history.replaceState(null, '', '/');
+      }
+    } catch (e) {}
     if (state.activeTab) {
       window.switchTab(state.activeTab, { historyMode: 'none', haptic: false });
     }
@@ -10632,7 +10672,12 @@
       if (loginScreen) {
         loginScreen.style.display = 'flex';
         loginScreen.classList.remove('hidden');
-        window.showOnboardingStep('signin');
+        if (parsedLocation.authRoute === 'verify') {
+          state.onboardingEmail = parsedLocation.email || '';
+          window.showOnboardingStep('verify');
+        } else {
+          window.showOnboardingStep('signin');
+        }
       }
       return;
     }
@@ -10803,6 +10848,12 @@
       }
       if (signOutDot) signOutDot.style.display = 'none';
       if (btnSignOut) btnSignOut.style.display = 'none';
+
+      try {
+        if (window.location.pathname !== '/auth/sign-in' && !window.location.pathname.startsWith('/invite') && !window.location.pathname.startsWith('/auth/join')) {
+          window.history.replaceState(null, '', '/auth/sign-in');
+        }
+      } catch (e) {}
     } else if (step === 'verify') {
       if (verifyStep) {
         verifyStep.classList.remove('hidden');
@@ -10814,6 +10865,13 @@
       }
       if (signOutDot) signOutDot.style.display = 'none';
       if (btnSignOut) btnSignOut.style.display = 'none';
+
+      try {
+        const verifyUrl = state.onboardingEmail ? ('/auth/temporary-password?email=' + encodeURIComponent(state.onboardingEmail)) : '/auth/temporary-password';
+        if (window.location.pathname + window.location.search !== verifyUrl) {
+          window.history.pushState(null, '', verifyUrl);
+        }
+      } catch (e) {}
     } else if (step === 'personal') {
       if (personalStep) {
         personalStep.classList.remove('hidden');
@@ -10830,6 +10888,12 @@
       }
       if (signOutDot) signOutDot.style.display = 'inline';
       if (btnSignOut) btnSignOut.style.display = 'inline';
+
+      try {
+        if (window.location.pathname !== '/welcome/personal-details') {
+          window.history.replaceState(null, '', '/welcome/personal-details');
+        }
+      } catch (e) {}
     }
   };
 
@@ -11300,15 +11364,31 @@
     setWebAuthToken('');
     showToast('Вы вышли из системы', 'info');
     setTimeout(() => {
-      try { window.history.replaceState({}, '', '/sign-in'); } catch (e) {}
+      try { window.history.replaceState({}, '', '/auth/sign-in'); } catch (e) {}
       window.location.reload();
     }, 300);
   };
 
   window.addEventListener('popstate', (event) => {
-    if (!state.user) return;
-    const stateObj = event?.state || {};
     const parsed = parsePathLocation();
+    if (!state.user) {
+      if (parsed.authRoute === 'verify') {
+        state.onboardingEmail = parsed.email || '';
+        window.showOnboardingStep('verify');
+      } else {
+        window.showOnboardingStep('signin');
+      }
+      return;
+    }
+    if (state.user && state.user.onboarding_completed === false) {
+      if (parsed.authRoute === 'personal') {
+        window.showOnboardingStep('personal');
+      } else if (parsed.authRoute === 'workspace') {
+        window.openCreateWorkspacePage();
+      }
+      return;
+    }
+    const stateObj = event?.state || {};
     const groupFilter = stateObj.groupFilter !== undefined ? stateObj.groupFilter : parsed.groupFilter;
     const ruleId = stateObj.ruleId !== undefined ? stateObj.ruleId : parsed.ruleId;
 
