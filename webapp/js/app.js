@@ -756,13 +756,19 @@
 
   window.closeCreateWorkspacePage = function () {
     const wsScreen = document.getElementById('createWorkspaceScreen');
+    const loginScreen = document.getElementById('loginScreen');
     const appEl = document.getElementById('app');
     if (wsScreen) {
       wsScreen.style.display = 'none';
       wsScreen.classList.add('hidden');
     }
+    if (loginScreen) {
+      loginScreen.style.display = 'none';
+      loginScreen.classList.add('hidden');
+    }
     if (appEl) {
-      appEl.style.display = 'flex';
+      appEl.style.display = '';
+      appEl.classList.remove('hidden');
     }
     try {
       const targetSlug = state.activeWorkspace?.slug || '';
@@ -798,14 +804,18 @@
         })
       });
 
-      window.closeCreateWorkspacePage();
+      if (state.user) {
+        state.user.onboarding_completed = true;
+        state.user.onboarding_step = 'completed';
+      }
       state.activeWorkspace = created;
+      window.closeCreateWorkspacePage();
       const workspacesList = await apiRequest('/api/workspaces');
       state.workspaces = workspacesList;
       renderWorkspacesDropdown();
-      syncBrowserRoute('home', 'push');
+      syncBrowserRoute('home', 'replace');
       window.switchTab('home');
-      showToast(`Воркспейс "${created.name}" создан!`);
+      showToast(`Воркспейс "${created.name}" готов!`, 'success');
 
       // Refresh accounts & rules (will be empty in new workspace)
       await Promise.allSettled([
@@ -10687,8 +10697,10 @@
       const user = await apiRequest('/api/me');
       state.user = user;
       
-      // If user has not completed onboarding, route them to their onboarding step
-      if (user && user.onboarding_completed === false) {
+      // If user has not completed onboarding and has no workspaces, route them to onboarding
+      const userWorkspaces = user && user.workspaces ? user.workspaces : [];
+      const hasWorkspaces = userWorkspaces.length > 0 || !!user.active_workspace;
+      if (user && user.onboarding_completed === false && !hasWorkspaces) {
         const appEl = document.getElementById('app');
         if (appEl) {
           appEl.style.display = 'none';
@@ -10714,12 +10726,17 @@
         }
       }
 
-      // Hide login screen & reveal app UI
+      // Hide login and workspace creation screens & reveal main app UI
       const loginScreen = document.getElementById('loginScreen');
+      const createWorkspaceScreen = document.getElementById('createWorkspaceScreen');
       const appEl = document.getElementById('app');
       if (loginScreen) {
         loginScreen.style.display = 'none';
         loginScreen.classList.add('hidden');
+      }
+      if (createWorkspaceScreen) {
+        createWorkspaceScreen.style.display = 'none';
+        createWorkspaceScreen.classList.add('hidden');
       }
       if (appEl) {
         // Let responsive CSS choose flex on mobile and grid on desktop.

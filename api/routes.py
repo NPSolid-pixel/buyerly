@@ -1705,6 +1705,14 @@ async def get_me(user: TelegramUser = Depends(get_current_user)):
         db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
         workspaces = await get_user_workspaces_list(session, db_user)
         active_ws = next((w for w in workspaces if w.is_active), workspaces[0] if workspaces else None)
+
+        onboarding_done = bool(getattr(db_user, "onboarding_completed", False))
+        if not onboarding_done and len(workspaces) > 0 and getattr(db_user, "first_name", ""):
+            onboarding_done = True
+            db_user.onboarding_completed = True
+            db_user.onboarding_step = "completed"
+            await session.commit()
+
         return UserProfileResponse(
             telegram_id=db_user.telegram_id,
             username=db_user.username or "",
@@ -1716,7 +1724,7 @@ async def get_me(user: TelegramUser = Depends(get_current_user)):
             role=db_user.role,
             is_approved=db_user.is_approved,
             onboarding_step=getattr(db_user, "onboarding_step", "completed") or "completed",
-            onboarding_completed=bool(getattr(db_user, "onboarding_completed", False)),
+            onboarding_completed=onboarding_done,
             active_workspace=active_ws,
             workspaces=workspaces
         )
@@ -1737,32 +1745,44 @@ async def create_workspace(req: CreateWorkspaceRequest, user: TelegramUser = Dep
     if not name:
         raise HTTPException(status_code=400, detail="Название воркспейса обязательно")
     
-    slug = slugify(req.slug.strip()) if req.slug else slugify(name)
+    raw_slug = slugify(req.slug.strip()) if req.slug else slugify(name)
+    slug = raw_slug or "workspace"
     badge_color = req.badge_color or "#F5A300"
     badge_text = req.badge_text.strip() if req.badge_text else name[:1].upper()
     logo_url = req.logo_url.strip() if req.logo_url else ""
 
     async with async_session_maker() as session:
         existing = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
-        if existing:
-            slug = f"{slug}-{uuid.uuid4().hex[:6]}"
+        if existing and existing.owner_user_id == user.id:
+            # Re-use & update existing workspace owned by user
+            existing.name = name
+            existing.badge_color = badge_color
+            existing.badge_text = badge_text
+            if logo_url:
+                existing.logo_url = logo_url
+            ws = existing
+        else:
+            if existing:
+                slug = f"{slug}-{uuid.uuid4().hex[:6]}"
 
-        ws = Workspace(
-            name=name,
-            slug=slug,
-            badge_text=badge_text,
-            badge_color=badge_color,
-            logo_url=logo_url,
-            owner_user_id=user.id
-        )
-        session.add(ws)
-        await session.flush()
+            ws = Workspace(
+                name=name,
+                slug=slug,
+                badge_text=badge_text,
+                badge_color=badge_color,
+                logo_url=logo_url,
+                owner_user_id=user.id
+            )
+            session.add(ws)
+            await session.flush()
 
-        member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
-        session.add(member)
+            member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
+            session.add(member)
 
         db_user = (await session.execute(select(TelegramUser).where(TelegramUser.id == user.id))).scalar_one()
         db_user.active_workspace_id = ws.id
+        db_user.onboarding_completed = True
+        db_user.onboarding_step = "completed"
         await session.commit()
 
         return WorkspaceItem(
