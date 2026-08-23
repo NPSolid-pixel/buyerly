@@ -190,53 +190,73 @@ class TestMonitoringWorkerTokenErrorHandling(unittest.IsolatedAsyncioTestCase):
         self.session_maker = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
         await init_test_db(self.engine)
 
+        import scheduler.worker as sw
+        import database.db as db
+        self.orig_sw_session_maker = getattr(sw, "async_session_maker", None)
+        self.orig_db_session_maker = getattr(db, "async_session_maker", None)
+        sw.async_session_maker = self.session_maker
+        db.async_session_maker = self.session_maker
+
         async with self.session_maker() as session:
             user = User(
-                id=1,
                 username="buyer1",
                 telegram_id="999888",
                 role="admin",
+                is_approved=True,
             )
+            session.add(user)
+            await session.flush()
+
             workspace = Workspace(
-                id=1,
                 name="Main Workspace",
                 slug="main",
-                owner_user_id=1,
+                owner_user_id=user.id,
             )
+            session.add(workspace)
+            await session.flush()
+
+            session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="owner"))
+            user.active_workspace_id = workspace.id
+
             conn = MetaConnection(
-                id=10,
-                owner_user_id=1,
-                workspace_id=1,
+                owner_user_id=user.id,
+                workspace_id=workspace.id,
                 provider_user_id="fb_user_1",
                 provider_user_name="Facebook User",
                 access_token_encrypted="gAAAAABtest...",
                 status="active",
             )
+            session.add(conn)
+            await session.flush()
+
             account = Account(
-                id=1,
                 account_id="act_777888999",
                 name="Scale Campaign 1",
-                owner_user_id=1,
-                workspace_id=1,
-                meta_connection_id=10,
+                owner_user_id=user.id,
+                workspace_id=workspace.id,
+                meta_connection_id=conn.id,
                 is_active=True,
                 rules_enabled=True,
                 account_status=1,
                 currency="USD",
                 timezone_name="UTC",
             )
-            session.add_all([user, workspace, conn, account])
+            session.add(account)
             await session.commit()
+            self.account_id = account.id
+            self.conn_id = conn.id
 
     async def asyncTearDown(self):
+        import scheduler.worker as sw
+        import database.db as db
+        if self.orig_sw_session_maker:
+            sw.async_session_maker = self.orig_sw_session_maker
+        if self.orig_db_session_maker:
+            db.async_session_maker = self.orig_db_session_maker
         await self.engine.dispose()
 
     async def test_worker_handles_checkpoint_subcode_in_snapshot(self):
         """Воркер при получении subcode 459 деактивирует кабинет, обновляет MetaConnection и сохраняет AuditEvent."""
-        from database import db
-        orig_session_maker = db.async_session_maker
-        db.async_session_maker = self.session_maker
-
         mock_meta = MagicMock()
         mock_error = MetaTokenAuthError(
             "Token expired or invalid: Checkpoint",
@@ -255,35 +275,32 @@ class TestMonitoringWorkerTokenErrorHandling(unittest.IsolatedAsyncioTestCase):
         async def mock_notifier(**kwargs):
             sent_alerts.append(kwargs)
 
-        try:
-            worker = MonitoringWorker(meta_client=mock_meta, telegram_notifier=mock_notifier)
-            stats = await worker.run_cycle()
+        worker = MonitoringWorker(meta_client=mock_meta, telegram_notifier=mock_notifier)
+        stats = await worker.run_cycle()
 
-            # Проверка доставки алерта
-            self.assertEqual(len(sent_alerts), 1)
-            self.assertEqual(sent_alerts[0]["event_type"], "TOKEN_EXPIRED")
-            self.assertEqual(sent_alerts[0]["subcode"], 459)
-            self.assertIn("Чекпоинт", sent_alerts[0]["subcode_title"])
-            self.assertIn("антидетект", sent_alerts[0]["action_hint"])
+        # Проверка доставки алерта
+        self.assertEqual(len(sent_alerts), 1)
+        self.assertEqual(sent_alerts[0]["event_type"], "TOKEN_EXPIRED")
+        self.assertEqual(sent_alerts[0]["subcode"], 459)
+        self.assertIn("Чекпоинт", sent_alerts[0]["subcode_title"])
+        self.assertIn("антидетект", sent_alerts[0]["action_hint"])
 
-            # Проверка состояния БД
-            async with self.session_maker() as session:
-                from sqlalchemy import select
-                acc = (await session.execute(select(Account).where(Account.id == 1))).scalar_one()
-                self.assertFalse(acc.is_active)
+        # Проверка состояния БД
+        async with self.session_maker() as session:
+            from sqlalchemy import select
+            acc = (await session.execute(select(Account).where(Account.id == self.account_id))).scalar_one()
+            self.assertFalse(acc.is_active)
 
-                conn = (await session.execute(select(MetaConnection).where(MetaConnection.id == 10))).scalar_one()
-                self.assertEqual(conn.status, "error")
-                self.assertIn("безопасности", conn.last_error)
+            conn = (await session.execute(select(MetaConnection).where(MetaConnection.id == self.conn_id))).scalar_one()
+            self.assertEqual(conn.status, "error")
+            self.assertIn("безопасности", conn.last_error)
 
-                audit = (await session.execute(select(AuditEvent).where(AuditEvent.account_id == "act_777888999"))).scalar_one()
-                self.assertEqual(audit.event_type, "TOKEN_EXPIRED")
-                self.assertEqual(audit.status, "ERROR")
-                details = audit.details if isinstance(audit.details, dict) else json.loads(audit.details)
-                self.assertEqual(details["error_subcode"], 459)
-                self.assertEqual(details["subcode_key"], "CHECKPOINT")
-        finally:
-            db.async_session_maker = orig_session_maker
+            audit = (await session.execute(select(AuditEvent).where(AuditEvent.account_id == "act_777888999"))).scalar_one()
+            self.assertEqual(audit.event_type, "TOKEN_EXPIRED")
+            self.assertEqual(audit.status, "ERROR")
+            details = audit.details if isinstance(audit.details, dict) else json.loads(audit.details)
+            self.assertEqual(details["error_subcode"], 459)
+            self.assertEqual(details["subcode_key"], "CHECKPOINT")
 
 
 if __name__ == "__main__":
