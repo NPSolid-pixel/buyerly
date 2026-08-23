@@ -57,13 +57,17 @@ class TestBotAccessChecks(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
 
     async def test_owner_and_admin_can_manage_but_other_buyer_cannot(self):
-        account = Account(
-            account_id="act_access_test",
-            name="Access test",
-            access_token="mock",
-            owner_id="owner",
-        )
         async with self.sessions() as session:
+            owner = (await session.execute(select(User).where(User.telegram_id == "owner"))).scalar_one()
+            account = Account(
+                account_id="act_access_test",
+                name="Access test",
+                access_token="mock",
+                owner_user_id=owner.id,
+                workspace_id=owner.active_workspace_id,
+            )
+            session.add(account)
+            await session.commit()
             self.assertTrue(await _can_manage_account(session, "owner", account))
             self.assertTrue(await _can_manage_account(session, "admin-test", account))
             self.assertFalse(await _can_manage_account(session, "other", account))

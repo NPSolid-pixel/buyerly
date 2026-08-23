@@ -271,27 +271,6 @@ async def update_profile(req: UpdateProfileRequest, user: User = Depends(get_cur
             if collision is not None:
                 raise HTTPException(status_code=409, detail="Этот Telegram ID уже используется")
 
-            legacy_owner_id = str(db_user.telegram_id or "")
-            if legacy_owner_id:
-                for model in (
-                    Account,
-                    RulePreset,
-                    RuleGroup,
-                    SummarySnapshot,
-                    AnalyticsViewPreference,
-                    AuditEvent,
-                    AutomationScheduleState,
-                    RuleExecutionState,
-                    ActionUndoState,
-                ):
-                    await session.execute(
-                        update(model)
-                        .where(
-                            model.owner_user_id.is_(None),
-                            model.owner_id == legacy_owner_id,
-                        )
-                        .values(owner_user_id=db_user.id)
-                    )
             db_user.telegram_id = new_telegram_id
         await session.commit()
         return {

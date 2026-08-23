@@ -39,7 +39,9 @@ class AccountItem(BaseModel):
     custom_name: str
     note: str
     connection_type: Literal["facebook_login", "system_user"]
-    owner_id: str
+    owner_user_id: Optional[int] = None
+    workspace_id: Optional[int] = None
+    owner_id: str = ""
     batch_name: str
     timezone_name: str
     currency: str

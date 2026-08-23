@@ -336,16 +336,15 @@ async def process_token_and_save(message: Message, state: FSMContext):
                     existing.access_token = token
                     existing.timezone_name = timezone_name
                     existing.currency = currency
-                    existing.owner_id = owner_id
                     existing.owner_user_id = owner_user.id
                     existing.batch_name = batch_name if batch_name != "-" else ""
                     existing.is_active = True
                 else:
                     new_acc = Account(
+                        workspace_id=owner_user.active_workspace_id,
                         account_id=acc_id,
                         name=display_name,
                         access_token=token,
-                        owner_id=owner_id,
                         owner_user_id=owner_user.id,
                         batch_name=batch_name if batch_name != "-" else "",
                         timezone_name=timezone_name,

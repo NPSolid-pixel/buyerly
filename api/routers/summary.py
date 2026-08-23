@@ -54,9 +54,14 @@ async def get_analytics_view(user: User = Depends(get_current_user)):
         if row is None:
             config = _normalize_summary_view_config({})
         else:
-            try:
-                stored_config = json.loads(row.config or "{}")
-            except (TypeError, json.JSONDecodeError):
+            if isinstance(row.config, dict):
+                stored_config = dict(row.config)
+            elif isinstance(row.config, str):
+                try:
+                    stored_config = json.loads(row.config or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    stored_config = {}
+            else:
                 stored_config = {}
             stored_order = stored_config.get("column_order")
             if (
@@ -91,14 +96,13 @@ async def save_analytics_view(
         ).scalar_one_or_none()
         if row is None:
             row = AnalyticsViewPreference(
-                owner_id=str(user.telegram_id or ""),
                 owner_user_id=user.id,
                 scope=SUMMARY_VIEW_SCOPE,
-                config=json.dumps(config, ensure_ascii=False),
+                config=config,
             )
             session.add(row)
         else:
-            row.config = json.dumps(config, ensure_ascii=False)
+            row.config = config
             row.updated_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(row)
@@ -137,7 +141,6 @@ async def get_summary_report(
         if not force:
             persisted = await _load_persisted_summary(
                 session,
-                owner_id=str(user.telegram_id or ""),
                 owner_user_id=user.id,
                 period=period,
             )
@@ -197,7 +200,6 @@ async def get_summary_report(
             }
             empty_res["snapshot"] = await _persist_summary(
                 session,
-                owner_id=str(user.telegram_id or ""),
                 owner_user_id=user.id,
                 period=period,
                 payload=empty_res,
@@ -518,7 +520,6 @@ async def get_summary_report(
         }
         res_data["snapshot"] = await _persist_summary(
             session,
-            owner_id=str(user.telegram_id or ""),
             owner_user_id=user.id,
             period=period,
             payload=res_data,

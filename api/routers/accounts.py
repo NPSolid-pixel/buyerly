@@ -53,7 +53,6 @@ async def list_accounts(user: User = Depends(get_current_user)):
         group_ids_by_account = await _account_group_ids_by_account(session, user)
         latest_summary = await _load_persisted_summary(
             session,
-            owner_id=str(user.telegram_id or ""),
             owner_user_id=user.id,
             period="today",
         )
@@ -73,7 +72,9 @@ async def list_accounts(user: User = Depends(get_current_user)):
                     connection_type=(
                         "facebook_login" if a.meta_connection_id else "system_user"
                     ),
-                    owner_id=a.owner_id,
+                    owner_user_id=a.owner_user_id,
+                    workspace_id=a.workspace_id,
+                    owner_id="",
                     batch_name=a.batch_name or "",
                     timezone_name=a.timezone_name or "UTC",
                     currency=normalize_currency(a.currency),
@@ -127,7 +128,6 @@ async def create_account_group(
         accounts = await _validate_account_group_members(session, user, payload.account_ids)
         group = AccountGroup(
             workspace_id=ws.id if ws else None,
-            owner_id=str(user.telegram_id or ""),
             owner_user_id=user.id,
             name=name,
             description=payload.description.strip(),
@@ -304,7 +304,6 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
 
     token = payload.access_token.strip()
     batch_name = (payload.batch_name or "-").strip()
-    owner_id = user.telegram_id
 
     added_list = []
     error_list = []
@@ -359,7 +358,6 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                     existing.meta_connection_id = None
                     existing.timezone_name = timezone_name
                     existing.currency = currency
-                    existing.owner_id = owner_id
                     existing.owner_user_id = user.id
                     existing.workspace_id = ws.id if ws else existing.workspace_id
                     existing.batch_name = batch_name if batch_name != "-" else ""
@@ -372,7 +370,6 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                         account_id=acc_id,
                         name=display_name,
                         access_token=token,
-                        owner_id=owner_id,
                         owner_user_id=user.id,
                         batch_name=batch_name if batch_name != "-" else "",
                         timezone_name=timezone_name,

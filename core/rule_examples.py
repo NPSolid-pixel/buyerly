@@ -155,7 +155,6 @@ async def ensure_rule_examples(session, user: User) -> bool:
 
     marker = RuleExamplesBootstrap(
         owner_user_id=user.id,
-        owner_id=str(user.telegram_id or ""),
         version=RULE_EXAMPLES_VERSION,
     )
     session.add(marker)
@@ -169,11 +168,11 @@ async def ensure_rule_examples(session, user: User) -> bool:
     for definition in EXAMPLE_PRESETS:
         validate_runtime_rule(_runtime_payload(definition))
         preset = RulePreset(
-            owner_id=str(user.telegram_id or ""),
+            workspace_id=user.active_workspace_id,
             owner_user_id=user.id,
             name=definition["name"],
             action=definition["action"],
-            conditions=json.dumps(definition["conditions"], ensure_ascii=False),
+            conditions=definition["conditions"],
             condition_logic=definition.get("condition_logic", "and"),
             cooldown_minutes=definition.get("cooldown_minutes", 0),
             check_interval_minutes=definition.get("check_interval_minutes", 5),
@@ -187,7 +186,7 @@ async def ensure_rule_examples(session, user: User) -> bool:
 
     for group_definition in EXAMPLE_GROUPS:
         group = RuleGroup(
-            owner_id=str(user.telegram_id or ""),
+            workspace_id=user.active_workspace_id,
             owner_user_id=user.id,
             name=group_definition["name"],
             description=group_definition["description"],

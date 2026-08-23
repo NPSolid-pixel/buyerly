@@ -42,7 +42,6 @@ class TestRuleExamples(unittest.IsolatedAsyncioTestCase):
                 account_id="act_examples",
                 name="Examples account",
                 access_token="token",
-                owner_id="111",
                 currency="USD",
                 rules_enabled=False,
             )
@@ -74,7 +73,7 @@ class TestRuleExamples(unittest.IsolatedAsyncioTestCase):
                 group_items_count,
                 sum(len(group["preset_keys"]) for group in EXAMPLE_GROUPS),
             )
-            self.assertTrue(all(preset.owner_id == "111" for preset in presets))
+            self.assertTrue(all(preset.owner_user_id == user.id for preset in presets))
             self.assertFalse(account.rules_enabled)
             self.assertEqual(account.active_rules, "[]")
 

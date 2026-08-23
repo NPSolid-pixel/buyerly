@@ -311,7 +311,6 @@ class MonitoringWorker:
 
         state = AutomationScheduleState(
             state_key=state_key,
-            owner_id=str(account.owner_id or ""),
             owner_user_id=account.owner_user_id,
             account_id=str(account.account_id),
             rule_key=rule_key,
@@ -356,7 +355,6 @@ class MonitoringWorker:
         if state is None:
             state = RuleExecutionState(
                 execution_key=execution_key,
-                owner_id=str(account.owner_id or ""),
                 owner_user_id=account.owner_user_id,
                 account_id=str(account.account_id),
                 adset_id=str(evaluation.adset_id),
@@ -375,26 +373,19 @@ class MonitoringWorker:
             if self._state_matches(observed_state, pending_target):
                 state.status = "SUCCESS"
                 state.last_success_at = state.last_attempt_at or now
-                state.details = json.dumps(
-                    {"reconciled_after_restart": True},
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
+                state.details = {"reconciled_after_restart": True}
                 await session.commit()
                 return False, "reconciled", state
             if now - float(state.last_attempt_at or 0.0) < PENDING_RECONCILIATION_SECONDS:
                 await session.commit()
                 return False, "pending", state
             state.status = "ERROR"
-            state.details = json.dumps(
-                {"reason": "stale_pending_not_confirmed"},
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
+            state.details = {"reason": "stale_pending_not_confirmed"}
             await session.commit()
             state = (await session.execute(query.with_for_update())).scalar_one()
 
-        cooldown_seconds = max(0, int(evaluation.cooldown_minutes or 0)) * 60
+        cooldown_minutes = max(0, int(evaluation.cooldown_minutes or 0))
+        cooldown_seconds = cooldown_minutes * 60
         if (
             cooldown_seconds > 0
             and state.last_success_at is not None
@@ -403,14 +394,13 @@ class MonitoringWorker:
             await session.commit()
             return False, "cooldown", state
 
-        state.owner_id = str(account.owner_id or "")
         state.owner_user_id = account.owner_user_id
         state.status = "PENDING"
         state.correlation_id = self._current_cycle_id
         state.last_attempt_at = now
-        state.before_state = json.dumps(observed_state, ensure_ascii=False, separators=(",", ":"))
-        state.after_state = json.dumps(desired_state, ensure_ascii=False, separators=(",", ":"))
-        state.details = "{}"
+        state.before_state = observed_state
+        state.after_state = desired_state
+        state.details = {}
         await session.commit()
         return True, "claimed", state
 
@@ -437,7 +427,6 @@ class MonitoringWorker:
         if state is None:
             state = RuleExecutionState(
                 execution_key=execution_key,
-                owner_id=str(account.owner_id or ""),
                 owner_user_id=account.owner_user_id,
                 account_id=str(account.account_id),
                 adset_id=str(evaluation.adset_id),
@@ -476,7 +465,6 @@ class MonitoringWorker:
         )
         if not is_continuous:
             state.status = "STOP_CONFIRMING"
-            state.owner_id = str(account.owner_id or "")
             state.owner_user_id = account.owner_user_id
             state.correlation_id = self._current_cycle_id
             state.last_attempt_at = now
@@ -703,9 +691,7 @@ class MonitoringWorker:
             for account in accounts:
                 account_id = str(account.account_id)
                 account_name = str(account.name)
-                notification_target = (
-                    owner_chat_ids.get(account.owner_user_id) or str(account.owner_id or "")
-                )
+                notification_target = owner_chat_ids.get(account.owner_user_id) or ""
                 clock = resolve_account_clock(account.timezone_name)
                 if clock is None:
                     stats["invalid_timezones"] += 1
@@ -936,7 +922,7 @@ class MonitoringWorker:
             prepared_accounts = []
             for acc in accounts:
                 account_ref = str(acc.account_id)
-                notification_target = owner_chat_ids.get(acc.owner_user_id) or acc.owner_id
+                notification_target = owner_chat_ids.get(acc.owner_user_id) or ""
                 now = self._clock()
                 active_rules = self._load_rules(acc.active_rules)
                 due_rule_entries = []

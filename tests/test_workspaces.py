@@ -70,7 +70,6 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                 account_id='act_111111',
                 name='Buyerly Account 1',
                 workspace_id=ws1.id,
-                owner_id='777000111',
                 owner_user_id=artem.id,
                 timezone_name='UTC',
                 currency='USD',
@@ -79,7 +78,6 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
 
             rule1 = RulePreset(
                 workspace_id=ws1.id,
-                owner_id='777000111',
                 owner_user_id=artem.id,
                 name='Buyerly Stop Rule',
                 action='turn_off',
@@ -150,7 +148,6 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                     account_id='act_222222',
                     name='Canada Scale 1',
                     workspace_id=canada_ws['id'],
-                    owner_id='777000111',
                     timezone_name='UTC',
                     currency='USD',
                 )
@@ -683,7 +680,8 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         # Verify account in DB was NOT modified
         async with self.test_session_maker() as session:
             acc = (await session.execute(select(Account).where(Account.account_id == 'act_111111'))).scalar_one()
-            self.assertEqual(acc.owner_id, '777000111')
+            artem = (await session.execute(select(User).where(User.telegram_id == '777000111'))).scalar_one()
+            self.assertEqual(acc.owner_user_id, artem.id)
             self.assertEqual(acc.name, 'Buyerly Account 1')
 
     async def test_targeted_workspace_invite_rejects_mismatched_email(self):
