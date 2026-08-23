@@ -32,6 +32,7 @@ from core.timezones import (
 )
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
+from services.inventory_cache import AdsetInventoryService, PostgreSQLInventoryCache
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class MonitoringWorker:
         telegram_notifier: Optional[Callable[..., Awaitable[None]]] = None,
         clock: Optional[Callable[[], float]] = None,
     ):
-        self.meta_client = meta_client or MetaClient()
+        self.meta_client = meta_client or MetaClient(cache_provider=PostgreSQLInventoryCache())
         self.telegram_notifier = telegram_notifier
         # A wall clock is intentionally used: persisted timestamps must remain
         # meaningful after a process restart, unlike time.monotonic().
@@ -1066,8 +1067,10 @@ class MonitoringWorker:
                             acc.timezone_name = refreshed_timezone
                             acc.last_day_start_date = ""
                         status_code = acc_info.get("account_status", 1)
+                        status_label = acc_info.get("status_label", f"Статус #{status_code}")
+                        acc.account_status = status_code
+                        acc.status_label = status_label
                         if status_code != 1:
-                            status_label = acc_info.get("status_label", f"Статус #{status_code}")
                             logger.warning(f"Account {acc.account_id} has issue: {status_label}")
                             acc.is_active = False
                             await self._persist_audit_event(
@@ -1263,8 +1266,12 @@ class MonitoringWorker:
                                     await self.meta_client.set_adset_status(
                                         adset_id=a_id,
                                         access_token=access_token,
-                                        status="PAUSED"
+                                        status="PAUSED",
+                                        account_id=acc.account_id,
                                     )
+                                await AdsetInventoryService.update_adset_status(
+                                    session, acc.account_id, a_id, "PAUSED"
+                                )
                                 stats["adsets_stopped"] += 1
                                 logger.info(f"STOPPED AdSet: {a_id} ({eval_res.adset_name}) - {eval_res.reason}")
 
@@ -1387,8 +1394,12 @@ class MonitoringWorker:
                                     await self.meta_client.set_adset_status(
                                         adset_id=a_id,
                                         access_token=access_token,
-                                        status="ACTIVE"
+                                        status="ACTIVE",
+                                        account_id=acc.account_id,
                                     )
+                                await AdsetInventoryService.update_adset_status(
+                                    session, acc.account_id, a_id, "ACTIVE"
+                                )
                                 stats["adsets_reactivated"] += 1
 
                                 try:
@@ -1456,6 +1467,7 @@ class MonitoringWorker:
                                         access_token=access_token,
                                         new_daily_budget_dollars=new_budget,
                                         currency=acc.currency,
+                                        account_id=acc.account_id,
                                     )
                                 stats["budgets_changed"] += 1
                                 self._finish_execution(execution_state, status="SUCCESS", now=now)
@@ -1511,6 +1523,7 @@ class MonitoringWorker:
                                         access_token=access_token,
                                         new_daily_budget_dollars=new_budget,
                                         currency=acc.currency,
+                                        account_id=acc.account_id,
                                     )
                                 stats["budgets_changed"] += 1
                                 self._finish_execution(execution_state, status="SUCCESS", now=now)

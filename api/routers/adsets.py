@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 
 from api.auth import get_current_user
-from api.deps import get_user_accounts
+from api.deps import get_user_accounts, invalidate_summary_cache
 from core.audit import build_audit_event
 from core.currency import UNKNOWN_CURRENCY, normalize_currency
 from core.meta_tokens import resolve_account_access_token
@@ -14,10 +14,11 @@ from core.ownership import entity_is_owned_by
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, User
 from meta_api.client import MetaClient
+from services.inventory_cache import AdsetInventoryService, PostgreSQLInventoryCache
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["AdSets"])
-meta_client = MetaClient()
+meta_client = MetaClient(cache_provider=PostgreSQLInventoryCache())
 
 
 @router.get("/adsets/stopped")
@@ -75,7 +76,12 @@ async def reactivate_adset(adset_id: str, user: User = Depends(get_current_user)
         action_started = time.perf_counter()
         try:
             access_token = await resolve_account_access_token(session, account)
-            await meta_client.set_adset_status(adset_id=adset_id, access_token=access_token, status="ACTIVE")
+            await meta_client.set_adset_status(
+                adset_id=adset_id,
+                access_token=access_token,
+                status="ACTIVE",
+                account_id=account.account_id,
+            )
         except Exception as e:
             logger.error("Error reactivating adset %s; details stored in audit history", adset_id)
             session.add(
@@ -107,6 +113,15 @@ async def reactivate_adset(adset_id: str, user: User = Depends(get_current_user)
             )
 
         stopped_entry.is_resolved = True
+        await AdsetInventoryService.update_adset_status(
+            session,
+            account.account_id,
+            adset_id,
+            "ACTIVE",
+        )
+        if account.owner_user_id:
+            invalidate_summary_cache(account.owner_user_id)
+
         session.add(
             build_audit_event(
                 account=account,
@@ -129,11 +144,12 @@ async def reactivate_adset(adset_id: str, user: User = Depends(get_current_user)
             await session.commit()
         except Exception as e:
             await session.rollback()
-            logger.error("Meta activated adset %s but local state commit failed: %s", adset_id, e)
-            raise HTTPException(
-                status_code=500,
-                detail="Meta включила ad set, но Buyerly не смог сохранить локальный статус. Обновите страницу.",
-            )
+            logger.warning("Meta activated adset %s but local state commit failed: %s", adset_id, e)
+            return {
+                "success": True,
+                "warning": True,
+                "message": f"Адсет {adset_id} включен в Meta, но локальная база обновится при следующем запросе.",
+            }
         return {"success": True, "message": f"Адсет {adset_id} успешно включен!"}
 
 

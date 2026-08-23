@@ -34,10 +34,11 @@ from database.db import async_session_maker
 from database.models import AnalyticsViewPreference, User
 from api.deps import get_user_accounts
 from meta_api.client import MetaClient
+from services.inventory_cache import PostgreSQLInventoryCache
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Analytics & Summary"])
-meta_client = MetaClient()
+meta_client = MetaClient(cache_provider=PostgreSQLInventoryCache())
 
 
 @router.get("/analytics-view")

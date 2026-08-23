@@ -56,6 +56,7 @@ from api.deps import (
     get_user_workspace,
     get_user_workspace_member,
     get_user_workspaces_list,
+    invalidate_summary_cache,
     slugify,
 )
 from api.routers import (
@@ -197,6 +198,7 @@ __all__ = [
     "meta_client",
     "async_session_maker",
     "_summary_cache",
+    "invalidate_summary_cache",
     "SUMMARY_CACHE_TTL",
     "SUMMARY_SNAPSHOT_RETENTION",
     "SUMMARY_VIEW_SCOPE",

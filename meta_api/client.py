@@ -6,6 +6,7 @@ import hmac
 import random
 import re
 import time
+from datetime import datetime, timezone
 import httpx
 from typing import Optional, List, Dict, Any
 
@@ -46,7 +47,12 @@ class MetaClient:
 
     GRAPH_VERSION_PATTERN = re.compile(r"^v\d+\.\d+$")
 
-    def __init__(self, timeout: float = 15.0, graph_version: Optional[str] = None):
+    def __init__(
+        self,
+        timeout: float = 15.0,
+        graph_version: Optional[str] = None,
+        cache_provider: Optional[Any] = None,
+    ):
         self.timeout = timeout
         requested_version = str(graph_version or settings.META_GRAPH_VERSION).strip()
         if not self.GRAPH_VERSION_PATTERN.fullmatch(requested_version):
@@ -54,6 +60,7 @@ class MetaClient:
         self.graph_version = requested_version
         self.base_url = f"https://graph.facebook.com/{self.graph_version}"
         self._client: Optional[httpx.AsyncClient] = None
+        self._cache_provider = cache_provider
         self._inventory_cache_seconds = 5 * 60
         self._inventory_cache: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
         self._adaptive_polling_enabled = True
@@ -669,10 +676,17 @@ class MetaClient:
             "limit": 100,
             "access_token": access_token
         }
-        cached = self._inventory_cache.get(acc_id)
-        if cached and cached[0] > time.monotonic():
-            adsets_list = self._copy_rows(cached[1])
-        else:
+        request_started_at = datetime.now(timezone.utc)
+        adsets_list = None
+        if self._cache_provider is not None:
+            adsets_list = await self._cache_provider.get_inventory(acc_id)
+
+        if adsets_list is None:
+            cached = self._inventory_cache.get(acc_id)
+            if cached and cached[0] > time.monotonic():
+                adsets_list = self._copy_rows(cached[1])
+
+        if adsets_list is None:
             adsets_list = await self._fetch_paginated_data(
                 adsets_url,
                 adsets_params,
@@ -683,6 +697,13 @@ class MetaClient:
                 time.monotonic() + self._inventory_cache_seconds,
                 self._copy_rows(adsets_list),
             )
+            if self._cache_provider is not None:
+                await self._cache_provider.set_inventory(
+                    acc_id,
+                    self._copy_rows(adsets_list),
+                    ttl_seconds=self._inventory_cache_seconds,
+                    request_started_at=request_started_at,
+                )
 
         # 2. Получаем Insights за указанный период
         insights_url = f"{self.base_url}/{acc_id}/insights"
@@ -778,7 +799,8 @@ class MetaClient:
         self, 
         adset_id: str, 
         access_token: str, 
-        status: str
+        status: str,
+        account_id: Optional[str] = None,
     ) -> bool:
         """
         Переключает статус адсета: 'PAUSED' или 'ACTIVE' с поддержкой повторов.
@@ -805,6 +827,13 @@ class MetaClient:
                     if str(row.get("id")) == str(adset_id):
                         row["status"] = status
                         row["effective_status"] = status
+            if self._cache_provider is not None:
+                acc_id = self._normalize_account_id(account_id or "")
+                await self._cache_provider.update_status(
+                    account_id=acc_id,
+                    adset_id=adset_id,
+                    status=status,
+                )
             logger.info(f"Successfully set adset {adset_id} status to {status}")
             return True
         else:
@@ -849,6 +878,7 @@ class MetaClient:
         access_token: str, 
         new_daily_budget_dollars: float,
         currency: str = "UNKNOWN",
+        account_id: Optional[str] = None,
     ) -> bool:
         """
         Обновляет дневной бюджет в минимальных единицах валюты кабинета.
@@ -873,6 +903,10 @@ class MetaClient:
                 for row in rows:
                     if str(row.get("id")) == str(adset_id):
                         row["daily_budget"] = str(new_budget_units)
+            if self._cache_provider is not None:
+                acc_id = self._normalize_account_id(account_id or "")
+                if acc_id:
+                    await self._cache_provider.invalidate(acc_id)
             logger.info(
                 "Successfully updated adset %s daily budget to %.2f %s",
                 adset_id,
@@ -885,3 +919,12 @@ class MetaClient:
             error_msg = error_data.get("message", resp.text)
             logger.error(f"Failed to update adset {adset_id} budget: {error_msg}")
             raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
+
+    async def invalidate_inventory_cache(self, account_id: str) -> None:
+        """Invalidate inventory cache in memory and in the external provider."""
+        acc_id = self._normalize_account_id(account_id)
+        if acc_id:
+            self._inventory_cache.pop(acc_id, None)
+            if self._cache_provider is not None:
+                await self._cache_provider.invalidate(acc_id)
+

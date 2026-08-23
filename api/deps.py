@@ -47,6 +47,19 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------
 _summary_cache: Dict[str, Any] = {}
 SUMMARY_CACHE_TTL = 120  # 2 minutes cache
+
+
+def invalidate_summary_cache(owner_user_id: Optional[int] = None) -> None:
+    """Clear memory summary cache for specific user or all users."""
+    if owner_user_id is None:
+        _summary_cache.clear()
+    else:
+        prefix = f"{owner_user_id}:"
+        stale_keys = [k for k in list(_summary_cache.keys()) if k.startswith(prefix)]
+        for k in stale_keys:
+            _summary_cache.pop(k, None)
+
+
 SUMMARY_SNAPSHOT_RETENTION = 100
 SUMMARY_VIEW_SCOPE = "summary"
 SUMMARY_TABLE_COLUMNS = (
