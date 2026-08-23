@@ -419,6 +419,68 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(results[0]["adset_name"], "Deleted Midday")
         self.assertEqual(results[0]["spend"], 25.0)
 
+    def test_conversion_counts_omni_lead_and_instant_forms(self):
+        insight_omni = {
+            "actions": [
+                {"action_type": "omni_lead", "value": "14"},
+            ]
+        }
+        counts = MetaClient._conversion_counts(insight_omni)
+        self.assertEqual(counts["leads"], 14)
+
+        insight_instant = {
+            "actions": [
+                {"action_type": "onsite_conversion.lead_grouped", "value": "8"},
+            ]
+        }
+        counts = MetaClient._conversion_counts(insight_instant)
+        self.assertEqual(counts["leads"], 8)
+
+        insight_leadgen = {
+            "actions": [
+                {"action_type": "leadgen.other", "value": "12"},
+            ]
+        }
+        counts = MetaClient._conversion_counts(insight_leadgen)
+        self.assertEqual(counts["leads"], 12)
+
+    def test_conversion_counts_custom_conversions_fallback(self):
+        insight_custom_id = {
+            "actions": [
+                {"action_type": "offsite_conversion.custom.987654321", "value": "7"},
+            ]
+        }
+        counts = MetaClient._conversion_counts(insight_custom_id)
+        self.assertEqual(counts["leads"], 7)
+
+        insight_custom_prefix = {
+            "actions": [
+                {"action_type": "custom:form_submitted", "value": "9"},
+            ]
+        }
+        counts = MetaClient._conversion_counts(insight_custom_prefix)
+        self.assertEqual(counts["leads"], 9)
+
+        insight_omni_custom = {
+            "actions": [
+                {"action_type": "omni_custom", "value": "5"},
+            ]
+        }
+        counts = MetaClient._conversion_counts(insight_omni_custom)
+        self.assertEqual(counts["leads"], 5)
+
+    def test_conversion_counts_deduplication_prefers_standard_lead(self):
+        insight_multi = {
+            "actions": [
+                {"action_type": "lead", "value": "20"},
+                {"action_type": "omni_lead", "value": "20"},
+                {"action_type": "offsite_conversion.fb_pixel_lead", "value": "20"},
+                {"action_type": "offsite_conversion.custom.123", "value": "20"},
+            ]
+        }
+        counts = MetaClient._conversion_counts(insight_multi)
+        self.assertEqual(counts["leads"], 20)
+
 
 if __name__ == "__main__":
     unittest.main()
