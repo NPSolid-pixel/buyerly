@@ -7,6 +7,37 @@
 
 ---
 
+## [1.2.0] - 2026-08-23
+
+### 🗄 Модернизация базы данных, чистый Multi-Tenant и декларативный Alembic (Database Modernization Release)
+
+#### Added
+- **Декларативные миграции Alembic**:
+  - Интегрирован Alembic (`alembic.ini`, `alembic/env.py`, `alembic/script.py.mako`) с полной поддержкой асинхронного движка SQLAlchemy (`asyncpg`) и пула потоков для синхронных команд.
+  - Создана эталонная базовая миграция `0001_initial_schema.py` для всех 25 таблиц платформы.
+- **PostgreSQL JSONB**: Все JSON-колонки во всех 25 моделях переведены на нативный тип PostgreSQL `JSONB` с бинарной десериализацией и поддержкой индексации.
+- **Унифицированный TIMESTAMPTZ**: Все временные метки (`created_at`, `updated_at`, `expires_at` и др.) приведены к единому стандарту `DateTime(timezone=True)`.
+- **Документация**: Добавлен подробный архитектурный отчет [`docs/database_modernization_and_migrations.md`](docs/database_modernization_and_migrations.md).
+
+#### Changed
+- **Рефакторинг сущности пользователя (`TelegramUser` → `User`)**: Главная сущность авторизации и аккаунта пользователя переименована в универсальный `User` (таблица `users`) с сохранением обратной совместимости через алиас.
+- **Multi-Tenant Ownership Architecture**:
+  - Полностью выпилена рудиментарная колонка `owner_id: str` (двойное владение) из всех 13 моделей.
+  - Логика владения переведена на стандарт **Multi-tenant Workspaces**: изоляция по `workspace_id: int` с явной привязкой создателя `owner_user_id: int`.
+  - Обновлены и усилены селекторы `owned_by`, `entity_is_owned_by`, `assign_owner` в `core/ownership.py`.
+
+#### Removed
+- **Тотальное удаление SQLite**: Полностью вычищен пакет `aiosqlite`, рудиментарные ветки поддержки SQLite, локальные файлы `.db` и фоллбэки. База данных PostgreSQL является единственным стандартом платформы.
+
+#### Fixed
+- **CI/CD Auto-Deploy Pipeline Resilience**:
+  - Исправлен запуск скрипта резервного копирования `scripts/backup_db.sh` под строгим режимом `set -euo pipefail`.
+  - Улучшен пайплайн деплоя `.github/workflows/deploy.yml`: добавлена обязательная предварительная синхронизация кодовой базы на сервере до запуска `scripts/deploy.sh`.
+  - В автомиграцию `migrate_automation_settings_contract` добавлены колонки `updated_at` и `admin_chat_id`.
+- **Десериализация JSONB в Summary API**: Исправлен парсинг `AnalyticsViewPreference.config` для поддержки нативных словарей Python.
+
+---
+
 ## [1.1.0] - 2026-08-23
 
 ### 🔒 Безопасность и отказоустойчивость (Hardening & Security Release)
