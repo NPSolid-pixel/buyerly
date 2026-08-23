@@ -399,16 +399,7 @@ class MetaClient:
                     return actions[alias]
             return 0
 
-        def first_custom_conversion_value() -> int:
-            for k, v in actions.items():
-                if v > 0 and (
-                    k.startswith("offsite_conversion.custom.")
-                    or k.startswith("custom:")
-                    or k.startswith("omni_custom")
-                ):
-                    return v
-            return 0
-
+        # 1. Standard / Omni Meta event aliases
         leads = first_value(
             "lead",
             "omni_lead",
@@ -421,8 +412,6 @@ class MetaClient:
             "leadgen",
             "leadgen_grouped",
         )
-        if leads == 0:
-            leads = first_custom_conversion_value()
 
         registrations = first_value(
             "complete_registration",
@@ -441,6 +430,47 @@ class MetaClient:
             "onsite_conversion.purchase_grouped",
             "onsite_web_purchase",
         )
+
+        # 2. Semantic matching for custom conversions (e.g. custom:form_submitted, custom:order_placed)
+        custom_actions = {
+            k: v for k, v in actions.items()
+            if v > 0 and (
+                k.startswith("offsite_conversion.custom.")
+                or k.startswith("custom:")
+                or k.startswith("omni_custom")
+            )
+        }
+
+        lead_keywords = ("lead", "form", "submit", "contact", "schedule", "appli", "request")
+        reg_keywords = ("reg", "signup", "sign_up", "account")
+        purchase_keywords = ("purchase", "buy", "order", "sale", "checkout", "deposit")
+
+        if leads == 0:
+            for k in sorted(custom_actions):
+                k_lower = k.lower()
+                if any(kw in k_lower for kw in lead_keywords):
+                    leads = custom_actions[k]
+                    break
+
+        if registrations == 0:
+            for k in sorted(custom_actions):
+                k_lower = k.lower()
+                if any(kw in k_lower for kw in reg_keywords):
+                    registrations = custom_actions[k]
+                    break
+
+        if purchases == 0:
+            for k in sorted(custom_actions):
+                k_lower = k.lower()
+                if any(kw in k_lower for kw in purchase_keywords):
+                    purchases = custom_actions[k]
+                    break
+
+        # 3. Fallback for unclassified custom conversions (e.g. offsite_conversion.custom.<id>)
+        if leads == 0 and custom_actions:
+            for k in sorted(custom_actions):
+                leads = custom_actions[k]
+                break
 
         return {
             "leads": leads,
