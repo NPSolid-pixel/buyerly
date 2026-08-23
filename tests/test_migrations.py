@@ -552,13 +552,27 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
         from alembic import command
         import os
 
-        ini_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
-        alembic_cfg = Config(ini_path)
-        alembic_cfg.set_main_option(
-            "script_location",
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
-        )
-        command.upgrade(alembic_cfg, "head")
+        engine = create_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+
+            ini_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+            alembic_cfg = Config(ini_path)
+            alembic_cfg.set_main_option(
+                "script_location",
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
+            )
+            command.upgrade(alembic_cfg, "head")
+
+            async with engine.begin() as conn:
+                version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
+            self.assertEqual(version, "0001_initial_schema")
+
+            command.downgrade(alembic_cfg, "base")
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
 
 
 if __name__ == "__main__":

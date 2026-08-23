@@ -381,3 +381,6 @@ async def reverse_audit_event(
         "reversal_event_id": reversal.id,
         "message": "Действие отменено и подтверждено Meta.",
     }
+
+
+undo_audit_action = reverse_audit_event
