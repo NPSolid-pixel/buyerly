@@ -417,6 +417,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    try:
+        op.drop_constraint("fk_users_active_workspace", "users", type_="foreignkey")
+    except Exception:
+        pass
     for table_name in [
         "action_undo_states",
         "rule_execution_states",

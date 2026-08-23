@@ -71,6 +71,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         settings.ADMIN_CHAT_ID = "8634201356"
 
         # Populate initial test user & account
+        async with self.test_session_maker() as session:
             admin_user = User(
                 telegram_id="8634201356",
                 username="admin_user",

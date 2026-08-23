@@ -15,7 +15,7 @@ from database.db import (
     migrate_rule_safety_contract,
     migrate_stable_owner_contract,
 )
-from tests.test_db_helper import create_test_engine
+from tests.test_db_helper import create_test_engine, init_test_db
 
 
 class TestLegacyAccountRulesMigration(unittest.IsolatedAsyncioTestCase):
