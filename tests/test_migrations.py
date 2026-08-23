@@ -387,6 +387,7 @@ class TestAutomationSettingsContractMigration(unittest.IsolatedAsyncioTestCase):
                 "usage_soft_limit_percent",
                 "usage_hard_limit_percent",
                 "adaptive_polling_enabled",
+                "updated_at",
             },
         )
         self.assertTrue(set(first).issubset(columns))
