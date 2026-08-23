@@ -289,6 +289,61 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
             await client._respect_usage_limit(priority="normal")
         await client._respect_usage_limit(priority="critical")
 
+    async def test_account_quota_isolation_does_not_defer_other_accounts(self):
+        client = MetaClient()
+        client.configure_automation(
+            usage_soft_limit_percent=60,
+            usage_hard_limit_percent=80,
+        )
+        headers = httpx.Headers({
+            "x-business-use-case-usage": json.dumps({
+                "act_overloaded": [{"type": "ads_management", "call_count": 85, "total_cputime": 10, "total_time": 10, "estimated_time_to_regain_access": 15}]
+            }),
+            "x-app-usage": json.dumps({"call_count": 10, "total_cputime": 5, "total_time": 5})
+        })
+        client._parse_usage_headers(headers, account_id="act_overloaded")
+
+        # Overloaded account should be deferred for normal requests
+        with self.assertRaises(MetaRateLimitDeferred):
+            await client._respect_usage_limit(account_id="act_overloaded", priority="normal")
+
+        # Critical actions on the overloaded account must still be allowed
+        await client._respect_usage_limit(account_id="act_overloaded", priority="critical")
+
+        # Clean/healthy account MUST NOT be deferred
+        await client._respect_usage_limit(account_id="act_healthy", priority="normal")
+
+    async def test_app_quota_defers_all_accounts(self):
+        client = MetaClient()
+        client.configure_automation(
+            usage_soft_limit_percent=60,
+            usage_hard_limit_percent=80,
+        )
+        headers = httpx.Headers({
+            "x-app-usage": json.dumps({"call_count": 85, "total_cputime": 20, "total_time": 20})
+        })
+        client._parse_usage_headers(headers)
+
+        with self.assertRaises(MetaRateLimitDeferred):
+            await client._respect_usage_limit(account_id="act_healthy", priority="normal")
+
+    async def test_expired_account_quota_ttl_allows_polling(self):
+        client = MetaClient()
+        client.configure_automation(
+            usage_soft_limit_percent=60,
+            usage_hard_limit_percent=80,
+            usage_ttl_minutes=15,
+        )
+        client._usage_snapshot["accounts"]["act_old"] = {
+            "call_count": 90,
+            "total_cputime": 90,
+            "total_time": 90,
+            "updated_at": time.time() - (20 * 60),  # 20 minutes ago (expired)
+        }
+
+        # Expired quota snapshot should not block polling
+        await client._respect_usage_limit(account_id="act_old", priority="normal")
+
     async def test_dead_archived_adsets_with_zero_activity_are_skipped(self):
         client = MetaClient()
         client._fetch_paginated_data = AsyncMock(
