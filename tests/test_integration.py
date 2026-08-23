@@ -20,6 +20,11 @@ from rules.engine import RuleEngine, RuleAction
 from scheduler.worker import MonitoringWorker
 from meta_api.client import MetaClient
 
+
+def _json_val(v):
+    return json.loads(v) if isinstance(v, str) else (v or {})
+
+
 class MockMetaClient(MetaClient):
     def __init__(self):
         super().__init__()
@@ -213,8 +218,8 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(stop_events[0].owner_id, "123456789")
             self.assertEqual(stop_events[0].rule_id, 1)
             self.assertEqual(stop_events[0].rule_name, "Stop spend without leads")
-            self.assertEqual(json.loads(stop_events[0].before_state)["status"], "ACTIVE")
-            self.assertEqual(json.loads(stop_events[0].after_state)["status"], "PAUSED")
+            self.assertEqual(_json_val(stop_events[0].before_state)["status"], "ACTIVE")
+            self.assertEqual(_json_val(stop_events[0].after_state)["status"], "PAUSED")
             self.assertTrue(stop_events[0].correlation_id)
 
         # Re-stopping the same ad set reopens and updates one durable record.
@@ -366,7 +371,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             self.assertEqual(audit_event.status, "SUCCESS")
             self.assertEqual(audit_event.rule_id, 3)
-            self.assertFalse(json.loads(audit_event.details)["notify_tg"])
+            self.assertFalse(_json_val(audit_event.details)["notify_tg"])
 
     async def test_failed_rule_action_is_audited_and_secret_safe(self):
         async with self.test_session_maker() as session:
@@ -394,7 +399,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             self.assertNotIn("private-secret", failed_event.message)
             self.assertIn("access_token=[REDACTED]", failed_event.message)
-            self.assertEqual(json.loads(failed_event.before_state)["status"], "ACTIVE")
+            self.assertEqual(_json_val(failed_event.before_state)["status"], "ACTIVE")
 
     async def test_stop_requires_repeated_confirmation_before_meta_mutation(self):
         now = [1_000.0]
@@ -473,7 +478,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                     )
                 )
             ).scalar_one()
-            details = json.loads(state.details)
+            details = _json_val(state.details)
             self.assertEqual(state.status, "STOP_CONFIRMING")
             self.assertEqual(details["first_seen_at"], now[0])
             self.assertEqual(details["observations"], 1)
@@ -770,7 +775,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         async with self.test_session_maker() as session:
             state = (await session.execute(select(RuleExecutionState))).scalar_one()
             self.assertEqual(state.status, "SUCCESS")
-            self.assertEqual(json.loads(state.details)["reconciled_after_restart"], True)
+            self.assertEqual(_json_val(state.details)["reconciled_after_restart"], True)
 
     async def test_budget_increase_action(self):
         """Правило: CPL < $5 И Лиды >= 2 → увеличить бюджет на 20%, потолок $100."""

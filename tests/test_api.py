@@ -1843,7 +1843,8 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             self.assertEqual(source_row.status, "SUCCESS")
             self.assertEqual(reversal.event_type, "UNDO_ACTION")
-            self.assertEqual(json.loads(reversal.after_state)["status"], "ACTIVE")
+            after_st = json.loads(reversal.after_state) if isinstance(reversal.after_state, str) else reversal.after_state
+            self.assertEqual(after_st["status"], "ACTIVE")
             self.assertTrue(stopped.is_resolved)
 
     async def test_undo_rejects_a_stale_action_after_a_newer_mutation(self):
