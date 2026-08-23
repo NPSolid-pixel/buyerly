@@ -178,6 +178,7 @@ class TestTelegramNotifierSubcodes(unittest.IsolatedAsyncioTestCase):
         self.assertIn("A" * 350, text)
 
 
+from core.meta_tokens import encrypt_meta_token
 from tests.test_db_helper import create_test_engine, init_test_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -223,7 +224,7 @@ class TestMonitoringWorkerTokenErrorHandling(unittest.IsolatedAsyncioTestCase):
                 workspace_id=workspace.id,
                 provider_user_id="fb_user_1",
                 provider_user_name="Facebook User",
-                access_token_encrypted="gAAAAABtest...",
+                access_token_encrypted=encrypt_meta_token("mock_token_123"),
                 status="active",
             )
             session.add(conn)
