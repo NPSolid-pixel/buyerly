@@ -505,25 +505,23 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     owner_id="8948797431",
                     owner_user_id=buyer.id,
                     period="today",
-                    payload=json.dumps(
-                        {
-                            "period": "today",
-                            "generated_at": "2026-08-18T08:15:00+00:00",
-                            "accounts": [
-                                {
-                                    "account_id": account.account_id,
-                                    "data_status": "synced",
-                                    "data_status_label": "Метрики получены",
-                                    "spend": 123.45,
-                                    "impressions": 9000,
-                                    "clicks": 210,
-                                    "leads": 17,
-                                    "registrations": 6,
-                                    "purchases": 2,
-                                }
-                            ],
-                        }
-                    ),
+                    payload={
+                        "period": "today",
+                        "generated_at": "2026-08-18T08:15:00+00:00",
+                        "accounts": [
+                            {
+                                "account_id": account.account_id,
+                                "data_status": "synced",
+                                "data_status_label": "Метрики получены",
+                                "spend": 123.45,
+                                "impressions": 9000,
+                                "clicks": 210,
+                                "leads": 17,
+                                "registrations": 6,
+                                "purchases": 2,
+                            }
+                        ],
+                    },
                 )
             )
             account_group = AccountGroup(
@@ -1845,7 +1843,8 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             self.assertEqual(source_row.status, "SUCCESS")
             self.assertEqual(reversal.event_type, "UNDO_ACTION")
-            self.assertEqual(json.loads(reversal.after_state)["status"], "ACTIVE")
+            after_st = json.loads(reversal.after_state) if isinstance(reversal.after_state, str) else reversal.after_state
+            self.assertEqual(after_st["status"], "ACTIVE")
             self.assertTrue(stopped.is_resolved)
 
     async def test_undo_rejects_a_stale_action_after_a_newer_mutation(self):

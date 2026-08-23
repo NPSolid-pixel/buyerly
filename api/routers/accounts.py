@@ -184,7 +184,7 @@ async def update_account_group(
         accounts = await _validate_account_group_members(session, user, payload.account_ids)
         group.name = name
         group.description = payload.description.strip()
-        group.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        group.updated_at = datetime.now(timezone.utc)
         await session.execute(delete(AccountGroupMember).where(AccountGroupMember.group_id == group.id))
         for position, account in enumerate(accounts):
             session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))

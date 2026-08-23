@@ -372,7 +372,7 @@ async def undo_audit_action(
                     stop_leads=0,
                     stop_registrations=0,
                     is_resolved=False,
-                    stopped_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                    stopped_at=datetime.now(timezone.utc),
                 )
             )
     try:

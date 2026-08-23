@@ -56,7 +56,7 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
         raise HTTPException(status_code=400, detail="Некорректный адрес электронной почты")
 
     async with async_session_maker() as session:
-        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        now_dt = datetime.now(timezone.utc)
 
         # Rate limiting: max 1 request per 60 seconds per email
         recent_otp = (
@@ -155,7 +155,7 @@ async def login_user(req: LoginRequest):
 
         if not is_password_valid and user:
             # Check for valid unexpired OTP code
-            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+            now_dt = datetime.now(timezone.utc)
             check_email = (user.email or uname).lower()
             otp_stmt = (
                 select(EmailVerificationCode)

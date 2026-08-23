@@ -618,7 +618,7 @@ async def migrate_workspaces_contract(conn) -> int:
             if existing_slug:
                 ws_slug = f"buyerly-{u_id}"
 
-            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+            now_dt = datetime.now(timezone.utc)
             res = await conn.execute(
                 text(
                     "INSERT INTO workspaces (name, slug, badge_text, badge_color, owner_user_id, created_at, updated_at) "

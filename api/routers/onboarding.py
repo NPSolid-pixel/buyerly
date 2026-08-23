@@ -321,7 +321,7 @@ async def submit_onboarding_invites(
             raise HTTPException(status_code=400, detail="Не найден активный воркспейс для создания приглашений")
 
         created_invites: List[WorkspaceInviteItem] = []
-        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        now_dt = datetime.now(timezone.utc)
         expires_at = now_dt + timedelta(days=7)
 
         for item in req.invites:
