@@ -9,9 +9,10 @@ KEEP_BACKUPS="${KEEP_BACKUPS:-30}"
 
 mkdir -p "${BACKUP_DIR}"
 
+postgres_state=$(docker inspect -f '{{.State.Status}}' "${POSTGRES_CONTAINER}" 2>/dev/null || true)
 if [[ "${postgres_state}" != "running" ]]; then
-    echo "[ERROR] PostgreSQL container '${POSTGRES_CONTAINER}' is not running."
-    exit 1
+    echo "[INFO] PostgreSQL container '${POSTGRES_CONTAINER}' is not running (state: '${postgres_state:-missing}'). Skipping backup."
+    exit 0
 fi
 
 backup_file="${BACKUP_DIR}/buyerly_postgres_${TIMESTAMP}.sql"
