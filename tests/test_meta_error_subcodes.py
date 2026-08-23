@@ -94,6 +94,7 @@ class TestTelegramNotifierSubcodes(unittest.IsolatedAsyncioTestCase):
         bot_mock = MagicMock()
         bot_mock.send_message = AsyncMock()
         notifier = TelegramNotifier(bot=bot_mock, target_chat_id="123456")
+        notifier._save_event_log = AsyncMock()
 
         await notifier.send_alert(
             event_type="TOKEN_EXPIRED",
@@ -122,6 +123,7 @@ class TestTelegramNotifierSubcodes(unittest.IsolatedAsyncioTestCase):
         bot_mock = MagicMock()
         bot_mock.send_message = AsyncMock()
         notifier = TelegramNotifier(bot=bot_mock, target_chat_id="123456")
+        notifier._save_event_log = AsyncMock()
 
         dangerous_name = "Agency <Media> & Co <script>alert(1)</script>"
         dangerous_msg = "Error validating <Token> & Session for user <12345>"
@@ -153,6 +155,7 @@ class TestTelegramNotifierSubcodes(unittest.IsolatedAsyncioTestCase):
         bot_mock = MagicMock()
         bot_mock.send_message = AsyncMock()
         notifier = TelegramNotifier(bot=bot_mock, target_chat_id="123456")
+        notifier._save_event_log = AsyncMock()
 
         huge_error_msg = "A" * 1000
 
@@ -175,14 +178,17 @@ class TestTelegramNotifierSubcodes(unittest.IsolatedAsyncioTestCase):
         self.assertIn("A" * 350, text)
 
 
+from tests.test_db_helper import create_test_engine, init_test_db
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 class TestMonitoringWorkerTokenErrorHandling(unittest.IsolatedAsyncioTestCase):
     """Интеграционные тесты обработки MetaTokenAuthError в MonitoringWorker."""
 
     async def asyncSetUp(self):
-        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-        self.session_maker = async_sessionmaker(self.engine, expire_on_commit=False)
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        self.engine = create_test_engine()
+        self.session_maker = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
+        await init_test_db(self.engine)
 
         async with self.session_maker() as session:
             user = User(
