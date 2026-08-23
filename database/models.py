@@ -1,15 +1,28 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Boolean,
+    DateTime,
+    Text,
+    ForeignKey,
+    Index,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from database.db import Base
 
-def utcnow_naive():
-    """UTC for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
-
-def utcnow_aware():
+def utcnow():
     """UTC for PostgreSQL TIMESTAMP WITH TIME ZONE columns."""
     return datetime.now(timezone.utc)
+
+
+utcnow_aware = utcnow
+utcnow_naive = utcnow
+
 
 class User(Base):
     __tablename__ = "users"
@@ -50,7 +63,7 @@ class User(Base):
         index=True,
         doc="ID активного воркспейса",
     )
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<User(username='{self.username}', role='{self.role}', approved={self.is_approved})>"
@@ -70,8 +83,8 @@ class Workspace(Base):
     badge_color = Column(String, default="#F5A300", nullable=False, doc="Цвет бейджа (#F5A300, #7C3AED, etc.)")
     logo_url = Column(String, default="", nullable=False, doc="URL или путь к логотипу компании")
     owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<Workspace(id={self.id}, name='{self.name}', slug='{self.slug}')>"
@@ -87,7 +100,7 @@ class WorkspaceMember(Base):
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, default="owner", nullable=False, doc="'owner', 'admin', 'buyer', 'viewer'")
-    joined_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    joined_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<WorkspaceMember(workspace_id={self.workspace_id}, user_id={self.user_id}, role='{self.role}')>"
@@ -150,16 +163,16 @@ class WorkspaceInvite(Base):
         doc="Количество фактических использований инвайта",
     )
     expires_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=True,
         index=True,
         doc="Срок действия приглашения (UTC)",
     )
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
         nullable=False,
     )
 
@@ -176,10 +189,10 @@ class EmailVerificationCode(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String, nullable=False, index=True, doc="Email получателя кода")
     code = Column(String(10), nullable=False, doc="6-значный одноразовый OTP-пароль")
-    expires_at = Column(DateTime, nullable=False, index=True, doc="Срок действия кода (UTC)")
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True, doc="Срок действия кода (UTC)")
     is_used = Column(Boolean, default=False, nullable=False, doc="Был ли код использован")
     failed_attempts = Column(Integer, default=0, nullable=False, doc="Количество неудачных попыток ввода кода")
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<EmailVerificationCode(email='{self.email}', used={self.is_used})>"
@@ -245,6 +258,7 @@ class AppSettings(Base):
         doc="Автоматически уменьшать частоту при росте расхода квоты",
     )
     admin_chat_id = Column(String, default="", nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<AppSettings(interval={self.poll_interval_minutes}m)>"
@@ -256,8 +270,8 @@ class AutomationRuntimeState(Base):
     __tablename__ = "automation_runtime_states"
 
     state_key = Column(String, primary_key=True, default="monitoring")
-    payload = Column(Text, default="{}", nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
+    payload = Column(JSONB, default=dict, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class RulePreset(Base):
@@ -269,15 +283,15 @@ class RulePreset(Base):
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPL выше порога')")
     action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only', 'increase_budget', 'decrease_budget'")
-    conditions = Column(Text, default="[]", nullable=False, doc="JSON список условий")
+    conditions = Column(JSONB, default=list, nullable=False, doc="JSONB список условий")
     condition_logic = Column(String, default="and", nullable=False, doc="'and' или 'or' — логика объединения условий")
     cooldown_minutes = Column(Integer, default=0, nullable=False, doc="Пауза между срабатываниями (мин, 0=нет)")
     check_interval_minutes = Column(Integer, default=5, nullable=False, doc="Интервал проверки воркером (мин)")
     notify_tg = Column(Boolean, default=True, nullable=False, doc="Уведомление в Telegram")
     budget_change_percent = Column(Float, default=0.0, nullable=False, doc="На сколько % изменить бюджет")
     budget_max_daily = Column(Float, default=0.0, nullable=False, doc="Макс. дневной бюджет в валюте кабинета, 0 = без ограничения")
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<RulePreset(id={self.id}, name='{self.name}', action='{self.action}')>"
@@ -295,8 +309,8 @@ class RuleGroup(Base):
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
     position = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<RuleGroup(id={self.id}, name='{self.name}', owner='{self.owner_id}')>"
@@ -314,7 +328,7 @@ class RuleGroupItem(Base):
     group_id = Column(Integer, ForeignKey("rule_groups.id", ondelete="CASCADE"), nullable=False, index=True)
     preset_id = Column(Integer, ForeignKey("rule_presets.id", ondelete="CASCADE"), nullable=False, index=True)
     position = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<RuleGroupItem(group={self.group_id}, preset={self.preset_id}, position={self.position})>"
@@ -335,7 +349,7 @@ class RuleExamplesBootstrap(Base):
     )
     owner_id = Column(String, default="", nullable=False)
     version = Column(Integer, default=1, nullable=False)
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<RuleExamplesBootstrap(owner_user_id={self.owner_user_id}, version={self.version})>"
@@ -365,17 +379,17 @@ class MetaConnection(Base):
     provider_user_id = Column(String, nullable=False, index=True)
     provider_user_name = Column(String, default="", nullable=False)
     access_token_encrypted = Column(Text, nullable=False)
-    granted_scopes = Column(Text, default="[]", nullable=False)
+    granted_scopes = Column(JSONB, default=list, nullable=False)
     token_expires_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String, default="active", nullable=False, index=True)
     last_error = Column(Text, default="", nullable=False)
     last_validated_at = Column(DateTime(timezone=True), nullable=True)
-    connected_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+    connected_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(
         DateTime(timezone=True),
-        default=utcnow_aware,
-        onupdate=utcnow_aware,
+        default=utcnow,
+        onupdate=utcnow,
         nullable=False,
     )
 
@@ -397,7 +411,7 @@ class MetaOAuthState(Base):
     return_path = Column(String, default="/add-accounts", nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     used_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 class MetaConnectionAsset(Base):
@@ -433,7 +447,7 @@ class MetaConnectionAsset(Base):
     account_status = Column(Integer, default=1, nullable=False)
     currency = Column(String, default="UNKNOWN", nullable=False)
     timezone_name = Column(String, default="UTC", nullable=False)
-    discovered_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
+    discovered_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 class Account(Base):
@@ -475,8 +489,8 @@ class Account(Base):
     last_started_date = Column(String, default="", nullable=False, doc="Legacy: прежняя дата обнаружения Spend")
     last_day_start_date = Column(String, default="", nullable=False, doc="Последняя локальная дата, обработанная уведомлением новых суток")
     
-    # Привязанные правила (JSON)
-    active_rules = Column(Text, default="[]", nullable=False, doc="JSON массив объектов привязанных правил")
+    # Привязанные правила (JSONB)
+    active_rules = Column(JSONB, default=list, nullable=False, doc="JSONB массив объектов привязанных правил")
     
     # Статус кабинета в Meta
     account_status = Column(Integer, default=1, nullable=False, doc="1: ACTIVE, 2: DISABLED, 3: UNSETTLED")
@@ -484,7 +498,7 @@ class Account(Base):
     
     rules_enabled = Column(Boolean, default=False, nullable=False, doc="Включены ли авто-правила стопов")
     is_active = Column(Boolean, default=True, nullable=False, doc="Включен ли кабинет в системе")
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<Account(account_id='{self.account_id}', name='{self.name}', status={self.account_status})>"
@@ -504,8 +518,8 @@ class AccountGroup(Base):
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<AccountGroup(id={self.id}, name='{self.name}', owner='{self.owner_id}')>"
@@ -523,7 +537,7 @@ class AccountGroupMember(Base):
     group_id = Column(Integer, ForeignKey("account_groups.id", ondelete="CASCADE"), nullable=False, index=True)
     account_id = Column(Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False, index=True)
     position = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<AccountGroupMember(group={self.group_id}, account={self.account_id}, position={self.position})>"
@@ -547,10 +561,10 @@ class SummarySnapshot(Base):
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     period = Column(String, nullable=False, index=True)
-    payload = Column(Text, nullable=False, doc="Безопасный JSON сводки без access token")
+    payload = Column(JSONB, nullable=False, doc="Безопасный JSONB сводки без access token")
     schema_version = Column(Integer, default=1, nullable=False)
-    generated_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False, index=True)
+    generated_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
     def __repr__(self):
         return f"<SummarySnapshot(owner='{self.owner_id}', period='{self.period}', generated='{self.generated_at}')>"
@@ -568,9 +582,9 @@ class AnalyticsViewPreference(Base):
     owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     scope = Column(String, default="summary", nullable=False, index=True)
-    config = Column(Text, default="{}", nullable=False, doc="Безопасный JSON настроек представления")
-    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
+    config = Column(JSONB, default=dict, nullable=False, doc="Безопасный JSONB настроек представления")
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<AnalyticsViewPreference(owner='{self.owner_id}', scope='{self.scope}')>"
@@ -589,8 +603,8 @@ class StoppedAdSet(Base):
     stop_registrations = Column(Integer, default=0, nullable=False, doc="Регистрации на момент отключения")
     
     is_resolved = Column(Boolean, default=False, nullable=False, doc="Обработан ли долет (включен/отклонен)")
-    stopped_at = Column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at = Column(DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False)
+    stopped_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
         return f"<StoppedAdSet(adset_id='{self.adset_id}', spend={self.stop_spend})>"
@@ -605,7 +619,7 @@ class EventLog(Base):
     account_id = Column(String, default="", index=True, doc="ID кабинета")
     message = Column(Text, nullable=False, doc="Текст отправленного сообщения или события")
     status = Column(String, default="SUCCESS", nullable=False, doc="Статус: SUCCESS или ERROR")
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
     def __repr__(self):
         return f"<EventLog(type='{self.event_type}', chat='{self.target_chat_id}', status='{self.status}', time='{self.created_at}')>"
@@ -633,13 +647,13 @@ class AuditEvent(Base):
     rule_name = Column(String, default="", nullable=False)
     action = Column(String, default="", nullable=False, index=True)
     message = Column(Text, default="", nullable=False)
-    before_state = Column(Text, default="{}", nullable=False)
-    after_state = Column(Text, default="{}", nullable=False)
-    details = Column(Text, default="{}", nullable=False)
+    before_state = Column(JSONB, default=dict, nullable=False)
+    after_state = Column(JSONB, default=dict, nullable=False)
+    details = Column(JSONB, default=dict, nullable=False)
     correlation_id = Column(String, default="", nullable=False, index=True)
     reverts_event_id = Column(Integer, ForeignKey("audit_events.id"), nullable=True, unique=True, index=True)
     duration_ms = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=utcnow_naive, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
     def __repr__(self):
         return (
@@ -660,7 +674,7 @@ class AutomationScheduleState(Base):
     account_id = Column(String, default="", nullable=False, index=True)
     rule_key = Column(String, default="", nullable=False, index=True)
     last_checked_at = Column(Float, default=0.0, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class RuleExecutionState(Base):
@@ -680,11 +694,11 @@ class RuleExecutionState(Base):
     correlation_id = Column(String, default="", nullable=False, index=True)
     last_attempt_at = Column(Float, default=0.0, nullable=False)
     last_success_at = Column(Float, nullable=True)
-    before_state = Column(Text, default="{}", nullable=False)
-    after_state = Column(Text, default="{}", nullable=False)
-    details = Column(Text, default="{}", nullable=False)
-    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
+    before_state = Column(JSONB, default=dict, nullable=False)
+    after_state = Column(JSONB, default=dict, nullable=False)
+    details = Column(JSONB, default=dict, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
 class ActionUndoState(Base):
@@ -699,13 +713,8 @@ class ActionUndoState(Base):
     status = Column(String, default="PENDING", nullable=False, index=True)
     correlation_id = Column(String, default="", nullable=False, index=True)
     attempt_count = Column(Integer, default=1, nullable=False)
-    expected_state = Column(Text, default="{}", nullable=False)
-    desired_state = Column(Text, default="{}", nullable=False)
+    expected_state = Column(JSONB, default=dict, nullable=False)
+    desired_state = Column(JSONB, default=dict, nullable=False)
     last_error = Column(Text, default="", nullable=False)
-    created_at = Column(DateTime(timezone=True), default=utcnow_aware, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=utcnow_aware, onupdate=utcnow_aware, nullable=False)
-
-
-# Modern semantic alias for TelegramUser
-User = TelegramUser
-
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

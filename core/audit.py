@@ -6,8 +6,13 @@ from database.models import Account, AuditEvent
 from rules.engine import RuleEvaluationResult
 
 
-def _json_text(value: Any) -> str:
-    return json.dumps(value or {}, ensure_ascii=False, default=str, separators=(",", ":"))
+def _json_data(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return {"raw": value} if value else {}
+    return value if value is not None else {}
 
 
 def _optional_int(value: Any) -> Optional[int]:
@@ -74,9 +79,9 @@ def build_audit_event(
         rule_name=str(evaluation.rule_name if evaluation else ""),
         action=action or (evaluation.action.value if evaluation else ""),
         message=safe_message,
-        before_state=_json_text(before_state),
-        after_state=_json_text(after_state),
-        details=_json_text(merged_details),
+        before_state=_json_data(before_state),
+        after_state=_json_data(after_state),
+        details=_json_data(merged_details),
         correlation_id=str(correlation_id),
         duration_ms=max(0, int(duration_ms or 0)),
     )

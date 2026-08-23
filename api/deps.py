@@ -1051,7 +1051,7 @@ async def _persist_summary(
         owner_id=owner_id,
         owner_user_id=owner_user_id,
         period=period,
-        payload=json.dumps(stored_payload, ensure_ascii=False, separators=(",", ":")),
+        payload=stored_payload,
         generated_at=generated_at,
     )
     session.add(snapshot)
