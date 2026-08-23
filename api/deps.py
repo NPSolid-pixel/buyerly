@@ -422,15 +422,7 @@ async def _validate_account_group_members(
 
 
 async def _ensure_stable_account_owner(session, account: Account) -> None:
-    if account.owner_user_id is not None or not account.owner_id:
-        return
-    owner_user_id = (
-        await session.execute(
-            select(User.id).where(User.telegram_id == account.owner_id)
-        )
-    ).scalar_one_or_none()
-    if owner_user_id is not None:
-        account.owner_user_id = owner_user_id
+    pass
 
 
 # ----------------------------------------------------
@@ -572,9 +564,10 @@ async def _get_owned_presets(
     owner_id: str = "",
 ) -> List[RulePreset]:
     ordered_ids = _unique_preset_ids(preset_ids)
+    target_user_id = owner_user_id if owner_user_id is not None else getattr(user, "id", None)
     owner_clause = (
-        owned_by_ids(RulePreset, owner_user_id, owner_id)
-        if owner_user_id is not None or owner_id
+        RulePreset.owner_user_id == target_user_id
+        if target_user_id is not None
         else owned_by(RulePreset, user)
     )
     result = await session.execute(
@@ -957,15 +950,15 @@ async def _enrich_summary_account_metadata(
 async def _load_persisted_summary(
     session,
     *,
-    owner_id: str,
     owner_user_id: int,
     period: str,
+    owner_id: str = "",
 ) -> Optional[Dict[str, Any]]:
     rows = (
         await session.execute(
             select(SummarySnapshot)
             .where(
-                owned_by_ids(SummarySnapshot, owner_user_id, owner_id),
+                SummarySnapshot.owner_user_id == owner_user_id,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -1011,16 +1004,16 @@ async def _load_persisted_summary(
 async def _persist_summary(
     session,
     *,
-    owner_id: str,
     owner_user_id: int,
     period: str,
     payload: Dict[str, Any],
+    owner_id: str = "",
 ) -> Dict[str, Any]:
     previous_rows = (
         await session.execute(
             select(SummarySnapshot)
             .where(
-                owned_by_ids(SummarySnapshot, owner_user_id, owner_id),
+                SummarySnapshot.owner_user_id == owner_user_id,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -1048,7 +1041,6 @@ async def _persist_summary(
             pass
 
     snapshot = SummarySnapshot(
-        owner_id=owner_id,
         owner_user_id=owner_user_id,
         period=period,
         payload=stored_payload,
@@ -1061,7 +1053,7 @@ async def _persist_summary(
         await session.execute(
             select(SummarySnapshot.id)
             .where(
-                owned_by_ids(SummarySnapshot, owner_user_id, owner_id),
+                SummarySnapshot.owner_user_id == owner_user_id,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())

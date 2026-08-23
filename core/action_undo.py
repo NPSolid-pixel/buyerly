@@ -144,15 +144,15 @@ async def _mark_failed(
         await session.rollback()
 
 
-async def undo_audit_action(
-    session,
+async def reverse_audit_event(
+    session: AsyncSession,
     *,
     meta_client,
     event_id: int,
     actor_type: str,
     actor_id: str,
-    owner_id: Optional[str],
-    owner_user_id: Optional[int],
+    owner_user_id: Optional[int] = None,
+    owner_id: Optional[str] = None,
     is_admin: bool = False,
     now: Optional[float] = None,
 ) -> dict[str, Any]:
@@ -166,11 +166,7 @@ async def undo_audit_action(
     ).scalar_one_or_none()
     if source is None:
         raise UndoError("Событие не найдено.", 404)
-    source_owned = (
-        source.owner_user_id == owner_user_id
-        if source.owner_user_id is not None
-        else source.owner_id == str(owner_id or "")
-    )
+    source_owned = source.owner_user_id == owner_user_id if source.owner_user_id is not None else False
     if not is_admin and not source_owned:
         raise UndoError("Доступ к этому действию запрещён.", 403)
 
@@ -212,14 +208,7 @@ async def undo_audit_action(
     account = (
         await session.execute(select(Account).where(Account.account_id == source.account_id))
     ).scalar_one_or_none()
-    account_owned = bool(
-        account
-        and (
-            account.owner_user_id == owner_user_id
-            if account.owner_user_id is not None
-            else account.owner_id == str(owner_id or "")
-        )
-    )
+    account_owned = bool(account and account.owner_user_id == owner_user_id)
     if account is None or (not is_admin and not account_owned):
         raise UndoError("Кабинет для этого действия не найден или недоступен.", 403)
 

@@ -66,7 +66,7 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<User(username='{self.username}', role='{self.role}', approved={self.is_approved})>"
+        return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
 
 
 # Backwards compatibility alias
@@ -279,8 +279,7 @@ class RulePreset(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
-    owner_id = Column(String, nullable=False, index=True, doc="Legacy-метка владельца для совместимости")
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String, nullable=False, doc="Название пресета (e.g. 'Стоп CPL выше порога')")
     action = Column(String, default="turn_off", nullable=False, doc="'turn_off', 'turn_on', 'notify_only', 'increase_budget', 'decrease_budget'")
     conditions = Column(JSONB, default=list, nullable=False, doc="JSONB список условий")
@@ -304,8 +303,7 @@ class RuleGroup(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
-    owner_id = Column(String, nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
     position = Column(Integer, default=0, nullable=False)
@@ -313,7 +311,7 @@ class RuleGroup(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<RuleGroup(id={self.id}, name='{self.name}', owner='{self.owner_id}')>"
+        return f"<RuleGroup(id={self.id}, name='{self.name}', owner_user_id={self.owner_user_id})>"
 
 
 class RuleGroupItem(Base):
@@ -347,7 +345,6 @@ class RuleExamplesBootstrap(Base):
         nullable=False,
         index=True,
     )
-    owner_id = Column(String, default="", nullable=False)
     version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -369,7 +366,6 @@ class MetaConnection(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
-    owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -401,7 +397,6 @@ class MetaOAuthState(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     state_hash = Column(String, unique=True, nullable=False, index=True)
-    owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -433,7 +428,6 @@ class MetaConnectionAsset(Base):
         nullable=False,
         index=True,
     )
-    owner_id = Column(String, nullable=False, index=True)
     owner_user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -479,8 +473,7 @@ class Account(Base):
     )
     
     # Привязка к владельцу (мульти-пользовательская изоляция)
-    owner_id = Column(String, nullable=False, index=True, doc="Legacy-метка владельца для совместимости")
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     batch_name = Column(String, default="", nullable=False, doc="Имя пачки кабинетов (если добавлялось пачкой)")
     currency = Column(String, default="UNKNOWN", nullable=False, doc="ISO 4217 валюта рекламного кабинета из Meta")
     
@@ -514,15 +507,14 @@ class AccountGroup(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
-    owner_id = Column(String, nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, default="", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<AccountGroup(id={self.id}, name='{self.name}', owner='{self.owner_id}')>"
+        return f"<AccountGroup(id={self.id}, name='{self.name}', owner_user_id={self.owner_user_id})>"
 
 
 class AccountGroupMember(Base):
@@ -549,8 +541,8 @@ class SummarySnapshot(Base):
     __tablename__ = "summary_snapshots"
     __table_args__ = (
         Index(
-            "ix_summary_snapshots_owner_period_created",
-            "owner_id",
+            "ix_summary_snapshots_user_period_created",
+            "owner_user_id",
             "period",
             "created_at",
         ),
@@ -558,8 +550,7 @@ class SummarySnapshot(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
-    owner_id = Column(String, nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     period = Column(String, nullable=False, index=True)
     payload = Column(JSONB, nullable=False, doc="Безопасный JSONB сводки без access token")
     schema_version = Column(Integer, default=1, nullable=False)
@@ -567,7 +558,7 @@ class SummarySnapshot(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
     def __repr__(self):
-        return f"<SummarySnapshot(owner='{self.owner_id}', period='{self.period}', generated='{self.generated_at}')>"
+        return f"<SummarySnapshot(owner_user_id={self.owner_user_id}, period='{self.period}', generated='{self.generated_at}')>"
 
 
 class AnalyticsViewPreference(Base):
@@ -575,19 +566,18 @@ class AnalyticsViewPreference(Base):
 
     __tablename__ = "analytics_view_preferences"
     __table_args__ = (
-        UniqueConstraint("owner_id", "scope", name="uq_analytics_view_owner_scope"),
+        UniqueConstraint("owner_user_id", "scope", name="uq_analytics_view_owner_scope"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    owner_id = Column(String, nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     scope = Column(String, default="summary", nullable=False, index=True)
     config = Column(JSONB, default=dict, nullable=False, doc="Безопасный JSONB настроек представления")
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<AnalyticsViewPreference(owner='{self.owner_id}', scope='{self.scope}')>"
+        return f"<AnalyticsViewPreference(owner_user_id={self.owner_user_id}, scope='{self.scope}')>"
 
 
 class StoppedAdSet(Base):
@@ -632,8 +622,7 @@ class AuditEvent(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
-    owner_id = Column(String, default="", nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     actor_type = Column(String, default="system", nullable=False, index=True)
     actor_id = Column(String, default="monitoring_worker", nullable=False)
     category = Column(String, default="RULE_ACTION", nullable=False, index=True)
@@ -669,8 +658,7 @@ class AutomationScheduleState(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     state_key = Column(String, unique=True, nullable=False, index=True)
-    owner_id = Column(String, default="", nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     account_id = Column(String, default="", nullable=False, index=True)
     rule_key = Column(String, default="", nullable=False, index=True)
     last_checked_at = Column(Float, default=0.0, nullable=False)
@@ -684,8 +672,7 @@ class RuleExecutionState(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     execution_key = Column(String, unique=True, nullable=False, index=True)
-    owner_id = Column(String, default="", nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     account_id = Column(String, default="", nullable=False, index=True)
     adset_id = Column(String, default="", nullable=False, index=True)
     rule_key = Column(String, default="", nullable=False, index=True)
@@ -708,8 +695,7 @@ class ActionUndoState(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     original_event_id = Column(Integer, ForeignKey("audit_events.id"), unique=True, nullable=False, index=True)
-    owner_id = Column(String, default="", nullable=False, index=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     status = Column(String, default="PENDING", nullable=False, index=True)
     correlation_id = Column(String, default="", nullable=False, index=True)
     attempt_count = Column(Integer, default=1, nullable=False)

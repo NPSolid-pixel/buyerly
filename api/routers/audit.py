@@ -184,7 +184,8 @@ async def list_audit_events(
             undo_reason = ""
         items.append({
             "id": row.id,
-            "owner_id": row.owner_id if user.role == "admin" else None,
+            "owner_user_id": row.owner_user_id if user.role == "admin" else None,
+            "workspace_id": row.workspace_id,
             "actor_type": row.actor_type,
             "actor_id": row.actor_id,
             "category": row.category,
@@ -239,7 +240,6 @@ async def undo_audit_event(
                 event_id=event_id,
                 actor_type="user",
                 actor_id=str(user.telegram_id or user.id),
-                owner_id=user.telegram_id,
                 owner_user_id=user.id,
                 is_admin=user.role == "admin",
             )

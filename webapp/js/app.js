@@ -3986,7 +3986,7 @@
           </div>`).join('')
       : '<div class="account-detail-rules-empty">Правила не назначены. Автоматика не может быть включена.</div>';
     const ownerHtml = state.user?.role === 'admin'
-      ? `<div class="account-detail-field"><span>Владелец</span><b class="mono">${escapeHtml(account.owner_id || '—')}</b></div>`
+      ? `<div class="account-detail-field"><span>Владелец (User ID)</span><b class="mono">${escapeHtml(account.owner_user_id ? `User #${account.owner_user_id}` : (account.owner_id || '—'))}</b></div>`
       : '';
     const connectionState = getAccountConnectionState(account);
     const displayName = accountDisplayName(account);

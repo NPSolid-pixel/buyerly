@@ -155,7 +155,6 @@ async def start_oauth(
         session.add(
             MetaOAuthState(
                 state_hash=state_hash,
-                owner_id=str(user.telegram_id or ""),
                 owner_user_id=user.id,
                 return_path=_safe_return_path(return_path),
                 expires_at=now + timedelta(minutes=OAUTH_STATE_TTL_MINUTES),
@@ -217,7 +216,6 @@ async def oauth_callback(
             )
         await session.commit()
         owner_user_id = oauth_state.owner_user_id
-        owner_id = oauth_state.owner_id
         return_path = _safe_return_path(oauth_state.return_path)
 
     try:
@@ -243,7 +241,7 @@ async def oauth_callback(
                 )
             ).scalar_one_or_none()
             connection = existing or MetaConnection(
-                owner_id=owner_id,
+                workspace_id=owner.active_workspace_id,
                 owner_user_id=owner_user_id,
                 provider_user_id=provider_user_id,
                 access_token_encrypted=encrypted_token,
@@ -350,7 +348,6 @@ async def discover_accounts(
             business = raw.get("business") if isinstance(raw.get("business"), dict) else {}
             asset = existing_assets.get(account_id) or MetaConnectionAsset(
                 connection_id=connection.id,
-                owner_id=connection.owner_id,
                 owner_user_id=connection.owner_user_id,
                 meta_account_id=account_id,
             )
@@ -503,7 +500,6 @@ async def import_accounts(
                         account_id=account_id,
                         name=str(account_info.get("name") or asset.name or account_id),
                         workspace_id=ws.id if ws else None,
-                        owner_id=str(user.telegram_id or ""),
                         owner_user_id=user.id,
                         access_token="",
                         rules_enabled=False,
@@ -513,7 +509,6 @@ async def import_accounts(
                         existing.last_day_start_date = ""
                     account.name = str(account_info.get("name") or asset.name or account_id)
                     account.workspace_id = ws.id if ws else account.workspace_id
-                    account.owner_id = str(user.telegram_id or "")
                     account.owner_user_id = user.id
                     account.batch_name = asset.business_name if asset.business_id else ""
                     account.access_token = ""

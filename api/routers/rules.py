@@ -69,14 +69,12 @@ async def create_preset(payload: CreatePresetRequest, user: User = Depends(get_c
         ensure_workspace_write_access(user, member, "создания правил")
 
         condition_payloads = _validated_condition_payloads(payload.conditions)
-        conds_json = json.dumps(condition_payloads)
         preset = RulePreset(
             workspace_id=ws.id if ws else None,
-            owner_id=user.telegram_id,
             owner_user_id=user.id,
             name=payload.name.strip() or "Новое правило",
             action=payload.action or "turn_off",
-            conditions=conds_json,
+            conditions=condition_payloads,
             condition_logic=payload.condition_logic or "and",
             cooldown_minutes=payload.cooldown_minutes or 0,
             check_interval_minutes=payload.check_interval_minutes or 5,
@@ -304,7 +302,6 @@ async def create_rule_group(
 
         group = RuleGroup(
             workspace_id=ws.id if ws else None,
-            owner_id=user.telegram_id,
             owner_user_id=user.id,
             name=_clean_rule_group_name(payload.name),
             description=payload.description.strip(),
@@ -500,7 +497,6 @@ async def assign_rule_group_to_account(
             user,
             [item.preset_id for item in group_items],
             owner_user_id=account.owner_user_id,
-            owner_id=account.owner_id,
         )
         active_rules = _load_active_rules(account.active_rules)
         attached_ids = {rule.get("preset_id") for rule in active_rules}

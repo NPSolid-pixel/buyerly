@@ -64,7 +64,6 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
             await session.refresh(user)
             self.user_id = user.id
             connection = MetaConnection(
-                owner_id=user.telegram_id,
                 owner_user_id=user.id,
                 provider_user_id="meta-user-1",
                 provider_user_name="Meta Test User",

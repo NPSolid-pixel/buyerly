@@ -30,7 +30,7 @@ class TestBatchScheduleLoading(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_or_create_schedule_state_cache(self):
         async with self.session_maker() as session:
-            acc = Account(account_id="act_test_1", name="Test 1", owner_id="123", is_active=True)
+            acc = Account(account_id="act_test_1", name="Test 1", is_active=True)
             session.add(acc)
             await session.commit()
 
@@ -64,7 +64,6 @@ class TestBatchScheduleLoading(unittest.IsolatedAsyncioTestCase):
 
             conn = MetaConnection(
                 id=10,
-                owner_id="123",
                 owner_user_id=1,
                 provider_user_id="fb_123",
                 access_token_encrypted=encrypt_meta_token("EAAB_test_token_xyz"),
@@ -76,7 +75,6 @@ class TestBatchScheduleLoading(unittest.IsolatedAsyncioTestCase):
             acc = Account(
                 account_id="act_cached_1",
                 name="Cached Acc",
-                owner_id="123",
                 owner_user_id=1,
                 meta_connection_id=10,
                 is_active=True,

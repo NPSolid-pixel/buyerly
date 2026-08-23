@@ -546,5 +546,20 @@ class TestRuleGroupsPositionMigration(unittest.IsolatedAsyncioTestCase):
             await engine.dispose()
 
 
+class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
+    async def test_alembic_upgrade_head_applies_successfully(self):
+        from alembic.config import Config
+        from alembic import command
+        import os
+
+        ini_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+        alembic_cfg = Config(ini_path)
+        alembic_cfg.set_main_option(
+            "script_location",
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
+        )
+        command.upgrade(alembic_cfg, "head")
+
+
 if __name__ == "__main__":
     unittest.main()

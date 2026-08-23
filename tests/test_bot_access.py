@@ -61,7 +61,6 @@ class TestBotAccessChecks(unittest.IsolatedAsyncioTestCase):
             account_id="act_access_test",
             name="Access test",
             access_token="mock",
-            owner_id="owner",
         )
         async with self.sessions() as session:
             self.assertTrue(await _can_manage_account(session, "owner", account))

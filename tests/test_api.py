@@ -95,7 +95,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 account_id="act_1018756607700064",
                 name="Швеция 1",
                 access_token="mock_token",
-                owner_id="8948797431",
                 timezone_name="UTC",
                 currency="USD",
                 rules_enabled=False,
@@ -322,7 +321,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
             ).scalar_one()
             self.assertEqual(account.owner_user_id, user.id)
-            self.assertEqual(account.owner_id, "8948797431")
+            self.assertEqual(account.owner_user_id, buyer.id)
 
     async def test_get_accounts_endpoint(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
@@ -352,7 +351,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         account_id="act_2000000000000001",
                         name="NL second",
                         access_token="mock_token",
-                        owner_id="8948797431",
                         timezone_name="UTC",
                         currency="USD",
                     ),
@@ -360,7 +358,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         account_id="act_9000000000000001",
                         name="Admin foreign",
                         access_token="mock_token",
-                        owner_id="8634201356",
                         timezone_name="UTC",
                         currency="USD",
                     ),
@@ -485,7 +482,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
             ).scalar_one()
             conn_obj = MetaConnection(
-                owner_id="8948797431",
                 owner_user_id=buyer.id,
                 provider_user_id="provider_nick_1",
                 access_token_encrypted="encrypted_token",
@@ -502,7 +498,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             account.meta_connection_id = conn_obj.id
             session.add(
                 SummarySnapshot(
-                    owner_id="8948797431",
                     owner_user_id=buyer.id,
                     period="today",
                     payload={
@@ -525,7 +520,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
             )
             account_group = AccountGroup(
-                owner_id="8948797431",
                 owner_user_id=buyer.id,
                 name="NL",
                 description="Netherlands",
@@ -537,7 +531,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 Account(
                     account_id="act_999999999",
                     name="Foreign",
-                    owner_id="8634201356",
                     timezone_name="UTC",
                     currency="USD",
                 )
@@ -786,20 +779,17 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         async with self.test_session_maker() as session:
             buyer_presets = [
                 RulePreset(
-                    owner_id="8948797431",
                     name="Stop no leads",
                     action="turn_off",
                     conditions=json.dumps([{"metric": "spend", "operator": "gte", "value": 10}]),
                 ),
                 RulePreset(
-                    owner_id="8948797431",
                     name="Notify high CPL",
                     action="notify_only",
                     conditions=json.dumps([{"metric": "cpl", "operator": "gte", "value": 7}]),
                 ),
             ]
             foreign_preset = RulePreset(
-                owner_id="8634201356",
                 name="Admin private rule",
                 action="turn_off",
                 conditions="[]",
@@ -1025,7 +1015,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
             ).scalar_one()
             conn_obj = MetaConnection(
-                owner_id="8948797431",
                 owner_user_id=buyer.id,
                 provider_user_id="provider_nick_reimport",
                 access_token_encrypted="encrypted_token",
@@ -1269,7 +1258,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         account_id="act_blocked",
                         name="Blocked account",
                         access_token="blocked_token",
-                        owner_id="8948797431",
                         currency="USD",
                         account_status=2,
                         is_active=True,
@@ -1278,7 +1266,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         account_id="act_sync_error",
                         name="Error account",
                         access_token="error_token",
-                        owner_id="8948797431",
                         currency="USD",
                         account_status=1,
                         is_active=True,
@@ -1463,7 +1450,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     account_id="act_eur",
                     name="Euro account",
                     access_token="eur_token",
-                    owner_id="8948797431",
                     currency="EUR",
                     is_active=True,
                 )
@@ -1596,7 +1582,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     account_id="act_admin_account",
                     name="Admin account",
                     access_token="admin_mock_token",
-                    owner_id="8634201356",
                     timezone_name="UTC",
                 )
             )
@@ -1648,7 +1633,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             session.add_all(
                 [
                     AuditEvent(
-                        owner_id="8948797431",
                         category="RULE_ACTION",
                         event_type="STOP",
                         status="SUCCESS",
@@ -1662,7 +1646,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         correlation_id="buyer-cycle",
                     ),
                     AuditEvent(
-                        owner_id="8634201356",
                         category="ACCOUNT_HEALTH",
                         event_type="TOKEN_EXPIRED",
                         status="ERROR",
@@ -1701,7 +1684,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(buyer_response.status_code, 200)
         self.assertEqual(buyer_response.json()["total"], 1)
         self.assertEqual(buyer_response.json()["items"][0]["adset_id"], "buyer_adset")
-        self.assertIsNone(buyer_response.json()["items"][0]["owner_id"])
+        self.assertIsNone(buyer_response.json()["items"][0]["owner_user_id"])
         self.assertEqual(buyer_response.json()["status_counts"]["SUCCESS"], 1)
         self.assertEqual(buyer_error_filter.json()["total"], 0)
         self.assertEqual(buyer_error_filter.json()["status_counts"]["SUCCESS"], 1)
@@ -1710,7 +1693,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(admin_response.json()["total"], 2)
         self.assertEqual(admin_response.json()["total_pages"], 2)
         self.assertEqual(len(admin_response.json()["items"]), 1)
-        self.assertIsNotNone(admin_response.json()["items"][0]["owner_id"])
+        self.assertIsNotNone(admin_response.json()["items"][0]["owner_user_id"])
 
     async def test_failed_manual_reactivation_is_audited_without_exposing_secret(self):
         async with self.test_session_maker() as session:
@@ -1760,7 +1743,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
     async def test_stop_undo_is_guarded_idempotent_and_append_only(self):
         async with self.test_session_maker() as session:
             source = AuditEvent(
-                owner_id="8948797431",
                 actor_type="system",
                 actor_id="monitoring_worker",
                 category="RULE_ACTION",
@@ -1850,7 +1832,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
     async def test_undo_rejects_a_stale_action_after_a_newer_mutation(self):
         async with self.test_session_maker() as session:
             source = AuditEvent(
-                owner_id="8948797431",
                 category="RULE_ACTION",
                 event_type="STOP",
                 status="SUCCESS",
@@ -1865,7 +1846,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             await session.flush()
             session.add(
                 AuditEvent(
-                    owner_id="8948797431",
                     category="MANUAL_ACTION",
                     event_type="MANUAL_REACTIVATE",
                     status="SUCCESS",
@@ -1903,7 +1883,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
     async def test_budget_undo_restores_the_exact_previous_value(self):
         async with self.test_session_maker() as session:
             source = AuditEvent(
-                owner_id="8948797431",
                 category="RULE_ACTION",
                 event_type="INCREASE_BUDGET",
                 status="SUCCESS",
@@ -1950,7 +1929,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
     async def test_account_cannot_attach_another_owners_preset(self):
         async with self.test_session_maker() as session:
             foreign_preset = RulePreset(
-                owner_id="8634201356",
                 name="Admin-only preset",
                 action="turn_off",
                 conditions="[]",

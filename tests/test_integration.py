@@ -122,7 +122,6 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                 account_id="act_e2e_sweden_1083",
                 name="Underdog 3286 (Швеция)",
                 access_token="mock_token_123",
-                owner_id="123456789",
                 timezone_name="HST",
                 currency="USD",
                 active_rules=json.dumps([
@@ -215,7 +214,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             ).scalars().all()
             self.assertEqual(len(stop_events), 1)
             self.assertEqual(stop_events[0].status, "SUCCESS")
-            self.assertEqual(stop_events[0].owner_id, "123456789")
+            # owner_id removed in favor of owner_user_id
             self.assertEqual(stop_events[0].rule_id, 1)
             self.assertEqual(stop_events[0].rule_name, "Stop spend without leads")
             self.assertEqual(_json_val(stop_events[0].before_state)["status"], "ACTIVE")
@@ -585,7 +584,6 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                         account_id=f"act_parallel_{suffix}",
                         name=f"Parallel {suffix}",
                         access_token=f"token_{suffix}",
-                        owner_id="123456789",
                         timezone_name="UTC",
                         currency="USD",
                         active_rules="[]",
@@ -614,7 +612,6 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             session.add(
                 AutomationScheduleState(
                     state_key=MonitoringWorker._schedule_key("account", account.account_id),
-                    owner_id=account.owner_id,
                     account_id=account.account_id,
                     last_checked_at=now[0],
                 )
@@ -670,7 +667,6 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             session.add(
                 AutomationScheduleState(
                     state_key=f"rule:{self.account_id}:{self.account_id}:6",
-                    owner_id="123456789",
                     account_id=self.account_id,
                     rule_key=f"{self.account_id}:6",
                     last_checked_at=now[0],
@@ -752,7 +748,6 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             session.add(
                 RuleExecutionState(
                     execution_key=execution_key,
-                    owner_id=account.owner_id,
                     account_id=account.account_id,
                     adset_id="adset_2",
                     rule_key=rule_key,

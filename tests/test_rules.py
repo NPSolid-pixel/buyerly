@@ -13,7 +13,6 @@ class TestRuleEngine(unittest.TestCase):
             access_token="mock_token",
             timezone_name="UTC",
             currency="USD",
-            owner_id="123",
             rules_enabled=True,
             active_rules="[]",
         )

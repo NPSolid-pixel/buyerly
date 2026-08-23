@@ -1,37 +1,31 @@
-from sqlalchemy import and_, false, or_
+from sqlalchemy import false
 
 
 def owned_by(model, user):
-    """Stable owner check with a legacy fallback during rolling migration."""
-
-    legacy_id = str(user.telegram_id or "")
-    stable = model.owner_user_id == user.id
-    if not legacy_id:
-        return stable
-    return or_(
-        stable,
-        and_(model.owner_user_id.is_(None), model.owner_id == legacy_id),
-    )
+    """Owner check using workspace_id or owner_user_id."""
+    if getattr(model, "workspace_id", None) is not None and getattr(user, "active_workspace_id", None):
+        return model.workspace_id == user.active_workspace_id
+    if user and getattr(user, "id", None):
+        return model.owner_user_id == user.id
+    return false()
 
 
-def owned_by_ids(model, owner_user_id: int, legacy_owner_id: str):
-    return or_(
-        model.owner_user_id == owner_user_id if owner_user_id is not None else false(),
-        and_(
-            model.owner_user_id.is_(None),
-            model.owner_id == str(legacy_owner_id or ""),
-        ),
-    )
+def owned_by_ids(model, owner_user_id: int, legacy_owner_id: str = None):
+    if owner_user_id is not None:
+        return model.owner_user_id == owner_user_id
+    return false()
 
 
 def assign_owner(entity, user) -> None:
-    """Write both stable identity and the legacy notification identifier."""
-
-    entity.owner_user_id = user.id
-    entity.owner_id = str(user.telegram_id or "")
+    """Assign owner user and active workspace."""
+    entity.owner_user_id = getattr(user, "id", None)
+    if hasattr(entity, "workspace_id") and getattr(user, "active_workspace_id", None):
+        entity.workspace_id = user.active_workspace_id
 
 
 def entity_is_owned_by(entity, user) -> bool:
-    if getattr(entity, "owner_user_id", None) is not None:
-        return entity.owner_user_id == user.id
-    return bool(user.telegram_id) and entity.owner_id == str(user.telegram_id)
+    if not user:
+        return False
+    if hasattr(entity, "workspace_id") and entity.workspace_id and getattr(user, "active_workspace_id", None):
+        return entity.workspace_id == user.active_workspace_id
+    return getattr(entity, "owner_user_id", None) == getattr(user, "id", None)
