@@ -654,6 +654,65 @@ class MonitoringWorker:
             logger.error("Failed to persist audit event %s: %s", event_type, audit_error)
             return None
 
+    async def _handle_token_error(
+        self,
+        session,
+        acc: Account,
+        error: Exception,
+        connection_cache: dict[int, MetaConnection],
+        notification_target: str,
+    ) -> None:
+        logger.error("Token error for account %s: %s", acc.account_id, error)
+        acc.is_active = False
+
+        subcode = getattr(error, "subcode", None)
+        subcode_key = getattr(error, "subcode_key", "UNKNOWN")
+        title = getattr(error, "title", "")
+        description = getattr(error, "description", "")
+        action_hint = getattr(error, "action_hint", "")
+        user_msg = getattr(error, "error_user_msg", "")
+        fbtrace_id = getattr(error, "fbtrace_id", "")
+        error_code = getattr(error, "code", 190)
+
+        if acc.meta_connection_id and acc.meta_connection_id in connection_cache:
+            conn = connection_cache[acc.meta_connection_id]
+            conn.status = "error"
+            conn.last_error = description or str(error)
+
+        await self._persist_audit_event(
+            session,
+            acc,
+            event_type="TOKEN_EXPIRED",
+            status="ERROR",
+            category="ACCOUNT_HEALTH",
+            action="DISABLE_MONITORING",
+            message=description or str(error),
+            before_state={"is_active": True},
+            after_state={"is_active": False},
+            details={
+                "error_code": error_code,
+                "error_subcode": subcode,
+                "subcode_key": subcode_key,
+                "subcode_title": title,
+                "subcode_description": description,
+                "action_hint": action_hint,
+                "error_user_msg": user_msg,
+                "fbtrace_id": fbtrace_id,
+            },
+        )
+        if self.telegram_notifier:
+            await self.telegram_notifier(
+                event_type="TOKEN_EXPIRED",
+                account_name=acc.name,
+                account_id=acc.account_id,
+                target_chat_id=notification_target,
+                subcode=subcode,
+                subcode_title=title,
+                subcode_description=description,
+                action_hint=action_hint,
+                user_msg=user_msg,
+            )
+
     async def run_day_boundary_cycle(self) -> dict:
         """Notify once when each connected account enters a new local date."""
 
@@ -1033,26 +1092,13 @@ class MonitoringWorker:
                 access_token = item["access_token"]
                 try:
                     if isinstance(snapshot, PermissionError):
-                        logger.error("Token expired for account %s: %s", acc.account_id, snapshot)
-                        acc.is_active = False
-                        await self._persist_audit_event(
+                        await self._handle_token_error(
                             session,
                             acc,
-                            event_type="TOKEN_EXPIRED",
-                            status="ERROR",
-                            category="ACCOUNT_HEALTH",
-                            action="DISABLE_MONITORING",
-                            message=str(snapshot),
-                            before_state={"is_active": True},
-                            after_state={"is_active": False},
+                            snapshot,
+                            connection_cache,
+                            notification_target,
                         )
-                        if self.telegram_notifier:
-                            await self.telegram_notifier(
-                                event_type="TOKEN_EXPIRED",
-                                account_name=acc.name,
-                                account_id=acc.account_id,
-                                target_chat_id=notification_target,
-                            )
                         continue
                     if isinstance(snapshot, Exception):
                         raise snapshot
