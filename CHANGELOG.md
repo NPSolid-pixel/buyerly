@@ -10,6 +10,13 @@
 ## [Unreleased]
 
 ### Fixed
+- **Устранение Multi-Process Cache Drift (Синхронизация статусов между Worker и Web UI)**:
+  - Создана таблица `adset_inventory_cache` и сервис `AdsetInventoryService` в PostgreSQL как единый источник правды для инвентаря адсетов между процессами воркера и API.
+  - Добавлен адаптер `PostgreSQLInventoryCache` для `MetaClient` с поддержкой внешнего провайдера кэша и чистой архитектуры.
+  - Реализована защита от состояния гонки «Stale Overwrite» при конкурентных сетевых ответах Meta API.
+  - Добавлена инвалидация кэша инвентаря и сводки (`invalidate_summary_cache`) при любых мутациях статусов и бюджетов.
+  - Обеспечена финансовая безопасность (Financial Safety): успех переключения статуса в Meta не маскируется локальными ошибками сохранения БД.
+  - Добавлена миграция Alembic `0002_adset_inventory_cache.py`.
 - **Парсинг Omni и Custom Conversions в Meta Insights**:
   - Добавлена поддержка событий `omni_lead`, `omni:lead`, `onsite_conversion.lead_grouped`, `leadgen.other`, `leadgen`, `leadgen_grouped` в метод извлечения конверсий `_conversion_counts`.
   - Добавлен безопасный fallback для пользовательских конверсий (`offsite_conversion.custom.*`, `custom:*`, `omni_custom`) для предотвращения ложных срабатываний стоп-правил (False STOP).

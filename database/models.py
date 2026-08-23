@@ -600,6 +600,22 @@ class StoppedAdSet(Base):
         return f"<StoppedAdSet(adset_id='{self.adset_id}', spend={self.stop_spend})>"
 
 
+class AdsetInventoryCache(Base):
+    """PostgreSQL-backed shared inventory cache for Meta ad sets across worker and API."""
+
+    __tablename__ = "adset_inventory_cache"
+
+    account_id = Column(String, primary_key=True, index=True)
+    adsets_payload = Column(JSONB, nullable=False, doc="List of adsets: id, name, status, effective_status, daily_budget")
+    version = Column(Integer, default=1, nullable=False)
+    fetched_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<AdsetInventoryCache(account_id='{self.account_id}', expires_at='{self.expires_at}')>"
+
+
 class EventLog(Base):
     __tablename__ = "event_logs"
 

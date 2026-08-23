@@ -40,10 +40,11 @@ from database.models import (
     User,
 )
 from meta_api.client import MetaClient
+from services.inventory_cache import PostgreSQLInventoryCache
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Accounts & Groups"])
-meta_client = MetaClient()
+meta_client = MetaClient(cache_provider=PostgreSQLInventoryCache())
 
 
 @router.get("/accounts", response_model=List[AccountItem])
