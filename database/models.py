@@ -489,8 +489,8 @@ class Account(Base):
     last_started_date = Column(String, default="", nullable=False, doc="Legacy: прежняя дата обнаружения Spend")
     last_day_start_date = Column(String, default="", nullable=False, doc="Последняя локальная дата, обработанная уведомлением новых суток")
     
-    # Привязанные правила (JSONB)
-    active_rules = Column(JSONB, default=list, nullable=False, doc="JSONB массив объектов привязанных правил")
+    # Привязанные правила (JSON)
+    active_rules = Column(Text, default="[]", nullable=False, doc="JSON массив объектов привязанных правил")
     
     # Статус кабинета в Meta
     account_status = Column(Integer, default=1, nullable=False, doc="1: ACTIVE, 2: DISABLED, 3: UNSETTLED")

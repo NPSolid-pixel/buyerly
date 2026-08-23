@@ -590,7 +590,7 @@ class MonitoringWorker:
             select(StoppedAdSet).where(StoppedAdSet.adset_id == result.adset_id)
         )
         stopped = query.scalar_one_or_none()
-        stopped_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        stopped_at = datetime.now(timezone.utc)
         if stopped:
             stopped.account_id = account.account_id
             stopped.adset_name = result.adset_name

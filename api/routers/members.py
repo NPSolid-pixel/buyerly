@@ -377,7 +377,7 @@ async def create_workspace_invite(
             raise HTTPException(status_code=403, detail="Недостаточно прав для создания приглашений")
 
         token = f"inv_{secrets.token_urlsafe(24)}"
-        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        now_dt = datetime.now(timezone.utc)
         expires_at = now_dt + timedelta(days=req.expires_in_days) if req.expires_in_days > 0 else None
         target_email = req.email.strip().lower() if req.email and req.email.strip() else None
 
@@ -464,7 +464,7 @@ async def list_workspace_invites(
             )
         ).all()
 
-        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        now_dt = datetime.now(timezone.utc)
         items = []
         base_url = settings.WEBAPP_URL.rstrip("/") if settings.WEBAPP_URL else ""
 
@@ -559,7 +559,7 @@ async def get_public_invite_info(token: str):
                 message="Приглашение не найдено или ссылка недействительна",
             )
 
-        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        now_dt = datetime.now(timezone.utc)
         if invite.status == "revoked":
             return PublicInviteInfoResponse(
                 valid=False,
@@ -632,7 +632,7 @@ async def accept_workspace_invite(
         if not invite:
             raise HTTPException(status_code=404, detail="Приглашение не найдено")
 
-        now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+        now_dt = datetime.now(timezone.utc)
         if invite.status == "revoked":
             raise HTTPException(status_code=400, detail="Это приглашение было отозвано")
 
