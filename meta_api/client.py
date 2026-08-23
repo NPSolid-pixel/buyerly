@@ -54,11 +54,12 @@ class MetaClient:
         self.graph_version = requested_version
         self.base_url = f"https://graph.facebook.com/{self.graph_version}"
         self._client: Optional[httpx.AsyncClient] = None
-        self._inventory_cache: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
         self._inventory_cache_seconds = 5 * 60
+        self._inventory_cache: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
         self._adaptive_polling_enabled = True
         self._usage_soft_limit_percent = 60
         self._usage_hard_limit_percent = 80
+        self._usage_ttl_seconds = 15 * 60
         self._usage_snapshot: Dict[str, Any] = {
             "max_percent": 0,
             "app": {},
@@ -73,6 +74,7 @@ class MetaClient:
         adaptive_polling_enabled: bool = True,
         usage_soft_limit_percent: int = 60,
         usage_hard_limit_percent: int = 80,
+        usage_ttl_minutes: int = 15,
     ) -> None:
         """Apply operator-controlled limits without recreating the client."""
 
@@ -83,6 +85,7 @@ class MetaClient:
             self._usage_soft_limit_percent + 1,
             int(usage_hard_limit_percent),
         )
+        self._usage_ttl_seconds = max(60, int(usage_ttl_minutes) * 60)
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -105,6 +108,13 @@ class MetaClient:
         }
 
     @staticmethod
+    def _normalize_account_id(account_id: str) -> str:
+        acc = str(account_id or "").strip()
+        if not acc:
+            return ""
+        return acc if acc.startswith("act_") else f"act_{acc}"
+
+    @staticmethod
     def _copy_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return [dict(row) for row in rows]
 
@@ -125,18 +135,68 @@ class MetaClient:
             ).hexdigest()
         return protected
 
-    async def _respect_usage_limit(self, *, priority: str) -> None:
+    async def _respect_usage_limit(
+        self,
+        *,
+        account_id: str = "",
+        priority: str = "normal",
+    ) -> None:
         if not self._adaptive_polling_enabled:
             return
         if priority == "critical":
             return
-        max_percent = int(self._usage_snapshot.get("max_percent", 0) or 0)
-        if max_percent >= self._usage_hard_limit_percent:
-            raise MetaRateLimitDeferred(
-                f"Meta quota is at {max_percent}%; non-critical polling is deferred"
+
+        now = time.time()
+
+        # 1. Global App-Level Quota (X-App-Usage)
+        app_usage = self._usage_snapshot.get("app") or {}
+        app_updated = self._safe_float(self._usage_snapshot.get("updated_at") or 0)
+        app_percent = 0
+        if not app_updated or (now - app_updated) <= self._usage_ttl_seconds:
+            app_percent = max(
+                (self._safe_int(v) for v in app_usage.values()),
+                default=0,
             )
-        if max_percent >= self._usage_soft_limit_percent:
-            pressure = max_percent - self._usage_soft_limit_percent + 1
+
+        if app_percent >= self._usage_hard_limit_percent:
+            raise MetaRateLimitDeferred(
+                f"Meta App quota is at {app_percent}%; non-critical polling is deferred"
+            )
+
+        # 2. Local Ad Account-Level Quota (X-Business-Use-Case-Usage)
+        account_percent = 0
+        target_account = self._normalize_account_id(account_id)
+        if target_account:
+            accounts_map = self._usage_snapshot.get("accounts") or {}
+            acc_data = accounts_map.get(target_account)
+            if not acc_data and target_account.startswith("act_"):
+                acc_data = accounts_map.get(target_account[4:])
+            elif not acc_data and not target_account.startswith("act_"):
+                acc_data = accounts_map.get(f"act_{target_account}")
+
+            if acc_data:
+                acc_updated = self._safe_float(acc_data.get("updated_at") or 0)
+                if not acc_updated or (now - acc_updated) <= self._usage_ttl_seconds:
+                    account_percent = max(
+                        self._safe_int(acc_data.get("call_count")),
+                        self._safe_int(acc_data.get("total_cputime")),
+                        self._safe_int(acc_data.get("total_time")),
+                    )
+
+            if account_percent >= self._usage_hard_limit_percent:
+                raise MetaRateLimitDeferred(
+                    f"Meta quota for account {account_id} is at {account_percent}%; non-critical polling is deferred"
+                )
+        else:
+            raw_max = self._safe_int(self._usage_snapshot.get("max_percent", 0))
+            if raw_max >= self._usage_hard_limit_percent and not app_usage:
+                raise MetaRateLimitDeferred(
+                    f"Meta quota is at {raw_max}%; non-critical polling is deferred"
+                )
+
+        effective_pressure_percent = max(app_percent, account_percent)
+        if effective_pressure_percent >= self._usage_soft_limit_percent:
+            pressure = effective_pressure_percent - self._usage_soft_limit_percent + 1
             await asyncio.sleep(min(2.0, 0.05 * pressure) + random.uniform(0.0, 0.15))
 
     @staticmethod
@@ -283,12 +343,14 @@ class MetaClient:
         Парсит диагностический заголовок X-Business-Use-Case-Usage и X-App-Usage.
         Если использование квоты достигает 80%, логирует предупреждение и флаг замедления.
         """
+        now = time.time()
         usage_info = {
             "call_count": 0,
             "total_cputime": 0,
             "total_time": 0,
             "estimated_time_to_regain_access": 0,
-            "is_high_usage": False
+            "is_high_usage": False,
+            "updated_at": now,
         }
 
         # 1. Проверяем заголовок X-Business-Use-Case-Usage (детальные лимиты по кабинету)
@@ -298,6 +360,15 @@ class MetaClient:
                 buc_data = json.loads(buc_header)
                 # Структура: {"act_123456": [{"type": "ads_management", "call_count": 10, ...}]}
                 for acc_key, metrics_list in buc_data.items():
+                    acc_norm = self._normalize_account_id(acc_key)
+                    acc_usage = {
+                        "call_count": 0,
+                        "total_cputime": 0,
+                        "total_time": 0,
+                        "estimated_time_to_regain_access": 0,
+                        "is_high_usage": False,
+                        "updated_at": now,
+                    }
                     for metric in metrics_list:
                         call_cnt = self._safe_int(metric.get("call_count", 0))
                         cpu_time = self._safe_int(metric.get("total_cputime", 0))
@@ -306,6 +377,11 @@ class MetaClient:
                             metric.get("estimated_time_to_regain_access", 0)
                         )
 
+                        acc_usage["call_count"] = max(acc_usage["call_count"], call_cnt)
+                        acc_usage["total_cputime"] = max(acc_usage["total_cputime"], cpu_time)
+                        acc_usage["total_time"] = max(acc_usage["total_time"], tot_time)
+                        acc_usage["estimated_time_to_regain_access"] = max(acc_usage["estimated_time_to_regain_access"], regain_mins)
+
                         usage_info["call_count"] = max(usage_info["call_count"], call_cnt)
                         usage_info["total_cputime"] = max(usage_info["total_cputime"], cpu_time)
                         usage_info["total_time"] = max(usage_info["total_time"], tot_time)
@@ -313,14 +389,18 @@ class MetaClient:
 
                         # Если стрелка на спидометре дошла до 80%
                         if call_cnt >= 80 or cpu_time >= 80 or tot_time >= 80:
+                            acc_usage["is_high_usage"] = True
                             usage_info["is_high_usage"] = True
                             logger.warning(
                                 f"⚠️ [BUC Rate Warning] Meta API Usage is HIGH for {account_id or acc_key}: "
                                 f"call_count={call_cnt}%, cputime={cpu_time}%, time={tot_time}%, "
                                 f"regain_in={regain_mins}m"
                             )
+                    self._usage_snapshot["accounts"][acc_norm] = acc_usage
+
                 if account_id:
-                    self._usage_snapshot["accounts"][account_id] = dict(usage_info)
+                    normalized_id = self._normalize_account_id(account_id)
+                    self._usage_snapshot["accounts"][normalized_id] = dict(usage_info)
             except Exception as e:
                 logger.debug(f"Failed to parse x-business-use-case-usage header: {e}")
 
@@ -350,6 +430,7 @@ class MetaClient:
                     self._safe_int(row.get("total_time")),
                 )
                 for row in self._usage_snapshot["accounts"].values()
+                if (now - self._safe_float(row.get("updated_at") or 0)) <= self._usage_ttl_seconds
             ),
             default=0,
         )
@@ -358,7 +439,7 @@ class MetaClient:
             default=0,
         )
         self._usage_snapshot["max_percent"] = max(account_max, app_max)
-        self._usage_snapshot["updated_at"] = time.time()
+        self._usage_snapshot["updated_at"] = now
         return usage_info
 
     async def _request_with_retry(
@@ -374,7 +455,7 @@ class MetaClient:
         """
         Централизованный исполнитель HTTP-запросов с Exponential Backoff + Jitter и мониторингом лимитов.
         """
-        await self._respect_usage_limit(priority=priority)
+        await self._respect_usage_limit(account_id=account_id, priority=priority)
         client = await self._get_client()
         request_params = self._auth_protected_payload(params)
         request_data = self._auth_protected_payload(data)
