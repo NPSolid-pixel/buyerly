@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import build_audit_event
 from core.currency import UNKNOWN_CURRENCY, normalize_currency
@@ -223,7 +224,6 @@ async def reverse_audit_event(
     if undo_state is None:
         undo_state = ActionUndoState(
             original_event_id=source.id,
-            owner_id=source.owner_id,
             owner_user_id=source.owner_user_id,
             status="PENDING",
             correlation_id=uuid.uuid4().hex,

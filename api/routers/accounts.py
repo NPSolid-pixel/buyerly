@@ -53,7 +53,6 @@ async def list_accounts(user: User = Depends(get_current_user)):
         group_ids_by_account = await _account_group_ids_by_account(session, user)
         latest_summary = await _load_persisted_summary(
             session,
-            owner_id=str(user.telegram_id or ""),
             owner_user_id=user.id,
             period="today",
         )
@@ -305,7 +304,6 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
 
     token = payload.access_token.strip()
     batch_name = (payload.batch_name or "-").strip()
-    owner_id = user.telegram_id
 
     added_list = []
     error_list = []

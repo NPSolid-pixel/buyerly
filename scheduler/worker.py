@@ -355,7 +355,6 @@ class MonitoringWorker:
         if state is None:
             state = RuleExecutionState(
                 execution_key=execution_key,
-                owner_id=str(account.owner_id or ""),
                 owner_user_id=account.owner_user_id,
                 account_id=str(account.account_id),
                 adset_id=str(evaluation.adset_id),
@@ -402,11 +401,6 @@ class MonitoringWorker:
         state.before_state = observed_state
         state.after_state = desired_state
         state.details = {}
-        await session.commit()
-        return True, "claimed", state
-        state.before_state = json.dumps(observed_state, ensure_ascii=False, separators=(",", ":"))
-        state.after_state = json.dumps(desired_state, ensure_ascii=False, separators=(",", ":"))
-        state.details = "{}"
         await session.commit()
         return True, "claimed", state
 
