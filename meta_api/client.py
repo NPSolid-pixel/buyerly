@@ -246,22 +246,53 @@ class MetaClient:
                     return actions[alias]
             return 0
 
+        def first_custom_conversion_value() -> int:
+            for k, v in actions.items():
+                if v > 0 and (
+                    k.startswith("offsite_conversion.custom.")
+                    or k.startswith("custom:")
+                    or k.startswith("omni_custom")
+                ):
+                    return v
+            return 0
+
+        leads = first_value(
+            "lead",
+            "omni_lead",
+            "omni:lead",
+            "offsite_conversion.fb_pixel_lead",
+            "onsite_conversion.lead_grouped",
+            "onsite_web_lead",
+            "onsite_lead",
+            "leadgen.other",
+            "leadgen",
+            "leadgen_grouped",
+        )
+        if leads == 0:
+            leads = first_custom_conversion_value()
+
+        registrations = first_value(
+            "complete_registration",
+            "omni_complete_registration",
+            "omni:complete_registration",
+            "offsite_conversion.fb_pixel_complete_registration",
+            "onsite_conversion.registration_grouped",
+            "onsite_web_complete_registration",
+        )
+
+        purchases = first_value(
+            "purchase",
+            "omni_purchase",
+            "omni:purchase",
+            "offsite_conversion.fb_pixel_purchase",
+            "onsite_conversion.purchase_grouped",
+            "onsite_web_purchase",
+        )
+
         return {
-            "leads": first_value(
-                "lead",
-                "offsite_conversion.fb_pixel_lead",
-                "onsite_web_lead",
-            ),
-            "registrations": first_value(
-                "complete_registration",
-                "offsite_conversion.fb_pixel_complete_registration",
-                "omni_complete_registration",
-            ),
-            "purchases": first_value(
-                "purchase",
-                "offsite_conversion.fb_pixel_purchase",
-                "omni_purchase",
-            ),
+            "leads": leads,
+            "registrations": registrations,
+            "purchases": purchases,
         }
 
     @classmethod
@@ -289,10 +320,14 @@ class MetaClient:
             "outbound_clicks": cls._first_action_value(
                 insight.get("outbound_clicks"),
                 "outbound_click",
+                "omni_outbound_click",
+                "omni:outbound_click",
             ),
             "landing_page_views": cls._first_action_value(
                 insight.get("actions"),
                 "landing_page_view",
+                "omni_landing_page_view",
+                "omni:landing_page_view",
                 "offsite_conversion.fb_pixel_landing_page_view",
             ),
             **counts,

@@ -7,6 +7,16 @@
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Парсинг Omni и Custom Conversions в Meta Insights**:
+  - Добавлена поддержка событий `omni_lead`, `omni:lead`, `onsite_conversion.lead_grouped`, `leadgen.other`, `leadgen`, `leadgen_grouped` в метод извлечения конверсий `_conversion_counts`.
+  - Добавлен безопасный fallback для пользовательских конверсий (`offsite_conversion.custom.*`, `custom:*`, `omni_custom`) для предотвращения ложных срабатываний стоп-правил (False STOP).
+  - Обеспечена каноническая дедупликация событий во избежание задвоения лидов.
+
+---
+
 ## [1.2.0] - 2026-08-23
 
 ### 🗄 Модернизация базы данных, чистый Multi-Tenant и декларативный Alembic (Database Modernization Release)
