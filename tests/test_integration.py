@@ -89,7 +89,7 @@ class MockMetaClient(MetaClient):
         source = self.insights_by_window.get(date_preset, self.adsets_state)
         return [dict(adset) for adset in source.values()]
 
-    async def set_adset_status(self, adset_id: str, access_token: str, status: str) -> bool:
+    async def set_adset_status(self, adset_id: str, access_token: str, status: str, *args, **kwargs) -> bool:
         self.adsets_state[adset_id]["status"] = status
         self.adsets_state[adset_id]["effective_status"] = status
         self.status_changes.append((adset_id, status))
@@ -101,6 +101,8 @@ class MockMetaClient(MetaClient):
         access_token: str,
         new_daily_budget_dollars: float,
         currency: str = "UNKNOWN",
+        *args,
+        **kwargs,
     ) -> bool:
         self.adsets_state[adset_id]["daily_budget"] = new_daily_budget_dollars
         self.budget_changes.append((adset_id, new_daily_budget_dollars))
