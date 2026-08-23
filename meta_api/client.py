@@ -31,6 +31,152 @@ ACCOUNT_SUMMARY_FIELDS = (
     "inline_link_clicks,outbound_clicks,actions"
 )
 
+META_TOKEN_SUBCODE_MAP: Dict[int, tuple[str, str, str, str]] = {
+    # subcode: (subcode_key, title, description, action_hint)
+    458: (
+        "APP_REVOKED",
+        "🚫 Доступ отозван",
+        "Приложение удалено из бизнес-интеграций Facebook",
+        "Переподключите интеграцию в настройках Business Manager",
+    ),
+    459: (
+        "CHECKPOINT",
+        "🔒 Чекпоинт / Бан профиля",
+        "Профиль Facebook отправлен на проверку безопасности (селфи / документы)",
+        "Зайдите в профиль через антидетект-браузер и пройдите чекпоинт",
+    ),
+    460: (
+        "PASSWORD_CHANGED",
+        "🔑 Пароль изменён",
+        "Пароль аккаунта был изменён, все сессии сброшены",
+        "Авторизуйтесь заново с новым паролем",
+    ),
+    463: (
+        "SESSION_EXPIRED",
+        "⏳ Срок токена истёк",
+        "Истёк 60-дневный срок действия долгоживущего токена",
+        "Обновите токен через бота (кнопка '➕ Добавить кабинеты')",
+    ),
+    464: (
+        "UNCONFIRMED_USER",
+        "📧 Аккаунт не подтверждён",
+        "Пользователь не подтвердил email или телефон в Facebook",
+        "Подтвердите контактные данные в профиле FB",
+    ),
+    467: (
+        "ACCESS_TOKEN_INVALIDATED",
+        "🚪 Сессия завершена",
+        "Выполнен выход со всех устройств или сброс токена",
+        "Выпустите новый токен доступа",
+    ),
+    490: (
+        "LOGIN_APPROVAL_NEEDED",
+        "🛡 Требуется 2FA",
+        "Meta запросила подтверждение двухфакторной аутентификации",
+        "Подтвердите вход через приложение аутентификации",
+    ),
+    492: (
+        "DEVICE_SESSION_EXPIRED",
+        "📱 Сессия устройства устарела",
+        "Сессия мобильного/веб устройства устарела",
+        "Переавторизуйтесь в аккаунте",
+    ),
+    1348001: (
+        "ACCOUNT_PERMISSION_DENIED",
+        "🚫 Нет прав на кабинет",
+        "Пользователь не имеет роли администратора/рекламодателя в кабинете",
+        "Выдайте права пользователю в Business Manager",
+    ),
+}
+
+
+class MetaTokenAuthError(PermissionError):
+    """
+    Структурированное исключение авторизации/токена Meta Marketing API.
+    Наследуется от PermissionError для 100% обратной совместимости.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: int = 190,
+        subcode: Optional[int] = None,
+        subcode_key: str = "UNKNOWN",
+        title: str = "",
+        description: str = "",
+        action_hint: str = "",
+        error_user_title: str = "",
+        error_user_msg: str = "",
+        fbtrace_id: str = "",
+    ):
+        super().__init__(message)
+        self.code = code
+        self.subcode = subcode
+        self.subcode_key = subcode_key
+        self.title = title
+        self.description = description
+        self.action_hint = action_hint
+        self.error_user_title = error_user_title
+        self.error_user_msg = error_user_msg
+        self.fbtrace_id = fbtrace_id
+
+
+def classify_meta_token_error(
+    error_data: Dict[str, Any],
+    fallback_message: str = "",
+) -> MetaTokenAuthError:
+    """
+    Классифицирует ошибку токена/прав Meta API на основе code, error_subcode и сообщений Meta.
+    """
+    raw_code = error_data.get("code")
+    try:
+        code = int(raw_code) if raw_code is not None else 190
+    except (TypeError, ValueError):
+        code = 190
+
+    raw_subcode = error_data.get("error_subcode")
+    try:
+        subcode = int(raw_subcode) if raw_subcode is not None else None
+    except (TypeError, ValueError):
+        subcode = None
+
+    error_user_title = str(error_data.get("error_user_title") or "").strip()
+    error_user_msg = str(error_data.get("error_user_msg") or "").strip()
+    fbtrace_id = str(error_data.get("fbtrace_id") or "").strip()
+    message = str(error_data.get("message") or fallback_message or "Meta token expired or invalid").strip()
+
+    if subcode is not None and subcode in META_TOKEN_SUBCODE_MAP:
+        subcode_key, title, description, action_hint = META_TOKEN_SUBCODE_MAP[subcode]
+    elif code in [10, 200]:
+        subcode_key = "ACCOUNT_PERMISSION_DENIED"
+        title = "🚫 Нет прав на кабинет"
+        description = "Недостаточно прав для управления рекламным кабинетом в Meta"
+        action_hint = "Проверьте права пользователя в Business Manager"
+    elif code in [102]:
+        subcode_key = "API_SESSION_INVALID"
+        title = "🔌 Сессия API недействительна"
+        description = "Сессия API Meta завершена или сброшена"
+        action_hint = "Переподключите аккаунт через OAuth"
+    else:
+        subcode_key = "TOKEN_INVALID"
+        title = "🔑 Токен недействителен"
+        description = "Токен доступа Meta API стал недействительным или истёк"
+        action_hint = "Обновите токен через бота (кнопка '➕ Добавить кабинеты')"
+
+    return MetaTokenAuthError(
+        f"Token expired or invalid: {message}",
+        code=code,
+        subcode=subcode,
+        subcode_key=subcode_key,
+        title=title,
+        description=description,
+        action_hint=action_hint,
+        error_user_title=error_user_title,
+        error_user_msg=error_user_msg,
+        fbtrace_id=fbtrace_id,
+    )
+
 
 class MetaRateLimitDeferred(RuntimeError):
     """A non-critical request was postponed to protect the Meta API quota."""
@@ -552,16 +698,18 @@ class MetaClient:
                 except Exception:
                     pass
                 error_code = error_data.get("code")
+                error_subcode = error_data.get("error_subcode")
                 error_msg = error_data.get("message", resp.text)
                 logger.error(
-                    "Meta API Error (%s, code %s) for %s: %s",
+                    "Meta API Error (%s, code %s, subcode %s) for %s: %s",
                     resp.status_code,
                     error_code,
+                    error_subcode,
                     account_id,
                     error_msg,
                 )
-                if error_code in [190, 102, 10]:
-                    raise PermissionError(f"Token expired or invalid: {error_msg}")
+                if error_code in [190, 102, 10, 200]:
+                    raise classify_meta_token_error(error_data, fallback_message=error_msg)
                 raise RuntimeError(f"Meta API Error ({resp.status_code}): {error_msg}")
 
             except (httpx.TimeoutException, httpx.NetworkError) as net_err:

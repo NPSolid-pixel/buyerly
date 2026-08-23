@@ -1,3 +1,4 @@
+import html
 import logging
 from typing import Optional
 from aiogram import Bot
@@ -7,6 +8,7 @@ from bot.keyboards import get_undo_action_keyboard
 from database.db import async_session_maker
 from database.models import EventLog
 from core.currency import format_money, normalize_currency
+from core.logging_config import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -187,12 +189,34 @@ class TelegramNotifier:
 
             # 6. СЛЕТЕВШИЙ ТОКЕН ДОСТУПА
             elif event_type == "TOKEN_EXPIRED":
-                text = (
-                    f"🔑 <b>ВНИМАНИЕ: Слетел Access Token Meta API!</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"⚠️ <i>Токен доступа стал недействительным или истек срок действия.</i>\n\n"
-                    f"💡 <i>Обновите токен через бота (кнопка '➕ Добавить кабинеты').</i>"
-                )
+                safe_account_name = html.escape(str(account_name or ""))
+                safe_account_id = html.escape(str(account_id or ""))
+                subcode = kwargs.get("subcode")
+                subcode_title = html.escape(str(kwargs.get("subcode_title") or "").strip())
+                subcode_description = html.escape(str(kwargs.get("subcode_description") or "").strip())
+                action_hint = html.escape(str(kwargs.get("action_hint") or "").strip())
+                user_msg = html.escape(redact_secrets(str(kwargs.get("user_msg") or "").strip()))[:350]
+
+                lines = ["🔑 <b>ВНИМАНИЕ: Проблема с токеном Meta API!</b>\n"]
+                lines.append(f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)")
+
+                if subcode_title:
+                    subcode_str = f" <i>(Subcode {subcode})</i>" if subcode is not None else ""
+                    lines.append(f"🏷 <b>Диагноз:</b> {subcode_title}{subcode_str}")
+
+                if subcode_description:
+                    lines.append(f"📋 <b>Причина:</b> {subcode_description}")
+                elif not subcode_title:
+                    lines.append("⚠️ <i>Токен доступа стал недействительным или истёк срок действия.</i>")
+
+                if user_msg:
+                    lines.append(f"💬 <i>«{user_msg}»</i>")
+
+                hint = action_hint or "Обновите токен через бота (кнопка '➕ Добавить кабинеты')."
+                lines.append(f"\n💡 <b>Что делать:</b> {hint}")
+                lines.append("🛑 <i>Мониторинг этого кабинета временно приостановлен.</i>")
+
+                text = "\n".join(lines)
 
             audit_event_id = kwargs.get("audit_event_id")
             if audit_event_id and event_type in {
