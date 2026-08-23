@@ -178,6 +178,8 @@ class TestTelegramNotifierSubcodes(unittest.IsolatedAsyncioTestCase):
         self.assertIn("A" * 350, text)
 
 
+from cryptography.fernet import Fernet
+from core.config import settings
 from core.meta_tokens import encrypt_meta_token
 from tests.test_db_helper import create_test_engine, init_test_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -187,6 +189,9 @@ class TestMonitoringWorkerTokenErrorHandling(unittest.IsolatedAsyncioTestCase):
     """Интеграционные тесты обработки MetaTokenAuthError в MonitoringWorker."""
 
     async def asyncSetUp(self):
+        self.original_key = settings.META_TOKEN_ENCRYPTION_KEY
+        settings.META_TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode("ascii")
+
         self.engine = create_test_engine()
         self.session_maker = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
         await init_test_db(self.engine)
@@ -248,6 +253,7 @@ class TestMonitoringWorkerTokenErrorHandling(unittest.IsolatedAsyncioTestCase):
             self.conn_id = conn.id
 
     async def asyncTearDown(self):
+        settings.META_TOKEN_ENCRYPTION_KEY = self.original_key
         import scheduler.worker as sw
         import database.db as db
         if self.orig_sw_session_maker:
