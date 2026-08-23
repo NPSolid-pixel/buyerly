@@ -54,9 +54,14 @@ async def get_analytics_view(user: User = Depends(get_current_user)):
         if row is None:
             config = _normalize_summary_view_config({})
         else:
-            try:
-                stored_config = json.loads(row.config or "{}")
-            except (TypeError, json.JSONDecodeError):
+            if isinstance(row.config, dict):
+                stored_config = dict(row.config)
+            elif isinstance(row.config, str):
+                try:
+                    stored_config = json.loads(row.config or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    stored_config = {}
+            else:
                 stored_config = {}
             stored_order = stored_config.get("column_order")
             if (
