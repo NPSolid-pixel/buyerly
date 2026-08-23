@@ -549,6 +549,8 @@ async def migrate_automation_settings_contract(conn) -> list[str]:
         "usage_soft_limit_percent": "INTEGER NOT NULL DEFAULT 60",
         "usage_hard_limit_percent": "INTEGER NOT NULL DEFAULT 80",
         "adaptive_polling_enabled": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "admin_chat_id": "VARCHAR NOT NULL DEFAULT ''",
+        "updated_at": "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
     }
     added = []
     for name, definition in definitions.items():
