@@ -16,6 +16,8 @@ from database.models import (
     RuleExecutionState,
     StoppedAdSet,
     User,
+    Workspace,
+    WorkspaceMember,
 )
 from rules.engine import RuleEngine, RuleAction
 from scheduler.worker import MonitoringWorker
@@ -129,12 +131,24 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             session.add(user)
             await session.flush()
 
+            ws = Workspace(
+                name="E2E Workspace",
+                slug="e2e-workspace",
+                badge_text="E",
+                badge_color="#3B82F6",
+                owner_user_id=user.id,
+            )
+            session.add(ws)
+            await session.flush()
+            session.add(WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner"))
+            user.active_workspace_id = ws.id
+
             account = Account(
                 account_id="act_e2e_sweden_1083",
                 name="Underdog 3286 (Швеция)",
                 access_token="mock_token_123",
                 owner_user_id=user.id,
-                workspace_id=user.active_workspace_id,
+                workspace_id=ws.id,
                 timezone_name="HST",
                 currency="USD",
                 active_rules=json.dumps([

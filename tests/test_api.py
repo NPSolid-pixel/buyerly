@@ -32,6 +32,8 @@ from database.models import (
     MetaConnection,
     StoppedAdSet,
     User,
+    Workspace,
+    WorkspaceMember,
 )
 
 
@@ -92,18 +94,34 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             session.add(buyer_user)
             await session.flush()
 
-            from database.db import migrate_workspaces_contract
+            ws_admin = Workspace(
+                name="Admin Workspace",
+                slug="admin-workspace",
+                badge_text="A",
+                badge_color="#3B82F6",
+                owner_user_id=admin_user.id,
+            )
+            ws_buyer = Workspace(
+                name="Buyer Workspace",
+                slug="buyer-workspace",
+                badge_text="B",
+                badge_color="#10B981",
+                owner_user_id=buyer_user.id,
+            )
+            session.add_all([ws_admin, ws_buyer])
+            await session.flush()
 
-            await migrate_workspaces_contract(session.connection())
-            await session.refresh(buyer_user)
-            await session.refresh(admin_user)
+            session.add(WorkspaceMember(workspace_id=ws_admin.id, user_id=admin_user.id, role="owner"))
+            session.add(WorkspaceMember(workspace_id=ws_buyer.id, user_id=buyer_user.id, role="owner"))
+            admin_user.active_workspace_id = ws_admin.id
+            buyer_user.active_workspace_id = ws_buyer.id
 
             acc = Account(
                 account_id="act_1018756607700064",
                 name="Швеция 1",
                 access_token="mock_token",
                 owner_user_id=buyer_user.id,
-                workspace_id=buyer_user.active_workspace_id,
+                workspace_id=ws_buyer.id,
                 timezone_name="UTC",
                 currency="USD",
                 rules_enabled=False,
