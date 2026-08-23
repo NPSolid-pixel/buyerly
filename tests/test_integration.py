@@ -15,6 +15,7 @@ from database.models import (
     AutomationScheduleState,
     RuleExecutionState,
     StoppedAdSet,
+    User,
 )
 from rules.engine import RuleEngine, RuleAction
 from scheduler.worker import MonitoringWorker
