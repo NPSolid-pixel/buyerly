@@ -680,7 +680,8 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         # Verify account in DB was NOT modified
         async with self.test_session_maker() as session:
             acc = (await session.execute(select(Account).where(Account.account_id == 'act_111111'))).scalar_one()
-            self.assertEqual(acc.owner_user_id, user.id)
+            artem = (await session.execute(select(User).where(User.telegram_id == '777000111'))).scalar_one()
+            self.assertEqual(acc.owner_user_id, artem.id)
             self.assertEqual(acc.name, 'Buyerly Account 1')
 
     async def test_targeted_workspace_invite_rejects_mismatched_email(self):

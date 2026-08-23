@@ -118,10 +118,22 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         sw.async_session_maker = self.test_session_maker
 
         async with self.test_session_maker() as session:
+            user = User(
+                telegram_id="123456789",
+                username="e2e_user",
+                full_name="E2E User",
+                role="admin",
+                is_approved=True,
+            )
+            session.add(user)
+            await session.flush()
+
             account = Account(
                 account_id="act_e2e_sweden_1083",
                 name="Underdog 3286 (Швеция)",
                 access_token="mock_token_123",
+                owner_user_id=user.id,
+                workspace_id=user.active_workspace_id,
                 timezone_name="HST",
                 currency="USD",
                 active_rules=json.dumps([

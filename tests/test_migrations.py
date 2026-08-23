@@ -555,7 +555,8 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
         engine = create_test_engine()
         try:
             async with engine.begin() as conn:
-                await conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
 
             ini_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
             alembic_cfg = Config(ini_path)
