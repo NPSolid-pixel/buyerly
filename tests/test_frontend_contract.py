@@ -788,6 +788,27 @@ class TestFrontendRuleContract(unittest.TestCase):
         # 4. Critical loaders must guard against workspace epoch changes
         self.assertIn("if (state.workspaceEpoch !== epoch) return;", self.script)
 
+    def test_template_field_sanitization_and_url_security_contracts(self):
+        # 1. sanitizeUrl helper must exist and be exposed to window
+        self.assertIn("function sanitizeUrl(url)", self.script)
+        self.assertIn("window.sanitizeUrl = sanitizeUrl", self.script)
+
+        # 2. avatar_url must never be directly interpolated without sanitizeUrl and escapeHtml
+        self.assertNotIn('${m.avatar_url ? `<img src="${m.avatar_url}"', self.script)
+        self.assertNotIn('uAvatar.innerHTML = `<img src="${user.avatar_url}"', self.script)
+        self.assertIn("${safeAvatar ? `<img src=\"${escapeHtml(safeAvatar)}\" alt=\"\">` : initial}", self.script)
+        self.assertIn("uAvatar.innerHTML = `<img src=\"${escapeHtml(safeAvatar)}\"", self.script)
+
+        # 3. account_id must be escaped in summary table, mobile cards, parsed chips and batch results
+        self.assertNotIn("(${acc.account_id})", self.script)
+        self.assertIn("(${escapeHtml(acc.account_id)})", self.script)
+        self.assertNotIn("<code>${p.account_id}</code>", self.script)
+        self.assertIn("<code>${escapeHtml(p.account_id)}</code>", self.script)
+        self.assertNotIn("(${item.account_id})", self.script)
+        self.assertNotIn("<b>${item.account_id}</b>", self.script)
+        self.assertIn("(${escapeHtml(item.account_id)})", self.script)
+        self.assertIn("<b>${escapeHtml(item.account_id)}</b>", self.script)
+
 
 
 

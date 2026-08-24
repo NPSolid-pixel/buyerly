@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.schemas.workspaces import WorkspaceItem
 
@@ -56,3 +56,21 @@ class UpdateProfileRequest(BaseModel):
     email: Optional[str] = Field(None, max_length=255)
     avatar_url: Optional[str] = Field(None, max_length=500)
     telegram_id: Optional[str] = Field(None, max_length=64)
+
+    @field_validator("avatar_url")
+    @classmethod
+    def validate_avatar_url(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            return ""
+        if any(c in cleaned for c in ("<", ">", '"', "'", "\r", "\n", "\t", "\0")):
+            raise ValueError("avatar_url содержит недопустимые символы")
+        if cleaned.startswith("//"):
+            raise ValueError("Протокол-относительные URL не поддерживаются")
+        if cleaned.startswith("/uploads/avatars/"):
+            return cleaned
+        if cleaned.startswith("http://") or cleaned.startswith("https://"):
+            return cleaned
+        raise ValueError("avatar_url должен начинаться с https://, http:// или /uploads/avatars/")

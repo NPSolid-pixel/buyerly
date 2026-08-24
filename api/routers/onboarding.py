@@ -3,7 +3,7 @@ import os
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
@@ -131,12 +131,27 @@ async def submit_onboarding_personal_details(
         )
 
 
+def _cleanup_old_avatar_file(old_avatar_url: Optional[str], user_id: int):
+    if not old_avatar_url or not isinstance(old_avatar_url, str):
+        return
+    if not old_avatar_url.startswith("/uploads/avatars/"):
+        return
+    filename = os.path.basename(old_avatar_url)
+    if filename.startswith(f"avatar_{user_id}_"):
+        file_path = os.path.join("webapp", "uploads", "avatars", filename)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+
+
 @router.post("/onboarding/avatar")
 async def upload_onboarding_avatar(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
 ):
-    """Upload custom avatar image for the user during or after onboarding."""
+    """Upload user avatar during onboarding or settings."""
     filename = file.filename or "avatar.png"
     ext = os.path.splitext(filename)[1].lower()
     if ext not in (".png", ".jpg", ".jpeg", ".webp"):
@@ -159,8 +174,11 @@ async def upload_onboarding_avatar(
 
     async with async_session_maker() as session:
         db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
+        old_avatar = db_user.avatar_url
         db_user.avatar_url = avatar_url
         await session.commit()
+
+    _cleanup_old_avatar_file(old_avatar, user.id)
 
     return {"status": "ok", "avatar_url": avatar_url}
 
@@ -170,8 +188,12 @@ async def delete_onboarding_avatar(user: User = Depends(get_current_user)):
     """Reset user avatar to default initial badge."""
     async with async_session_maker() as session:
         db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
+        old_avatar = db_user.avatar_url
         db_user.avatar_url = ""
         await session.commit()
+
+    _cleanup_old_avatar_file(old_avatar, user.id)
+
     return {"status": "ok", "avatar_url": ""}
 
 
