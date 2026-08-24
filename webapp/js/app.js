@@ -266,17 +266,42 @@
     const container = document.getElementById('toastContainer');
     if (!container) return;
 
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    
-    let iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
-    if (type === 'success') {
-      iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
-    } else if (type === 'error') {
-      iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+    while (container.children.length >= 5) {
+      container.removeChild(container.firstChild);
     }
 
-    toast.innerHTML = `<span>${iconSvg}</span> <span>${message}</span>`;
+    const safeType = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
+    const toast = document.createElement('div');
+    toast.className = `toast ${safeType}`;
+    
+    let iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+    if (safeType === 'success') {
+      iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+    } else if (safeType === 'error') {
+      iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+    } else if (safeType === 'warning') {
+      iconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    }
+
+    let text = '';
+    if (typeof message === 'string') {
+      text = message;
+    } else if (message instanceof Error) {
+      text = message.message || 'Произошла непредвиденная ошибка';
+    } else if (typeof message === 'object' && message !== null) {
+      text = message.message || message.error || message.detail || JSON.stringify(message);
+    } else {
+      text = String(message ?? '');
+    }
+
+    const iconSpan = document.createElement('span');
+    iconSpan.innerHTML = iconSvg;
+
+    const messageSpan = document.createElement('span');
+    messageSpan.textContent = text;
+
+    toast.appendChild(iconSpan);
+    toast.appendChild(messageSpan);
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -1410,7 +1435,7 @@
         return { accounts, groups };
       } catch (err) {
         if (listEl && state.activeTab === 'accounts') {
-          listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${err.message}</p></div>`;
+          listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
         }
       } finally {
         loadAccountsInFlightPromise = null;
@@ -4356,9 +4381,9 @@
       await loadRulePresets();
       await loadRuleGroups();
       renderRulesTab();
-      showNotification(`Успешно удалено правил: ${count}`, 'success');
+      showToast(`Успешно удалено правил: ${count}`, 'success');
     } catch (err) {
-      showNotification(`Ошибка удаления: ${err.message}`, 'error');
+      showToast(`Ошибка удаления: ${err.message}`, 'error');
     } finally {
       hideGlobalLoading();
     }

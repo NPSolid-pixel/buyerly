@@ -753,5 +753,19 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.nav-item.active svg', self.styles)
         self.assertIn('.list-item.active svg', self.styles)
 
+    def test_toast_and_error_sanitization_contract(self):
+        # 1. showToast must not use raw unescaped string interpolation into innerHTML
+        self.assertNotIn("toast.innerHTML = `<span>${iconSvg}</span> <span>${message}</span>`", self.script)
+
+        # 2. showToast must use messageSpan.textContent to safely render toast text
+        self.assertIn("messageSpan.textContent = text", self.script)
+
+        # 3. No undefined showNotification() calls in frontend script
+        self.assertNotIn("showNotification(", self.script)
+
+        # 4. Empty-state error rendering in accounts list must escape error message
+        self.assertIn("${escapeHtml(err.message)}", self.script)
+
+
 
 
