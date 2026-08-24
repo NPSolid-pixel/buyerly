@@ -18,6 +18,12 @@
   - Добавлен контрактный тест `test_toast_and_error_sanitization_contract` в `tests/test_frontend_contract.py`.
 
 ### Fixed
+- **Устранение утечки стейта между воркспейсами (Multi-Tenancy Bleed)**:
+  - Добавлена функция `resetWorkspaceState()` в `webapp/js/app.js` для полной очистки временных выборок чекбоксов (`selectedAccounts`, `selectedRuleIds`, `linkRuleSelectedAccountIds`, `metaOAuth.selectedAccountIds`), кэша аналитики и сводки (`summaryCache`, `summary`), остановленных адсетов, аудит-логов и блокировок запросов.
+  - Введено версионирование стейта через `state.workspaceEpoch`: критические асинхронные загрузчики (`loadAccounts`, `loadSummary`, `loadLogsTab`, `loadFacebookAccounts`, `loadPresets`, `loadRuleGroups`) защищены от состояний гонки (Race Conditions) и отбрасывают ответы от запросов предыдущего воркспейса.
+  - Автоматизирована перезагрузка текущей активной вкладки (`summary`, `logs`, `settings`) при переключении воркспейса.
+  - Добавлена обработка смены воркспейса при навигации через историю браузера (`popstate`).
+  - Добавлен контрактный тест `test_workspace_multi_tenancy_bleed_isolation_contract` в `tests/test_frontend_contract.py`.
 - **Устранение runtime-краша при пакетном удалении правил**:
   - Заменены ошибочные вызовы необъявленной функции `showNotification()` на `showToast()` в `webapp/js/app.js`.
 - **Безопасное экранирование HTML в TelegramNotifier**:

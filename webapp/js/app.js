@@ -94,6 +94,7 @@
     user: null,
     workspaces: [],
     activeWorkspace: null,
+    workspaceEpoch: 0,
     newWorkspaceSelectedColor: '#F5A300',
     editWorkspaceSelectedColor: '#F5A300',
     collapsedSections: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_sections') || '[]')),
@@ -687,7 +688,57 @@
     if (dropdown) dropdown.classList.remove('show');
   };
 
-  window.switchWorkspace = async function (workspaceId) {
+  function resetWorkspaceState() {
+    state.workspaceEpoch = (state.workspaceEpoch || 0) + 1;
+
+    if (state.selectedAccounts) state.selectedAccounts.clear();
+    else state.selectedAccounts = new Set();
+
+    if (state.selectedRuleIds) state.selectedRuleIds.clear();
+    else state.selectedRuleIds = new Set();
+
+    if (state.linkRuleSelectedAccountIds) state.linkRuleSelectedAccountIds.clear();
+    else state.linkRuleSelectedAccountIds = new Set();
+
+    if (state.metaOAuth) {
+      if (state.metaOAuth.selectedAccountIds) state.metaOAuth.selectedAccountIds.clear();
+      else state.metaOAuth.selectedAccountIds = new Set();
+      state.metaOAuth.assets = [];
+    }
+
+    state.chooseRuleTargetGroupId = null;
+    state.chooseRuleSelectedIndex = 0;
+    state.chooseRuleFilteredList = [];
+    state.linkRuleModalPresetId = null;
+
+    state.summary = null;
+    state.summaryCache = {};
+    state.summaryLoading = false;
+    state.summaryQueuedRequest = null;
+    state.stoppedAdsets = [];
+
+    state.accounts = [];
+    state.accountGroups = [];
+    state.fbConnections = [];
+    state.presets = [];
+    state.ruleGroups = [];
+    state.auditEvents = [];
+    state.auditPage = 1;
+    state.auditTotalPages = 1;
+    state.parsedAccounts = [];
+    state.accountGroupFilter = 'all';
+
+    loadAccountsInFlightPromise = null;
+
+    updateBulkActionBar();
+    const selectAllCb = document.getElementById('selectAllAccountsCheckbox');
+    if (selectAllCb) selectAllCb.checked = false;
+    const selectAllFbCb = document.getElementById('selectAllFbCheckbox');
+    if (selectAllFbCb) selectAllFbCb.checked = false;
+  }
+  window.resetWorkspaceState = resetWorkspaceState;
+
+  window.switchWorkspace = async function (workspaceId, options = {}) {
     window.closeWorkspaceDropdown();
     try {
       showLoading();
@@ -697,8 +748,13 @@
       });
       state.activeWorkspace = res.active_workspace;
       state.workspaces = res.workspaces || state.workspaces;
+
+      // Reset all workspace-specific state and invalidate previous in-flight requests
+      resetWorkspaceState();
+      const currentEpoch = state.workspaceEpoch;
+
       renderWorkspacesDropdown();
-      syncBrowserRoute(state.activeTab, 'push');
+      syncBrowserRoute(state.activeTab, options.historyMode || 'push');
       showToast(`Воркспейс: ${state.activeWorkspace.name}`);
 
       // Refresh data for new active workspace
@@ -708,6 +764,25 @@
         loadPresets(),
         loadRuleGroups()
       ]);
+
+      if (state.workspaceEpoch !== currentEpoch) return;
+
+      // Reload current active tab if it requires dedicated data fetching
+      if (state.activeTab === 'summary') {
+        initializeSummaryTab();
+      } else if (state.activeTab === 'logs') {
+        loadLogsTab(1);
+      } else if (state.activeTab === 'settings') {
+        loadSettings();
+      } else if (state.activeTab === 'add') {
+        loadMetaConnections();
+      } else if (state.activeTab === 'rules') {
+        renderRulesTab();
+      } else if (state.activeTab === 'accounts') {
+        renderAccounts();
+      } else if (state.activeTab === 'fb_accounts') {
+        renderFacebookAccounts();
+      }
     } catch (e) {
       showToast(e.message || 'Ошибка переключения воркспейса', 'error');
     } finally {
@@ -848,6 +923,7 @@
         state.user.onboarding_step = 'completed';
       }
       state.activeWorkspace = created;
+      resetWorkspaceState();
       window.closeCreateWorkspacePage();
       const workspacesList = await apiRequest('/api/workspaces');
       state.workspaces = workspacesList;
@@ -1409,12 +1485,15 @@
       return loadAccountsInFlightPromise;
     }
 
+    const epoch = state.workspaceEpoch || 0;
+
     loadAccountsInFlightPromise = (async () => {
       try {
         const [accounts, groups] = await Promise.all([
           apiRequest('/api/accounts'),
           apiRequest('/api/account-groups')
         ]);
+        if (state.workspaceEpoch !== epoch) return;
         state.accounts = accounts;
         state.accountGroups = groups;
         if (state.accountGroupFilter !== 'all') {
@@ -1434,11 +1513,14 @@
         renderAccounts();
         return { accounts, groups };
       } catch (err) {
+        if (state.workspaceEpoch !== epoch) return;
         if (listEl && state.activeTab === 'accounts') {
           listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
         }
       } finally {
-        loadAccountsInFlightPromise = null;
+        if (state.workspaceEpoch === epoch) {
+          loadAccountsInFlightPromise = null;
+        }
       }
     })();
 
@@ -3818,11 +3900,13 @@
     const emptyEl = document.getElementById('fbAccountsEmptyState');
     if (!tableBody) return;
     
+    const epoch = state.workspaceEpoch || 0;
     try {
       const [connections, accounts] = await Promise.all([
         apiRequest('/api/meta/connections').catch(() => []),
         state.accounts.length ? Promise.resolve(state.accounts) : apiRequest('/api/accounts').catch(() => [])
       ]);
+      if (state.workspaceEpoch !== epoch) return;
       
       state.fbConnections = connections || [];
       if (accounts && accounts.length) {
@@ -3830,6 +3914,7 @@
       }
       renderFacebookAccounts();
     } catch (e) {
+      if (state.workspaceEpoch !== epoch) return;
       console.error('Error loading facebook accounts:', e);
       if (emptyEl) emptyEl.classList.remove('hidden');
     }
@@ -6877,9 +6962,13 @@
   };
 
   async function loadRuleGroups() {
+    const epoch = state.workspaceEpoch || 0;
     try {
-      state.ruleGroups = await apiRequest('/api/rule-groups') || [];
+      const groups = await apiRequest('/api/rule-groups') || [];
+      if (state.workspaceEpoch !== epoch) return;
+      state.ruleGroups = groups;
     } catch (error) {
+      if (state.workspaceEpoch !== epoch) return;
       state.ruleGroups = [];
       console.error('Failed to load rule groups:', error);
     }
@@ -7112,11 +7201,14 @@
   };
 
   async function loadPresets() {
+    const epoch = state.workspaceEpoch || 0;
     try {
       const data = await apiRequest('/api/presets');
+      if (state.workspaceEpoch !== epoch) return;
       state.presets = data || [];
       renderPresetsList(state.activePresetId || state.templatePresetId);
     } catch (e) {
+      if (state.workspaceEpoch !== epoch) return;
       console.error('Failed to load presets:', e);
     }
   }
@@ -8430,6 +8522,7 @@
       return state.summaryCache[period] || null;
     }
 
+    const epoch = state.workspaceEpoch || 0;
     const silent = options.silent === true;
     const existingData = state.summaryCache[period] || null;
     let loadedData = null;
@@ -8459,6 +8552,7 @@
 
     try {
       const data = await apiRequest(`/api/summary?period=${period}${force ? '&force=true' : ''}`);
+      if (state.workspaceEpoch !== epoch) return;
       loadedData = data;
       state.summary = data;
       state.summaryCache[period] = data;
@@ -8471,6 +8565,7 @@
       if (!silent) showToast('Сводка обновлена и сохранена', 'success');
 
     } catch (err) {
+      if (state.workspaceEpoch !== epoch) return;
       if (existingData) {
         if (state.currentPeriod === period) {
           renderSummaryProvenance(existingData, { refreshError: err.message });
@@ -8482,22 +8577,24 @@
       }
       if (!silent) showToast(`Ошибка обновления: ${err.message}`, 'error');
     } finally {
-      state.summaryLoading = false;
-      if (fetchBtn) {
-        fetchBtn.classList.remove('loading');
-        fetchBtn.disabled = false;
-      }
-      if (!force && options.refreshIfStale !== false && loadedData) {
-        refreshSummaryIfStale(period, loadedData);
-      }
-      const queuedRequest = state.summaryQueuedRequest;
-      state.summaryQueuedRequest = null;
-      if (queuedRequest && queuedRequest.period !== period) {
-        window.setTimeout(() => loadSummary(
-          queuedRequest.period,
-          queuedRequest.force,
-          queuedRequest.options
-        ), 0);
+      if (state.workspaceEpoch === epoch) {
+        state.summaryLoading = false;
+        if (fetchBtn) {
+          fetchBtn.classList.remove('loading');
+          fetchBtn.disabled = false;
+        }
+        if (!force && options.refreshIfStale !== false && loadedData) {
+          refreshSummaryIfStale(period, loadedData);
+        }
+        const queuedRequest = state.summaryQueuedRequest;
+        state.summaryQueuedRequest = null;
+        if (queuedRequest && queuedRequest.period !== period) {
+          window.setTimeout(() => loadSummary(
+            queuedRequest.period,
+            queuedRequest.force,
+            queuedRequest.options
+          ), 0);
+        }
       }
     }
   }
@@ -9141,11 +9238,16 @@
     const tableBody = document.getElementById('logsTableBody');
     const refreshBtn = document.getElementById('btnRefreshLogs');
     if (!tableBody) return;
+    const epoch = state.workspaceEpoch || 0;
     state.auditPage = Math.max(1, page);
     refreshBtn?.classList.add('loading');
 
     if (state.accounts.length === 0) {
       await loadAccounts();
+    }
+    if (state.workspaceEpoch !== epoch) {
+      refreshBtn?.classList.remove('loading');
+      return;
     }
     populateLogsAccountFilter();
 
@@ -9164,15 +9266,19 @@
         apiRequest(`/api/audit-events?${params.toString()}`),
         loadStoppedAdsets()
       ]);
+      if (state.workspaceEpoch !== epoch) return;
       state.auditEvents = data.items || [];
       state.auditPage = data.page || 1;
       state.auditTotalPages = data.total_pages || 1;
       renderAuditEvents(data);
     } catch (err) {
+      if (state.workspaceEpoch !== epoch) return;
       tableBody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
       document.getElementById('logsMobileList').innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
     } finally {
-      refreshBtn?.classList.remove('loading');
+      if (state.workspaceEpoch === epoch) {
+        refreshBtn?.classList.remove('loading');
+      }
     }
   }
 
@@ -10825,6 +10931,7 @@
               });
               state.activeWorkspace = swRes.active_workspace;
               state.workspaces = swRes.workspaces || state.workspaces;
+              resetWorkspaceState();
               renderWorkspacesDropdown();
             } catch (e) {}
           }
@@ -11505,6 +11612,16 @@
       }
       return;
     }
+
+    const targetSlug = parsed.workspaceSlug;
+    if (targetSlug && state.workspaces && state.activeWorkspace && state.activeWorkspace.slug !== targetSlug) {
+      const matchWs = state.workspaces.find(w => w.slug === targetSlug);
+      if (matchWs) {
+        window.switchWorkspace(matchWs.id, { historyMode: 'none' });
+        return;
+      }
+    }
+
     const stateObj = event?.state || {};
     const groupFilter = stateObj.groupFilter !== undefined ? stateObj.groupFilter : parsed.groupFilter;
     const ruleId = stateObj.ruleId !== undefined ? stateObj.ruleId : parsed.ruleId;
