@@ -469,6 +469,19 @@ class TestMetaInsightsCollection(unittest.IsolatedAsyncioTestCase):
         counts = MetaClient._conversion_counts(insight_omni_custom)
         self.assertEqual(counts["leads"], 5)
 
+    def test_conversion_counts_multiple_semantic_custom_conversions(self):
+        insight_multiple_custom = {
+            "actions": [
+                {"action_type": "custom:lead_form_submitted", "value": "15"},
+                {"action_type": "custom:account_registration", "value": "8"},
+                {"action_type": "custom:purchase_completed", "value": "3"},
+            ]
+        }
+        counts = MetaClient._conversion_counts(insight_multiple_custom)
+        self.assertEqual(counts["leads"], 15)
+        self.assertEqual(counts["registrations"], 8)
+        self.assertEqual(counts["purchases"], 3)
+
     def test_conversion_counts_deduplication_prefers_standard_lead(self):
         insight_multi = {
             "actions": [

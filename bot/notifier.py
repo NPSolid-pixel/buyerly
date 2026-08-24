@@ -26,12 +26,18 @@ def format_account_day_started_message(
     timezone_name: str,
     utc_offset: str,
 ) -> str:
+    safe_name = html.escape(str(account_name or ""))
+    safe_acc_id = html.escape(str(account_id or ""))
+    safe_date = html.escape(str(local_date or "—"))
+    safe_time = html.escape(str(local_time or "00:00"))
+    safe_tz = html.escape(str(timezone_name or "UTC"))
+    safe_offset = html.escape(str(utc_offset or "UTC"))
     return (
         "🌅 <b>В рекламном кабинете начались новые сутки</b>\n\n"
-        f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-        f"📅 <b>Новая дата:</b> <code>{local_date}</code>\n"
-        f"🕛 <b>Локальное время:</b> <code>{local_time}</code>\n"
-        f"🌍 <b>Часовой пояс:</b> <code>{timezone_name}</code> ({utc_offset})\n\n"
+        f"🏢 <b>Кабинет:</b> {safe_name} (<code>{safe_acc_id}</code>)\n"
+        f"📅 <b>Новая дата:</b> <code>{safe_date}</code>\n"
+        f"🕛 <b>Локальное время:</b> <code>{safe_time}</code>\n"
+        f"🌍 <b>Часовой пояс:</b> <code>{safe_tz}</code> ({safe_offset})\n\n"
         "<i>Начался новый дневной период Meta. Это время можно использовать "
         "как ориентир для запуска и настройки правил.</i>"
     )
@@ -84,25 +90,31 @@ class TelegramNotifier:
             eval_result.currency if eval_result else kwargs.get("currency")
         )
 
+        safe_account_name = html.escape(str(account_name or ""))
+        safe_account_id = html.escape(str(account_id or ""))
+        safe_adset_name = html.escape(str(eval_result.adset_name or "")) if eval_result else ""
+        safe_adset_id = html.escape(str(eval_result.adset_id or "")) if eval_result else ""
+        safe_reason = html.escape(str(eval_result.reason or "")) if eval_result else ""
+
         try:
             # 1. ОСТАНОВКА АДСЕТА
             if event_type == "STOP" and eval_result:
                 text = (
                     f"🛑 <b>Авто-отключение AdSet</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
+                    f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{safe_adset_name}</code> (ID: <code>{safe_adset_id}</code>)\n"
                     f"💰 <b>Спенд:</b> {format_money(eval_result.spend, currency)}\n"
                     f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations} | <b>Покупок:</b> {eval_result.purchases}\n"
                     f"📊 <b>CPL:</b> {_cost_text(eval_result.cpl, currency)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg, currency)} | <b>CPP:</b> {_cost_text(eval_result.cpp, currency)}\n\n"
-                    f"⚠️ <i>Причина: {eval_result.reason}</i>"
+                    f"⚠️ <i>Причина: {safe_reason}</i>"
                 )
 
             # 2. ДОЛЕТ ЛИДА / РЕГИ (ПРЕДЛОЖЕНИЕ ВКЛЮЧИТЬ)
             elif event_type == "PROPOSE_REACTIVATE" and eval_result:
                 text = (
                     f"🟢 <b>Долетел результат в остановленный AdSet!</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
+                    f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{safe_adset_name}</code> (ID: <code>{safe_adset_id}</code>)\n"
                     f"💰 <b>Итоговый спенд:</b> {format_money(eval_result.spend, currency)}\n"
                     f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations} | <b>Покупок:</b> {eval_result.purchases}\n"
                     f"🎯 <b>CPL:</b> {_cost_text(eval_result.cpl, currency)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg, currency)} | <b>CPP:</b> {_cost_text(eval_result.cpp, currency)}\n\n"
@@ -117,10 +129,10 @@ class TelegramNotifier:
             elif event_type == "AUTO_REACTIVATE" and eval_result:
                 text = (
                     f"⚡ <b>Авто-возобновление AdSet (Долетел результат)</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code>\n"
+                    f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{safe_adset_name}</code>\n"
                     f"💰 <b>Спенд:</b> {format_money(eval_result.spend, currency)} | <b>Лиды:</b> {eval_result.leads} | <b>Реги:</b> {eval_result.registrations} | <b>Покупки:</b> {eval_result.purchases}\n"
-                    f"📊 <b>CPL:</b> {_cost_text(eval_result.cpl, currency)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg, currency)} | <b>CPP:</b> {_cost_text(eval_result.cpp, currency)}\n"
+                    f"📊 <b>CPL:</b> {_cost_text(eval_result.cpl, currency)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg, currency)} | <b>CPP:</b> {_cost_text(eval_result.cpp, currency)}\n\n"
                     f"✅ <i>Адсет автоматически переведен в статус ACTIVE.</i>"
                 )
 
@@ -128,12 +140,12 @@ class TelegramNotifier:
             elif event_type == "NOTIFY_ONLY" and eval_result:
                 text = (
                     f"🔔 <b>Внимание: Сработало правило (Только пуш)</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
+                    f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{safe_adset_name}</code> (ID: <code>{safe_adset_id}</code>)\n"
                     f"💰 <b>Спенд:</b> {format_money(eval_result.spend, currency)}\n"
                     f"👥 <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations} | <b>Покупок:</b> {eval_result.purchases}\n"
                     f"📊 <b>CPL:</b> {_cost_text(eval_result.cpl, currency)} | <b>CPReg:</b> {_cost_text(eval_result.cpreg, currency)} | <b>CPP:</b> {_cost_text(eval_result.cpp, currency)}\n\n"
-                    f"⚠️ <i>{eval_result.reason}</i>"
+                    f"⚠️ <i>{safe_reason}</i>"
                 )
                 from bot.keyboards import get_pause_adset_keyboard
                 keyboard = get_pause_adset_keyboard(
@@ -147,11 +159,11 @@ class TelegramNotifier:
                 new_b = kwargs.get("new_budget", 0.0)
                 text = (
                     f"📈 <b>Увеличен бюджет AdSet</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
+                    f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{safe_adset_name}</code> (ID: <code>{safe_adset_id}</code>)\n"
                     f"💰 <b>Бюджет:</b> {format_money(old_b, currency)} → <b>{format_money(new_b, currency)}</b> (+{eval_result.budget_change_percent:.0f}%)\n"
                     f"📊 <b>Спенд:</b> {format_money(eval_result.spend, currency)} | <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n\n"
-                    f"⚠️ <i>{eval_result.reason}</i>"
+                    f"⚠️ <i>{safe_reason}</i>"
                 )
 
             # УМЕНЬШЕНИЕ БЮДЖЕТА
@@ -160,11 +172,11 @@ class TelegramNotifier:
                 new_b = kwargs.get("new_budget", 0.0)
                 text = (
                     f"📉 <b>Уменьшен бюджет AdSet</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"🎯 <b>AdSet:</b> <code>{eval_result.adset_name}</code> (ID: <code>{eval_result.adset_id}</code>)\n"
+                    f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)\n"
+                    f"🎯 <b>AdSet:</b> <code>{safe_adset_name}</code> (ID: <code>{safe_adset_id}</code>)\n"
                     f"💰 <b>Бюджет:</b> {format_money(old_b, currency)} → <b>{format_money(new_b, currency)}</b> (-{eval_result.budget_change_percent:.0f}%)\n"
                     f"📊 <b>Спенд:</b> {format_money(eval_result.spend, currency)} | <b>Лидов:</b> {eval_result.leads} | <b>Рег:</b> {eval_result.registrations}\n\n"
-                    f"⚠️ <i>{eval_result.reason}</i>"
+                    f"⚠️ <i>{safe_reason}</i>"
                 )
 
             # 4. НОВЫЕ КАЛЕНДАРНЫЕ СУТКИ РЕКЛАМНОГО КАБИНЕТА
@@ -180,22 +192,22 @@ class TelegramNotifier:
 
             # 5. ПРОБЛЕМА С КАБИНЕТОМ (БАН / ХОЛД / ПРОВЕРКА)
             elif event_type == "ACCOUNT_ISSUE":
+                safe_status = html.escape(str(local_time or ""))
                 text = (
                     f"🚨 <b>ВНИМАНИЕ: Проблема со статусом кабинета в Meta!</b>\n\n"
-                    f"🏢 <b>Кабинет:</b> {account_name} (<code>{account_id}</code>)\n"
-                    f"⚠️ <b>Статус:</b> {local_time}\n\n"
+                    f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)\n"
+                    f"⚠️ <b>Статус:</b> {safe_status}\n\n"
                     f"🛑 <i>Мониторинг этого кабинета временно приостановлен во избежание ошибок.</i>"
                 )
 
             # 6. СЛЕТЕВШИЙ ТОКЕН ДОСТУПА
             elif event_type == "TOKEN_EXPIRED":
-                safe_account_name = html.escape(str(account_name or ""))
-                safe_account_id = html.escape(str(account_id or ""))
                 subcode = kwargs.get("subcode")
                 subcode_title = html.escape(str(kwargs.get("subcode_title") or "").strip())
                 subcode_description = html.escape(str(kwargs.get("subcode_description") or "").strip())
                 action_hint = html.escape(str(kwargs.get("action_hint") or "").strip())
-                user_msg = html.escape(redact_secrets(str(kwargs.get("user_msg") or "").strip()))[:350]
+                raw_user_msg = redact_secrets(str(kwargs.get("user_msg") or "").strip())[:350]
+                user_msg = html.escape(raw_user_msg)
 
                 lines = ["🔑 <b>ВНИМАНИЕ: Проблема с токеном Meta API!</b>\n"]
                 lines.append(f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)")
