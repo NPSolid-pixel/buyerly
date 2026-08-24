@@ -1018,7 +1018,7 @@
           <td style="color:#898A8D;">${joinedFormatted}</td>
           <td style="text-align:right;">
             ${!isMemberOwner && !isCurrentUser && isOwnerOrAdmin ? `
-              <button type="button" class="attio-btn-icon" title="Remove member" onclick="window.removeWorkspaceMember(${m.user_id}, '${escapeHtml(m.full_name || m.username)}')">
+              <button type="button" class="attio-btn-icon" title="Remove member" onclick="window.removeWorkspaceMember(${m.user_id}, ${escapeJsArg(m.full_name || m.username)})">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
             ` : ''}
@@ -1471,7 +1471,7 @@
     if (!container) return;
     const buttons = state.accountGroups.map(group => (
       `<span class="account-group-filter-wrap">
-        <button type="button" class="account-group-filter ${state.accountGroupFilter === String(group.id) ? 'active' : ''}" data-account-group-filter="${group.id}" onclick="window.switchAccountGroup('${group.id}')" title="${escapeHtml(group.description || '')}"><span>${escapeHtml(group.name)}</span><b>${group.accounts_count || 0}</b></button>
+        <button type="button" class="account-group-filter ${state.accountGroupFilter === String(group.id) ? 'active' : ''}" data-account-group-filter="${group.id}" onclick="window.switchAccountGroup(${escapeJsArg(group.id)})" title="${escapeHtml(group.description || '')}"><span>${escapeHtml(group.name)}</span><b>${group.accounts_count || 0}</b></button>
         <button type="button" class="account-group-edit" onclick="window.openAccountGroupEditor(${group.id})" aria-label="Изменить группу ${escapeHtml(group.name)}" title="Изменить состав группы"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
       </span>`
     ));
@@ -1520,7 +1520,7 @@
              data-tab="accounts" 
              data-group-filter="${group.id}" 
              id="navGroup-${group.id}" 
-             onclick="window.switchAccountGroup('${group.id}');"
+             onclick="window.switchAccountGroup(${escapeJsArg(group.id)});"
              ondragstart="window.onGroupDragStart(event, ${group.id})"
              ondragover="window.onGroupDragOver(event)"
              ondragenter="window.onGroupDragEnter(event, ${group.id})"
@@ -2361,7 +2361,7 @@
     listEl.innerHTML = options.map(opt => {
       const isActive = currentCalc === opt.key;
       return `
-        <div class="attio-dropdown-item ${isActive ? 'active' : ''}" onclick="window.setColumnCalculation('${opt.key}')">
+        <div class="attio-dropdown-item ${isActive ? 'active' : ''}" onclick="window.setColumnCalculation(${escapeJsArg(opt.key)})">
           <div class="attio-dropdown-item-left">
             <span>${opt.label}</span>
           </div>
@@ -2722,7 +2722,7 @@
         items.forEach(col => {
           const isActive = currentOrder.has(col.id);
           html += `
-            <div class="attio-picker-item ${isActive ? 'is-active' : ''}" onclick="window.toggleColumnVisibility('${col.id}')">
+            <div class="attio-picker-item ${isActive ? 'is-active' : ''}" onclick="window.toggleColumnVisibility(${escapeJsArg(col.id)})">
               <div class="attio-picker-item-left">
                 <span class="attio-picker-item-icon">${col.iconSvg || ''}</span>
                 <span class="attio-picker-item-label">${escapeHtml(col.label)}</span>
@@ -2804,7 +2804,7 @@
     container.innerHTML = groups.map(g => {
       const isActive = state.accountGroupFilter === String(g.id);
       return `
-        <div class="attio-dropdown-item ${isActive ? 'active' : ''}" onclick="window.selectAccountGroupView('${g.id}')">
+        <div class="attio-dropdown-item ${isActive ? 'active' : ''}" onclick="window.selectAccountGroupView(${escapeJsArg(g.id)})">
           <div class="attio-dropdown-item-left">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
             <span>${escapeHtml(g.name)}</span>
@@ -3347,11 +3347,11 @@
           <td class="attio-td sticky-col">
             <div class="cell-entity-wrapper">
               <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
-                <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection('${escapeHtml(acc.account_id)}', this.checked)" title="Выбрать кабинет">
+                <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection(${escapeJsArg(acc.account_id)}, this.checked)" title="Выбрать кабинет">
               </div>
               <div class="attio-entity-text-block">
                 <div class="account-text-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</div>
-                <div class="account-text-id" onclick="window.copyToClipboard('${escapeHtml(acc.account_id)}', this)" title="Нажмите, чтобы скопировать ID">
+                <div class="account-text-id" onclick="window.copyToClipboard(${escapeJsArg(acc.account_id)}, this)" title="Нажмите, чтобы скопировать ID">
                   ${escapeHtml(acc.account_id)}
                 </div>
               </div>
@@ -3452,7 +3452,7 @@
       case 'automation':
         return `
           <td class="attio-td">
-            <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules('${escapeHtml(acc.account_id)}', ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Нажмите, чтобы переключить автоматику">
+            <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules(${escapeJsArg(acc.account_id)}, ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Нажмите, чтобы переключить автоматику">
               <span class="status-dot"></span>
               <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${autoPillText}</span>
             </button>
@@ -3569,7 +3569,7 @@
               <span class="status-pill ${activeRules.length > 0 ? 'green' : 'amber'}" style="font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
                 ${activeRules.length > 0 ? `${activeRules.length} ${pluralize(activeRules.length, 'правило', 'правила', 'правил')}` : 'Без правил'}
               </span>
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAssignRuleModal('${escapeHtml(acc.account_id)}')" style="padding: 2px 5px; font-size: 10.5px; flex-shrink: 0;">
+              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAssignRuleModal(${escapeJsArg(acc.account_id)})" style="padding: 2px 5px; font-size: 10.5px; flex-shrink: 0;">
                 Настроить
               </button>
             </div>
@@ -3677,7 +3677,7 @@
                 </div>
               </div>
             </div>
-            <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
+            <div class="attio-resizer" onmousedown="window.initColumnResize(event, ${escapeJsArg(colId)})" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
           </th>
         `;
       }
@@ -3687,7 +3687,7 @@
             data-col-id="${colId}" 
             id="th-col-${colId}"
             style="width: ${width}px; max-width: ${width}px; min-width: ${width}px;"
-            onmousedown="window.handleHeaderPointerDown(event, '${colId}')">
+            onmousedown="window.handleHeaderPointerDown(event, ${escapeJsArg(colId)})">
           <div class="attio-th-content">
             <div class="attio-th-left">
               ${colDef.iconSvg ? `<span class="attio-th-type-icon">${colDef.iconSvg}</span>` : ''}
@@ -3699,7 +3699,7 @@
               </div>
             </div>
           </div>
-          <div class="attio-resizer" onmousedown="window.initColumnResize(event, '${colId}')" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
+          <div class="attio-resizer" onmousedown="window.initColumnResize(event, ${escapeJsArg(colId)})" title="Потяните для изменения ширины (двойной клик — сброс)"></div>
         </th>
       `;
     }).join('');
@@ -3737,7 +3737,7 @@
           <td class="attio-calc-td ${isSticky ? 'sticky-col' : ''}">
             <button type="button" 
                     class="attio-calc-trigger has-value" 
-                    onclick="window.openColumnCalcPopover(event, '${colId}')" 
+                    onclick="window.openColumnCalcPopover(event, ${escapeJsArg(colId)})" 
                     aria-haspopup="dialog" 
                     aria-expanded="false" 
                     title="Нажмите для изменения вычисления">
@@ -3754,7 +3754,7 @@
         <td class="attio-calc-td ${isSticky ? 'sticky-col' : ''}">
           <button type="button" 
                   class="attio-calc-trigger is-empty" 
-                  onclick="window.openColumnCalcPopover(event, '${colId}')" 
+                  onclick="window.openColumnCalcPopover(event, ${escapeJsArg(colId)})" 
                   aria-haspopup="dialog" 
                   aria-expanded="false" 
                   title="Добавить вычисление">
@@ -4024,7 +4024,7 @@
           <span class="eyebrow">Рекламный кабинет</span>
           <h2>${escapeHtml(displayName)}</h2>
           ${hasCustomName ? `<span class="account-detail-source-name">Название Meta: ${escapeHtml(account.name)}</span>` : ''}
-          <button type="button" class="account-detail-copy mono" onclick="window.copyToClipboard('${escapeHtml(account.account_id)}', this)">${escapeHtml(account.account_id)} · копировать</button>
+          <button type="button" class="account-detail-copy mono" onclick="window.copyToClipboard(${escapeJsArg(account.account_id)}, this)">${escapeHtml(account.account_id)} · копировать</button>
         </div>
         <span class="account-meta-state ${metaState.key}"><span class="status-dot dot-${metaState.dot}"></span>${metaState.label}</span>
       </div>
@@ -4041,12 +4041,12 @@
       </div>
 
       <section class="account-detail-profile">
-        <div class="account-detail-section-head"><h3>Внутренняя заметка</h3><button type="button" onclick="window.openAccountProfileEditor('${escapeHtml(account.account_id)}')">Изменить</button></div>
+        <div class="account-detail-section-head"><h3>Внутренняя заметка</h3><button type="button" onclick="window.openAccountProfileEditor(${escapeJsArg(account.account_id)})">Изменить</button></div>
         <p class="${note ? '' : 'empty'}">${escapeHtml(note || 'Заметка пока не заполнена. Здесь можно хранить гео, оффер или текущий статус работы.')}</p>
       </section>
 
       <section class="account-detail-profile">
-        <div class="account-detail-section-head"><h3>Группы кабинета</h3><button type="button" onclick="window.openAccountGroupForAccount('${escapeHtml(account.account_id)}')">Новая группа</button></div>
+        <div class="account-detail-section-head"><h3>Группы кабинета</h3><button type="button" onclick="window.openAccountGroupForAccount(${escapeJsArg(account.account_id)})">Новая группа</button></div>
         <div class="account-group-tags">${renderAccountGroupTags(account, { empty: true })}</div>
       </section>
 
@@ -4061,9 +4061,9 @@
       </section>
 
       <div class="account-detail-actions">
-        <button class="btn btn-primary" type="button" onclick="window.manageRulesFromAccountDetails('${escapeHtml(account.account_id)}')">Управлять правилами</button>
-        <button class="btn btn-secondary" type="button" onclick="window.openAccountLogs('${escapeHtml(account.account_id)}')">История действий</button>
-        <button class="btn btn-danger" type="button" onclick="window.deleteAccountFromDetails('${escapeHtml(account.account_id)}')">Удалить</button>
+        <button class="btn btn-primary" type="button" onclick="window.manageRulesFromAccountDetails(${escapeJsArg(account.account_id)})">Управлять правилами</button>
+        <button class="btn btn-secondary" type="button" onclick="window.openAccountLogs(${escapeJsArg(account.account_id)})">История действий</button>
+        <button class="btn btn-danger" type="button" onclick="window.deleteAccountFromDetails(${escapeJsArg(account.account_id)})">Удалить</button>
       </div>`;
     window.openModal('modalAccountDetails');
   };
@@ -6062,7 +6062,7 @@
               <span class="badge ${acc.rules_enabled ? 'badge-success' : 'badge-neutral'}">
                 ${acc.rules_enabled ? 'Автоматика вкл.' : 'На паузе'}
               </span>
-              <button type="button" class="record-account-detach-btn" title="Отвязать правило от кабинета" onclick="window.detachRuleFromAccountDirectly('${escapeHtml(acc.account_id)}', ${preset.id})">
+              <button type="button" class="record-account-detach-btn" title="Отвязать правило от кабинета" onclick="window.detachRuleFromAccountDirectly(${escapeJsArg(acc.account_id)}, ${preset.id})">
                 Отвязать
               </button>
             </div>
@@ -6155,9 +6155,9 @@
       const isSelected = state.linkRuleSelectedAccountIds.has(acc.account_id);
       const attachedRulesCount = (acc.active_rules || []).length;
       return `
-        <div class="choose-group-item ${isSelected ? 'selected' : ''}" style="cursor: pointer;" onclick="window.toggleLinkAccountSelection('${escapeHtml(acc.account_id)}')">
+        <div class="choose-group-item ${isSelected ? 'selected' : ''}" style="cursor: pointer;" onclick="window.toggleLinkAccountSelection(${escapeJsArg(acc.account_id)})">
           <div class="choose-group-item-left" style="gap: 12px;">
-            <input type="checkbox" class="link-account-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); window.toggleLinkAccountSelection('${escapeHtml(acc.account_id)}')">
+            <input type="checkbox" class="link-account-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); window.toggleLinkAccountSelection(${escapeJsArg(acc.account_id)})">
             <div>
               <div class="choose-group-item-name" style="font-weight: 600;">
                 ${escapeHtml(acc.custom_name || acc.name)}
@@ -9294,8 +9294,8 @@
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
-          <button class="btn btn-primary btn-sm" onclick="window.reactivateAdset('${escapeHtml(record.adset_id)}')">Включить обратно</button>
-          <button class="btn btn-secondary btn-sm" title="Скрыть карточку из списка" onclick="window.dismissAdset('${escapeHtml(record.adset_id)}')">Скрыть</button>
+          <button class="btn btn-primary btn-sm" onclick="window.reactivateAdset(${escapeJsArg(record.adset_id)})">Включить обратно</button>
+          <button class="btn btn-secondary btn-sm" title="Скрыть карточку из списка" onclick="window.dismissAdset(${escapeJsArg(record.adset_id)})">Скрыть</button>
         </div>
       </div>`).join('');
   }
@@ -10682,6 +10682,14 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
+  }
+
+  function escapeJsArg(value) {
+    if (value === undefined || value === null) return "''";
+    const serialized = JSON.stringify(String(value))
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029');
+    return escapeHtml(serialized);
   }
 
   // ==========================================================
