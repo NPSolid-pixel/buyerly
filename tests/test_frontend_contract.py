@@ -562,6 +562,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             'renderWorkspacesDropdown',
             'window.toggleWorkspaceDropdown',
             'window.switchWorkspace',
+            'resetWorkspaceState',
+            'window.resetWorkspaceState',
+            'workspaceEpoch',
             'window.openCreateWorkspacePage',
             'window.closeCreateWorkspacePage',
             'window.handleWorkspaceLogoUpload',
@@ -765,6 +768,25 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         # 4. Empty-state error rendering in accounts list must escape error message
         self.assertIn("${escapeHtml(err.message)}", self.script)
+
+    def test_workspace_multi_tenancy_bleed_isolation_contract(self):
+        # 1. State must track workspaceEpoch
+        self.assertIn("workspaceEpoch: 0", self.script)
+
+        # 2. resetWorkspaceState must clear all transient selections, summary caches and in-flight promises
+        self.assertIn("function resetWorkspaceState()", self.script)
+        self.assertIn("state.selectedAccounts.clear()", self.script)
+        self.assertIn("state.selectedRuleIds.clear()", self.script)
+        self.assertIn("state.linkRuleSelectedAccountIds.clear()", self.script)
+        self.assertIn("state.summaryCache = {}", self.script)
+        self.assertIn("state.summary = null", self.script)
+        self.assertIn("loadAccountsInFlightPromise = null", self.script)
+
+        # 3. switchWorkspace and submitCreateWorkspaceFromPage must invoke resetWorkspaceState
+        self.assertIn("resetWorkspaceState();", self.script)
+
+        # 4. Critical loaders must guard against workspace epoch changes
+        self.assertIn("if (state.workspaceEpoch !== epoch) return;", self.script)
 
 
 
