@@ -2132,3 +2132,42 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 files={"file": ("logo.svg", b"<svg onload=alert(1)>", "image/svg+xml")},
             )
             self.assertEqual(logo_svg.status_code, 400)
+
+    async def test_update_profile_avatar_url_validation(self):
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # 1. Malicious schemes and XSS payloads must be rejected with 422
+            for bad_avatar in (
+                "javascript:alert(1)",
+                "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+                'x" onerror="alert(1)',
+                "<script>alert(1)</script>",
+                "//evil.com/avatar.png",
+                "ftp://example.com/avatar.png",
+            ):
+                res = await client.post(
+                    "/api/auth/update-profile",
+                    headers=headers,
+                    json={"avatar_url": bad_avatar},
+                )
+                self.assertEqual(res.status_code, 422, f"Failed to reject bad avatar: {bad_avatar}")
+
+            # 2. Valid HTTPS, HTTP, local /uploads/avatars/ and empty string must succeed
+            for good_avatar in (
+                "https://cdn.example.com/avatar.png",
+                "http://cdn.example.com/avatar.jpg",
+                "/uploads/avatars/avatar_123_abc.webp",
+                "",
+            ):
+                res = await client.post(
+                    "/api/auth/update-profile",
+                    headers=headers,
+                    json={"avatar_url": good_avatar},
+                )
+                self.assertEqual(res.status_code, 200, f"Failed to accept good avatar: {good_avatar}")
+                self.assertEqual(res.json()["avatar_url"], good_avatar)

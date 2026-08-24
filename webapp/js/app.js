@@ -1062,6 +1062,7 @@
     const isOwnerOrAdmin = members.some(m => m.user_id === currentUserId && (m.role === 'owner' || m.role === 'admin'));
 
     tbody.innerHTML = members.map(m => {
+      const safeAvatar = sanitizeUrl(m.avatar_url);
       const initial = (m.full_name || m.username || 'U').charAt(0).toUpperCase();
       const isCurrentUser = m.user_id === currentUserId;
       const isMemberOwner = m.role === 'owner';
@@ -1072,7 +1073,7 @@
           <td>
             <div class="attio-member-cell">
               <div class="attio-member-avatar">
-                ${m.avatar_url ? `<img src="${m.avatar_url}" alt="">` : initial}
+                ${safeAvatar ? `<img src="${escapeHtml(safeAvatar)}" alt="">` : initial}
               </div>
               <div style="display:flex; flex-direction:column;">
                 <span class="attio-member-name">${escapeHtml(m.full_name || m.username)} ${isCurrentUser ? '<span style="color:#898A8D;font-weight:normal;">(you)</span>' : ''}</span>
@@ -8994,7 +8995,7 @@
 
         return `
           <tr>
-            <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${acc.account_id})</span></td>
+            <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${escapeHtml(acc.account_id)})</span></td>
             <td class="summary-custom-name-cell" data-summary-column="custom_name">${acc.custom_name ? `<b>${escapeHtml(acc.custom_name)}</b>` : '<span class="text-hint">—</span>'}</td>
             <td class="summary-note-cell" data-summary-column="note" title="${escapeHtml(acc.note || '')}">${acc.note ? escapeHtml(acc.note) : '<span class="text-hint">—</span>'}</td>
             <td data-summary-column="data">${summaryDataStatus(acc)}</td>
@@ -9072,9 +9073,10 @@
       mobileCards.innerHTML = visibleAccounts.map(acc => {
         const metaName = acc.short_name || acc.name;
         const displayName = acc.custom_name || metaName;
+        const safeAccId = escapeHtml(acc.account_id);
         const subLabel = acc.custom_name
-          ? `${escapeHtml(metaName)} · ${acc.account_id}`
-          : (acc.name !== metaName ? `${escapeHtml(acc.name)} · ${acc.account_id}` : acc.account_id);
+          ? `${escapeHtml(metaName)} · ${safeAccId}`
+          : (acc.name !== metaName ? `${escapeHtml(acc.name)} · ${safeAccId}` : safeAccId);
         const hasMetrics = summaryAccountHasMetrics(acc);
         const statusPillHtml = summaryDataStatus(acc);
         const noteHtml = acc.note
@@ -9721,7 +9723,7 @@
         const namePart = p.name ? ` (${escapeHtml(p.name)})` : '';
         return `
           <span class="parsed-item-chip">
-            <code>${p.account_id}</code>${namePart}
+            <code>${escapeHtml(p.account_id)}</code>${namePart}
             <button type="button" class="chip-del-btn" title="Исключить кабинет" onclick="window.removeParsedChip(${idx})">&times;</button>
           </span>
         `;
@@ -9798,7 +9800,7 @@
         res.added.forEach(item => {
           resultsHtml.push(`
             <div class="batch-res-item">
-              <span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${item.account_id})</span>
+              <span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${escapeHtml(item.account_id)})</span>
               <span class="badge badge-success">OK</span>
             </div>
           `);
@@ -9808,7 +9810,7 @@
         res.errors.forEach(item => {
           resultsHtml.push(`
             <div class="batch-res-item">
-              <span><span class="status-dot dot-danger"></span><b>${item.account_id}</b>: ${escapeHtml(item.error)}</span>
+              <span><span class="status-dot dot-danger"></span><b>${escapeHtml(item.account_id)}</b>: ${escapeHtml(item.error)}</span>
               <span class="badge badge-danger">Ошибка</span>
             </div>
           `);
@@ -10790,6 +10792,26 @@
       .replace(/'/g, "&#039;");
   }
 
+  function sanitizeUrl(url) {
+    if (!url || typeof url !== 'string') return '';
+    const cleaned = url.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
+    if (!cleaned) return '';
+    if (cleaned.startsWith('//')) return '';
+    if (cleaned.startsWith('/') && !cleaned.startsWith('/\\')) {
+      return cleaned;
+    }
+    try {
+      const parsed = new URL(cleaned, window.location ? window.location.origin : 'https://buyerly.app');
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return cleaned;
+      }
+    } catch (e) {
+      return '';
+    }
+    return '';
+  }
+  window.sanitizeUrl = sanitizeUrl;
+
   function escapeJsArg(value) {
     if (value === undefined || value === null) return "''";
     const serialized = JSON.stringify(String(value))
@@ -10908,8 +10930,9 @@
         const uAvatar = document.getElementById('userAvatar');
         if (uName) uName.textContent = user.full_name || user.username || 'Media Buyer';
         if (uAvatar) {
-          if (user.avatar_url) {
-            uAvatar.innerHTML = `<img src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="Avatar">`;
+          const safeAvatar = sanitizeUrl(user.avatar_url);
+          if (safeAvatar) {
+            uAvatar.innerHTML = `<img src="${escapeHtml(safeAvatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="Avatar">`;
           } else {
             uAvatar.textContent = (user.first_name || user.full_name || user.username || 'B').charAt(0).toUpperCase();
           }
@@ -11239,7 +11262,7 @@
     const btnRemove = document.getElementById('btnOnboardingAvatarRemove');
     const fnInput = document.getElementById('onboardingFirstName');
 
-    const avatarUrl = state.user?.avatar_url || '';
+    const avatarUrl = sanitizeUrl(state.user?.avatar_url || '');
     if (avatarUrl) {
       if (imgEl) {
         imgEl.src = avatarUrl;
