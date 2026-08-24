@@ -9,16 +9,17 @@
 
 ## [Unreleased]
 
-### Added
-- **Классификация Meta Error Subcodes и информативные Telegram-алерты**:
-  - Внедрен справочник субкодов ошибок Meta API `META_TOKEN_SUBCODE_MAP` (458 — отзыв доступа, 459 — чекпоинт/бан профиля, 460 — смена пароля, 463 — истечение 60 дней, 464 — неподтвержденный аккаунт, 467 — сброс сессий, 490 — 2FA, 492 — устаревание сессии, 1348001 — отзыв прав в BM).
-  - Создан класс типизированного исключения `MetaTokenAuthError` (наследник `PermissionError` для 100% обратной совместимости) с атрибутами `code`, `subcode`, `subcode_key`, `title`, `description`, `action_hint`, `error_user_msg`, `fbtrace_id`.
-  - Модернизирован нотификатор `TelegramNotifier`: алерты `TOKEN_EXPIRED` содержат точный диагноз, понятное описание причины, официальное сообщение Meta и конкретное руководство к действию для байера.
-  - Обеспечена безопасность Telegram HTML-разметки (`html.escape`), ограничение длины текста и санитизация секретов (`redact_secrets`).
-  - Добавлена синхронизация статуса ошибки связки `MetaConnection.status = "error"` и сохранение метаданных субкода в `AuditEvent.details` и `EventLog`.
-  - Добавлен тестовый набор `tests/test_meta_error_subcodes.py`.
+### Security
+- **Санация уведомлений `showToast` и устранение Stored/Reflected XSS**:
+  - Переписана функция `showToast()` в `webapp/js/app.js` с использованием изолированных DOM-элементов и безопасного свойства `textContent` вместо уязвимой конкатенации в `innerHTML`.
+  - Добавлена нормализация входных параметров `message`: безопасная обработка строк, экземпляров `Error` и объектов ответов API без риска вывода `[object Object]`.
+  - Реализована защита от переполнения экрана и утечек памяти (anti-flooding: лимит до 5 активных тостов в DOM).
+  - В `loadAccountsAndGroups()` добавлено экранирование текста ошибок через `escapeHtml(err.message)` в блоке `empty-state`.
+  - Добавлен контрактный тест `test_toast_and_error_sanitization_contract` в `tests/test_frontend_contract.py`.
 
 ### Fixed
+- **Устранение runtime-краша при пакетном удалении правил**:
+  - Заменены ошибочные вызовы необъявленной функции `showNotification()` на `showToast()` в `webapp/js/app.js`.
 - **Безопасное экранирование HTML в TelegramNotifier**:
   - Все динамические поля (`eval_result.reason`, `adset_name`, `account_name`, `user_msg`, `status_label`) теперь строго экранируются через `html.escape()`.
   - Устранена ошибка парсинга HTML в Telegram при срабатывании правил со знаками `<`, `>`, `&` (например `CTR (< 1.5%) < 1.0%`).
