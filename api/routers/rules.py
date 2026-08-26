@@ -21,6 +21,7 @@ from api.deps import (
     ensure_workspace_write_access,
     get_user_workspace,
     get_user_workspace_member,
+    record_security_event_and_raise,
 )
 from api.schemas import (
     ApplyPresetRequest,
@@ -107,14 +108,12 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: User
         ensure_workspace_write_access(user, member, "редактирования правил")
 
         condition_payloads = _validated_condition_payloads(payload.conditions)
-        stmt = select(RulePreset).where(RulePreset.id == preset_id)
-        if user.role != "admin":
-            scope_clause = (
-                or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
-                if ws
-                else owned_by(RulePreset, user)
-            )
-            stmt = stmt.where(scope_clause)
+        scope_clause = (
+            or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
+            if ws
+            else owned_by(RulePreset, user)
+        )
+        stmt = select(RulePreset).where(RulePreset.id == preset_id, scope_clause)
         res = await session.execute(stmt)
         preset = res.scalar_one_or_none()
         if not preset:
@@ -177,14 +176,12 @@ async def delete_preset(preset_id: int, user: User = Depends(get_current_user)):
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "удаления правил")
 
-        stmt = select(RulePreset).where(RulePreset.id == preset_id)
-        if user.role != "admin":
-            scope_clause = (
-                or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
-                if ws
-                else owned_by(RulePreset, user)
-            )
-            stmt = stmt.where(scope_clause)
+        scope_clause = (
+            or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
+            if ws
+            else owned_by(RulePreset, user)
+        )
+        stmt = select(RulePreset).where(RulePreset.id == preset_id, scope_clause)
         res = await session.execute(stmt)
         preset = res.scalar_one_or_none()
         if not preset:
@@ -325,11 +322,19 @@ async def update_rule_group(
     user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "редактирования групп правил")
+
+        scope_clause = (
+            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
+            if ws
+            else owned_by(RuleGroup, user)
+        )
         group = (
             await session.execute(
                 select(RuleGroup).where(
                     RuleGroup.id == group_id,
-                    owned_by(RuleGroup, user),
+                    scope_clause,
                 )
             )
         ).scalar_one_or_none()
@@ -358,11 +363,19 @@ async def delete_rule_group(
     user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "удаления групп правил")
+
+        scope_clause = (
+            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
+            if ws
+            else owned_by(RuleGroup, user)
+        )
         group = (
             await session.execute(
                 select(RuleGroup).where(
                     RuleGroup.id == group_id,
-                    owned_by(RuleGroup, user),
+                    scope_clause,
                 )
             )
         ).scalar_one_or_none()
@@ -391,9 +404,7 @@ async def assign_rule_to_account(
             if ws
             else owned_by(Account, user)
         )
-        stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            stmt = stmt.where(scope_clause)
+        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -403,14 +414,12 @@ async def assign_rule_to_account(
 
         # If preset_id provided, load preset
         if payload.preset_id:
-            p_stmt = select(RulePreset).where(RulePreset.id == payload.preset_id)
-            if user.role != "admin":
-                p_scope = (
-                    or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
-                    if ws
-                    else owned_by(RulePreset, user)
-                )
-                p_stmt = p_stmt.where(p_scope)
+            p_scope = (
+                or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
+                if ws
+                else owned_by(RulePreset, user)
+            )
+            p_stmt = select(RulePreset).where(RulePreset.id == payload.preset_id, p_scope)
             p_res = await session.execute(p_stmt)
             preset = p_res.scalar_one_or_none()
             if not preset:
@@ -462,9 +471,7 @@ async def assign_rule_group_to_account(
             if ws
             else owned_by(Account, user)
         )
-        account_stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            account_stmt = account_stmt.where(scope_clause)
+        account_stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
         account = (await session.execute(account_stmt)).scalar_one_or_none()
         if not account:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
@@ -475,9 +482,7 @@ async def assign_rule_group_to_account(
             if ws
             else owned_by(RuleGroup, user)
         )
-        group_stmt = select(RuleGroup).where(RuleGroup.id == group_id)
-        if user.role != "admin":
-            group_stmt = group_stmt.where(group_scope)
+        group_stmt = select(RuleGroup).where(RuleGroup.id == group_id, group_scope)
         group = (await session.execute(group_stmt)).scalar_one_or_none()
         if not group:
             raise HTTPException(status_code=404, detail="Группа правил не найдена.")
@@ -548,9 +553,7 @@ async def detach_rule_from_account(
             if ws
             else owned_by(Account, user)
         )
-        stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            stmt = stmt.where(scope_clause)
+        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -590,9 +593,7 @@ async def toggle_rules(account_id: str, user: User = Depends(get_current_user)):
             if ws
             else owned_by(Account, user)
         )
-        stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            stmt = stmt.where(scope_clause)
+        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()

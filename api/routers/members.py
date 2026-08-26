@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, delete, select
 
 from api.auth import get_current_user
-from api.deps import _utc_iso, invalidate_summary_cache
+from api.deps import (
+    _active_support_grant,
+    _utc_iso,
+    invalidate_summary_cache,
+    record_security_event_and_raise,
+)
 from api.schemas import (
     CreateWorkspaceInviteRequest,
     PublicInviteInfoResponse,
@@ -45,8 +50,22 @@ async def list_workspace_members(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="LIST_WORKSPACE_MEMBERS",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
         rows = (
             await session.execute(
@@ -105,11 +124,24 @@ async def update_workspace_member_role(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="UPDATE_MEMBER_ROLE",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для изменения ролей участников")
 
         if member_user_id == user.id:
@@ -129,7 +161,7 @@ async def update_workspace_member_role(
         if target_member.role == "owner":
             raise HTTPException(status_code=400, detail="Нельзя изменить роль владельца. Используйте передачу владения.")
 
-        if caller_role == "admin" and target_member.role == "admin" and user.role != "admin":
+        if caller_role == "admin" and target_member.role == "admin" and ws.owner_user_id != user.id:
             raise HTTPException(status_code=403, detail="Только владелец может менять роль администратора")
 
         target_member.role = req.role
@@ -172,11 +204,24 @@ async def remove_workspace_member(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="REMOVE_MEMBER",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для исключения участников")
 
         if member_user_id == user.id:
@@ -196,7 +241,7 @@ async def remove_workspace_member(
         if target_member.role == "owner":
             raise HTTPException(status_code=400, detail="Нельзя исключить владельца воркспейса")
 
-        if caller_role == "admin" and target_member.role == "admin" and user.role != "admin":
+        if caller_role == "admin" and target_member.role == "admin" and ws.owner_user_id != user.id:
             raise HTTPException(status_code=403, detail="Только владелец может исключить администратора")
 
         await session.execute(
@@ -312,8 +357,17 @@ async def transfer_workspace_ownership(
         if not ws:
             raise HTTPException(status_code=404, detail="Воркспейс не найден")
 
-        if ws.owner_user_id != user.id and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Только владелец может передать права владения воркспейсом")
+        if ws.owner_user_id != user.id:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Только владелец может передать права владения воркспейсом",
+                user=user,
+                workspace_id=workspace_id,
+                action="TRANSFER_OWNERSHIP",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
         if req.new_owner_user_id == user.id:
             raise HTTPException(status_code=400, detail="Вы уже являетесь владельцем этого воркспейса")
@@ -372,11 +426,24 @@ async def create_workspace_invite(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="CREATE_INVITE",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для создания приглашений")
 
         token = f"inv_{secrets.token_urlsafe(24)}"
@@ -488,11 +555,24 @@ async def list_workspace_invites(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="LIST_INVITES",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для просмотра приглашений")
 
         rows = (
@@ -556,11 +636,24 @@ async def revoke_workspace_invite(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="REVOKE_INVITE",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для отзыва приглашений")
 
         invite = (

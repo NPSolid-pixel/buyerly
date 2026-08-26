@@ -31,6 +31,7 @@ from database.models import (
     AccountGroup,
     AccountGroupMember,
     AnalyticsViewPreference,
+    AuditEvent,
     RuleGroup,
     RuleGroupItem,
     RulePreset,
@@ -38,6 +39,7 @@ from database.models import (
     User,
     Workspace,
     WorkspaceMember,
+    WorkspaceSupportGrant,
 )
 
 logger = logging.getLogger(__name__)
@@ -173,13 +175,67 @@ def slugify(text: str) -> str:
     return text or "workspace"
 
 
+async def _active_support_grant(
+    session,
+    user_id: int,
+    workspace_id: int,
+) -> Optional[WorkspaceSupportGrant]:
+    now = datetime.now(timezone.utc)
+    return (
+        await session.execute(
+            select(WorkspaceSupportGrant).where(
+                WorkspaceSupportGrant.workspace_id == workspace_id,
+                WorkspaceSupportGrant.user_id == user_id,
+                WorkspaceSupportGrant.expires_at > now,
+                WorkspaceSupportGrant.revoked_at.is_(None),
+            )
+        )
+    ).scalars().first()
+
+
+async def record_security_event_and_raise(
+    session,
+    *,
+    status_code: int = 403,
+    detail: str,
+    user: User,
+    workspace_id: Optional[int] = None,
+    action: str = "UNAUTHORIZED_ACCESS",
+    resource_type: str = "workspace",
+    resource_id: str = "",
+) -> None:
+    """Atomically commit a security audit event before raising HTTPException."""
+    try:
+        audit_event = AuditEvent(
+            workspace_id=workspace_id,
+            owner_user_id=user.id,
+            actor_type="user",
+            actor_id=str(user.telegram_id or user.id),
+            category="SECURITY",
+            event_type="UNAUTHORIZED_ACCESS_ATTEMPT",
+            status="BLOCKED",
+            action=action,
+            message=detail,
+            details={"resource_type": resource_type, "resource_id": str(resource_id)},
+        )
+        session.add(audit_event)
+        await session.commit()
+    except Exception as e:
+        logger.error("Failed to commit security audit event: %s", e)
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
 async def get_user_workspace(
     session,
     user: User,
     workspace_id: Optional[int] = None,
     slug: Optional[str] = None,
 ) -> Optional[Workspace]:
-    """Resolve the active workspace for the user, verifying membership."""
+    """Resolve the active workspace for the user, strictly verifying membership or active support grant."""
     if slug:
         ws = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
         if ws:
@@ -191,8 +247,13 @@ async def get_user_workspace(
                     )
                 )
             ).scalar_one_or_none()
-            if member or user.role == "admin":
+            if member:
                 return ws
+            if user.role == "admin":
+                grant = await _active_support_grant(session, user.id, ws.id)
+                if grant:
+                    return ws
+            return None
 
     if workspace_id:
         member = (
@@ -203,15 +264,36 @@ async def get_user_workspace(
                 )
             )
         ).scalar_one_or_none()
-        if member or user.role == "admin":
+        if member:
             return (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                return (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        return None
 
+    # Check user.active_workspace_id with strict membership or support grant
     if user.active_workspace_id:
-        ws = (await session.execute(select(Workspace).where(Workspace.id == user.active_workspace_id))).scalar_one_or_none()
-        if ws:
-            return ws
+        member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == user.active_workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if member:
+            ws = (await session.execute(select(Workspace).where(Workspace.id == user.active_workspace_id))).scalar_one_or_none()
+            if ws:
+                return ws
+        elif user.role == "admin":
+            grant = await _active_support_grant(session, user.id, user.active_workspace_id)
+            if grant:
+                ws = (await session.execute(select(Workspace).where(Workspace.id == user.active_workspace_id))).scalar_one_or_none()
+                if ws:
+                    return ws
 
-    # Fallback to first membership
+    # Fallback to first legitimate membership
     first_member = (
         await session.execute(
             select(WorkspaceMember).where(WorkspaceMember.user_id == user.id).limit(1)
@@ -221,7 +303,10 @@ async def get_user_workspace(
         ws = (await session.execute(select(Workspace).where(Workspace.id == first_member.workspace_id))).scalar_one_or_none()
         if ws:
             user.active_workspace_id = ws.id
-            await session.commit()
+            try:
+                await session.flush()
+            except Exception:
+                pass
             return ws
 
     # Create default workspace if user has none
@@ -244,15 +329,19 @@ async def get_user_workspace(
     member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
     session.add(member)
     user.active_workspace_id = ws.id
-    await session.commit()
+    try:
+        await session.flush()
+    except Exception:
+        pass
     return ws
 
 
 async def get_user_workspaces_list(session, user: User) -> List[WorkspaceItem]:
-    """Return all workspaces accessible to the user with live stats."""
+    """Return all workspaces accessible to the user with live stats, including active support grants."""
     active_ws = await get_user_workspace(session, user)
     active_id = active_ws.id if active_ws else None
 
+    # 1. Direct memberships
     rows = (
         await session.execute(
             select(Workspace, WorkspaceMember.role)
@@ -262,8 +351,30 @@ async def get_user_workspaces_list(session, user: User) -> List[WorkspaceItem]:
         )
     ).all()
 
-    items = []
+    workspaces_dict = {}
     for ws, role in rows:
+        workspaces_dict[ws.id] = (ws, role)
+
+    # 2. Active support grants for platform admins
+    if user.role == "admin":
+        now = datetime.now(timezone.utc)
+        grants = (
+            await session.execute(
+                select(Workspace, WorkspaceSupportGrant.role)
+                .join(WorkspaceSupportGrant, WorkspaceSupportGrant.workspace_id == Workspace.id)
+                .where(
+                    WorkspaceSupportGrant.user_id == user.id,
+                    WorkspaceSupportGrant.expires_at > now,
+                    WorkspaceSupportGrant.revoked_at.is_(None),
+                )
+            )
+        ).all()
+        for ws, role in grants:
+            if ws.id not in workspaces_dict:
+                workspaces_dict[ws.id] = (ws, role or "admin")
+
+    items = []
+    for ws_id, (ws, role) in sorted(workspaces_dict.items(), key=lambda x: x[0]):
         acc_count = (
             await session.execute(
                 select(func.count()).select_from(Account).where(Account.workspace_id == ws.id)
@@ -297,7 +408,7 @@ async def get_user_workspace_member(
     user: User,
     workspace_id: Optional[int] = None,
 ) -> tuple[Optional[Workspace], Optional[WorkspaceMember]]:
-    """Resolve active workspace and user membership with role."""
+    """Resolve active workspace and user membership with role, supporting active support grants."""
     ws = await get_user_workspace(session, user, workspace_id=workspace_id)
     if not ws:
         return None, None
@@ -309,6 +420,14 @@ async def get_user_workspace_member(
             )
         )
     ).scalar_one_or_none()
+    if not member and user.role == "admin":
+        grant = await _active_support_grant(session, user.id, ws.id)
+        if grant:
+            member = WorkspaceMember(
+                workspace_id=ws.id,
+                user_id=user.id,
+                role=grant.role or "admin",
+            )
     return ws, member
 
 
@@ -317,9 +436,7 @@ def ensure_workspace_write_access(
     member: Optional[WorkspaceMember],
     action_description: str = "изменения данных",
 ) -> None:
-    """Ensure user has write access to workspace (owner, admin, buyer). Viewers are blocked."""
-    if user.role == "admin":
-        return
+    """Ensure user has write access to workspace (owner, admin, buyer). Viewers and non-members are blocked."""
     if not member:
         raise HTTPException(status_code=403, detail=f"Нет доступа к воркспейсу для {action_description}")
     if member.role == "viewer":
@@ -333,23 +450,36 @@ def ensure_workspace_write_access(
 # Account & AccountGroup Helpers
 # ----------------------------------------------------
 async def get_user_accounts(session, user: User, workspace_id: Optional[int] = None) -> List[Account]:
-    if user.role == "admin" and not workspace_id:
-        stmt = select(Account).order_by(Account.id.desc())
-        res = await session.execute(stmt)
-        return res.scalars().all()
-
     ws = await get_user_workspace(session, user, workspace_id=workspace_id)
-    if ws:
-        stmt = select(Account).where(
+    if not ws:
+        return []
+
+    stmt = (
+        select(Account)
+        .where(
             or_(
                 Account.workspace_id == ws.id,
                 and_(Account.workspace_id.is_(None), owned_by(Account, user)),
             )
-        ).order_by(Account.id.desc())
-    else:
-        stmt = select(Account).where(owned_by(Account, user)).order_by(Account.id.desc())
+        )
+        .order_by(Account.id.desc())
+    )
     res = await session.execute(stmt)
-    return res.scalars().all()
+    accounts = res.scalars().all()
+
+    # Auto-backfill workspace_id for legacy unassigned accounts owned by this user in their active workspace
+    needs_flush = False
+    for acc in accounts:
+        if acc.workspace_id is None and acc.owner_user_id == user.id:
+            acc.workspace_id = ws.id
+            needs_flush = True
+    if needs_flush:
+        try:
+            await session.flush()
+        except Exception:
+            pass
+
+    return accounts
 
 
 async def _account_group_ids_by_account(

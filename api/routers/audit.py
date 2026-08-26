@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
 
 from api.auth import get_current_user
-from api.deps import _load_json_object, _utc_iso
+from api.deps import (
+    _load_json_object,
+    _utc_iso,
+    ensure_workspace_write_access,
+    get_user_workspace,
+    get_user_workspace_member,
+)
 from core.action_undo import (
     MUTATING_EVENT_TYPES,
     REVERSIBLE_EVENT_TYPES,
@@ -39,47 +45,55 @@ async def list_audit_events(
     user: User = Depends(get_current_user),
 ):
     """Return an owner-isolated, filterable audit history for the web UI."""
-    filters = []
-    if user.role != "admin":
-        filters.append(owned_by(AuditEvent, user))
-    if category:
-        filters.append(AuditEvent.category == category.upper())
-    if account_id:
-        filters.append(AuditEvent.account_id == account_id)
-    if rule_id is not None:
-        filters.append(AuditEvent.rule_id == rule_id)
-    if date_from:
-        filters.append(AuditEvent.created_at >= date_from)
-    if date_to:
-        filters.append(AuditEvent.created_at <= date_to)
-    if search and search.strip():
-        search_pattern = f"%{search.strip()}%"
-        filters.append(
-            or_(
-                AuditEvent.account_name.ilike(search_pattern),
-                AuditEvent.account_id.ilike(search_pattern),
-                AuditEvent.adset_name.ilike(search_pattern),
-                AuditEvent.adset_id.ilike(search_pattern),
-                AuditEvent.rule_name.ilike(search_pattern),
-                AuditEvent.message.ilike(search_pattern),
-            )
-        )
-
-    status_filters = list(filters)
-    if event_status:
-        normalized_status = event_status.upper()
-        if normalized_status == "REVERTED":
+    async with async_session_maker() as session:
+        ws = await get_user_workspace(session, user)
+        filters = []
+        if ws:
             filters.append(
-                AuditEvent.id.in_(
-                    select(AuditEvent.reverts_event_id).where(
-                        AuditEvent.reverts_event_id.is_not(None)
-                    )
+                or_(
+                    AuditEvent.workspace_id == ws.id,
+                    and_(AuditEvent.workspace_id.is_(None), owned_by(AuditEvent, user)),
                 )
             )
         else:
-            filters.append(AuditEvent.status == normalized_status)
+            filters.append(owned_by(AuditEvent, user))
+        if category:
+            filters.append(AuditEvent.category == category.upper())
+        if account_id:
+            filters.append(AuditEvent.account_id == account_id)
+        if rule_id is not None:
+            filters.append(AuditEvent.rule_id == rule_id)
+        if date_from:
+            filters.append(AuditEvent.created_at >= date_from)
+        if date_to:
+            filters.append(AuditEvent.created_at <= date_to)
+        if search and search.strip():
+            search_pattern = f"%{search.strip()}%"
+            filters.append(
+                or_(
+                    AuditEvent.account_name.ilike(search_pattern),
+                    AuditEvent.account_id.ilike(search_pattern),
+                    AuditEvent.adset_name.ilike(search_pattern),
+                    AuditEvent.adset_id.ilike(search_pattern),
+                    AuditEvent.rule_name.ilike(search_pattern),
+                    AuditEvent.message.ilike(search_pattern),
+                )
+            )
 
-    async with async_session_maker() as session:
+        status_filters = list(filters)
+        if event_status:
+            normalized_status = event_status.upper()
+            if normalized_status == "REVERTED":
+                filters.append(
+                    AuditEvent.id.in_(
+                        select(AuditEvent.reverts_event_id).where(
+                            AuditEvent.reverts_event_id.is_not(None)
+                        )
+                    )
+                )
+            else:
+                filters.append(AuditEvent.status == normalized_status)
+
         total = (
             await session.execute(
                 select(func.count()).select_from(AuditEvent).where(*filters)
@@ -234,6 +248,8 @@ async def undo_audit_event(
     user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "отмены действия")
         try:
             return await undo_audit_action(
                 session,
@@ -242,6 +258,7 @@ async def undo_audit_event(
                 actor_type="user",
                 actor_id=str(user.telegram_id or user.id),
                 owner_user_id=user.id,
+                workspace_id=ws.id if ws else None,
                 is_admin=user.role == "admin",
             )
         except UndoError as error:

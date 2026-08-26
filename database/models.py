@@ -185,6 +185,58 @@ class WorkspaceInvite(Base):
         )
 
 
+class WorkspaceSupportGrant(Base):
+    """Temporary, auditable privileged support/impersonation grant for platform superadmins."""
+
+    __tablename__ = "workspace_support_grants"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="ID воркспейса, к которому выдан временный доступ саппорта",
+    )
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="ID администратора платформы, получившего доступ",
+    )
+    role = Column(
+        String,
+        default="admin",
+        nullable=False,
+        doc="Временная роль в воркспейсе на время сессии ('admin' или 'viewer')",
+    )
+    reason = Column(
+        Text,
+        nullable=False,
+        doc="Обязательная обоснованная причина доступа саппорта/диагностики",
+    )
+    expires_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+        doc="Срок истечения сессии саппорта (UTC)",
+    )
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    revoked_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        doc="Время досрочного отзыва гранта (если отозван)",
+    )
+
+    def __repr__(self):
+        return (
+            f"<WorkspaceSupportGrant(id={self.id}, workspace_id={self.workspace_id}, "
+            f"user_id={self.user_id}, role='{self.role}', expires='{self.expires_at}')>"
+        )
+
+
 class EmailVerificationCode(Base):
     __tablename__ = "email_verification_codes"
 

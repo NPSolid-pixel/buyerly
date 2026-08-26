@@ -10,10 +10,14 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 
 from api.auth import get_current_user
-from api.deps import get_user_workspace
+from api.deps import (
+    ensure_workspace_write_access,
+    get_user_workspace,
+    get_user_workspace_member,
+)
 from core.config import settings
 from core.currency import normalize_currency
 from core.meta_tokens import (
@@ -390,6 +394,7 @@ async def list_connection_assets(
 ):
     async with async_session_maker() as session:
         connection = await _owned_connection(session, connection_id, user)
+        ws = await get_user_workspace(session, user)
         assets = (
             await session.execute(
                 select(MetaConnectionAsset)
@@ -400,10 +405,15 @@ async def list_connection_assets(
                 )
             )
         ).scalars().all()
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
         imported_ids = set(
             (
                 await session.execute(
-                    select(Account.account_id).where(owned_by(Account, user))
+                    select(Account.account_id).where(scope_clause)
                 )
             ).scalars().all()
         )
@@ -443,7 +453,10 @@ async def import_accounts(
     errors: list[dict] = []
     async with async_session_maker() as session:
         connection = await _owned_connection(session, connection_id, user)
-        ws = await get_user_workspace(session, user)
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "импорта рекламных кабинетов")
+        caller_role = member.role if member else "buyer"
+
         if connection.status != "active":
             raise HTTPException(status_code=409, detail="Сначала переподключите профиль Meta")
         try:
@@ -488,11 +501,14 @@ async def import_accounts(
                             existing.workspace_id is not None
                             and ws is not None
                             and existing.workspace_id != ws.id
-                            and user.role != "admin"
                         ):
                             raise RuntimeError("Кабинет уже подключён в другом рабочем пространстве.")
-                        if not entity_is_owned_by(existing, user) and user.role != "admin":
-                            raise RuntimeError("Кабинет уже принадлежит другому пользователю Buyerly")
+                        if (
+                            existing.workspace_id == (ws.id if ws else None)
+                            and not entity_is_owned_by(existing, user)
+                            and caller_role not in ("owner", "admin")
+                        ):
+                            raise RuntimeError("Кабинет добавлен другим байером в этом воркспейсе. Изменение разрешено только владельцу или администратору воркспейса.")
 
                     status_code = int(account_info.get("account_status") or 0)
                     status_label = str(account_info.get("status_label") or f"Статус #{status_code}")

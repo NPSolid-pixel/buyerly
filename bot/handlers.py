@@ -9,7 +9,7 @@ from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
-from sqlalchemy import select, delete
+from sqlalchemy import and_, delete, or_, select
 
 from core.config import settings
 from core.audit import build_audit_event
@@ -19,7 +19,7 @@ from core.ownership import entity_is_owned_by, owned_by
 from core.meta_tokens import resolve_account_access_token
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
-from database.models import Account, StoppedAdSet, AppSettings, User
+from database.models import Account, AppSettings, StoppedAdSet, User, WorkspaceMember
 from meta_api.client import MetaClient
 from bot.keyboards import (
     get_main_menu_keyboard,
@@ -417,12 +417,17 @@ async def get_user_accounts(session, user_id: str) -> List[Account]:
             select(User).where(User.telegram_id == user_id)
         )
     ).scalar_one_or_none()
-    if user and user.is_approved and user.role == "admin":
-        stmt = select(Account)
-    elif user and user.is_approved:
-        stmt = select(Account).where(owned_by(Account, user))
-    else:
+    if not user or not user.is_approved:
         return []
+    if user.active_workspace_id:
+        stmt = select(Account).where(
+            or_(
+                Account.workspace_id == user.active_workspace_id,
+                and_(Account.workspace_id.is_(None), owned_by(Account, user)),
+            )
+        )
+    else:
+        stmt = select(Account).where(owned_by(Account, user))
     res = await session.execute(stmt)
     return res.scalars().all()
 
@@ -442,7 +447,18 @@ async def _can_manage_account(session, user_id: str, account: Account) -> bool:
     user = result.scalar_one_or_none()
     if not user or not user.is_approved:
         return False
-    return entity_is_owned_by(account, user) or user.role == "admin"
+    if account.workspace_id is not None:
+        member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == account.workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if member and member.role in ("owner", "admin", "buyer"):
+            return True
+    return entity_is_owned_by(account, user)
 
 
 @router.callback_query(F.data.startswith("report_period:"))

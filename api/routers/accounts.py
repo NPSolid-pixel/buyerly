@@ -18,6 +18,7 @@ from api.deps import (
     get_user_workspace,
     get_user_workspace_member,
     invalidate_summary_cache,
+    record_security_event_and_raise,
 )
 from api.schemas import (
     AccountGroupItem,
@@ -30,7 +31,7 @@ from api.schemas import (
 )
 from bot.handlers import parse_fb_raw_accounts
 from core.currency import normalize_currency
-from core.ownership import owned_by
+from core.ownership import entity_is_owned_by, owned_by
 from core.rate_limit import rate_limit_dep
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
@@ -247,11 +248,22 @@ async def update_account_profile(
             if ws
             else owned_by(Account, user)
         )
-        stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            stmt = stmt.where(scope_clause)
+        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
         account = (await session.execute(stmt)).scalar_one_or_none()
         if not account:
+            # Check if this is a cross-workspace attempt for audit logging
+            exists_any = (await session.execute(select(Account.id).where(Account.account_id == acc_id))).scalar_one_or_none()
+            if exists_any is not None:
+                await record_security_event_and_raise(
+                    session,
+                    status_code=404,
+                    detail="Кабинет не найден.",
+                    user=user,
+                    workspace_id=ws.id if ws else None,
+                    action="UPDATE_ACCOUNT_PROFILE",
+                    resource_type="account",
+                    resource_id=acc_id,
+                )
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
 
         account.custom_name = payload.custom_name.strip()
@@ -278,13 +290,23 @@ async def delete_account(account_id: str, user: User = Depends(get_current_user)
             if ws
             else owned_by(Account, user)
         )
-        stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            stmt = stmt.where(scope_clause)
+        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
         if not acc:
+            exists_any = (await session.execute(select(Account.id).where(Account.account_id == acc_id))).scalar_one_or_none()
+            if exists_any is not None:
+                await record_security_event_and_raise(
+                    session,
+                    status_code=404,
+                    detail="Кабинет не найден.",
+                    user=user,
+                    workspace_id=ws.id if ws else None,
+                    action="DELETE_ACCOUNT",
+                    resource_type="account",
+                    resource_id=acc_id,
+                )
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
 
         await session.execute(delete(AccountGroupMember).where(AccountGroupMember.account_id == acc.id))
@@ -320,6 +342,8 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "добавления рекламных кабинетов")
+        caller_role = member.role if member else "buyer"
+
         for idx, item in enumerate(payload.accounts, start=1):
             acc_id = item.account_id if item.account_id.startswith("act_") else f"act_{item.account_id}"
             custom_name = item.name.strip() if item.name else ""
@@ -346,17 +370,27 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                 res = await session.execute(select(Account).where(Account.account_id == acc_id))
                 existing = res.scalar_one_or_none()
 
-                ws = await get_user_workspace(session, user)
                 if existing:
                     if (
                         existing.workspace_id is not None
                         and ws is not None
                         and existing.workspace_id != ws.id
-                        and user.role != "admin"
                     ):
                         error_list.append({
                             "account_id": acc_id,
                             "error": "Кабинет уже подключён в другом рабочем пространстве."
+                        })
+                        continue
+
+                    # Intraworkspace RBAC check: only account owner or workspace owner/admin can overwrite token
+                    if (
+                        existing.workspace_id == (ws.id if ws else None)
+                        and not entity_is_owned_by(existing, user)
+                        and caller_role not in ("owner", "admin")
+                    ):
+                        error_list.append({
+                            "account_id": acc_id,
+                            "error": "Кабинет добавлен другим байером в этом воркспейсе. Изменение разрешено только владельцу или администратору воркспейса."
                         })
                         continue
 
