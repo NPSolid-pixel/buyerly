@@ -2009,6 +2009,17 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         message="Admin event",
                         correlation_id="admin-cycle",
                     ),
+                    AuditEvent(
+                        owner_user_id=admin.id,
+                        workspace_id=admin.active_workspace_id,
+                        category="RULE_ACTION",
+                        event_type="STOP",
+                        status="SUCCESS",
+                        account_id="act_admin_account_2",
+                        account_name="Admin account 2",
+                        message="Admin event 2",
+                        correlation_id="admin-cycle-2",
+                    ),
                 ]
             )
             await session.commit()
