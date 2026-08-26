@@ -30,7 +30,7 @@ from api.schemas import (
 from core.email import send_workspace_invitation_email
 from core.rate_limit import rate_limit_dep
 from database.db import async_session_maker
-from database.models import User, Workspace, WorkspaceInvite, WorkspaceMember
+from database.models import AuditEvent, User, Workspace, WorkspaceInvite, WorkspaceMember
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Onboarding"])
@@ -61,6 +61,8 @@ async def get_onboarding_status(user: User = Depends(get_current_user)):
             first_name=getattr(db_user, "first_name", "") or "",
             last_name=getattr(db_user, "last_name", "") or "",
             email=db_user.email,
+            email_verified=bool(getattr(db_user, "email_verified_at", None)),
+            unconfirmed_email=getattr(db_user, "unconfirmed_email", None),
             avatar_url=getattr(db_user, "avatar_url", "") or "",
             role=db_user.role,
             is_approved=db_user.is_approved,
@@ -97,7 +99,10 @@ async def submit_onboarding_personal_details(
         db_user.last_name = last_name
         db_user.full_name = f"{first_name} {last_name}".strip()
         if clean_email:
-            db_user.email = clean_email
+            existing_email = (db_user.email or "").strip().lower() or None
+            if clean_email != existing_email:
+                db_user.email = clean_email
+                db_user.email_verified_at = None
 
         if db_user.onboarding_step in ("personal_details", ""):
             db_user.onboarding_step = "workspace"
@@ -114,6 +119,8 @@ async def submit_onboarding_personal_details(
             first_name=db_user.first_name or "",
             last_name=db_user.last_name or "",
             email=db_user.email,
+            email_verified=bool(getattr(db_user, "email_verified_at", None)),
+            unconfirmed_email=getattr(db_user, "unconfirmed_email", None),
             avatar_url=db_user.avatar_url or "",
             role=db_user.role,
             is_approved=db_user.is_approved,
@@ -368,6 +375,25 @@ async def submit_onboarding_invites(
             session.add(invite)
             await session.flush()
 
+            session.add(
+                AuditEvent(
+                    workspace_id=active_ws.id,
+                    owner_user_id=db_user.id,
+                    actor_type="user",
+                    actor_id=str(db_user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_CREATE",
+                    status="SUCCESS",
+                    message=f"Создано приглашение для {clean_email}",
+                    details={
+                        "invite_id": invite.id,
+                        "email": clean_email,
+                        "role": invite.role,
+                        "max_uses": invite.max_uses,
+                    },
+                )
+            )
+
             created_invites.append(
                 WorkspaceInviteItem(
                     id=invite.id,
@@ -387,6 +413,7 @@ async def submit_onboarding_invites(
             )
 
             if clean_email:
+                send_ok = True
                 try:
                     inviter_name = db_user.full_name or db_user.username or "Коллега"
                     await send_workspace_invitation_email(
@@ -397,7 +424,22 @@ async def submit_onboarding_invites(
                         invite_token=invite.token,
                     )
                 except Exception as e:
+                    send_ok = False
                     logger.error("Failed to send onboarding invite email to %s: %s", clean_email, e)
+
+                session.add(
+                    AuditEvent(
+                        workspace_id=active_ws.id,
+                        owner_user_id=db_user.id,
+                        actor_type="user",
+                        actor_id=str(db_user.id),
+                        category="WORKSPACE_INVITE",
+                        event_type="INVITE_SEND",
+                        status="SUCCESS" if send_ok else "FAILED",
+                        message=f"Отправка приглашения на {clean_email}: {'успешно' if send_ok else 'ошибка'}",
+                        details={"invite_id": invite.id, "email": clean_email},
+                    )
+                )
 
         db_user.onboarding_step = "completed"
         db_user.onboarding_completed = True

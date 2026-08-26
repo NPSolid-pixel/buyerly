@@ -146,4 +146,3 @@ webapp/              Фронтенд SPA в стиле Attio CRM, стили, �
 - [План официальной авторизации Facebook](docs/FACEBOOK_AUTHORIZATION_PLAN.md)
 - [Бэклог продукта](docs/PRODUCT_BACKLOG.md)
 - [Карта оставшихся продуктовых задач](docs/REMAINING_PRODUCT_WORK.md)
-

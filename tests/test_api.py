@@ -2187,3 +2187,168 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(res.status_code, 200, f"Failed to accept good avatar: {good_avatar}")
                 self.assertEqual(res.json()["avatar_url"], good_avatar)
+
+    async def test_update_profile_cannot_bypass_email_verification(self):
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # Direct modification of email in update-profile must be rejected
+            res = await client.post(
+                "/api/auth/update-profile",
+                headers=headers,
+                json={"email": "attacker@evil.com"},
+            )
+            self.assertEqual(res.status_code, 400)
+            self.assertIn("Прямое изменение email без подтверждения запрещено", res.json()["detail"])
+
+    async def test_email_change_verify_before_activate_flow(self):
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # 1. Request email change
+            with patch("api.routers.auth.send_otp_verification_email", new=AsyncMock()):
+                req_res = await client.post(
+                    "/api/auth/request-email-change",
+                    headers=headers,
+                    json={"new_email": "nick_new@example.com"},
+                )
+                self.assertEqual(req_res.status_code, 200)
+                self.assertTrue(req_res.json()["ok"])
+                self.assertEqual(req_res.json()["unconfirmed_email"], "nick_new@example.com")
+
+            # Verify unconfirmed_email is saved on user
+            async with self.test_session_maker() as session:
+                user = (await session.execute(select(User).where(User.telegram_id == "8948797431"))).scalar_one()
+                self.assertEqual(user.unconfirmed_email, "nick_new@example.com")
+                self.assertIsNone(user.email_verified_at)
+
+                # Fetch OTP code
+                otp = (
+                    await session.execute(
+                        select(EmailVerificationCode)
+                        .where(EmailVerificationCode.email == "nick_new@example.com")
+                        .order_by(EmailVerificationCode.id.desc())
+                    )
+                ).scalar_one()
+                code = otp.code
+
+            # 2. Try invalid code -> 400
+            bad_verify = await client.post(
+                "/api/auth/verify-email-change",
+                headers=headers,
+                json={"code": "999999"},
+            )
+            self.assertEqual(bad_verify.status_code, 400)
+
+            # 3. Submit valid code -> 200 OK, email activated
+            good_verify = await client.post(
+                "/api/auth/verify-email-change",
+                headers=headers,
+                json={"code": code},
+            )
+            self.assertEqual(good_verify.status_code, 200)
+            self.assertEqual(good_verify.json()["email"], "nick_new@example.com")
+            self.assertTrue(good_verify.json()["email_verified"])
+
+            # Verify DB state
+            async with self.test_session_maker() as session:
+                user = (await session.execute(select(User).where(User.telegram_id == "8948797431"))).scalar_one()
+                self.assertEqual(user.email, "nick_new@example.com")
+                self.assertIsNotNone(user.email_verified_at)
+                self.assertIsNone(user.unconfirmed_email)
+
+            # 4. Check /api/me returns email_verified = True
+            me_res = await client.get("/api/me", headers=headers)
+            self.assertEqual(me_res.status_code, 200)
+            self.assertEqual(me_res.json()["email"], "nick_new@example.com")
+            self.assertTrue(me_res.json()["email_verified"])
+
+    async def test_existing_user_request_email_verification(self):
+        async with self.test_session_maker() as session:
+            old_user = User(
+                telegram_id="8948797999",
+                username="old_buyer",
+                email="existing_unverified@corp.com",
+                email_verified_at=None,
+                role="buyer",
+                is_approved=True,
+            )
+            session.add(old_user)
+            await session.commit()
+
+        user_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797999, "first_name": "Old", "username": "old_buyer"},
+        )
+        headers = {"Authorization": f"tma {user_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            with patch("api.routers.auth.send_otp_verification_email", new=AsyncMock()):
+                req_res = await client.post("/api/auth/request-email-verification", headers=headers)
+                self.assertEqual(req_res.status_code, 200)
+
+            async with self.test_session_maker() as session:
+                otp = (
+                    await session.execute(
+                        select(EmailVerificationCode)
+                        .where(EmailVerificationCode.email == "existing_unverified@corp.com")
+                    )
+                ).scalar_one()
+                code = otp.code
+
+            verify_res = await client.post(
+                "/api/auth/verify-email-change",
+                headers=headers,
+                json={"code": code},
+            )
+            self.assertEqual(verify_res.status_code, 200)
+            self.assertTrue(verify_res.json()["email_verified"])
+
+            async with self.test_session_maker() as session:
+                db_u = (await session.execute(select(User).where(User.username == "old_buyer"))).scalar_one()
+                self.assertIsNotNone(db_u.email_verified_at)
+
+    async def test_email_uniqueness_and_case_normalization(self):
+        async with self.test_session_maker() as session:
+            user1 = User(
+                telegram_id="8948797111",
+                username="user_one",
+                email="unique_user@corp.com",
+                email_verified_at=datetime.now(timezone.utc),
+                role="buyer",
+                is_approved=True,
+            )
+            user2 = User(
+                telegram_id="8948797222",
+                username="user_two",
+                email="user2@corp.com",
+                email_verified_at=datetime.now(timezone.utc),
+                role="buyer",
+                is_approved=True,
+            )
+            session.add_all([user1, user2])
+            await session.commit()
+
+        user2_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797222, "first_name": "Two", "username": "user_two"},
+        )
+        headers = {"Authorization": f"tma {user2_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # User 2 tries to claim User 1's email with different case / spaces -> 409 Conflict
+            collision_res = await client.post(
+                "/api/auth/request-email-change",
+                headers=headers,
+                json={"new_email": "  Unique_User@Corp.com  "},
+            )
+            self.assertEqual(collision_res.status_code, 409)
+            self.assertIn("уже используется другим пользователем", collision_res.json()["detail"])

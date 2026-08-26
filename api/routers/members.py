@@ -20,7 +20,7 @@ from core.config import settings
 from core.email import send_workspace_invitation_email
 from core.rate_limit import rate_limit_dep
 from database.db import async_session_maker
-from database.models import User, Workspace, WorkspaceInvite, WorkspaceMember
+from database.models import AuditEvent, User, Workspace, WorkspaceInvite, WorkspaceMember
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Members & Invites"])
@@ -393,10 +393,31 @@ async def create_workspace_invite(
             expires_at=expires_at,
         )
         session.add(invite)
+        await session.flush()
+
+        session.add(
+            AuditEvent(
+                workspace_id=workspace_id,
+                owner_user_id=user.id,
+                actor_type="user",
+                actor_id=str(user.id),
+                category="WORKSPACE_INVITE",
+                event_type="INVITE_CREATE",
+                status="SUCCESS",
+                message=f"Создано приглашение для {target_email or 'публичной ссылки'}",
+                details={
+                    "invite_id": invite.id,
+                    "email": target_email,
+                    "role": invite.role,
+                    "max_uses": invite.max_uses,
+                },
+            )
+        )
         await session.commit()
         await session.refresh(invite)
 
         if target_email:
+            send_ok = True
             try:
                 inviter_name = user.full_name or user.username or "Коллега"
                 await send_workspace_invitation_email(
@@ -407,7 +428,23 @@ async def create_workspace_invite(
                     invite_token=invite.token,
                 )
             except Exception as e:
+                send_ok = False
                 logger.error("Failed to send invitation email to %s: %s", target_email, e)
+
+            session.add(
+                AuditEvent(
+                    workspace_id=workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_SEND",
+                    status="SUCCESS" if send_ok else "FAILED",
+                    message=f"Отправка приглашения на {target_email}: {'успешно' if send_ok else 'ошибка'}",
+                    details={"invite_id": invite.id, "email": target_email},
+                )
+            )
+            await session.commit()
 
         base_url = settings.WEBAPP_URL.rstrip("/") if settings.WEBAPP_URL else ""
         invite_url = f"{base_url}/invite/{invite.token}" if base_url else f"/invite/{invite.token}"
@@ -535,6 +572,19 @@ async def revoke_workspace_invite(
             raise HTTPException(status_code=404, detail="Приглашение не найдено")
 
         invite.status = "revoked"
+        session.add(
+            AuditEvent(
+                workspace_id=workspace_id,
+                owner_user_id=user.id,
+                actor_type="user",
+                actor_id=str(user.id),
+                category="WORKSPACE_INVITE",
+                event_type="INVITE_REVOKE",
+                status="SUCCESS",
+                message="Приглашение отозвано",
+                details={"invite_id": invite.id, "email": invite.email},
+            )
+        )
         await session.commit()
         return {"status": "ok", "message": "Приглашение успешно отозвано"}
 
@@ -626,7 +676,9 @@ async def accept_workspace_invite(
     async with async_session_maker() as session:
         invite = (
             await session.execute(
-                select(WorkspaceInvite).where(WorkspaceInvite.token == token)
+                select(WorkspaceInvite)
+                .where(WorkspaceInvite.token == token)
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if not invite:
@@ -634,28 +686,101 @@ async def accept_workspace_invite(
 
         now_dt = datetime.now(timezone.utc)
         if invite.status == "revoked":
+            session.add(
+                AuditEvent(
+                    workspace_id=invite.workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_REJECT",
+                    status="FAILED",
+                    message="Попытка принятия отозванного приглашения",
+                    details={"invite_id": invite.id, "reason": "revoked"},
+                )
+            )
+            await session.commit()
             raise HTTPException(status_code=400, detail="Это приглашение было отозвано")
 
         if invite.expires_at and now_dt > invite.expires_at:
             invite.status = "expired"
+            session.add(
+                AuditEvent(
+                    workspace_id=invite.workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_REJECT",
+                    status="FAILED",
+                    message="Попытка принятия просроченного приглашения",
+                    details={"invite_id": invite.id, "reason": "expired"},
+                )
+            )
             await session.commit()
             raise HTTPException(status_code=400, detail="Срок действия приглашения истёк")
 
         if invite.max_uses > 0 and invite.used_count >= invite.max_uses:
+            session.add(
+                AuditEvent(
+                    workspace_id=invite.workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_REJECT",
+                    status="FAILED",
+                    message="Лимит использований приглашения исчерпан",
+                    details={"invite_id": invite.id, "reason": "max_uses_reached"},
+                )
+            )
+            await session.commit()
             raise HTTPException(status_code=400, detail="Лимит использований приглашения исчерпан")
 
         ws = (await session.execute(select(Workspace).where(Workspace.id == invite.workspace_id))).scalar_one_or_none()
         if not ws:
             raise HTTPException(status_code=404, detail="Воркспейс не найден")
 
-        # Targeted invite protection: verify user email if invite is addressed to a specific email
+        # Targeted invite protection: verify user has verified email matching invite.email
         if invite.email:
             target_email = invite.email.strip().lower()
             user_email = (user.email or "").strip().lower()
-            if not user_email:
-                db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
-                db_user.email = target_email
-            elif user_email != target_email:
+
+            if not user_email or not getattr(user, "email_verified_at", None):
+                session.add(
+                    AuditEvent(
+                        workspace_id=invite.workspace_id,
+                        owner_user_id=user.id,
+                        actor_type="user",
+                        actor_id=str(user.id),
+                        category="WORKSPACE_INVITE",
+                        event_type="INVITE_REJECT",
+                        status="FAILED",
+                        message="Попытка принятия targeted invite без подтверждённого email",
+                        details={"invite_id": invite.id, "reason": "unverified_email"},
+                    )
+                )
+                await session.commit()
+                raise HTTPException(
+                    status_code=403,
+                    detail="Для принятия персонального приглашения требуется подтверждённый адрес электронной почты.",
+                )
+
+            if user_email != target_email:
+                session.add(
+                    AuditEvent(
+                        workspace_id=invite.workspace_id,
+                        owner_user_id=user.id,
+                        actor_type="user",
+                        actor_id=str(user.id),
+                        category="WORKSPACE_INVITE",
+                        event_type="INVITE_REJECT",
+                        status="FAILED",
+                        message="Попытка принятия targeted invite с несовпадающим email",
+                        details={"invite_id": invite.id, "reason": "email_mismatch"},
+                    )
+                )
+                await session.commit()
                 raise HTTPException(
                     status_code=403,
                     detail="Это приглашение предназначено для другого email-адреса.",
@@ -683,6 +808,25 @@ async def accept_workspace_invite(
             invite.used_count += 1
             if invite.max_uses > 0 and invite.used_count >= invite.max_uses:
                 invite.status = "accepted"
+
+        session.add(
+            AuditEvent(
+                workspace_id=invite.workspace_id,
+                owner_user_id=user.id,
+                actor_type="user",
+                actor_id=str(user.id),
+                category="WORKSPACE_INVITE",
+                event_type="INVITE_ACCEPT",
+                status="SUCCESS",
+                message=f"Приглашение принято пользователем {user.username}",
+                details={
+                    "invite_id": invite.id,
+                    "workspace_id": ws.id,
+                    "user_id": user.id,
+                    "role": existing_m.role if existing_m else invite.role,
+                },
+            )
+        )
 
         await session.commit()
         return {

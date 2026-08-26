@@ -33,7 +33,9 @@ class User(Base):
     full_name = Column(String, default="", nullable=False)
     first_name = Column(String, default="", nullable=False, doc="Имя пользователя")
     last_name = Column(String, default="", nullable=False, doc="Фамилия пользователя")
-    email = Column(String, nullable=True, index=True, doc="Рабочий Email пользователя")
+    email = Column(String, unique=True, nullable=True, index=True, doc="Нормализованный уникальный рабочий Email")
+    email_verified_at = Column(DateTime(timezone=True), nullable=True, index=True, doc="Дата и время подтверждения email (UTC)")
+    unconfirmed_email = Column(String, nullable=True, index=True, doc="Новый запрашиваемый email до подтверждения OTP")
     avatar_url = Column(String, default="", nullable=False, doc="URL или путь к аватару")
     onboarding_step = Column(
         String,
