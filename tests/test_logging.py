@@ -47,6 +47,17 @@ class TestSecretRedaction(unittest.TestCase):
         self.assertIn("1234567890:[REDACTED]", result)
         self.assertIn("[REDACTED_GITHUB_TOKEN]", result)
 
+    def test_redacts_resend_api_keys_and_passwords(self):
+        resend_key = "re_test12345678901234567890"
+        message = f"resend_key={resend_key} connect url=postgresql://buyerly:password=secret_pw123@host:5432"
+
+        result = redact_secrets(message)
+
+        self.assertNotIn(resend_key, result)
+        self.assertNotIn("secret_pw123", result)
+        self.assertIn("[REDACTED_RESEND_KEY]", result)
+        self.assertIn("password=[REDACTED]", result)
+
     def test_formatter_redacts_exception_text(self):
         formatter = RedactingFormatter("%(levelname)s %(message)s")
         record = logging.LogRecord(
