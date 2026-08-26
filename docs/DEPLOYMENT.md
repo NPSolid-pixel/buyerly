@@ -52,3 +52,22 @@ docker compose logs --tail=100 bot
 - `buyerly_postgres_YYYYMMDD_HHMMSS.sql.gz` через `pg_dump`.
 
 По умолчанию сохраняются последние 30 архивов. Для восстановления PostgreSQL остановите пишущие сервисы, разверните нужный архив через `psql`, затем запустите `migrate`, `api`, `bot`, `worker` и `web`.
+
+## Безопасность хоста и доступ по SSH
+
+1. **Запрет парольной аутентификации**:
+   - Вход на VPS разрешен **исключительно по асимметричным SSH-ключам** (`Ed25519`).
+   - Парольный вход и интерактивные методы отключены в конфигурации OpenSSH (`/etc/ssh/sshd_config.d/99-hardening.conf`):
+     ```sshd_config
+     PasswordAuthentication no
+     KbdInteractiveAuthentication no
+     PermitRootLogin prohibit-password
+     PubkeyAuthentication yes
+     ```
+2. **Управление ключами**:
+   - Список доверенных публичных ключей хранится в `~/.ssh/authorized_keys` на VPS.
+   - Для деплоя через GitHub Actions используется секрет репозитория `VPS_SSH_KEY`.
+3. **Сетевая изоляция**:
+   - Порт PostgreSQL (`5432`) закрыт внутри Docker-сети и не публикуется наружу хоста.
+   - Наружу выставлен только порт обратного прокси веб-сервиса (`8080`).
+
