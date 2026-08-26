@@ -1,6 +1,6 @@
 """Add email_verified_at and unconfirmed_email columns to users table and ensure unique index
 
-Revision ID: 0003_user_email_verified_and_unconfirmed
+Revision ID: 0003_user_email_verified
 Revises: 0002_adset_inventory_cache
 Create Date: 2026-08-26 17:45:00.000000+00:00
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "0003_user_email_verified_and_unconfirmed"
+revision: str = "0003_user_email_verified"
 down_revision: Union[str, None] = "0002_adset_inventory_cache"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
