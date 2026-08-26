@@ -31,11 +31,14 @@ Production: `https://buyerly.app`.
 | Метод и путь | Тело | Результат |
 |---|---|---|
 | `POST /api/auth/request-temporary-password` | `email` | генерирует и высылает 6-значный одноразовый пароль на email через Resend |
+| `POST /api/auth/request-email-verification` | — | высылает 6-значный одноразовый код на текущий неподтверждённый email |
+| `POST /api/auth/request-email-change` | `new_email` | высылает 6-значный код подтверждения для привязки нового email |
+| `POST /api/auth/verify-email-change` | `code` | верифицирует OTP и активирует подтверждённый email |
 | `POST /api/auth/login` | `username`, `password` | web token, профиль и роль (поддерживает пароль и OTP-код) |
 | `POST /api/auth/change-password` | `old_password`, `new_password` | меняет пароль; минимум 8 символов |
 | `POST /api/auth/update-profile` | `first_name?`, `last_name?`, `email?`, `avatar_url?`, `full_name?`, `telegram_id?` | обновляет персональные данные профиля и адрес Telegram-доставки |
 | `POST /api/auth/logout` | — | ротирует web token |
-| `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `first_name`, `last_name`, `email`, `avatar_url`, `role`, `is_approved`, `active_workspace`, `workspaces` |
+| `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `first_name`, `last_name`, `email`, `email_verified`, `unconfirmed_email`, `avatar_url`, `role`, `is_approved`, `active_workspace`, `workspaces` |
 | `GET /api/admin/overview` | — | сводная таблица всех пользователей, воркспейсов и инвайтов (только админ) |
 
 Изменение `telegram_id` не меняет внутреннего владельца данных: кабинеты, правила, сводки и история продолжают принадлежать тому же пользователю внутри воркспейса.
