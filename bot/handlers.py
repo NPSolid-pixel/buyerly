@@ -3,6 +3,7 @@ import logging
 import re
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import List
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart, StateFilter
@@ -19,7 +20,14 @@ from core.ownership import entity_is_owned_by, owned_by
 from core.meta_tokens import resolve_account_access_token
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
-from database.models import Account, AppSettings, StoppedAdSet, User, WorkspaceMember
+from database.models import (
+    Account,
+    AppSettings,
+    StoppedAdSet,
+    User,
+    WorkspaceMember,
+    WorkspaceSupportGrant,
+)
 from meta_api.client import MetaClient
 from bot.keyboards import (
     get_main_menu_keyboard,
@@ -458,6 +466,21 @@ async def _can_manage_account(session, user_id: str, account: Account) -> bool:
         ).scalar_one_or_none()
         if member and member.role in ("owner", "admin", "buyer"):
             return True
+        if user.role == "admin":
+            grant = (
+                await session.execute(
+                    select(WorkspaceSupportGrant).where(
+                        WorkspaceSupportGrant.workspace_id == account.workspace_id,
+                        WorkspaceSupportGrant.user_id == user.id,
+                        WorkspaceSupportGrant.expires_at > datetime.now(timezone.utc),
+                        WorkspaceSupportGrant.revoked_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if grant:
+                return True
+    elif user.role == "admin":
+        return True
     return entity_is_owned_by(account, user)
 
 
