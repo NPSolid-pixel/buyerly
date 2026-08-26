@@ -119,8 +119,8 @@ async def reactivate_adset(adset_id: str, user: User = Depends(get_current_user)
             adset_id,
             "ACTIVE",
         )
-        if account.owner_user_id:
-            invalidate_summary_cache(account.owner_user_id)
+        if account.workspace_id or account.owner_user_id:
+            invalidate_summary_cache(workspace_id=account.workspace_id, owner_user_id=account.owner_user_id)
 
         session.add(
             build_audit_event(

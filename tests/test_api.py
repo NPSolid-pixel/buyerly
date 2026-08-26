@@ -532,6 +532,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             account.meta_connection_id = conn_obj.id
             session.add(
                 SummarySnapshot(
+                    workspace_id=buyer.active_workspace_id,
                     owner_user_id=buyer.id,
                     period="today",
                     payload={
@@ -1546,6 +1547,298 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             {"EUR": 100.0, "USD": 50.0},
         )
 
+    async def test_summary_workspace_isolation_switch_and_cache(self):
+        async with self.test_session_maker() as session:
+            buyer = (await session.execute(select(User).where(User.telegram_id == "8948797431"))).scalar_one()
+
+            # Create a second workspace for buyer
+            ws_second = Workspace(
+                name="Second Workspace",
+                slug="buyer-second-ws",
+                badge_text="S",
+                badge_color="#6366F1",
+                owner_user_id=buyer.id,
+            )
+            session.add(ws_second)
+            await session.flush()
+            session.add(WorkspaceMember(workspace_id=ws_second.id, user_id=buyer.id, role="owner"))
+
+            # Add account to second workspace
+            acc_second = Account(
+                account_id="act_second_ws_999",
+                name="Second WS Account",
+                access_token="second_token",
+                owner_user_id=buyer.id,
+                workspace_id=ws_second.id,
+                currency="USD",
+                is_active=True,
+            )
+            session.add(acc_second)
+            await session.commit()
+
+            ws1_id = buyer.active_workspace_id
+            ws2_id = ws_second.id
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        async def insights_router(account_id, access_token, date_preset):
+            if account_id == "act_second_ws_999":
+                return {
+                    "spend": 250.0,
+                    "clicks": 100,
+                    "impressions": 5000,
+                    "reach": 3000,
+                    "leads": 20,
+                    "registrations": 10,
+                    "purchases": 5,
+                }
+            return {
+                "spend": 100.0,
+                "clicks": 40,
+                "impressions": 2000,
+                "reach": 1500,
+                "leads": 8,
+                "registrations": 4,
+                "purchases": 2,
+            }
+
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_account_insights_summary",
+            new=AsyncMock(side_effect=insights_router),
+        ) as mocked_insights:
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                # 1. Fetch in Workspace 1 (live)
+                resp1_live = await client.get("/api/summary?period=today&force=true", headers=headers)
+                self.assertEqual(resp1_live.status_code, 200)
+                data1_live = resp1_live.json()
+                self.assertEqual(data1_live["total_spend"], 100.0)
+                self.assertEqual(data1_live["cache"]["workspace_id"], ws1_id)
+                self.assertEqual(data1_live["cache"]["origin"], "live")
+
+                # 2. Fetch in Workspace 1 (memory cache)
+                resp1_mem = await client.get("/api/summary?period=today", headers=headers)
+                self.assertEqual(resp1_mem.status_code, 200)
+                data1_mem = resp1_mem.json()
+                self.assertEqual(data1_mem["total_spend"], 100.0)
+                self.assertEqual(data1_mem["cache"]["origin"], "memory")
+                self.assertEqual(data1_mem["cache"]["workspace_id"], ws1_id)
+
+                # 3. Switch to Workspace 2
+                switch_resp = await client.post(
+                    "/api/workspaces/switch",
+                    json={"workspace_id": ws2_id},
+                    headers=headers,
+                )
+                self.assertEqual(switch_resp.status_code, 200)
+
+                # 4. Fetch in Workspace 2 (must NOT hit WS1 cache/snapshot!)
+                resp2_live = await client.get("/api/summary?period=today", headers=headers)
+                self.assertEqual(resp2_live.status_code, 200)
+                data2_live = resp2_live.json()
+                self.assertEqual(data2_live["total_spend"], 250.0)
+                self.assertEqual(data2_live["cache"]["workspace_id"], ws2_id)
+                self.assertEqual(len(data2_live["accounts"]), 1)
+                self.assertEqual(data2_live["accounts"][0]["account_id"], "act_second_ws_999")
+
+                # 5. Switch back to Workspace 1
+                await client.post(
+                    "/api/workspaces/switch",
+                    json={"workspace_id": ws1_id},
+                    headers=headers,
+                )
+
+                # 6. Fetch in Workspace 1 (must get WS1 data, NOT WS2!)
+                resp1_back = await client.get("/api/summary?period=today", headers=headers)
+                self.assertEqual(resp1_back.status_code, 200)
+                data1_back = resp1_back.json()
+                self.assertEqual(data1_back["total_spend"], 100.0)
+                self.assertEqual(data1_back["cache"]["workspace_id"], ws1_id)
+                self.assertEqual(data1_back["accounts"][0]["account_id"], "act_1018756607700064")
+
+        # Verify DB snapshots have proper workspace_id
+        async with self.test_session_maker() as session:
+            snapshots = (
+                await session.execute(
+                    select(SummarySnapshot).order_by(SummarySnapshot.id)
+                )
+            ).scalars().all()
+            for sn in snapshots:
+                self.assertIsNotNone(sn.workspace_id)
+                self.assertIn(sn.workspace_id, [ws1_id, ws2_id])
+
+    async def test_summary_financial_consistency_on_account_membership_change(self):
+        async with self.test_session_maker() as session:
+            buyer = (await session.execute(select(User).where(User.telegram_id == "8948797431"))).scalar_one()
+            ws_id = buyer.active_workspace_id
+
+            # Add account 2 to same workspace
+            acc2 = Account(
+                account_id="act_temp_bonus",
+                name="Temp Account",
+                access_token="temp_token",
+                owner_user_id=buyer.id,
+                workspace_id=ws_id,
+                currency="USD",
+                is_active=True,
+            )
+            session.add(acc2)
+            await session.commit()
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        async def insights_2acc(account_id, access_token, date_preset):
+            return {
+                "spend": 50.0,
+                "clicks": 10,
+                "impressions": 500,
+                "reach": 400,
+                "leads": 1,
+                "registrations": 1,
+                "purchases": 0,
+            }
+
+        with patch.object(
+            api_routes_module.meta_client,
+            "get_account_insights_summary",
+            new=AsyncMock(side_effect=insights_2acc),
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                # 1. Fetch summary with 2 accounts -> total spend = 100
+                res = await client.get("/api/summary?period=today&force=true", headers=headers)
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(res.json()["total_spend"], 100.0)
+                self.assertEqual(len(res.json()["accounts"]), 2)
+
+                # 2. Delete acc2
+                del_resp = await client.delete("/api/accounts/act_temp_bonus", headers=headers)
+                self.assertEqual(del_resp.status_code, 200)
+
+                # 3. Clear memory cache to test DB snapshot stale detection
+                api_routes_module._summary_cache.clear()
+
+                # 4. Fetch summary non-force: the saved snapshot had 2 accounts, but workspace now has 1 account.
+                # It should detect mismatch, invalidate stale snapshot, and refresh fresh with 1 account!
+                res_after_del = await client.get("/api/summary?period=today", headers=headers)
+                self.assertEqual(res_after_del.status_code, 200)
+                data_after_del = res_after_del.json()
+                self.assertEqual(data_after_del["total_spend"], 50.0)
+                self.assertEqual(len(data_after_del["accounts"]), 1)
+                self.assertEqual(data_after_del["accounts"][0]["account_id"], "act_1018756607700064")
+
+    async def test_summary_empty_workspace_returns_valid_payload_and_snapshot(self):
+        async with self.test_session_maker() as session:
+            buyer = (await session.execute(select(User).where(User.telegram_id == "8948797431"))).scalar_one()
+            ws_empty = Workspace(
+                name="Empty Workspace",
+                slug="buyer-empty-ws",
+                badge_text="E",
+                badge_color="#EF4444",
+                owner_user_id=buyer.id,
+            )
+            session.add(ws_empty)
+            await session.flush()
+            session.add(WorkspaceMember(workspace_id=ws_empty.id, user_id=buyer.id, role="owner"))
+            await session.commit()
+            empty_ws_id = ws_empty.id
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # Switch to empty workspace
+            await client.post("/api/workspaces/switch", json={"workspace_id": empty_ws_id}, headers=headers)
+
+            # Get summary
+            resp = await client.get("/api/summary?period=today", headers=headers)
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertEqual(data["total_spend"], 0.0)
+            self.assertEqual(data["accounts_count"], 0)
+            self.assertEqual(data["accounts"], [])
+            self.assertEqual(data["data_quality"]["status"], "unavailable")
+            self.assertEqual(data["cache"]["workspace_id"], empty_ws_id)
+            self.assertTrue(data["snapshot"]["persisted"])
+
+            # Verify subsequent cached load
+            cached_resp = await client.get("/api/summary?period=today", headers=headers)
+            self.assertEqual(cached_resp.status_code, 200)
+            self.assertEqual(cached_resp.json()["total_spend"], 0.0)
+
+    async def test_summary_previous_comparison_isolated_per_workspace(self):
+        async with self.test_session_maker() as session:
+            buyer = (await session.execute(select(User).where(User.telegram_id == "8948797431"))).scalar_one()
+            ws_other = Workspace(
+                name="Other Workspace",
+                slug="buyer-other-ws",
+                badge_text="O",
+                badge_color="#EC4899",
+                owner_user_id=buyer.id,
+            )
+            session.add(ws_other)
+            await session.flush()
+            session.add(WorkspaceMember(workspace_id=ws_other.id, user_id=buyer.id, role="owner"))
+            acc_other = Account(
+                account_id="act_other_ws_111",
+                name="Other WS Account",
+                access_token="other_token",
+                owner_user_id=buyer.id,
+                workspace_id=ws_other.id,
+                currency="USD",
+                is_active=True,
+            )
+            session.add(acc_other)
+            await session.commit()
+            ws1_id = buyer.active_workspace_id
+            ws2_id = ws_other.id
+
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        insights_mock = AsyncMock()
+        with patch.object(api_routes_module.meta_client, "get_account_insights_summary", new=insights_mock):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                # 1. WS1 first refresh -> spend=100
+                insights_mock.return_value = {"spend": 100.0, "clicks": 10, "impressions": 100}
+                res1_1 = await client.get("/api/summary?period=today&force=true", headers=headers)
+                self.assertIsNone(res1_1.json()["snapshot"]["previous"])
+
+                # 2. WS1 second refresh -> spend=120 (previous is 100)
+                insights_mock.return_value = {"spend": 120.0, "clicks": 12, "impressions": 120}
+                res1_2 = await client.get("/api/summary?period=today&force=true", headers=headers)
+                self.assertEqual(res1_2.json()["snapshot"]["previous"]["total_spend"], 100.0)
+
+                # 3. Switch to WS2, refresh -> spend=999
+                await client.post("/api/workspaces/switch", json={"workspace_id": ws2_id}, headers=headers)
+                insights_mock.return_value = {"spend": 999.0, "clicks": 90, "impressions": 900}
+                res2_1 = await client.get("/api/summary?period=today&force=true", headers=headers)
+                self.assertEqual(res2_1.json()["total_spend"], 999.0)
+                self.assertIsNone(res2_1.json()["snapshot"]["previous"])
+
+                # 4. Switch back to WS1, refresh -> spend=150 (previous MUST be 120 from WS1, not 999 from WS2!)
+                await client.post("/api/workspaces/switch", json={"workspace_id": ws1_id}, headers=headers)
+                insights_mock.return_value = {"spend": 150.0, "clicks": 15, "impressions": 150}
+                res1_3 = await client.get("/api/summary?period=today&force=true", headers=headers)
+                self.assertEqual(res1_3.json()["total_spend"], 150.0)
+                self.assertEqual(res1_3.json()["snapshot"]["previous"]["total_spend"], 120.0)
 
     async def test_settings_endpoint(self):
         admin_info = {"id": 8634201356, "first_name": "Admin", "username": "admin_user"}

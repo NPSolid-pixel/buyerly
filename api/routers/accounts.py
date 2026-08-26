@@ -17,6 +17,7 @@ from api.deps import (
     get_user_accounts,
     get_user_workspace,
     get_user_workspace_member,
+    invalidate_summary_cache,
 )
 from api.schemas import (
     AccountGroupItem,
@@ -50,10 +51,12 @@ meta_client = MetaClient(cache_provider=PostgreSQLInventoryCache())
 @router.get("/accounts", response_model=List[AccountItem])
 async def list_accounts(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
-        accounts = await get_user_accounts(session, user)
-        group_ids_by_account = await _account_group_ids_by_account(session, user)
+        ws = await get_user_workspace(session, user)
+        accounts = await get_user_accounts(session, user, workspace_id=ws.id if ws else None)
+        group_ids_by_account = await _account_group_ids_by_account(session, user, workspace_id=ws.id if ws else None)
         latest_summary = await _load_persisted_summary(
             session,
+            workspace_id=ws.id if ws else None,
             owner_user_id=user.id,
             period="today",
         )
@@ -138,6 +141,7 @@ async def create_account_group(
         for position, account in enumerate(accounts):
             session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         items = await _account_group_items(session, user)
         return next(item for item in items if item.id == group.id)
 
@@ -190,6 +194,7 @@ async def update_account_group(
         for position, account in enumerate(accounts):
             session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         items = await _account_group_items(session, user)
         return next(item for item in items if item.id == group.id)
 
@@ -221,6 +226,7 @@ async def delete_account_group(
         await session.execute(delete(AccountGroupMember).where(AccountGroupMember.group_id == group.id))
         await session.delete(group)
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
     return {"message": "Группа кабинетов удалена", "group_id": group_id}
 
 
@@ -251,6 +257,7 @@ async def update_account_profile(
         account.custom_name = payload.custom_name.strip()
         account.note = payload.note.strip()
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         return {
             "account_id": account.account_id,
             "custom_name": account.custom_name,
@@ -283,6 +290,7 @@ async def delete_account(account_id: str, user: User = Depends(get_current_user)
         await session.execute(delete(AccountGroupMember).where(AccountGroupMember.account_id == acc.id))
         await session.execute(delete(Account).where(Account.account_id == acc_id))
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         return {"success": True, "message": f"Кабинет {acc_id} удален"}
 
 
@@ -395,6 +403,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                 error_list.append({"account_id": acc_id, "error": str(e)})
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
 
     return {
         "success_count": len(added_list),

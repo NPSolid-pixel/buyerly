@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 
 from api.auth import get_current_user
-from api.deps import get_user_workspaces_list, slugify
+from api.deps import get_user_workspaces_list, invalidate_summary_cache, slugify
 from api.schemas import (
     CreateWorkspaceRequest,
     SwitchWorkspaceRequest,
@@ -160,6 +160,7 @@ async def update_workspace(
             ws.logo_url = req.logo_url.strip()
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         workspaces = await get_user_workspaces_list(session, user)
         return next((w for w in workspaces if w.id == ws.id), None)
 
@@ -192,6 +193,7 @@ async def delete_workspace(workspace_id: int, user: User = Depends(get_current_u
         db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = other_member.workspace_id
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         return {
             "status": "ok",
             "message": "Воркспейс удалён",

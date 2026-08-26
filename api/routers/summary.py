@@ -23,6 +23,8 @@ from api.deps import (
     _summary_owner_key,
     _summary_with_cache_metadata,
     _utc_iso,
+    get_user_accounts,
+    get_user_workspace,
 )
 from api.schemas import AnalyticsViewPreferenceRequest
 from bot.handlers import get_short_account_label
@@ -32,7 +34,6 @@ from core.meta_tokens import resolve_account_access_token
 from core.ownership import owned_by
 from database.db import async_session_maker
 from database.models import AnalyticsViewPreference, User
-from api.deps import get_user_accounts
 from meta_api.client import MetaClient
 from services.inventory_cache import PostgreSQLInventoryCache
 
@@ -116,37 +117,54 @@ async def get_summary_report(
     force: bool = Query(False),
     user: User = Depends(get_current_user),
 ):
-    owner_key = _summary_owner_key(user)
-    cache_key = f"{owner_key}:{period}"
-    now_ts = time.time()
-
-    # Return cached data if valid and force is False
-    if not force and cache_key in _summary_cache:
-        cached_ts, cached_data = _summary_cache[cache_key]
-        if now_ts - cached_ts < SUMMARY_CACHE_TTL:
-            async with async_session_maker() as session:
-                enriched_cached_data = await _enrich_summary_account_metadata(
-                    session,
-                    cached_data,
-                    user,
-                )
-            return _summary_with_cache_metadata(
-                enriched_cached_data,
-                is_cached=True,
-                age_seconds=now_ts - cached_ts,
-                origin="memory",
-                persisted_at=(cached_data.get("snapshot") or {}).get("saved_at", ""),
-            )
-
     async with async_session_maker() as session:
+        ws = await get_user_workspace(session, user)
+        ws_id = ws.id if ws else getattr(user, "active_workspace_id", None)
+        accounts = await get_user_accounts(session, user, workspace_id=ws_id)
+        current_account_ids = {a.account_id for a in accounts}
+
+        owner_key = _summary_owner_key(user, workspace_id=ws_id)
+        cache_key = f"{owner_key}:{period}"
+        now_ts = time.time()
+
+        # Return cached data if valid and force is False
+        if not force and cache_key in _summary_cache:
+            cached_ts, cached_data = _summary_cache[cache_key]
+            if now_ts - cached_ts < SUMMARY_CACHE_TTL:
+                cached_accounts = cached_data.get("accounts", [])
+                cached_acc_ids = {
+                    str(a.get("account_id") or "")
+                    for a in cached_accounts
+                    if isinstance(a, dict) and str(a.get("account_id") or "")
+                }
+                if cached_acc_ids == current_account_ids:
+                    enriched_cached_data = await _enrich_summary_account_metadata(
+                        session,
+                        cached_data,
+                        user,
+                        workspace_id=ws_id,
+                    )
+                    return _summary_with_cache_metadata(
+                        enriched_cached_data,
+                        is_cached=True,
+                        age_seconds=now_ts - cached_ts,
+                        origin="memory",
+                        persisted_at=(cached_data.get("snapshot") or {}).get("saved_at", ""),
+                        workspace_id=ws_id,
+                    )
+
         if not force:
             persisted = await _load_persisted_summary(
                 session,
+                workspace_id=ws_id,
                 owner_user_id=user.id,
                 period=period,
+                current_account_ids=current_account_ids,
             )
             if persisted:
-                persisted = await _enrich_summary_account_metadata(session, persisted, user)
+                persisted = await _enrich_summary_account_metadata(
+                    session, persisted, user, workspace_id=ws_id
+                )
                 cached_payload = {
                     key: value
                     for key, value in persisted.items()
@@ -155,8 +173,7 @@ async def get_summary_report(
                 _summary_cache[cache_key] = (now_ts, cached_payload)
                 return persisted
 
-        accounts = await get_user_accounts(session, user)
-        group_ids_by_account = await _account_group_ids_by_account(session, user)
+        group_ids_by_account = await _account_group_ids_by_account(session, user, workspace_id=ws_id)
         if not accounts:
             empty_res = {
                 "period": period,
@@ -201,6 +218,7 @@ async def get_summary_report(
             }
             empty_res["snapshot"] = await _persist_summary(
                 session,
+                workspace_id=ws_id,
                 owner_user_id=user.id,
                 period=period,
                 payload=empty_res,
@@ -211,6 +229,7 @@ async def get_summary_report(
                 is_cached=False,
                 origin="live",
                 persisted_at=empty_res["snapshot"]["saved_at"],
+                workspace_id=ws_id,
             )
 
         total_spend = 0.0
@@ -521,6 +540,7 @@ async def get_summary_report(
         }
         res_data["snapshot"] = await _persist_summary(
             session,
+            workspace_id=ws_id,
             owner_user_id=user.id,
             period=period,
             payload=res_data,
@@ -531,4 +551,5 @@ async def get_summary_report(
             is_cached=False,
             origin="live",
             persisted_at=res_data["snapshot"]["saved_at"],
+            workspace_id=ws_id,
         )

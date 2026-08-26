@@ -49,15 +49,27 @@ _summary_cache: Dict[str, Any] = {}
 SUMMARY_CACHE_TTL = 120  # 2 minutes cache
 
 
-def invalidate_summary_cache(owner_user_id: Optional[int] = None) -> None:
-    """Clear memory summary cache for specific user or all users."""
-    if owner_user_id is None:
+def invalidate_summary_cache(
+    workspace_id: Optional[int] = None,
+    owner_user_id: Optional[int] = None,
+) -> None:
+    """Clear memory summary cache for specific workspace, user, or all."""
+    if workspace_id is None and owner_user_id is None:
         _summary_cache.clear()
-    else:
-        prefix = f"{owner_user_id}:"
-        stale_keys = [k for k in list(_summary_cache.keys()) if k.startswith(prefix)]
-        for k in stale_keys:
-            _summary_cache.pop(k, None)
+        return
+    stale_keys = []
+    for k in list(_summary_cache.keys()):
+        match = True
+        if workspace_id is not None:
+            if f"ws:{workspace_id}:" not in k and f"ws:{workspace_id}" != k:
+                match = False
+        if owner_user_id is not None:
+            if f"user:{owner_user_id}:" not in k and not k.startswith(f"{owner_user_id}:"):
+                match = False
+        if match:
+            stale_keys.append(k)
+    for k in stale_keys:
+        _summary_cache.pop(k, None)
 
 
 SUMMARY_SNAPSHOT_RETENTION = 100
@@ -694,6 +706,7 @@ def _summary_with_cache_metadata(
     age_seconds: float = 0.0,
     origin: str = "live",
     persisted_at: str = "",
+    workspace_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     return {
         **payload,
@@ -703,12 +716,14 @@ def _summary_with_cache_metadata(
             "ttl_seconds": SUMMARY_CACHE_TTL,
             "origin": origin,
             "persisted_at": persisted_at,
+            "workspace_id": workspace_id,
         },
     }
 
 
-def _summary_owner_key(user: User) -> str:
-    return f"user:{user.id}"
+def _summary_owner_key(user: User, workspace_id: Optional[int] = None) -> str:
+    ws_id = workspace_id if workspace_id is not None else getattr(user, "active_workspace_id", None)
+    return f"ws:{ws_id}" if ws_id is not None else f"user:{user.id}"
 
 
 def _normalize_summary_view_config(config: Any, *, strict: bool = True) -> Dict[str, Any]:
@@ -934,11 +949,12 @@ async def _enrich_summary_account_metadata(
     session,
     payload: Dict[str, Any],
     user: User,
+    workspace_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Overlay live Buyerly labels and groups on cached Meta metric rows."""
-    accounts = await get_user_accounts(session, user)
+    accounts = await get_user_accounts(session, user, workspace_id=workspace_id)
     accounts_by_id = {account.account_id: account for account in accounts}
-    group_ids_by_account = await _account_group_ids_by_account(session, user)
+    group_ids_by_account = await _account_group_ids_by_account(session, user, workspace_id=workspace_id)
     rows = payload.get("accounts") if isinstance(payload.get("accounts"), list) else []
     enriched_rows = []
     for raw_row in rows:
@@ -947,31 +963,37 @@ async def _enrich_summary_account_metadata(
         row = dict(raw_row)
         account_id = str(row.get("account_id") or "")
         account = accounts_by_id.get(account_id)
-        if account is not None:
-            row["name"] = account.name
-            row["short_name"] = get_short_account_label(account.name, account.account_id)
-            row["custom_name"] = account.custom_name or ""
-            row["note"] = account.note or ""
-        else:
-            row.setdefault("custom_name", "")
-            row.setdefault("note", "")
+        if account is None:
+            # Strictly drop accounts not present in the current workspace
+            continue
+        row["name"] = account.name
+        row["short_name"] = get_short_account_label(account.name, account.account_id)
+        row["custom_name"] = account.custom_name or ""
+        row["note"] = account.note or ""
         row["group_ids"] = group_ids_by_account.get(account_id, [])
         enriched_rows.append(row)
-    return {**payload, "accounts": enriched_rows}
+    return {**payload, "accounts": enriched_rows, "accounts_count": len(enriched_rows)}
 
 
 async def _load_persisted_summary(
     session,
     *,
-    owner_user_id: int,
     period: str,
+    workspace_id: Optional[int] = None,
+    current_account_ids: Optional[Any] = None,
+    owner_user_id: Optional[int] = None,
     owner_id: str = "",
 ) -> Optional[Dict[str, Any]]:
+    where_clause = (
+        SummarySnapshot.workspace_id == workspace_id
+        if workspace_id is not None
+        else and_(SummarySnapshot.owner_user_id == owner_user_id, SummarySnapshot.workspace_id.is_(None))
+    )
     rows = (
         await session.execute(
             select(SummarySnapshot)
             .where(
-                SummarySnapshot.owner_user_id == owner_user_id,
+                where_clause,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -990,6 +1012,19 @@ async def _load_persisted_summary(
         return None
 
     latest_row, latest_payload = valid_rows[0]
+    if current_account_ids is not None:
+        snapshot_accounts = latest_payload.get("accounts")
+        if isinstance(snapshot_accounts, list):
+            snapshot_account_ids = {
+                str(a.get("account_id") or "").strip()
+                for a in snapshot_accounts
+                if isinstance(a, dict) and str(a.get("account_id") or "").strip()
+            }
+            target_ids = set(current_account_ids)
+            if snapshot_account_ids != target_ids:
+                # Account membership has changed, snapshot is stale!
+                return None
+
     previous = (
         _summary_snapshot_reference(*valid_rows[1])
         if len(valid_rows) > 1
@@ -1011,22 +1046,29 @@ async def _load_persisted_summary(
         age_seconds=age_seconds,
         origin="database",
         persisted_at=_utc_iso(latest_row.created_at),
+        workspace_id=latest_row.workspace_id,
     )
 
 
 async def _persist_summary(
     session,
     *,
-    owner_user_id: int,
     period: str,
     payload: Dict[str, Any],
+    workspace_id: Optional[int] = None,
+    owner_user_id: Optional[int] = None,
     owner_id: str = "",
 ) -> Dict[str, Any]:
+    where_clause = (
+        SummarySnapshot.workspace_id == workspace_id
+        if workspace_id is not None
+        else and_(SummarySnapshot.owner_user_id == owner_user_id, SummarySnapshot.workspace_id.is_(None))
+    )
     previous_rows = (
         await session.execute(
             select(SummarySnapshot)
             .where(
-                SummarySnapshot.owner_user_id == owner_user_id,
+                where_clause,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -1054,6 +1096,7 @@ async def _persist_summary(
             pass
 
     snapshot = SummarySnapshot(
+        workspace_id=workspace_id,
         owner_user_id=owner_user_id,
         period=period,
         payload=stored_payload,
@@ -1066,7 +1109,7 @@ async def _persist_summary(
         await session.execute(
             select(SummarySnapshot.id)
             .where(
-                SummarySnapshot.owner_user_id == owner_user_id,
+                where_clause,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())

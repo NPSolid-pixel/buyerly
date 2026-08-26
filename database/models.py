@@ -538,10 +538,16 @@ class AccountGroupMember(Base):
 
 
 class SummarySnapshot(Base):
-    """Durable, owner-isolated history of successful dashboard refreshes."""
+    """Durable, workspace/owner-isolated history of successful dashboard refreshes."""
 
     __tablename__ = "summary_snapshots"
     __table_args__ = (
+        Index(
+            "ix_summary_snapshots_workspace_period_created",
+            "workspace_id",
+            "period",
+            "created_at",
+        ),
         Index(
             "ix_summary_snapshots_user_period_created",
             "owner_user_id",
@@ -560,7 +566,7 @@ class SummarySnapshot(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
     def __repr__(self):
-        return f"<SummarySnapshot(owner_user_id={self.owner_user_id}, period='{self.period}', generated='{self.generated_at}')>"
+        return f"<SummarySnapshot(workspace_id={self.workspace_id}, owner_user_id={self.owner_user_id}, period='{self.period}', generated='{self.generated_at}')>"
 
 
 class AnalyticsViewPreference(Base):

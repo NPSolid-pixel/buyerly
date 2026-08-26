@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, delete, select
 
 from api.auth import get_current_user
-from api.deps import _utc_iso
+from api.deps import _utc_iso, invalidate_summary_cache
 from api.schemas import (
     CreateWorkspaceInviteRequest,
     PublicInviteInfoResponse,
@@ -230,6 +230,7 @@ async def remove_workspace_member(
                 target_user.active_workspace_id = new_ws.id
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         return {"status": "ok", "message": "Участник успешно исключён из воркспейса"}
 
 
@@ -295,6 +296,7 @@ async def leave_workspace(
                 next_ws_id = new_ws.id
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         return {"status": "ok", "message": "Вы вышли из воркспейса", "next_workspace_id": next_ws_id}
 
 
@@ -342,6 +344,7 @@ async def transfer_workspace_ownership(
             caller_member.role = "admin"
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         return {
             "status": "ok",
             "message": "Права владения успешно переданы",
@@ -829,6 +832,7 @@ async def accept_workspace_invite(
         )
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id)
         return {
             "status": "ok",
             "message": f"Вы успешно присоединились к воркспейсу {ws.name}",
