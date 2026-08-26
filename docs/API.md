@@ -40,6 +40,9 @@ Production: `https://buyerly.app`.
 | `POST /api/auth/logout` | — | ротирует web token |
 | `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `first_name`, `last_name`, `email`, `email_verified`, `unconfirmed_email`, `avatar_url`, `role`, `is_approved`, `active_workspace`, `workspaces` |
 | `GET /api/admin/overview` | — | сводная таблица всех пользователей, воркспейсов и инвайтов (только админ) |
+| `POST /api/admin/support-sessions` | `workspace_id`, `reason`, `duration_minutes?` | создание ограниченной по времени сессии техподдержки администратора платформы (5–240 мин) с обязательным обоснованием |
+| `GET /api/admin/support-sessions` | `active_only?` | список активных или исторических сессий техподдержки администратора платформы |
+| `POST /api/admin/support-sessions/{grant_id}/revoke` | — | досрочный отзыв временной сессии техподдержки администратора |
 
 Изменение `telegram_id` не меняет внутреннего владельца данных: кабинеты, правила, сводки и история продолжают принадлежать тому же пользователю внутри воркспейса.
 
