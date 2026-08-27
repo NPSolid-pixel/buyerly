@@ -15,6 +15,7 @@ from core.metrics import (
     normalize_runtime_rule,
     validate_runtime_rule,
 )
+from database.jsonb_contract import JSONB_NATIVE_COLUMNS, decode_legacy_jsonb_string
 
 logger = logging.getLogger(__name__)
 
@@ -213,18 +214,34 @@ async def migrate_rule_metric_contract(conn) -> dict[str, int]:
     counts = {"presets_updated": 0, "account_rules_updated": 0, "rules_disabled": 0}
 
     if "rule_presets" in table_names:
+        preset_columns = await conn.run_sync(
+            lambda sync_conn: {
+                column["name"]: column
+                for column in inspect(sync_conn).get_columns("rule_presets")
+            }
+        )
+        conditions_assignment = (
+            "CAST(:conditions AS JSONB)"
+            if "JSONB" in str(preset_columns["conditions"]["type"]).upper()
+            else ":conditions"
+        )
         rows = (
             await conn.execute(text("SELECT id, conditions FROM rule_presets"))
         ).mappings().all()
         for row in rows:
-            try:
-                raw_conditions = json.loads(row.get("conditions") or "[]")
-            except (TypeError, json.JSONDecodeError):
-                raw_conditions = []
+            raw_conditions = row.get("conditions") or []
+            if isinstance(raw_conditions, str):
+                try:
+                    raw_conditions = json.loads(raw_conditions)
+                except (TypeError, json.JSONDecodeError):
+                    raw_conditions = []
             conditions, changed, _ = normalize_rule_conditions(raw_conditions)
             if changed:
                 await conn.execute(
-                    text("UPDATE rule_presets SET conditions = :conditions WHERE id = :id"),
+                    text(
+                        "UPDATE rule_presets SET conditions = "
+                        f"{conditions_assignment} WHERE id = :id"
+                    ),
                     {
                         "conditions": json.dumps(conditions, ensure_ascii=False),
                         "id": row["id"],
@@ -504,6 +521,72 @@ async def migrate_audit_event_ownership_contract(conn) -> dict[str, int | bool]:
         "owners_backfilled": owners_backfilled,
         "workspaces_backfilled": workspaces_backfilled,
     }
+
+
+async def migrate_jsonb_native_contract(conn) -> dict[str, int]:
+    """Decode valid legacy JSON strings stored inside structured JSONB columns.
+
+    Wrong-type and malformed values are deliberately preserved for inspection.
+    Returning their count makes the migration a data-integrity preflight as
+    well as an idempotent conversion.
+    """
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    converted = 0
+    malformed = 0
+
+    for table_name, primary_key, column_name, expected_type in JSONB_NATIVE_COLUMNS:
+        if table_name not in table_names:
+            continue
+        columns = await conn.run_sync(
+            lambda sync_conn, name=table_name: {
+                column["name"]: column
+                for column in inspect(sync_conn).get_columns(name)
+            }
+        )
+        column = columns.get(column_name)
+        if column is None or "JSONB" not in str(column["type"]).upper():
+            continue
+
+        rows = (
+            await conn.execute(
+                text(
+                    f"SELECT {primary_key} AS _pk, {column_name} AS _value "
+                    f"FROM {table_name} "
+                    f"WHERE jsonb_typeof({column_name}) <> :expected_type"
+                ),
+                {"expected_type": expected_type},
+            )
+        ).mappings().all()
+        for row in rows:
+            is_valid, decoded = decode_legacy_jsonb_string(
+                row["_value"],
+                expected_type,
+            )
+            if not is_valid:
+                malformed += 1
+                continue
+            result = await conn.execute(
+                text(
+                    f"UPDATE {table_name} "
+                    f"SET {column_name} = CAST(:native_json AS JSONB) "
+                    f"WHERE {primary_key} = :primary_key "
+                    f"AND jsonb_typeof({column_name}) = 'string'"
+                ),
+                {
+                    "native_json": json.dumps(
+                        decoded,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                    "primary_key": row["_pk"],
+                },
+            )
+            converted += max(0, int(result.rowcount or 0))
+
+    return {"converted": converted, "malformed": malformed}
 
 
 async def migrate_account_currency_contract(conn) -> bool:
@@ -940,6 +1023,17 @@ async def init_schema():
             logger.info(
                 "Migrated audit event ownership contract: %s",
                 audit_ownership_migration,
+            )
+        jsonb_migration = await migrate_jsonb_native_contract(conn)
+        if jsonb_migration["converted"]:
+            logger.info(
+                "Converted %s legacy JSONB string value(s) to native structures.",
+                jsonb_migration["converted"],
+            )
+        if jsonb_migration["malformed"]:
+            logger.warning(
+                "Detected %s malformed or wrong-type structured JSONB value(s).",
+                jsonb_migration["malformed"],
             )
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:

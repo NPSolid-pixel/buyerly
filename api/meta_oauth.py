@@ -53,6 +53,18 @@ class MetaAccountImportRequest(BaseModel):
     account_ids: list[str] = Field(min_length=1, max_length=500)
 
 
+def _json_list(value) -> list:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except (TypeError, json.JSONDecodeError):
+            return []
+        return decoded if isinstance(decoded, list) else []
+    return []
+
+
 def _oauth_client() -> MetaOAuthClient:
     missing = [
         key
@@ -252,7 +264,7 @@ async def oauth_callback(
             )
             connection.provider_user_name = provider_user_name
             connection.access_token_encrypted = encrypted_token
-            connection.granted_scopes = json.dumps(scopes, ensure_ascii=False)
+            connection.granted_scopes = scopes
             connection.token_expires_at = meta_token_expiry(debug)
             connection.status = "active"
             connection.last_error = ""
@@ -301,7 +313,7 @@ async def list_connections(user: User = Depends(get_current_user)):
             "provider_user_id": item.provider_user_id,
             "provider_user_name": item.provider_user_name,
             "status": item.status,
-            "granted_scopes": json.loads(item.granted_scopes or "[]"),
+            "granted_scopes": _json_list(item.granted_scopes),
             "token_expires_at": item.token_expires_at.isoformat()
             if item.token_expires_at
             else None,
@@ -378,7 +390,7 @@ async def discover_accounts(
                 )
             )
         scopes = debug.get("scopes") if isinstance(debug.get("scopes"), list) else []
-        connection.granted_scopes = json.dumps(scopes, ensure_ascii=False)
+        connection.granted_scopes = scopes
         connection.status = "active"
         connection.last_error = ""
         connection.last_validated_at = now

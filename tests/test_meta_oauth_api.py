@@ -155,10 +155,15 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
                     select(Account).where(Account.account_id == "act_123456789")
                 )
             ).scalar_one()
+            connection = await session.get(MetaConnection, self.connection_id)
             self.assertEqual(account.access_token, "")
             self.assertEqual(account.meta_connection_id, self.connection_id)
             self.assertFalse(account.rules_enabled)
             self.assertEqual(account.timezone_name, "Pacific/Honolulu")
+            self.assertEqual(
+                connection.granted_scopes,
+                ["ads_read", "ads_management", "business_management"],
+            )
 
 
 if __name__ == "__main__":
