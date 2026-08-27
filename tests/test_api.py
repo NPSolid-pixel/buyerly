@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
+from cryptography.fernet import Fernet
 from PIL import Image, PngImagePlugin
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -23,6 +24,7 @@ import api.server as api_server_module
 from api.auth import validate_telegram_init_data
 from api.server import create_app
 from core.config import settings
+from core.meta_tokens import decrypt_meta_token
 from database.db import Base, hash_password, verify_password
 from database.models import (
     Account,
@@ -68,6 +70,8 @@ def generate_valid_telegram_init_data(bot_token: str, user_dict: dict, auth_date
 class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
+        self.original_meta_token_key = settings.META_TOKEN_ENCRYPTION_KEY
+        settings.META_TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode("ascii")
         api_routes_module._summary_cache.clear()
         self.test_engine = create_test_engine()
         self.test_session_maker = async_sessionmaker(self.test_engine, class_=AsyncSession, expire_on_commit=False)
@@ -147,6 +151,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.app = create_app()
 
     async def asyncTearDown(self):
+        settings.META_TOKEN_ENCRYPTION_KEY = self.original_meta_token_key
         await self.test_engine.dispose()
 
     def test_summary_cache_invalidation_matches_workspace_or_owner(self):
@@ -1215,6 +1220,12 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(imported.rules_enabled)
             self.assertEqual(imported.active_rules, "[]")
             self.assertEqual(imported.currency, "EUR")
+            self.assertEqual(imported.access_token, "")
+            self.assertNotIn("new_mock_token", imported.access_token_encrypted)
+            self.assertEqual(
+                decrypt_meta_token(imported.access_token_encrypted),
+                "new_mock_token",
+            )
 
     async def test_manual_reimport_marks_existing_account_as_system_user(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
@@ -1280,7 +1291,15 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
             ).scalar_one()
             self.assertIsNone(reconnected.meta_connection_id)
-            self.assertEqual(reconnected.access_token, "replacement_system_user_token")
+            self.assertEqual(reconnected.access_token, "")
+            self.assertNotIn(
+                "replacement_system_user_token",
+                reconnected.access_token_encrypted,
+            )
+            self.assertEqual(
+                decrypt_meta_token(reconnected.access_token_encrypted),
+                "replacement_system_user_token",
+            )
             self.assertEqual(reconnected.currency, "EUR")
 
     async def test_batch_import_rejects_account_without_supported_meta_timezone(self):

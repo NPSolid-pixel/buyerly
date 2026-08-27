@@ -193,7 +193,7 @@
 - [ ] административный аудит;
 - [ ] server sessions/devices/logout-all;
 - [ ] login rate limit;
-- [ ] encryption at rest и key rotation.
+- [x] encryption at rest и key rotation.
 
 Часть защиты Meta token выполняется раньше внутри BL-007, потому что без неё нельзя безопасно выпускать Facebook Login.
 

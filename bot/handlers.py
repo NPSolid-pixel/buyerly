@@ -17,7 +17,11 @@ from core.audit import build_audit_event
 from core.action_undo import UndoError, undo_audit_action
 from core.currency import format_money, normalize_currency
 from core.ownership import entity_is_owned_by, owned_by
-from core.meta_tokens import resolve_account_access_token
+from core.meta_tokens import (
+    MetaTokenError,
+    encrypt_meta_token,
+    resolve_account_access_token,
+)
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
 from database.models import (
@@ -289,6 +293,16 @@ async def process_token_and_save(message: Message, state: FSMContext):
 
     progress_msg = await message.answer(f"⏳ Проверяю и подключаю {len(parsed_accounts)} кабинетов через Meta API...")
 
+    try:
+        _ = encrypt_meta_token(token)
+    except MetaTokenError as exc:
+        logger.error("Manual Meta token encryption is unavailable: %s", exc)
+        await state.clear()
+        await progress_msg.edit_text(
+            "⛔️ Безопасное сохранение Meta Access Token временно недоступно."
+        )
+        return
+
     added_results = []
     error_results = []
 
@@ -376,7 +390,9 @@ async def process_token_and_save(message: Message, state: FSMContext):
                     if existing.timezone_name != timezone_name:
                         existing.last_day_start_date = ""
                     existing.name = display_name
-                    existing.access_token = token
+                    existing.access_token = ""
+                    existing.access_token_encrypted = encrypt_meta_token(token)
+                    existing.meta_connection_id = None
                     existing.timezone_name = timezone_name
                     existing.currency = currency
                     existing.batch_name = batch_name if batch_name != "-" else ""
@@ -386,7 +402,8 @@ async def process_token_and_save(message: Message, state: FSMContext):
                         workspace_id=active_workspace_id,
                         account_id=acc_id,
                         name=display_name,
-                        access_token=token,
+                        access_token="",
+                        access_token_encrypted=encrypt_meta_token(token),
                         owner_user_id=owner_user.id,
                         batch_name=batch_name if batch_name != "-" else "",
                         timezone_name=timezone_name,

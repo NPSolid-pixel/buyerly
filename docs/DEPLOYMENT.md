@@ -35,6 +35,15 @@ META_TOKEN_ENCRYPTION_KEY=...
 
 `META_TOKEN_ENCRYPTION_KEY` — URL-safe base64 Fernet key. При ротации новый ключ
 указывается первым, старые decrypt-only ключи — после него через запятую.
+После выпуска конфигурации все сохранённые OAuth- и ручные System User токены
+нужно перевести на первичный ключ внутри API-контейнера:
+
+```bash
+docker compose exec api python -m scripts.rotate_meta_tokens
+```
+
+Старые ключи удаляются из `META_TOKEN_ENCRYPTION_KEY` только после успешного
+завершения команды. Операция транзакционна и не выводит токены в журнал.
 
 Параметры `APP_VERSION`, `DATABASE_URL`, `REDIS_URL`, `API_HOST`, `API_PORT` и
 `SERVE_STATIC` для Docker Compose задаются deploy/compose и не требуют ручного

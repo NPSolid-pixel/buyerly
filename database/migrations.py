@@ -17,6 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
 LEGACY_BASELINE_REVISION = "0009_web_sessions"
 POST_BASELINE_COLUMNS = {
+    "accounts": {
+        "access_token_encrypted",
+    },
     "email_verification_codes": {
         "code_hash",
         "purpose",

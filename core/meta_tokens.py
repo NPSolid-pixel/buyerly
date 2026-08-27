@@ -41,12 +41,56 @@ def decrypt_meta_token(encrypted_token: str) -> str:
         raise MetaTokenError("Stored Meta access token cannot be decrypted") from exc
 
 
+def rotate_meta_token(encrypted_token: str) -> str:
+    """Re-encrypt ciphertext with the primary configured encryption key."""
+    token = str(encrypted_token or "").strip()
+    if not token:
+        raise MetaTokenError("Encrypted Meta token is empty")
+    try:
+        return _fernet().rotate(token.encode("ascii")).decode("ascii")
+    except (InvalidToken, UnicodeError, ValueError) as exc:
+        raise MetaTokenError("Stored Meta access token cannot be rotated") from exc
+
+
+async def rotate_stored_meta_tokens(session: AsyncSession) -> Dict[str, int]:
+    """Re-encrypt OAuth and manual tokens with the primary configured key."""
+    from database.models import Account, MetaConnection
+
+    stats = {"connections_rotated": 0, "accounts_rotated": 0}
+    result = await session.execute(
+        select(MetaConnection).where(
+            MetaConnection.access_token_encrypted.isnot(None),
+            MetaConnection.access_token_encrypted != "",
+        )
+    )
+    for connection in result.scalars().all():
+        rotated = rotate_meta_token(connection.access_token_encrypted)
+        if rotated != connection.access_token_encrypted:
+            connection.access_token_encrypted = rotated
+            stats["connections_rotated"] += 1
+
+    result = await session.execute(
+        select(Account).where(
+            Account.access_token_encrypted.isnot(None),
+            Account.access_token_encrypted != "",
+        )
+    )
+    for account in result.scalars().all():
+        rotated = rotate_meta_token(account.access_token_encrypted)
+        if rotated != account.access_token_encrypted:
+            account.access_token_encrypted = rotated
+            stats["accounts_rotated"] += 1
+
+    await session.commit()
+    return stats
+
+
 async def resolve_account_access_token(
     session: AsyncSession,
     account,
     connection_cache: Optional[Dict[int, Any]] = None,
 ) -> str:
-    """Resolve OAuth tokens by connection while preserving legacy manual imports."""
+    """Resolve a token from an OAuth connection or encrypted manual import."""
 
     if account.meta_connection_id:
         connection = None
@@ -72,7 +116,20 @@ async def resolve_account_access_token(
             raise MetaTokenError("Meta connection ownership mismatch")
         return decrypt_meta_token(connection.access_token_encrypted)
 
-    legacy_token = str(account.access_token or "").strip()
+    encrypted_token = str(
+        getattr(account, "access_token_encrypted", "") or ""
+    ).strip()
+    if encrypted_token:
+        return decrypt_meta_token(encrypted_token)
+
+    # Compatibility fallback for rows not yet processed by the production
+    # migration. New writes never populate this deprecated plaintext field.
+    legacy_token = str(getattr(account, "access_token", "") or "").strip()
     if legacy_token:
+        if legacy_token.startswith("gAAAAA"):
+            try:
+                return decrypt_meta_token(legacy_token)
+            except MetaTokenError:
+                pass
         return legacy_token
     raise MetaTokenError("Meta authorization is missing")

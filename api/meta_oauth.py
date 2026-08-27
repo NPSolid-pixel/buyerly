@@ -637,6 +637,7 @@ async def import_accounts(
                         account.owner_user_id = user.id
                     account.batch_name = asset.business_name if asset.business_id else ""
                     account.access_token = ""
+                    account.access_token_encrypted = ""
                     account.meta_connection_id = connection.id
                     account.timezone_name = timezone_name
                     account.currency = currency

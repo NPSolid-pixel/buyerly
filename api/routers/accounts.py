@@ -32,6 +32,7 @@ from api.schemas import (
 )
 from bot.handlers import parse_fb_raw_accounts
 from core.currency import normalize_currency
+from core.meta_tokens import MetaTokenError, encrypt_meta_token
 from core.ownership import entity_is_owned_by, owned_by
 from core.rate_limit import rate_limit_dep
 from core.timezones import resolve_account_clock
@@ -331,6 +332,14 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
         raise HTTPException(status_code=400, detail="Укажите Access Token Meta.")
 
     token = payload.access_token.strip()
+    try:
+        _ = encrypt_meta_token(token)
+    except MetaTokenError as exc:
+        logger.error("Manual Meta token encryption is unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Безопасное сохранение Meta Access Token временно недоступно.",
+        ) from exc
     batch_name = (payload.batch_name or "-").strip()
 
     added_list = []
@@ -394,7 +403,8 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                     if existing.timezone_name != timezone_name:
                         existing.last_day_start_date = ""
                     existing.name = display_name
-                    existing.access_token = token
+                    existing.access_token = ""
+                    existing.access_token_encrypted = encrypt_meta_token(token)
                     existing.meta_connection_id = None
                     existing.timezone_name = timezone_name
                     existing.currency = currency
@@ -408,7 +418,8 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                         workspace_id=ws.id if ws else None,
                         account_id=acc_id,
                         name=display_name,
-                        access_token=token,
+                        access_token="",
+                        access_token_encrypted=encrypt_meta_token(token),
                         owner_user_id=user.id,
                         batch_name=batch_name if batch_name != "-" else "",
                         timezone_name=timezone_name,

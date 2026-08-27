@@ -1,6 +1,7 @@
 import json
 import unittest
 
+from cryptography.fernet import Fernet
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -23,6 +24,8 @@ from database.rule_workspace_contract import (
     WORKSPACE_REVIEW_REASON,
     scope_runtime_rule_snapshots,
 )
+from core.config import settings
+from core.meta_tokens import decrypt_meta_token
 from database.models import (
     Account,
     AccountGroup,
@@ -1011,6 +1014,81 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
             await init_test_db(engine)
             await engine.dispose()
 
+    async def test_manual_token_migration_encrypts_plaintext_and_downgrades_safely(self):
+        from alembic import command
+        from alembic.config import Config
+        import os
+
+        original_key = settings.META_TOKEN_ENCRYPTION_KEY
+        settings.META_TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode("ascii")
+        engine = create_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
+
+            config = Config(
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+            )
+            config.set_main_option(
+                "script_location",
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
+            )
+            command.upgrade(config, "0012_group_ws_unique")
+
+            raw_token = "EAAB-legacy-manual-token"
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        """
+                        INSERT INTO accounts (
+                            account_id, name, custom_name, note, access_token,
+                            batch_name, currency, timezone_name, last_started_date,
+                            last_day_start_date, active_rules, account_status,
+                            status_label, rules_enabled, is_active, created_at
+                        ) VALUES (
+                            'act_legacy_manual', 'Legacy manual', '', '', :token,
+                            '', 'USD', 'UTC', '', '', '[]', 1,
+                            'Активен (ACTIVE)', false, true, NOW()
+                        )
+                        """
+                    ),
+                    {"token": raw_token},
+                )
+
+            command.upgrade(config, "head")
+            async with engine.connect() as conn:
+                row = (
+                    await conn.execute(
+                        text(
+                            "SELECT access_token, access_token_encrypted "
+                            "FROM accounts WHERE account_id = 'act_legacy_manual'"
+                        )
+                    )
+                ).one()
+                self.assertEqual(row.access_token, "")
+                self.assertNotIn(raw_token, row.access_token_encrypted)
+                self.assertEqual(
+                    decrypt_meta_token(row.access_token_encrypted),
+                    raw_token,
+                )
+
+            command.downgrade(config, "0012_group_ws_unique")
+            async with engine.connect() as conn:
+                restored = (
+                    await conn.execute(
+                        text(
+                            "SELECT access_token FROM accounts "
+                            "WHERE account_id = 'act_legacy_manual'"
+                        )
+                    )
+                ).scalar_one()
+                self.assertEqual(restored, raw_token)
+        finally:
+            settings.META_TOKEN_ENCRYPTION_KEY = original_key
+            await init_test_db(engine)
+            await engine.dispose()
+
     async def test_workspace_slug_migration_normalizes_reserved_and_colliding_rows(self):
         from alembic.config import Config
         from alembic import command
@@ -1096,7 +1174,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-                self.assertEqual(version, "0012_group_ws_unique")
+                self.assertEqual(version, "0013_manual_tokens")
 
             command.downgrade(alembic_cfg, "base")
         finally:
@@ -1119,7 +1197,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0012_group_ws_unique")
+                self.assertEqual(version, "0013_manual_tokens")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -1153,7 +1231,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0012_group_ws_unique")
+                self.assertEqual(version, "0013_manual_tokens")
         finally:
             await init_test_db(engine)
             await engine.dispose()

@@ -23,6 +23,7 @@ COPY meta_api ./meta_api
 COPY rules ./rules
 COPY scheduler ./scheduler
 COPY services ./services
+COPY scripts/rotate_meta_tokens.py ./scripts/rotate_meta_tokens.py
 
 # The command is selected per service in docker-compose.yml.
 CMD ["python", "-m", "services.api"]
