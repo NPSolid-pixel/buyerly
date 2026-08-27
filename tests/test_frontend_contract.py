@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -91,6 +92,49 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('id="settingsSessionsList"', self.index)
         self.assertNotIn("localStorage.setItem('buyerly_auth_token'", self.script)
         self.assertNotIn("sessionStorage.setItem('buyerly_auth_token'", self.script)
+
+    def test_corrupted_browser_preferences_recover_to_valid_defaults(self):
+        for contract in (
+            "function readBrowserPreference(key, fallback, options = {})",
+            "function writeBrowserPreference(key, value, options = {})",
+            "const value = options.json ? JSON.parse(raw) : raw",
+            "resetBrowserPreference(key)",
+            "localStorage.removeItem(key)",
+            "validate: isStringArray",
+            "validate: isIdArray",
+            "validate: isWidthRecord",
+            "validate: isStringRecord",
+            "['relevant', 'custom'].includes(value)",
+            "['asc', 'desc'].includes(value)",
+        ):
+            self.assertIn(contract, self.script)
+
+        for unsafe_read in (
+            "JSON.parse(localStorage.getItem('buyerly_collapsed_sections')",
+            "JSON.parse(localStorage.getItem('buyerly_groups_custom_order')",
+            "JSON.parse(localStorage.getItem('buyerly_accounts_col_order_v2')",
+            "JSON.parse(localStorage.getItem('buyerly_accounts_col_widths')",
+            "JSON.parse(localStorage.getItem('buyerly_collapsed_rule_groups')",
+            "JSON.parse(localStorage.getItem('buyerly_rule_group_colors')",
+        ):
+            self.assertNotIn(unsafe_read, self.script)
+
+        for key in (
+            "buyerly_collapsed_sections",
+            "buyerly_groups_sort_mode",
+            "buyerly_groups_custom_order",
+            "buyerly_accounts_col_order_v2",
+            "buyerly_accounts_sort_col",
+            "buyerly_accounts_sort_dir",
+            "buyerly_accounts_col_widths",
+            "buyerly_collapsed_rule_groups",
+            "buyerly_rule_group_colors",
+            "buyerly_accounts_col_calcs",
+        ):
+            self.assertRegex(
+                self.script,
+                rf"readBrowserPreference\(\s*{re.escape(repr(key))}",
+            )
 
     def test_desktop_shell_uses_quiet_palette_and_sidebar_grid(self):
         self.assertIn("QUIET GRAPHITE PALETTE", self.styles)

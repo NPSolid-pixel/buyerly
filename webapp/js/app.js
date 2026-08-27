@@ -68,6 +68,59 @@
     п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts',
     ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya'
   });
+  const DEFAULT_ACCOUNTS_COLUMN_ORDER = [
+    'name', 'status', 'timezone', 'spend', 'cpm', 'cpc', 'ctr', 'leads', 'cpl',
+    'registrations', 'cpreg', 'purchases', 'cpp', 'automation'
+  ];
+
+  function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function resetBrowserPreference(key) {
+    try {
+      localStorage.removeItem(key);
+    } catch (_) {
+      // Storage can be unavailable in hardened/private browser contexts.
+    }
+  }
+
+  function writeBrowserPreference(key, value, options = {}) {
+    try {
+      localStorage.setItem(key, options.json ? JSON.stringify(value) : String(value));
+    } catch (_) {
+      // UI state remains usable even when persistence is unavailable.
+    }
+  }
+
+  function readBrowserPreference(key, fallback, options = {}) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === null) return fallback;
+      const value = options.json ? JSON.parse(raw) : raw;
+      if (options.validate && !options.validate(value)) {
+        throw new TypeError(`Invalid browser preference: ${key}`);
+      }
+      return value;
+    } catch (_) {
+      resetBrowserPreference(key);
+      return fallback;
+    }
+  }
+
+  const isStringArray = value => Array.isArray(value)
+    && value.every(item => typeof item === 'string' && item.trim().length > 0)
+    && new Set(value).size === value.length;
+  const isIdArray = value => {
+    if (!Array.isArray(value)) return false;
+    const ids = value.map(Number);
+    return ids.every(id => Number.isSafeInteger(id) && id > 0)
+      && new Set(ids).size === ids.length;
+  };
+  const isWidthRecord = value => isPlainObject(value) && Object.values(value)
+    .every(width => Number.isFinite(width) && width > 0 && width <= 2000);
+  const isStringRecord = value => isPlainObject(value) && Object.values(value)
+    .every(item => typeof item === 'string');
 
   function stableWorkspaceSlugHash(value) {
     let hash = 0x811c9dc5;
@@ -145,16 +198,33 @@
     workspaceEpoch: 0,
     newWorkspaceSelectedColor: '#F5A300',
     editWorkspaceSelectedColor: '#F5A300',
-    collapsedSections: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_sections') || '[]')),
-    accountGroupsSortMode: localStorage.getItem('buyerly_groups_sort_mode') || 'relevant',
-    accountGroupsCustomOrder: JSON.parse(localStorage.getItem('buyerly_groups_custom_order') || '[]'),
+    collapsedSections: new Set(readBrowserPreference('buyerly_collapsed_sections', [], {
+      json: true,
+      validate: isStringArray
+    })),
+    accountGroupsSortMode: readBrowserPreference('buyerly_groups_sort_mode', 'relevant', {
+      validate: value => ['relevant', 'custom'].includes(value)
+    }),
+    accountGroupsCustomOrder: readBrowserPreference('buyerly_groups_custom_order', [], {
+      json: true,
+      validate: isIdArray
+    }).map(Number),
     selectedAccounts: new Set(),
-    accountsColumnOrder: JSON.parse(localStorage.getItem('buyerly_accounts_col_order_v2') || 'null') || [
-      'name', 'status', 'timezone', 'spend', 'cpm', 'cpc', 'ctr', 'leads', 'cpl', 'registrations', 'cpreg', 'purchases', 'cpp', 'automation'
-    ],
-    accountsSortColumn: localStorage.getItem('buyerly_accounts_sort_col') || 'name',
-    accountsSortDirection: localStorage.getItem('buyerly_accounts_sort_dir') || 'asc',
-    accountsColumnWidths: JSON.parse(localStorage.getItem('buyerly_accounts_col_widths') || '{}'),
+    accountsColumnOrder: readBrowserPreference(
+      'buyerly_accounts_col_order_v2',
+      [...DEFAULT_ACCOUNTS_COLUMN_ORDER],
+      { json: true, validate: value => isStringArray(value) && value.length > 0 }
+    ),
+    accountsSortColumn: readBrowserPreference('buyerly_accounts_sort_col', 'name', {
+      validate: value => /^[a-z][a-z0-9_]*$/.test(value)
+    }),
+    accountsSortDirection: readBrowserPreference('buyerly_accounts_sort_dir', 'asc', {
+      validate: value => ['asc', 'desc'].includes(value)
+    }),
+    accountsColumnWidths: readBrowserPreference('buyerly_accounts_col_widths', {}, {
+      json: true,
+      validate: isWidthRecord
+    }),
     fbConnections: [],
     accounts: [],
     accountGroups: [],
@@ -176,8 +246,14 @@
     summaryViewLoaded: false,
     presets: [],
     ruleGroups: [],
-    collapsedRuleGroups: new Set(JSON.parse(localStorage.getItem('buyerly_collapsed_rule_groups') || '[]')),
-    ruleGroupColors: JSON.parse(localStorage.getItem('buyerly_rule_group_colors') || '{}'),
+    collapsedRuleGroups: new Set(readBrowserPreference('buyerly_collapsed_rule_groups', [], {
+      json: true,
+      validate: isIdArray
+    }).map(Number)),
+    ruleGroupColors: readBrowserPreference('buyerly_rule_group_colors', {}, {
+      json: true,
+      validate: isStringRecord
+    }),
     selectedRuleIds: new Set(),
     chooseRuleTargetGroupId: null,
     chooseRuleSelectedIndex: 0,
@@ -605,9 +681,7 @@
     } else {
       state.collapsedSections.add(sectionKey);
     }
-    try {
-      localStorage.setItem('buyerly_collapsed_sections', JSON.stringify(Array.from(state.collapsedSections)));
-    } catch (e) {}
+    writeBrowserPreference('buyerly_collapsed_sections', Array.from(state.collapsedSections), { json: true });
     applySidebarSectionsCollapsedState();
   };
 
@@ -1789,10 +1863,8 @@
     state.accountGroupsCustomOrder = currentIds;
     state.accountGroupsSortMode = 'custom';
 
-    try {
-      localStorage.setItem('buyerly_groups_custom_order', JSON.stringify(currentIds));
-      localStorage.setItem('buyerly_groups_sort_mode', 'custom');
-    } catch (err) {}
+    writeBrowserPreference('buyerly_groups_custom_order', currentIds, { json: true });
+    writeBrowserPreference('buyerly_groups_sort_mode', 'custom');
 
     updateSortDropdownUI();
     renderSidebarAccountGroups();
@@ -1825,15 +1897,11 @@
 
   window.setGroupsSortMode = function (mode) {
     state.accountGroupsSortMode = mode;
-    try {
-      localStorage.setItem('buyerly_groups_sort_mode', mode);
-    } catch (e) {}
+    writeBrowserPreference('buyerly_groups_sort_mode', mode);
 
     if (mode === 'custom' && (!state.accountGroupsCustomOrder || state.accountGroupsCustomOrder.length === 0)) {
       state.accountGroupsCustomOrder = (state.accountGroups || []).map(g => g.id);
-      try {
-        localStorage.setItem('buyerly_groups_custom_order', JSON.stringify(state.accountGroupsCustomOrder));
-      } catch (e) {}
+      writeBrowserPreference('buyerly_groups_custom_order', state.accountGroupsCustomOrder, { json: true });
     }
 
     updateSortDropdownUI();
@@ -1993,23 +2061,6 @@
   }
   // ATTIO ACCOUNTS DATA GRID & COLUMN DEFINITIONS
   // ==========================================================
-  const DEFAULT_ACCOUNTS_COLUMN_ORDER = [
-    'name',
-    'status',
-    'timezone',
-    'spend',
-    'cpm',
-    'cpc',
-    'ctr',
-    'leads',
-    'cpl',
-    'registrations',
-    'cpreg',
-    'purchases',
-    'cpp',
-    'automation'
-  ];
-
   const ACCOUNTS_COLUMNS_DEF = {
     name: {
       id: 'name',
@@ -2380,7 +2431,7 @@
             if (isRight) toIdx += 1;
             currentOrder.splice(toIdx, 0, colId);
             state.accountsColumnOrder = currentOrder;
-            localStorage.setItem('buyerly_accounts_col_order_v2', JSON.stringify(currentOrder));
+            writeBrowserPreference('buyerly_accounts_col_order_v2', currentOrder, { json: true });
             renderAccounts();
           }
         }
@@ -2409,12 +2460,16 @@
     amount_spent: 'sum'
   };
 
-  try {
-    const savedCalcs = localStorage.getItem('buyerly_accounts_col_calcs');
-    state.accountsColumnCalcs = savedCalcs ? JSON.parse(savedCalcs) : { ...DEFAULT_ACCOUNTS_COLUMN_CALCS };
-  } catch (_) {
-    state.accountsColumnCalcs = { ...DEFAULT_ACCOUNTS_COLUMN_CALCS };
-  }
+  state.accountsColumnCalcs = readBrowserPreference(
+    'buyerly_accounts_col_calcs',
+    { ...DEFAULT_ACCOUNTS_COLUMN_CALCS },
+    {
+      json: true,
+      validate: value => isPlainObject(value) && Object.values(value).every(calc =>
+        ['count', 'filled', 'empty', 'unique', 'sum', 'average'].includes(calc)
+      )
+    }
+  );
 
   function getAccountColRawValue(acc, colId) {
     const m = acc.latest_metrics || acc.insights || {};
@@ -2592,7 +2647,7 @@
     } else {
       state.accountsColumnCalcs[activeCalcColId] = calcType;
     }
-    localStorage.setItem('buyerly_accounts_col_calcs', JSON.stringify(state.accountsColumnCalcs));
+    writeBrowserPreference('buyerly_accounts_col_calcs', state.accountsColumnCalcs, { json: true });
     const popover = document.getElementById('accountsCalcPopover');
     if (popover) popover.classList.add('hidden');
     renderAccounts();
@@ -2723,8 +2778,8 @@
   window.resetAccountsColumnOrder = function () {
     state.accountsColumnOrder = [...DEFAULT_ACCOUNTS_COLUMN_ORDER];
     state.accountsColumnWidths = {};
-    localStorage.removeItem('buyerly_accounts_col_order_v2');
-    localStorage.removeItem('buyerly_accounts_col_widths');
+    resetBrowserPreference('buyerly_accounts_col_order_v2');
+    resetBrowserPreference('buyerly_accounts_col_widths');
     showToast('Порядок и ширина колонок сброшены', 'info');
     renderAccounts();
   };
@@ -2736,7 +2791,7 @@
     }
     if (state.accountsColumnWidths) {
       delete state.accountsColumnWidths[colId];
-      localStorage.setItem('buyerly_accounts_col_widths', JSON.stringify(state.accountsColumnWidths));
+      writeBrowserPreference('buyerly_accounts_col_widths', state.accountsColumnWidths, { json: true });
       const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
       showToast(`Ширина колонки «${colDef.label || colId}» сброшена`, 'info');
       renderAccounts();
@@ -2829,7 +2884,7 @@
       document.removeEventListener('mouseup', onMouseUp);
 
       state.accountsColumnWidths[colId] = currentWidth;
-      localStorage.setItem('buyerly_accounts_col_widths', JSON.stringify(state.accountsColumnWidths));
+      writeBrowserPreference('buyerly_accounts_col_widths', state.accountsColumnWidths, { json: true });
       renderAccounts();
     };
 
@@ -2951,7 +3006,7 @@
     }
 
     state.accountsColumnOrder = currentOrder;
-    localStorage.setItem('buyerly_accounts_col_order_v2', JSON.stringify(currentOrder));
+    writeBrowserPreference('buyerly_accounts_col_order_v2', currentOrder, { json: true });
     renderColumnPickerList(document.getElementById('columnPickerSearchInput')?.value || '');
     renderAccounts();
   };
@@ -3047,8 +3102,8 @@
       state.accountsSortColumn = colKey;
       state.accountsSortDirection = (colKey === 'spend' || colKey === 'leads' || colKey === 'cpl') ? 'desc' : 'asc';
     }
-    localStorage.setItem('buyerly_accounts_sort_col', state.accountsSortColumn);
-    localStorage.setItem('buyerly_accounts_sort_dir', state.accountsSortDirection);
+    writeBrowserPreference('buyerly_accounts_sort_col', state.accountsSortColumn);
+    writeBrowserPreference('buyerly_accounts_sort_dir', state.accountsSortDirection);
     
     const sortBtn = document.getElementById('btnAccountsSort');
     const sortLabel = document.getElementById('accountsSortLabel');
@@ -5103,7 +5158,7 @@
     } else {
       state.collapsedRuleGroups.add(groupId);
     }
-    localStorage.setItem('buyerly_collapsed_rule_groups', JSON.stringify([...state.collapsedRuleGroups]));
+    writeBrowserPreference('buyerly_collapsed_rule_groups', [...state.collapsedRuleGroups], { json: true });
     renderRulesTab();
   };
 
@@ -5163,7 +5218,7 @@
   window.hideCurrentGroupFromPopover = function () {
     if (!activePopoverGroupId) return;
     state.collapsedRuleGroups.add(activePopoverGroupId);
-    localStorage.setItem('buyerly_collapsed_rule_groups', JSON.stringify([...state.collapsedRuleGroups]));
+    writeBrowserPreference('buyerly_collapsed_rule_groups', [...state.collapsedRuleGroups], { json: true });
     document.getElementById('ruleGroupMenuPopover')?.classList.add('hidden');
     renderRulesTab();
   };
@@ -5212,7 +5267,7 @@
   window.selectGroupColor = function (colorName) {
     if (!activePopoverGroupId) return;
     state.ruleGroupColors[activePopoverGroupId] = colorName;
-    localStorage.setItem('buyerly_rule_group_colors', JSON.stringify(state.ruleGroupColors));
+    writeBrowserPreference('buyerly_rule_group_colors', state.ruleGroupColors, { json: true });
     const dot = document.getElementById('ruleGroupPopoverDot');
     if (dot) dot.className = `attio-popover-dot swatch-${colorName}`;
     const palette = document.getElementById('ruleGroupColorPalette');
@@ -5321,7 +5376,7 @@
       });
       if (created && created.id) {
         state.ruleGroupColors[created.id] = activeNewColumnColor;
-        localStorage.setItem('buyerly_rule_group_colors', JSON.stringify(state.ruleGroupColors));
+        writeBrowserPreference('buyerly_rule_group_colors', state.ruleGroupColors, { json: true });
       }
       showToast(`Группа «${name}» создана`, 'success');
       window.closeAddColumnPopover();
@@ -11660,9 +11715,7 @@
       }
       document.documentElement.style.setProperty('--sidebar-width', clampedWidth + 'px');
       if (saveToStorage) {
-        try {
-          localStorage.setItem(STORAGE_KEY, String(clampedWidth));
-        } catch (e) {}
+        writeBrowserPreference(STORAGE_KEY, clampedWidth);
       }
       return clampedWidth;
     }
