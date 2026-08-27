@@ -154,6 +154,7 @@ async def reverse_audit_event(
     actor_id: str,
     owner_user_id: Optional[int] = None,
     owner_id: Optional[str] = None,
+    workspace_id: Optional[int] = None,
     is_admin: bool = False,
     now: Optional[float] = None,
 ) -> dict[str, Any]:
@@ -167,8 +168,16 @@ async def reverse_audit_event(
     ).scalar_one_or_none()
     if source is None:
         raise UndoError("Событие не найдено.", 404)
-    source_owned = source.owner_user_id == owner_user_id if source.owner_user_id is not None else False
-    if not is_admin and not source_owned:
+
+    if workspace_id is not None:
+        source_accessible = (
+            source.workspace_id == workspace_id
+            or (source.workspace_id is None and source.owner_user_id == owner_user_id)
+        )
+    else:
+        source_accessible = source.owner_user_id == owner_user_id if source.owner_user_id is not None else False
+
+    if not source_accessible:
         raise UndoError("Доступ к этому действию запрещён.", 403)
 
     existing_reversal = (
@@ -209,8 +218,18 @@ async def reverse_audit_event(
     account = (
         await session.execute(select(Account).where(Account.account_id == source.account_id))
     ).scalar_one_or_none()
-    account_owned = bool(account and account.owner_user_id == owner_user_id)
-    if account is None or (not is_admin and not account_owned):
+    if workspace_id is not None:
+        account_accessible = (
+            account is not None
+            and (
+                account.workspace_id == workspace_id
+                or (account.workspace_id is None and account.owner_user_id == owner_user_id)
+            )
+        )
+    else:
+        account_accessible = bool(account and account.owner_user_id == owner_user_id)
+
+    if account is None or not account_accessible:
         raise UndoError("Кабинет для этого действия не найден или недоступен.", 403)
 
     undo_state = (

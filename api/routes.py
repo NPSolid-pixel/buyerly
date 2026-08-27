@@ -61,6 +61,7 @@ from api.deps import (
 )
 from api.routers import (
     accounts_router,
+    admin_support_router,
     adsets_router,
     audit_router,
     auth_router,
@@ -126,6 +127,7 @@ meta_client = MetaClient()
 
 # Mount all modular domain routers
 router.include_router(auth_router)
+router.include_router(admin_support_router)
 router.include_router(workspaces_router)
 router.include_router(members_router)
 router.include_router(onboarding_router)

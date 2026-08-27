@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 
 from api.auth import get_current_user
-from api.deps import get_user_workspaces_list, slugify
+from api.deps import (
+    _active_support_grant,
+    get_user_workspaces_list,
+    invalidate_summary_cache,
+    record_security_event_and_raise,
+    slugify,
+)
 from api.schemas import (
     CreateWorkspaceRequest,
     SwitchWorkspaceRequest,
@@ -116,8 +122,30 @@ async def switch_workspace(req: SwitchWorkspaceRequest, user: User = Depends(get
                 )
             )
         ).scalar_one_or_none()
-        if not member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        if not member and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, target_ws.id)
+            if not grant:
+                await record_security_event_and_raise(
+                    session,
+                    status_code=403,
+                    detail="Нет доступа к данному воркспейсу",
+                    user=user,
+                    workspace_id=target_ws.id,
+                    action="SWITCH_WORKSPACE",
+                    resource_type="workspace",
+                    resource_id=str(target_ws.id),
+                )
+        elif not member:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=target_ws.id,
+                action="SWITCH_WORKSPACE",
+                resource_type="workspace",
+                resource_id=str(target_ws.id),
+            )
 
         db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = target_ws.id
@@ -147,8 +175,23 @@ async def update_workspace(
                 )
             )
         ).scalar_one_or_none()
-        if not member or member.role not in ("owner", "admin"):
-            raise HTTPException(status_code=403, detail="Недостаточно прав для редактирования воркспейса")
+        caller_role = member.role if member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, ws.id)
+            if grant:
+                caller_role = grant.role or "admin"
+
+        if not caller_role or caller_role not in ("owner", "admin"):
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Недостаточно прав для редактирования воркспейса",
+                user=user,
+                workspace_id=ws.id,
+                action="UPDATE_WORKSPACE",
+                resource_type="workspace",
+                resource_id=str(ws.id),
+            )
 
         if req.name and req.name.strip():
             ws.name = req.name.strip()
@@ -160,6 +203,7 @@ async def update_workspace(
             ws.logo_url = req.logo_url.strip()
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         workspaces = await get_user_workspaces_list(session, user)
         return next((w for w in workspaces if w.id == ws.id), None)
 
@@ -170,8 +214,17 @@ async def delete_workspace(workspace_id: int, user: User = Depends(get_current_u
         ws = (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
         if not ws:
             raise HTTPException(status_code=404, detail="Воркспейс не найден")
-        if ws.owner_user_id != user.id and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Только владелец может удалить воркспейс")
+        if ws.owner_user_id != user.id:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Только владелец может удалить воркспейс",
+                user=user,
+                workspace_id=workspace_id,
+                action="DELETE_WORKSPACE",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
         other_member = (
             await session.execute(
@@ -192,6 +245,7 @@ async def delete_workspace(workspace_id: int, user: User = Depends(get_current_u
         db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = other_member.workspace_id
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         return {
             "status": "ok",
             "message": "Воркспейс удалён",

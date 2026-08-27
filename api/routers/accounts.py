@@ -17,6 +17,8 @@ from api.deps import (
     get_user_accounts,
     get_user_workspace,
     get_user_workspace_member,
+    invalidate_summary_cache,
+    record_security_event_and_raise,
 )
 from api.schemas import (
     AccountGroupItem,
@@ -29,7 +31,7 @@ from api.schemas import (
 )
 from bot.handlers import parse_fb_raw_accounts
 from core.currency import normalize_currency
-from core.ownership import owned_by
+from core.ownership import entity_is_owned_by, owned_by
 from core.rate_limit import rate_limit_dep
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
@@ -50,10 +52,12 @@ meta_client = MetaClient(cache_provider=PostgreSQLInventoryCache())
 @router.get("/accounts", response_model=List[AccountItem])
 async def list_accounts(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
-        accounts = await get_user_accounts(session, user)
-        group_ids_by_account = await _account_group_ids_by_account(session, user)
+        ws = await get_user_workspace(session, user)
+        accounts = await get_user_accounts(session, user, workspace_id=ws.id if ws else None)
+        group_ids_by_account = await _account_group_ids_by_account(session, user, workspace_id=ws.id if ws else None)
         latest_summary = await _load_persisted_summary(
             session,
+            workspace_id=ws.id if ws else None,
             owner_user_id=user.id,
             period="today",
         )
@@ -138,6 +142,7 @@ async def create_account_group(
         for position, account in enumerate(accounts):
             session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         items = await _account_group_items(session, user)
         return next(item for item in items if item.id == group.id)
 
@@ -190,6 +195,7 @@ async def update_account_group(
         for position, account in enumerate(accounts):
             session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         items = await _account_group_items(session, user)
         return next(item for item in items if item.id == group.id)
 
@@ -221,6 +227,7 @@ async def delete_account_group(
         await session.execute(delete(AccountGroupMember).where(AccountGroupMember.group_id == group.id))
         await session.delete(group)
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
     return {"message": "Группа кабинетов удалена", "group_id": group_id}
 
 
@@ -241,16 +248,28 @@ async def update_account_profile(
             if ws
             else owned_by(Account, user)
         )
-        stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            stmt = stmt.where(scope_clause)
+        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
         account = (await session.execute(stmt)).scalar_one_or_none()
         if not account:
+            # Check if this is a cross-workspace attempt for audit logging
+            exists_any = (await session.execute(select(Account.id).where(Account.account_id == acc_id))).scalar_one_or_none()
+            if exists_any is not None:
+                await record_security_event_and_raise(
+                    session,
+                    status_code=404,
+                    detail="Кабинет не найден.",
+                    user=user,
+                    workspace_id=ws.id if ws else None,
+                    action="UPDATE_ACCOUNT_PROFILE",
+                    resource_type="account",
+                    resource_id=acc_id,
+                )
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
 
         account.custom_name = payload.custom_name.strip()
         account.note = payload.note.strip()
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         return {
             "account_id": account.account_id,
             "custom_name": account.custom_name,
@@ -271,18 +290,29 @@ async def delete_account(account_id: str, user: User = Depends(get_current_user)
             if ws
             else owned_by(Account, user)
         )
-        stmt = select(Account).where(Account.account_id == acc_id)
-        if user.role != "admin":
-            stmt = stmt.where(scope_clause)
+        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
         if not acc:
+            exists_any = (await session.execute(select(Account.id).where(Account.account_id == acc_id))).scalar_one_or_none()
+            if exists_any is not None:
+                await record_security_event_and_raise(
+                    session,
+                    status_code=404,
+                    detail="Кабинет не найден.",
+                    user=user,
+                    workspace_id=ws.id if ws else None,
+                    action="DELETE_ACCOUNT",
+                    resource_type="account",
+                    resource_id=acc_id,
+                )
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
 
         await session.execute(delete(AccountGroupMember).where(AccountGroupMember.account_id == acc.id))
         await session.execute(delete(Account).where(Account.account_id == acc_id))
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         return {"success": True, "message": f"Кабинет {acc_id} удален"}
 
 
@@ -312,6 +342,8 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "добавления рекламных кабинетов")
+        caller_role = member.role if member else "buyer"
+
         for idx, item in enumerate(payload.accounts, start=1):
             acc_id = item.account_id if item.account_id.startswith("act_") else f"act_{item.account_id}"
             custom_name = item.name.strip() if item.name else ""
@@ -338,17 +370,27 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                 res = await session.execute(select(Account).where(Account.account_id == acc_id))
                 existing = res.scalar_one_or_none()
 
-                ws = await get_user_workspace(session, user)
                 if existing:
                     if (
                         existing.workspace_id is not None
                         and ws is not None
                         and existing.workspace_id != ws.id
-                        and user.role != "admin"
                     ):
                         error_list.append({
                             "account_id": acc_id,
                             "error": "Кабинет уже подключён в другом рабочем пространстве."
+                        })
+                        continue
+
+                    # Intraworkspace RBAC check: only account owner or workspace owner/admin can overwrite token
+                    if (
+                        existing.workspace_id == (ws.id if ws else None)
+                        and not entity_is_owned_by(existing, user)
+                        and caller_role not in ("owner", "admin")
+                    ):
+                        error_list.append({
+                            "account_id": acc_id,
+                            "error": "Кабинет добавлен другим байером в этом воркспейсе. Изменение разрешено только владельцу или администратору воркспейса."
                         })
                         continue
 
@@ -359,7 +401,6 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                     existing.meta_connection_id = None
                     existing.timezone_name = timezone_name
                     existing.currency = currency
-                    existing.owner_user_id = user.id
                     existing.workspace_id = ws.id if ws else existing.workspace_id
                     existing.batch_name = batch_name if batch_name != "-" else ""
                     existing.account_status = status_code
@@ -395,6 +436,7 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                 error_list.append({"account_id": acc_id, "error": str(e)})
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
 
     return {
         "success_count": len(added_list),

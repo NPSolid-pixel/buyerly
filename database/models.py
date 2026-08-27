@@ -33,7 +33,9 @@ class User(Base):
     full_name = Column(String, default="", nullable=False)
     first_name = Column(String, default="", nullable=False, doc="Имя пользователя")
     last_name = Column(String, default="", nullable=False, doc="Фамилия пользователя")
-    email = Column(String, nullable=True, index=True, doc="Рабочий Email пользователя")
+    email = Column(String, unique=True, nullable=True, index=True, doc="Нормализованный уникальный рабочий Email")
+    email_verified_at = Column(DateTime(timezone=True), nullable=True, index=True, doc="Дата и время подтверждения email (UTC)")
+    unconfirmed_email = Column(String, nullable=True, index=True, doc="Новый запрашиваемый email до подтверждения OTP")
     avatar_url = Column(String, default="", nullable=False, doc="URL или путь к аватару")
     onboarding_step = Column(
         String,
@@ -180,6 +182,58 @@ class WorkspaceInvite(Base):
         return (
             f"<WorkspaceInvite(id={self.id}, workspace_id={self.workspace_id}, "
             f"role='{self.role}', status='{self.status}')>"
+        )
+
+
+class WorkspaceSupportGrant(Base):
+    """Temporary, auditable privileged support/impersonation grant for platform superadmins."""
+
+    __tablename__ = "workspace_support_grants"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="ID воркспейса, к которому выдан временный доступ саппорта",
+    )
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="ID администратора платформы, получившего доступ",
+    )
+    role = Column(
+        String,
+        default="admin",
+        nullable=False,
+        doc="Временная роль в воркспейсе на время сессии ('admin' или 'viewer')",
+    )
+    reason = Column(
+        Text,
+        nullable=False,
+        doc="Обязательная обоснованная причина доступа саппорта/диагностики",
+    )
+    expires_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+        doc="Срок истечения сессии саппорта (UTC)",
+    )
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    revoked_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        doc="Время досрочного отзыва гранта (если отозван)",
+    )
+
+    def __repr__(self):
+        return (
+            f"<WorkspaceSupportGrant(id={self.id}, workspace_id={self.workspace_id}, "
+            f"user_id={self.user_id}, role='{self.role}', expires='{self.expires_at}')>"
         )
 
 
@@ -536,10 +590,16 @@ class AccountGroupMember(Base):
 
 
 class SummarySnapshot(Base):
-    """Durable, owner-isolated history of successful dashboard refreshes."""
+    """Durable, workspace/owner-isolated history of successful dashboard refreshes."""
 
     __tablename__ = "summary_snapshots"
     __table_args__ = (
+        Index(
+            "ix_summary_snapshots_workspace_period_created",
+            "workspace_id",
+            "period",
+            "created_at",
+        ),
         Index(
             "ix_summary_snapshots_user_period_created",
             "owner_user_id",
@@ -558,7 +618,7 @@ class SummarySnapshot(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
     def __repr__(self):
-        return f"<SummarySnapshot(owner_user_id={self.owner_user_id}, period='{self.period}', generated='{self.generated_at}')>"
+        return f"<SummarySnapshot(workspace_id={self.workspace_id}, owner_user_id={self.owner_user_id}, period='{self.period}', generated='{self.generated_at}')>"
 
 
 class AnalyticsViewPreference(Base):

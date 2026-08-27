@@ -743,6 +743,70 @@ async def migrate_otp_security_contract(conn) -> bool:
     return False
 
 
+async def migrate_user_email_verified_contract(conn) -> bool:
+    """Ensure email_verified_at, unconfirmed_email exist and email uniqueness is enforced safely."""
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "users" not in table_names:
+        return False
+
+    user_columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"] for column in inspect(sync_conn).get_columns("users")
+        }
+    )
+
+    migrated = False
+
+    # 1. Add email_verified_at if not present
+    if "email_verified_at" not in user_columns:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMPTZ"))
+        migrated = True
+
+    # 2. Add unconfirmed_email if not present
+    if "unconfirmed_email" not in user_columns:
+        await conn.execute(text("ALTER TABLE users ADD COLUMN unconfirmed_email VARCHAR"))
+        migrated = True
+
+    # 3. Clean up empty string emails to NULL
+    await conn.execute(text("UPDATE users SET email = NULL WHERE email IS NOT NULL AND TRIM(email) = ''"))
+    await conn.execute(text("UPDATE users SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL"))
+
+    # 4. Deduplicate any legacy duplicate emails keeping the most recent user with active workspace
+    dup_rows = (await conn.execute(
+        text("SELECT email, COUNT(*) FROM users WHERE email IS NOT NULL GROUP BY email HAVING COUNT(*) > 1")
+    )).fetchall()
+
+    for dup_row in dup_rows:
+        dup_email = dup_row[0]
+        # Find all user IDs with this email ordered by active_workspace_id IS NOT NULL desc, id desc
+        users_with_email = (await conn.execute(
+            text(
+                "SELECT id FROM users WHERE email = :email "
+                "ORDER BY (CASE WHEN active_workspace_id IS NOT NULL THEN 1 ELSE 0 END) DESC, id DESC"
+            ),
+            {"email": dup_email}
+        )).scalars().all()
+        # Keep the first user, set others to NULL
+        if len(users_with_email) > 1:
+            remove_ids = users_with_email[1:]
+            for r_id in remove_ids:
+                await conn.execute(
+                    text("UPDATE users SET email = NULL WHERE id = :uid"),
+                    {"uid": r_id}
+                )
+            migrated = True
+
+    # 5. Create unique index on email
+    try:
+        await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
+    except Exception as e:
+        logger.warning("Could not create ix_users_email unique index: %s", e)
+
+    return migrated
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -754,6 +818,8 @@ async def init_schema():
         await conn.run_sync(Base.metadata.create_all)
         if await migrate_otp_security_contract(conn):
             logger.info("Added failed_attempts to email_verification_codes.")
+        if await migrate_user_email_verified_contract(conn):
+            logger.info("Migrated user verified email and unconfirmed email columns.")
         if await migrate_rule_groups_position(conn):
             logger.info("Added position column to rule_groups.")
         if await migrate_onboarding_contract(conn):

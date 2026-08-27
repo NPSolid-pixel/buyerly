@@ -11,6 +11,8 @@ class UserProfileResponse(BaseModel):
     first_name: str = ""
     last_name: str = ""
     email: Optional[str] = None
+    email_verified: bool = False
+    unconfirmed_email: Optional[str] = None
     avatar_url: str = ""
     role: str
     is_approved: bool
@@ -23,6 +25,16 @@ class UserProfileResponse(BaseModel):
 class RequestTemporaryPasswordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(..., min_length=3, max_length=255)
+
+
+class RequestEmailChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    new_email: str = Field(..., min_length=3, max_length=255)
+
+
+class VerifyEmailChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(..., min_length=1, max_length=10)
 
 
 class LoginRequest(BaseModel):

@@ -1,4 +1,5 @@
 from api.routers.accounts import router as accounts_router
+from api.routers.admin_support import router as admin_support_router
 from api.routers.adsets import router as adsets_router
 from api.routers.audit import router as audit_router
 from api.routers.auth import router as auth_router
@@ -11,6 +12,7 @@ from api.routers.workspaces import router as workspaces_router
 
 __all__ = [
     "accounts_router",
+    "admin_support_router",
     "adsets_router",
     "audit_router",
     "auth_router",

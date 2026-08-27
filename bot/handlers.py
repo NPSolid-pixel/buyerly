@@ -3,13 +3,14 @@ import logging
 import re
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import List
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
-from sqlalchemy import select, delete
+from sqlalchemy import and_, delete, or_, select
 
 from core.config import settings
 from core.audit import build_audit_event
@@ -19,7 +20,14 @@ from core.ownership import entity_is_owned_by, owned_by
 from core.meta_tokens import resolve_account_access_token
 from core.timezones import resolve_account_clock
 from database.db import async_session_maker
-from database.models import Account, StoppedAdSet, AppSettings, User
+from database.models import (
+    Account,
+    AppSettings,
+    StoppedAdSet,
+    User,
+    WorkspaceMember,
+    WorkspaceSupportGrant,
+)
 from meta_api.client import MetaClient
 from bot.keyboards import (
     get_main_menu_keyboard,
@@ -293,6 +301,39 @@ async def process_token_and_save(message: Message, state: FSMContext):
             await state.clear()
             await progress_msg.edit_text("⛔️ Доступ не подтверждён.")
             return
+
+        active_workspace_id = owner_user.active_workspace_id
+        if active_workspace_id is None:
+            await state.clear()
+            await progress_msg.edit_text("⛔️ Сначала выберите активный воркспейс.")
+            return
+
+        member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == active_workspace_id,
+                    WorkspaceMember.user_id == owner_user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        caller_role = member.role if member else None
+        if caller_role is None and owner_user.role == "admin":
+            grant = (
+                await session.execute(
+                    select(WorkspaceSupportGrant).where(
+                        WorkspaceSupportGrant.workspace_id == active_workspace_id,
+                        WorkspaceSupportGrant.user_id == owner_user.id,
+                        WorkspaceSupportGrant.expires_at > datetime.now(timezone.utc),
+                        WorkspaceSupportGrant.revoked_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            caller_role = grant.role if grant else None
+        if caller_role not in ("owner", "admin", "buyer"):
+            await state.clear()
+            await progress_msg.edit_text("⛔️ Нет прав на изменение активного воркспейса.")
+            return
+
         for idx, item in enumerate(parsed_accounts, start=1):
             acc_id = item["account_id"]
             parsed_name = item.get("parsed_name", "")
@@ -320,13 +361,14 @@ async def process_token_and_save(message: Message, state: FSMContext):
                 existing = res.scalar_one_or_none()
 
                 if existing:
-                    if (
-                        existing.owner_user_id is not None
-                        and existing.owner_user_id != owner_user.id
-                        and not is_admin
-                    ):
+                    if existing.workspace_id != active_workspace_id:
                         error_results.append(
-                            f"• <code>{acc_id}</code>: Кабинет уже привязан к другому пользователю."
+                            f"• <code>{acc_id}</code>: Кабинет уже подключён в другом воркспейсе."
+                        )
+                        continue
+                    if existing.owner_user_id != owner_user.id and caller_role not in ("owner", "admin"):
+                        error_results.append(
+                            f"• <code>{acc_id}</code>: Кабинет добавлен другим байером; обновить его может владелец или администратор воркспейса."
                         )
                         continue
 
@@ -336,12 +378,11 @@ async def process_token_and_save(message: Message, state: FSMContext):
                     existing.access_token = token
                     existing.timezone_name = timezone_name
                     existing.currency = currency
-                    existing.owner_user_id = owner_user.id
                     existing.batch_name = batch_name if batch_name != "-" else ""
                     existing.is_active = True
                 else:
                     new_acc = Account(
-                        workspace_id=owner_user.active_workspace_id,
+                        workspace_id=active_workspace_id,
                         account_id=acc_id,
                         name=display_name,
                         access_token=token,
@@ -417,12 +458,17 @@ async def get_user_accounts(session, user_id: str) -> List[Account]:
             select(User).where(User.telegram_id == user_id)
         )
     ).scalar_one_or_none()
-    if user and user.is_approved and user.role == "admin":
-        stmt = select(Account)
-    elif user and user.is_approved:
-        stmt = select(Account).where(owned_by(Account, user))
-    else:
+    if not user or not user.is_approved:
         return []
+    if user.active_workspace_id:
+        stmt = select(Account).where(
+            or_(
+                Account.workspace_id == user.active_workspace_id,
+                and_(Account.workspace_id.is_(None), owned_by(Account, user)),
+            )
+        )
+    else:
+        stmt = select(Account).where(owned_by(Account, user))
     res = await session.execute(stmt)
     return res.scalars().all()
 
@@ -442,7 +488,31 @@ async def _can_manage_account(session, user_id: str, account: Account) -> bool:
     user = result.scalar_one_or_none()
     if not user or not user.is_approved:
         return False
-    return entity_is_owned_by(account, user) or user.role == "admin"
+    if account.workspace_id is not None:
+        member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == account.workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if member and member.role in ("owner", "admin", "buyer"):
+            return True
+        if user.role == "admin":
+            grant = (
+                await session.execute(
+                    select(WorkspaceSupportGrant).where(
+                        WorkspaceSupportGrant.workspace_id == account.workspace_id,
+                        WorkspaceSupportGrant.user_id == user.id,
+                        WorkspaceSupportGrant.expires_at > datetime.now(timezone.utc),
+                        WorkspaceSupportGrant.revoked_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if grant:
+                return True
+    return entity_is_owned_by(account, user)
 
 
 @router.callback_query(F.data.startswith("report_period:"))

@@ -1,6 +1,7 @@
 import json
 import time
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 import httpx
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from core.config import settings
 from database.db import Base, hash_password
 from database.models import (
     Account,
+    AuditEvent,
     User,
     Workspace,
     WorkspaceInvite,
@@ -684,6 +686,65 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(acc.owner_user_id, artem.id)
             self.assertEqual(acc.name, 'Buyerly Account 1')
 
+    async def test_workspace_admin_can_refresh_account_without_reassigning_owner(self):
+        async with self.test_session_maker() as session:
+            artem = (await session.execute(select(User).where(User.username == 'artem'))).scalar_one()
+            ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+            workspace_admin = User(
+                telegram_id='777000555',
+                username='workspace_admin',
+                full_name='Workspace Admin',
+                password_hash=hash_password('workspace-admin-password'),
+                role='buyer',
+                is_approved=True,
+                active_workspace_id=ws.id,
+            )
+            session.add(workspace_admin)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=ws.id,
+                    user_id=workspace_admin.id,
+                    role='admin',
+                )
+            )
+            original_owner_id = artem.id
+            await session.commit()
+
+        admin_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000555, 'first_name': 'Workspace', 'username': 'workspace_admin'},
+        )
+        headers = {'Authorization': f'tma {admin_data}'}
+        mock_meta_info = {
+            'id': 'act_111111',
+            'name': 'Refreshed Account',
+            'account_status': 1,
+            'status_label': 'Активен',
+            'timezone_name': 'UTC',
+            'currency': 'USD',
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(api_routes_module.meta_client, 'get_account_info', new=AsyncMock(return_value=mock_meta_info)):
+            async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+                response = await client.post(
+                    '/api/accounts/batch-add',
+                    json={
+                        'accounts': [{'account_id': 'act_111111', 'name': 'Refreshed'}],
+                        'access_token': 'replacement_token',
+                    },
+                    headers=headers,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['success_count'], 1)
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == 'act_111111'))
+            ).scalar_one()
+            self.assertEqual(account.owner_user_id, original_owner_id)
+
     async def test_targeted_workspace_invite_rejects_mismatched_email(self):
         artem_data = generate_valid_telegram_init_data(
             settings.BOT_TOKEN,
@@ -691,11 +752,13 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         )
         artem_headers = {'Authorization': f'tma {artem_data}'}
 
+        now_dt = datetime.now(timezone.utc)
         async with self.test_session_maker() as session:
             imposter = User(
                 telegram_id='777000888',
                 username='imposter',
                 email='imposter@evil.com',
+                email_verified_at=now_dt,
                 full_name='Imposter User',
                 password_hash=hash_password('imposter-password'),
                 role='buyer',
@@ -705,6 +768,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                 telegram_id='777000777',
                 username='recipient',
                 email='legit@company.com',
+                email_verified_at=now_dt,
                 full_name='Legit User',
                 password_hash=hash_password('legit-password'),
                 role='buyer',
@@ -752,6 +816,140 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(recipient_accept.status_code, 200)
             self.assertEqual(recipient_accept.json()['status'], 'ok')
 
+    async def test_targeted_workspace_invite_requires_verified_email(self):
+        artem_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000111, 'first_name': 'Artem', 'username': 'artem'},
+        )
+        artem_headers = {'Authorization': f'tma {artem_data}'}
+
+        # Unverified recipient has matching email string but email_verified_at is None
+        async with self.test_session_maker() as session:
+            unverified_user = User(
+                telegram_id='777000999',
+                username='unverified_user',
+                email='partner@agency.com',
+                email_verified_at=None,
+                full_name='Unverified Partner',
+                password_hash=hash_password('partner-password'),
+                role='buyer',
+                is_approved=True,
+            )
+            no_email_user = User(
+                telegram_id='777000555',
+                username='no_email_user',
+                email=None,
+                email_verified_at=None,
+                full_name='No Email User',
+                password_hash=hash_password('noemail-password'),
+                role='buyer',
+                is_approved=True,
+            )
+            session.add_all([unverified_user, no_email_user])
+            ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+            ws_id = ws.id
+            await session.commit()
+
+        unverified_headers = {
+            'Authorization': f"tma {generate_valid_telegram_init_data(settings.BOT_TOKEN, {'id': 777000999, 'first_name': 'Unverified', 'username': 'unverified_user'})}"
+        }
+        no_email_headers = {
+            'Authorization': f"tma {generate_valid_telegram_init_data(settings.BOT_TOKEN, {'id': 777000555, 'first_name': 'NoEmail', 'username': 'no_email_user'})}"
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+            create_res = await client.post(
+                f'/api/workspaces/{ws_id}/invites',
+                json={
+                    'email': 'partner@agency.com',
+                    'role': 'buyer',
+                    'expires_in_days': 7,
+                    'max_uses': 1,
+                },
+                headers=artem_headers,
+            )
+            self.assertEqual(create_res.status_code, 200)
+            token = create_res.json()['token']
+
+            # 1. User without email tries to accept -> 403 Forbidden (email is NOT auto-assigned)
+            no_email_accept = await client.post(f'/api/invites/{token}/accept', headers=no_email_headers)
+            self.assertEqual(no_email_accept.status_code, 403)
+            self.assertIn('требуется подтверждённый адрес электронной почты', no_email_accept.json()['detail'])
+
+            # Verify no_email_user still has NO email assigned in DB
+            async with self.test_session_maker() as session:
+                db_no_email = (await session.execute(select(User).where(User.username == 'no_email_user'))).scalar_one()
+                self.assertIsNone(db_no_email.email)
+
+            # 2. User with unverified matching email tries to accept -> 403 Forbidden
+            unverified_accept = await client.post(f'/api/invites/{token}/accept', headers=unverified_headers)
+            self.assertEqual(unverified_accept.status_code, 403)
+            self.assertIn('требуется подтверждённый адрес электронной почты', unverified_accept.json()['detail'])
+
+            # 3. Mark unverified user as verified in DB -> now acceptance succeeds
+            async with self.test_session_maker() as session:
+                db_user = (await session.execute(select(User).where(User.username == 'unverified_user'))).scalar_one()
+                db_user.email_verified_at = datetime.now(timezone.utc)
+                await session.commit()
+
+            verified_accept = await client.post(f'/api/invites/{token}/accept', headers=unverified_headers)
+            self.assertEqual(verified_accept.status_code, 200)
+            self.assertEqual(verified_accept.json()['status'], 'ok')
+
+    async def test_invite_audit_logging_no_raw_tokens(self):
+        artem_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000111, 'first_name': 'Artem', 'username': 'artem'},
+        )
+        artem_headers = {'Authorization': f'tma {artem_data}'}
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+            async with self.test_session_maker() as session:
+                ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+                ws_id = ws.id
+
+            # Create an invite
+            create_res = await client.post(
+                f'/api/workspaces/{ws_id}/invites',
+                json={
+                    'email': 'audit_test@example.com',
+                    'role': 'buyer',
+                    'expires_in_days': 7,
+                    'max_uses': 1,
+                },
+                headers=artem_headers,
+            )
+            self.assertEqual(create_res.status_code, 200)
+            invite_data = create_res.json()
+            raw_token = invite_data['token']
+            invite_id = invite_data['id']
+
+            # Revoke the invite
+            revoke_res = await client.delete(f'/api/workspaces/{ws_id}/invites/{invite_id}', headers=artem_headers)
+            self.assertEqual(revoke_res.status_code, 200)
+
+            # Check audit events in DB
+            async with self.test_session_maker() as session:
+                audit_events = (
+                    await session.execute(
+                        select(AuditEvent)
+                        .where(AuditEvent.category == 'WORKSPACE_INVITE')
+                        .order_by(AuditEvent.id.asc())
+                    )
+                ).scalars().all()
+
+                self.assertGreaterEqual(len(audit_events), 2)
+                event_types = [e.event_type for e in audit_events]
+                self.assertIn('INVITE_CREATE', event_types)
+                self.assertIn('INVITE_REVOKE', event_types)
+
+                # Ensure NO raw token appears in message or details of any audit event
+                for e in audit_events:
+                    self.assertNotIn(raw_token, e.message)
+                    details_str = json.dumps(e.details)
+                    self.assertNotIn(raw_token, details_str)
 
 
 

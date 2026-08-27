@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, delete, select
 
 from api.auth import get_current_user
-from api.deps import _utc_iso
+from api.deps import (
+    _active_support_grant,
+    _utc_iso,
+    invalidate_summary_cache,
+    record_security_event_and_raise,
+)
 from api.schemas import (
     CreateWorkspaceInviteRequest,
     PublicInviteInfoResponse,
@@ -20,7 +25,7 @@ from core.config import settings
 from core.email import send_workspace_invitation_email
 from core.rate_limit import rate_limit_dep
 from database.db import async_session_maker
-from database.models import User, Workspace, WorkspaceInvite, WorkspaceMember
+from database.models import AuditEvent, User, Workspace, WorkspaceInvite, WorkspaceMember
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Members & Invites"])
@@ -45,8 +50,22 @@ async def list_workspace_members(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="LIST_WORKSPACE_MEMBERS",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
         rows = (
             await session.execute(
@@ -105,11 +124,24 @@ async def update_workspace_member_role(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="UPDATE_MEMBER_ROLE",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для изменения ролей участников")
 
         if member_user_id == user.id:
@@ -129,7 +161,7 @@ async def update_workspace_member_role(
         if target_member.role == "owner":
             raise HTTPException(status_code=400, detail="Нельзя изменить роль владельца. Используйте передачу владения.")
 
-        if caller_role == "admin" and target_member.role == "admin" and user.role != "admin":
+        if caller_role == "admin" and target_member.role == "admin" and ws.owner_user_id != user.id:
             raise HTTPException(status_code=403, detail="Только владелец может менять роль администратора")
 
         target_member.role = req.role
@@ -172,11 +204,24 @@ async def remove_workspace_member(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="REMOVE_MEMBER",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для исключения участников")
 
         if member_user_id == user.id:
@@ -196,7 +241,7 @@ async def remove_workspace_member(
         if target_member.role == "owner":
             raise HTTPException(status_code=400, detail="Нельзя исключить владельца воркспейса")
 
-        if caller_role == "admin" and target_member.role == "admin" and user.role != "admin":
+        if caller_role == "admin" and target_member.role == "admin" and ws.owner_user_id != user.id:
             raise HTTPException(status_code=403, detail="Только владелец может исключить администратора")
 
         await session.execute(
@@ -230,6 +275,7 @@ async def remove_workspace_member(
                 target_user.active_workspace_id = new_ws.id
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         return {"status": "ok", "message": "Участник успешно исключён из воркспейса"}
 
 
@@ -295,6 +341,7 @@ async def leave_workspace(
                 next_ws_id = new_ws.id
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         return {"status": "ok", "message": "Вы вышли из воркспейса", "next_workspace_id": next_ws_id}
 
 
@@ -310,8 +357,17 @@ async def transfer_workspace_ownership(
         if not ws:
             raise HTTPException(status_code=404, detail="Воркспейс не найден")
 
-        if ws.owner_user_id != user.id and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Только владелец может передать права владения воркспейсом")
+        if ws.owner_user_id != user.id:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Только владелец может передать права владения воркспейсом",
+                user=user,
+                workspace_id=workspace_id,
+                action="TRANSFER_OWNERSHIP",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
         if req.new_owner_user_id == user.id:
             raise HTTPException(status_code=400, detail="Вы уже являетесь владельцем этого воркспейса")
@@ -342,6 +398,7 @@ async def transfer_workspace_ownership(
             caller_member.role = "admin"
 
         await session.commit()
+        invalidate_summary_cache(workspace_id=workspace_id)
         return {
             "status": "ok",
             "message": "Права владения успешно переданы",
@@ -369,11 +426,24 @@ async def create_workspace_invite(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="CREATE_INVITE",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для создания приглашений")
 
         token = f"inv_{secrets.token_urlsafe(24)}"
@@ -393,10 +463,31 @@ async def create_workspace_invite(
             expires_at=expires_at,
         )
         session.add(invite)
+        await session.flush()
+
+        session.add(
+            AuditEvent(
+                workspace_id=workspace_id,
+                owner_user_id=user.id,
+                actor_type="user",
+                actor_id=str(user.id),
+                category="WORKSPACE_INVITE",
+                event_type="INVITE_CREATE",
+                status="SUCCESS",
+                message=f"Создано приглашение для {target_email or 'публичной ссылки'}",
+                details={
+                    "invite_id": invite.id,
+                    "email": target_email,
+                    "role": invite.role,
+                    "max_uses": invite.max_uses,
+                },
+            )
+        )
         await session.commit()
         await session.refresh(invite)
 
         if target_email:
+            send_ok = True
             try:
                 inviter_name = user.full_name or user.username or "Коллега"
                 await send_workspace_invitation_email(
@@ -407,7 +498,23 @@ async def create_workspace_invite(
                     invite_token=invite.token,
                 )
             except Exception as e:
+                send_ok = False
                 logger.error("Failed to send invitation email to %s: %s", target_email, e)
+
+            session.add(
+                AuditEvent(
+                    workspace_id=workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_SEND",
+                    status="SUCCESS" if send_ok else "FAILED",
+                    message=f"Отправка приглашения на {target_email}: {'успешно' if send_ok else 'ошибка'}",
+                    details={"invite_id": invite.id, "email": target_email},
+                )
+            )
+            await session.commit()
 
         base_url = settings.WEBAPP_URL.rstrip("/") if settings.WEBAPP_URL else ""
         invite_url = f"{base_url}/invite/{invite.token}" if base_url else f"/invite/{invite.token}"
@@ -448,11 +555,24 @@ async def list_workspace_invites(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="LIST_INVITES",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для просмотра приглашений")
 
         rows = (
@@ -516,11 +636,24 @@ async def revoke_workspace_invite(
                 )
             )
         ).scalar_one_or_none()
-        if not caller_member and user.role != "admin":
-            raise HTTPException(status_code=403, detail="Нет доступа к данному воркспейсу")
+        caller_role = caller_member.role if caller_member else None
+        if not caller_role and user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                caller_role = grant.role or "admin"
+        if not caller_role:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Нет доступа к данному воркспейсу",
+                user=user,
+                workspace_id=workspace_id,
+                action="REVOKE_INVITE",
+                resource_type="workspace",
+                resource_id=str(workspace_id),
+            )
 
-        caller_role = caller_member.role if caller_member else "admin"
-        if caller_role not in ("owner", "admin") and user.role != "admin":
+        if caller_role not in ("owner", "admin"):
             raise HTTPException(status_code=403, detail="Недостаточно прав для отзыва приглашений")
 
         invite = (
@@ -535,6 +668,19 @@ async def revoke_workspace_invite(
             raise HTTPException(status_code=404, detail="Приглашение не найдено")
 
         invite.status = "revoked"
+        session.add(
+            AuditEvent(
+                workspace_id=workspace_id,
+                owner_user_id=user.id,
+                actor_type="user",
+                actor_id=str(user.id),
+                category="WORKSPACE_INVITE",
+                event_type="INVITE_REVOKE",
+                status="SUCCESS",
+                message="Приглашение отозвано",
+                details={"invite_id": invite.id, "email": invite.email},
+            )
+        )
         await session.commit()
         return {"status": "ok", "message": "Приглашение успешно отозвано"}
 
@@ -626,7 +772,9 @@ async def accept_workspace_invite(
     async with async_session_maker() as session:
         invite = (
             await session.execute(
-                select(WorkspaceInvite).where(WorkspaceInvite.token == token)
+                select(WorkspaceInvite)
+                .where(WorkspaceInvite.token == token)
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if not invite:
@@ -634,28 +782,101 @@ async def accept_workspace_invite(
 
         now_dt = datetime.now(timezone.utc)
         if invite.status == "revoked":
+            session.add(
+                AuditEvent(
+                    workspace_id=invite.workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_REJECT",
+                    status="FAILED",
+                    message="Попытка принятия отозванного приглашения",
+                    details={"invite_id": invite.id, "reason": "revoked"},
+                )
+            )
+            await session.commit()
             raise HTTPException(status_code=400, detail="Это приглашение было отозвано")
 
         if invite.expires_at and now_dt > invite.expires_at:
             invite.status = "expired"
+            session.add(
+                AuditEvent(
+                    workspace_id=invite.workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_REJECT",
+                    status="FAILED",
+                    message="Попытка принятия просроченного приглашения",
+                    details={"invite_id": invite.id, "reason": "expired"},
+                )
+            )
             await session.commit()
             raise HTTPException(status_code=400, detail="Срок действия приглашения истёк")
 
         if invite.max_uses > 0 and invite.used_count >= invite.max_uses:
+            session.add(
+                AuditEvent(
+                    workspace_id=invite.workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_REJECT",
+                    status="FAILED",
+                    message="Лимит использований приглашения исчерпан",
+                    details={"invite_id": invite.id, "reason": "max_uses_reached"},
+                )
+            )
+            await session.commit()
             raise HTTPException(status_code=400, detail="Лимит использований приглашения исчерпан")
 
         ws = (await session.execute(select(Workspace).where(Workspace.id == invite.workspace_id))).scalar_one_or_none()
         if not ws:
             raise HTTPException(status_code=404, detail="Воркспейс не найден")
 
-        # Targeted invite protection: verify user email if invite is addressed to a specific email
+        # Targeted invite protection: verify user has verified email matching invite.email
         if invite.email:
             target_email = invite.email.strip().lower()
             user_email = (user.email or "").strip().lower()
-            if not user_email:
-                db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
-                db_user.email = target_email
-            elif user_email != target_email:
+
+            if not user_email or not getattr(user, "email_verified_at", None):
+                session.add(
+                    AuditEvent(
+                        workspace_id=invite.workspace_id,
+                        owner_user_id=user.id,
+                        actor_type="user",
+                        actor_id=str(user.id),
+                        category="WORKSPACE_INVITE",
+                        event_type="INVITE_REJECT",
+                        status="FAILED",
+                        message="Попытка принятия targeted invite без подтверждённого email",
+                        details={"invite_id": invite.id, "reason": "unverified_email"},
+                    )
+                )
+                await session.commit()
+                raise HTTPException(
+                    status_code=403,
+                    detail="Для принятия персонального приглашения требуется подтверждённый адрес электронной почты.",
+                )
+
+            if user_email != target_email:
+                session.add(
+                    AuditEvent(
+                        workspace_id=invite.workspace_id,
+                        owner_user_id=user.id,
+                        actor_type="user",
+                        actor_id=str(user.id),
+                        category="WORKSPACE_INVITE",
+                        event_type="INVITE_REJECT",
+                        status="FAILED",
+                        message="Попытка принятия targeted invite с несовпадающим email",
+                        details={"invite_id": invite.id, "reason": "email_mismatch"},
+                    )
+                )
+                await session.commit()
                 raise HTTPException(
                     status_code=403,
                     detail="Это приглашение предназначено для другого email-адреса.",
@@ -684,7 +905,27 @@ async def accept_workspace_invite(
             if invite.max_uses > 0 and invite.used_count >= invite.max_uses:
                 invite.status = "accepted"
 
+        session.add(
+            AuditEvent(
+                workspace_id=invite.workspace_id,
+                owner_user_id=user.id,
+                actor_type="user",
+                actor_id=str(user.id),
+                category="WORKSPACE_INVITE",
+                event_type="INVITE_ACCEPT",
+                status="SUCCESS",
+                message=f"Приглашение принято пользователем {user.username}",
+                details={
+                    "invite_id": invite.id,
+                    "workspace_id": ws.id,
+                    "user_id": user.id,
+                    "role": existing_m.role if existing_m else invite.role,
+                },
+            )
+        )
+
         await session.commit()
+        invalidate_summary_cache(workspace_id=ws.id)
         return {
             "status": "ok",
             "message": f"Вы успешно присоединились к воркспейсу {ws.name}",

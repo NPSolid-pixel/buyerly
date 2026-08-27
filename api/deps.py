@@ -31,6 +31,7 @@ from database.models import (
     AccountGroup,
     AccountGroupMember,
     AnalyticsViewPreference,
+    AuditEvent,
     RuleGroup,
     RuleGroupItem,
     RulePreset,
@@ -38,6 +39,7 @@ from database.models import (
     User,
     Workspace,
     WorkspaceMember,
+    WorkspaceSupportGrant,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,15 +51,26 @@ _summary_cache: Dict[str, Any] = {}
 SUMMARY_CACHE_TTL = 120  # 2 minutes cache
 
 
-def invalidate_summary_cache(owner_user_id: Optional[int] = None) -> None:
-    """Clear memory summary cache for specific user or all users."""
-    if owner_user_id is None:
+def invalidate_summary_cache(
+    workspace_id: Optional[int] = None,
+    owner_user_id: Optional[int] = None,
+) -> None:
+    """Clear memory summary cache for specific workspace, user, or all."""
+    if workspace_id is None and owner_user_id is None:
         _summary_cache.clear()
-    else:
-        prefix = f"{owner_user_id}:"
-        stale_keys = [k for k in list(_summary_cache.keys()) if k.startswith(prefix)]
-        for k in stale_keys:
-            _summary_cache.pop(k, None)
+        return
+    stale_keys = []
+    for k in list(_summary_cache.keys()):
+        workspace_match = workspace_id is not None and (
+            k == f"ws:{workspace_id}" or k.startswith(f"ws:{workspace_id}:")
+        )
+        owner_match = owner_user_id is not None and (
+            k.startswith(f"user:{owner_user_id}:") or k.startswith(f"{owner_user_id}:")
+        )
+        if workspace_match or owner_match:
+            stale_keys.append(k)
+    for k in stale_keys:
+        _summary_cache.pop(k, None)
 
 
 SUMMARY_SNAPSHOT_RETENTION = 100
@@ -161,13 +174,67 @@ def slugify(text: str) -> str:
     return text or "workspace"
 
 
+async def _active_support_grant(
+    session,
+    user_id: int,
+    workspace_id: int,
+) -> Optional[WorkspaceSupportGrant]:
+    now = datetime.now(timezone.utc)
+    return (
+        await session.execute(
+            select(WorkspaceSupportGrant).where(
+                WorkspaceSupportGrant.workspace_id == workspace_id,
+                WorkspaceSupportGrant.user_id == user_id,
+                WorkspaceSupportGrant.expires_at > now,
+                WorkspaceSupportGrant.revoked_at.is_(None),
+            )
+        )
+    ).scalars().first()
+
+
+async def record_security_event_and_raise(
+    session,
+    *,
+    status_code: int = 403,
+    detail: str,
+    user: User,
+    workspace_id: Optional[int] = None,
+    action: str = "UNAUTHORIZED_ACCESS",
+    resource_type: str = "workspace",
+    resource_id: str = "",
+) -> None:
+    """Atomically commit a security audit event before raising HTTPException."""
+    try:
+        audit_event = AuditEvent(
+            workspace_id=workspace_id,
+            owner_user_id=user.id,
+            actor_type="user",
+            actor_id=str(user.telegram_id or user.id),
+            category="SECURITY",
+            event_type="UNAUTHORIZED_ACCESS_ATTEMPT",
+            status="BLOCKED",
+            action=action,
+            message=detail,
+            details={"resource_type": resource_type, "resource_id": str(resource_id)},
+        )
+        session.add(audit_event)
+        await session.commit()
+    except Exception as e:
+        logger.error("Failed to commit security audit event: %s", e)
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
 async def get_user_workspace(
     session,
     user: User,
     workspace_id: Optional[int] = None,
     slug: Optional[str] = None,
 ) -> Optional[Workspace]:
-    """Resolve the active workspace for the user, verifying membership."""
+    """Resolve the active workspace for the user, strictly verifying membership or active support grant."""
     if slug:
         ws = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
         if ws:
@@ -179,8 +246,14 @@ async def get_user_workspace(
                     )
                 )
             ).scalar_one_or_none()
-            if member or user.role == "admin":
+            if member:
                 return ws
+            if user.role == "admin":
+                grant = await _active_support_grant(session, user.id, ws.id)
+                if grant:
+                    return ws
+            return None
+        return None
 
     if workspace_id:
         member = (
@@ -191,15 +264,36 @@ async def get_user_workspace(
                 )
             )
         ).scalar_one_or_none()
-        if member or user.role == "admin":
+        if member:
             return (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        if user.role == "admin":
+            grant = await _active_support_grant(session, user.id, workspace_id)
+            if grant:
+                return (await session.execute(select(Workspace).where(Workspace.id == workspace_id))).scalar_one_or_none()
+        return None
 
+    # Check user.active_workspace_id with strict membership or support grant
     if user.active_workspace_id:
-        ws = (await session.execute(select(Workspace).where(Workspace.id == user.active_workspace_id))).scalar_one_or_none()
-        if ws:
-            return ws
+        member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == user.active_workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if member:
+            ws = (await session.execute(select(Workspace).where(Workspace.id == user.active_workspace_id))).scalar_one_or_none()
+            if ws:
+                return ws
+        elif user.role == "admin":
+            grant = await _active_support_grant(session, user.id, user.active_workspace_id)
+            if grant:
+                ws = (await session.execute(select(Workspace).where(Workspace.id == user.active_workspace_id))).scalar_one_or_none()
+                if ws:
+                    return ws
 
-    # Fallback to first membership
+    # Fallback to first legitimate membership
     first_member = (
         await session.execute(
             select(WorkspaceMember).where(WorkspaceMember.user_id == user.id).limit(1)
@@ -208,8 +302,13 @@ async def get_user_workspace(
     if first_member:
         ws = (await session.execute(select(Workspace).where(Workspace.id == first_member.workspace_id))).scalar_one_or_none()
         if ws:
+            db_user = (
+                await session.execute(select(User).where(User.id == user.id))
+            ).scalar_one_or_none()
+            if db_user is not None:
+                db_user.active_workspace_id = ws.id
+                await session.commit()
             user.active_workspace_id = ws.id
-            await session.commit()
             return ws
 
     # Create default workspace if user has none
@@ -231,16 +330,22 @@ async def get_user_workspace(
 
     member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
     session.add(member)
+    db_user = (
+        await session.execute(select(User).where(User.id == user.id))
+    ).scalar_one_or_none()
+    if db_user is not None:
+        db_user.active_workspace_id = ws.id
     user.active_workspace_id = ws.id
     await session.commit()
     return ws
 
 
 async def get_user_workspaces_list(session, user: User) -> List[WorkspaceItem]:
-    """Return all workspaces accessible to the user with live stats."""
+    """Return all workspaces accessible to the user with live stats, including active support grants."""
     active_ws = await get_user_workspace(session, user)
     active_id = active_ws.id if active_ws else None
 
+    # 1. Direct memberships
     rows = (
         await session.execute(
             select(Workspace, WorkspaceMember.role)
@@ -250,8 +355,30 @@ async def get_user_workspaces_list(session, user: User) -> List[WorkspaceItem]:
         )
     ).all()
 
-    items = []
+    workspaces_dict = {}
     for ws, role in rows:
+        workspaces_dict[ws.id] = (ws, role)
+
+    # 2. Active support grants for platform admins
+    if user.role == "admin":
+        now = datetime.now(timezone.utc)
+        grants = (
+            await session.execute(
+                select(Workspace, WorkspaceSupportGrant.role)
+                .join(WorkspaceSupportGrant, WorkspaceSupportGrant.workspace_id == Workspace.id)
+                .where(
+                    WorkspaceSupportGrant.user_id == user.id,
+                    WorkspaceSupportGrant.expires_at > now,
+                    WorkspaceSupportGrant.revoked_at.is_(None),
+                )
+            )
+        ).all()
+        for ws, role in grants:
+            if ws.id not in workspaces_dict:
+                workspaces_dict[ws.id] = (ws, role or "admin")
+
+    items = []
+    for ws_id, (ws, role) in sorted(workspaces_dict.items(), key=lambda x: x[0]):
         acc_count = (
             await session.execute(
                 select(func.count()).select_from(Account).where(Account.workspace_id == ws.id)
@@ -285,7 +412,7 @@ async def get_user_workspace_member(
     user: User,
     workspace_id: Optional[int] = None,
 ) -> tuple[Optional[Workspace], Optional[WorkspaceMember]]:
-    """Resolve active workspace and user membership with role."""
+    """Resolve active workspace and user membership with role, supporting active support grants."""
     ws = await get_user_workspace(session, user, workspace_id=workspace_id)
     if not ws:
         return None, None
@@ -297,6 +424,14 @@ async def get_user_workspace_member(
             )
         )
     ).scalar_one_or_none()
+    if not member and user.role == "admin":
+        grant = await _active_support_grant(session, user.id, ws.id)
+        if grant:
+            member = WorkspaceMember(
+                workspace_id=ws.id,
+                user_id=user.id,
+                role=grant.role or "admin",
+            )
     return ws, member
 
 
@@ -305,9 +440,7 @@ def ensure_workspace_write_access(
     member: Optional[WorkspaceMember],
     action_description: str = "изменения данных",
 ) -> None:
-    """Ensure user has write access to workspace (owner, admin, buyer). Viewers are blocked."""
-    if user.role == "admin":
-        return
+    """Ensure user has write access to workspace (owner, admin, buyer). Viewers and non-members are blocked."""
     if not member:
         raise HTTPException(status_code=403, detail=f"Нет доступа к воркспейсу для {action_description}")
     if member.role == "viewer":
@@ -321,23 +454,36 @@ def ensure_workspace_write_access(
 # Account & AccountGroup Helpers
 # ----------------------------------------------------
 async def get_user_accounts(session, user: User, workspace_id: Optional[int] = None) -> List[Account]:
-    if user.role == "admin" and not workspace_id:
-        stmt = select(Account).order_by(Account.id.desc())
-        res = await session.execute(stmt)
-        return res.scalars().all()
-
     ws = await get_user_workspace(session, user, workspace_id=workspace_id)
-    if ws:
-        stmt = select(Account).where(
+    if not ws:
+        return []
+
+    stmt = (
+        select(Account)
+        .where(
             or_(
                 Account.workspace_id == ws.id,
                 and_(Account.workspace_id.is_(None), owned_by(Account, user)),
             )
-        ).order_by(Account.id.desc())
-    else:
-        stmt = select(Account).where(owned_by(Account, user)).order_by(Account.id.desc())
+        )
+        .order_by(Account.id.desc())
+    )
     res = await session.execute(stmt)
-    return res.scalars().all()
+    accounts = res.scalars().all()
+
+    # Auto-backfill workspace_id for legacy unassigned accounts owned by this user in their active workspace
+    needs_flush = False
+    for acc in accounts:
+        if acc.workspace_id is None and acc.owner_user_id == user.id:
+            acc.workspace_id = ws.id
+            needs_flush = True
+    if needs_flush:
+        try:
+            await session.flush()
+        except Exception:
+            pass
+
+    return accounts
 
 
 async def _account_group_ids_by_account(
@@ -694,6 +840,7 @@ def _summary_with_cache_metadata(
     age_seconds: float = 0.0,
     origin: str = "live",
     persisted_at: str = "",
+    workspace_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     return {
         **payload,
@@ -703,12 +850,14 @@ def _summary_with_cache_metadata(
             "ttl_seconds": SUMMARY_CACHE_TTL,
             "origin": origin,
             "persisted_at": persisted_at,
+            "workspace_id": workspace_id,
         },
     }
 
 
-def _summary_owner_key(user: User) -> str:
-    return f"user:{user.id}"
+def _summary_owner_key(user: User, workspace_id: Optional[int] = None) -> str:
+    ws_id = workspace_id if workspace_id is not None else getattr(user, "active_workspace_id", None)
+    return f"ws:{ws_id}" if ws_id is not None else f"user:{user.id}"
 
 
 def _normalize_summary_view_config(config: Any, *, strict: bool = True) -> Dict[str, Any]:
@@ -934,11 +1083,12 @@ async def _enrich_summary_account_metadata(
     session,
     payload: Dict[str, Any],
     user: User,
+    workspace_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Overlay live Buyerly labels and groups on cached Meta metric rows."""
-    accounts = await get_user_accounts(session, user)
+    accounts = await get_user_accounts(session, user, workspace_id=workspace_id)
     accounts_by_id = {account.account_id: account for account in accounts}
-    group_ids_by_account = await _account_group_ids_by_account(session, user)
+    group_ids_by_account = await _account_group_ids_by_account(session, user, workspace_id=workspace_id)
     rows = payload.get("accounts") if isinstance(payload.get("accounts"), list) else []
     enriched_rows = []
     for raw_row in rows:
@@ -947,31 +1097,37 @@ async def _enrich_summary_account_metadata(
         row = dict(raw_row)
         account_id = str(row.get("account_id") or "")
         account = accounts_by_id.get(account_id)
-        if account is not None:
-            row["name"] = account.name
-            row["short_name"] = get_short_account_label(account.name, account.account_id)
-            row["custom_name"] = account.custom_name or ""
-            row["note"] = account.note or ""
-        else:
-            row.setdefault("custom_name", "")
-            row.setdefault("note", "")
+        if account is None:
+            # Strictly drop accounts not present in the current workspace
+            continue
+        row["name"] = account.name
+        row["short_name"] = get_short_account_label(account.name, account.account_id)
+        row["custom_name"] = account.custom_name or ""
+        row["note"] = account.note or ""
         row["group_ids"] = group_ids_by_account.get(account_id, [])
         enriched_rows.append(row)
-    return {**payload, "accounts": enriched_rows}
+    return {**payload, "accounts": enriched_rows, "accounts_count": len(enriched_rows)}
 
 
 async def _load_persisted_summary(
     session,
     *,
-    owner_user_id: int,
     period: str,
+    workspace_id: Optional[int] = None,
+    current_account_ids: Optional[Any] = None,
+    owner_user_id: Optional[int] = None,
     owner_id: str = "",
 ) -> Optional[Dict[str, Any]]:
+    where_clause = (
+        SummarySnapshot.workspace_id == workspace_id
+        if workspace_id is not None
+        else and_(SummarySnapshot.owner_user_id == owner_user_id, SummarySnapshot.workspace_id.is_(None))
+    )
     rows = (
         await session.execute(
             select(SummarySnapshot)
             .where(
-                SummarySnapshot.owner_user_id == owner_user_id,
+                where_clause,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -990,6 +1146,19 @@ async def _load_persisted_summary(
         return None
 
     latest_row, latest_payload = valid_rows[0]
+    if current_account_ids is not None:
+        snapshot_accounts = latest_payload.get("accounts")
+        if isinstance(snapshot_accounts, list):
+            snapshot_account_ids = {
+                str(a.get("account_id") or "").strip()
+                for a in snapshot_accounts
+                if isinstance(a, dict) and str(a.get("account_id") or "").strip()
+            }
+            target_ids = set(current_account_ids)
+            if snapshot_account_ids != target_ids:
+                # Account membership has changed, snapshot is stale!
+                return None
+
     previous = (
         _summary_snapshot_reference(*valid_rows[1])
         if len(valid_rows) > 1
@@ -1011,22 +1180,29 @@ async def _load_persisted_summary(
         age_seconds=age_seconds,
         origin="database",
         persisted_at=_utc_iso(latest_row.created_at),
+        workspace_id=latest_row.workspace_id,
     )
 
 
 async def _persist_summary(
     session,
     *,
-    owner_user_id: int,
     period: str,
     payload: Dict[str, Any],
+    workspace_id: Optional[int] = None,
+    owner_user_id: Optional[int] = None,
     owner_id: str = "",
 ) -> Dict[str, Any]:
+    where_clause = (
+        SummarySnapshot.workspace_id == workspace_id
+        if workspace_id is not None
+        else and_(SummarySnapshot.owner_user_id == owner_user_id, SummarySnapshot.workspace_id.is_(None))
+    )
     previous_rows = (
         await session.execute(
             select(SummarySnapshot)
             .where(
-                SummarySnapshot.owner_user_id == owner_user_id,
+                where_clause,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())
@@ -1054,6 +1230,7 @@ async def _persist_summary(
             pass
 
     snapshot = SummarySnapshot(
+        workspace_id=workspace_id,
         owner_user_id=owner_user_id,
         period=period,
         payload=stored_payload,
@@ -1066,7 +1243,7 @@ async def _persist_summary(
         await session.execute(
             select(SummarySnapshot.id)
             .where(
-                SummarySnapshot.owner_user_id == owner_user_id,
+                where_clause,
                 SummarySnapshot.period == period,
             )
             .order_by(SummarySnapshot.created_at.desc(), SummarySnapshot.id.desc())

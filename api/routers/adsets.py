@@ -3,14 +3,21 @@ import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from api.auth import get_current_user
-from api.deps import get_user_accounts, invalidate_summary_cache
+from api.deps import (
+    ensure_workspace_write_access,
+    get_user_accounts,
+    get_user_workspace,
+    get_user_workspace_member,
+    invalidate_summary_cache,
+    record_security_event_and_raise,
+)
 from core.audit import build_audit_event
 from core.currency import UNKNOWN_CURRENCY, normalize_currency
 from core.meta_tokens import resolve_account_access_token
-from core.ownership import entity_is_owned_by
+from core.ownership import entity_is_owned_by, owned_by
 from database.db import async_session_maker
 from database.models import Account, StoppedAdSet, User
 from meta_api.client import MetaClient
@@ -24,7 +31,8 @@ meta_client = MetaClient(cache_provider=PostgreSQLInventoryCache())
 @router.get("/adsets/stopped")
 async def list_stopped_adsets(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
-        user_accounts = await get_user_accounts(session, user)
+        ws = await get_user_workspace(session, user)
+        user_accounts = await get_user_accounts(session, user, workspace_id=ws.id if ws else None)
         acc_ids = [a.account_id for a in user_accounts]
         if not acc_ids:
             return []
@@ -63,15 +71,34 @@ async def list_stopped_adsets(user: User = Depends(get_current_user)):
 @router.post("/adsets/{adset_id}/reactivate")
 async def reactivate_adset(adset_id: str, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "включения ad set")
+
         stopped_res = await session.execute(select(StoppedAdSet).where(StoppedAdSet.adset_id == adset_id))
         stopped_entry = stopped_res.scalar_one_or_none()
         if not stopped_entry:
             raise HTTPException(status_code=404, detail="Запись об остановленном адсете не найдена.")
 
-        acc_res = await session.execute(select(Account).where(Account.account_id == stopped_entry.account_id))
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
+        acc_res = await session.execute(
+            select(Account).where(Account.account_id == stopped_entry.account_id, scope_clause)
+        )
         account = acc_res.scalar_one_or_none()
-        if not account or (user.role != "admin" and not entity_is_owned_by(account, user)):
-            raise HTTPException(status_code=403, detail="Доступ запрещен.")
+        if not account:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Доступ запрещен.",
+                user=user,
+                workspace_id=ws.id if ws else None,
+                action="REACTIVATE_ADSET",
+                resource_type="adset",
+                resource_id=adset_id,
+            )
 
         action_started = time.perf_counter()
         try:
@@ -119,8 +146,8 @@ async def reactivate_adset(adset_id: str, user: User = Depends(get_current_user)
             adset_id,
             "ACTIVE",
         )
-        if account.owner_user_id:
-            invalidate_summary_cache(account.owner_user_id)
+        if account.workspace_id or account.owner_user_id:
+            invalidate_summary_cache(workspace_id=account.workspace_id, owner_user_id=account.owner_user_id)
 
         session.add(
             build_audit_event(
@@ -156,17 +183,34 @@ async def reactivate_adset(adset_id: str, user: User = Depends(get_current_user)
 @router.post("/adsets/{adset_id}/dismiss")
 async def dismiss_adset(adset_id: str, user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "скрытия уведомления ad set")
+
         stopped_res = await session.execute(select(StoppedAdSet).where(StoppedAdSet.adset_id == adset_id))
         stopped_entry = stopped_res.scalar_one_or_none()
         if not stopped_entry:
             raise HTTPException(status_code=404, detail="Запись не найдена.")
 
+        scope_clause = (
+            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
+            if ws
+            else owned_by(Account, user)
+        )
         account_res = await session.execute(
-            select(Account).where(Account.account_id == stopped_entry.account_id)
+            select(Account).where(Account.account_id == stopped_entry.account_id, scope_clause)
         )
         account = account_res.scalar_one_or_none()
-        if not account or (user.role != "admin" and not entity_is_owned_by(account, user)):
-            raise HTTPException(status_code=403, detail="Доступ запрещен.")
+        if not account:
+            await record_security_event_and_raise(
+                session,
+                status_code=403,
+                detail="Доступ запрещен.",
+                user=user,
+                workspace_id=ws.id if ws else None,
+                action="DISMISS_ADSET",
+                resource_type="adset",
+                resource_id=adset_id,
+            )
 
         stopped_entry.is_resolved = True
         session.add(
