@@ -110,7 +110,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/api/meta/oauth/start?return_path=/add-accounts",
+                "/api/meta/oauth/start?return_path=/facebook-accounts",
                 headers=self.headers,
             )
 

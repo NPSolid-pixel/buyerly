@@ -530,7 +530,7 @@
             </div>
           </div>
           <div class="attio-view-header-right">
-            <button class="attio-header-btn" type="button" onclick="window.switchTab('add')">
+            <button class="attio-header-btn" type="button" onclick="window.openManualTokenModal()">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
               <span>По токену</span>
             </button>
@@ -615,8 +615,16 @@
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
             <h3>Нет подключенных Facebook аккаунтов</h3>
-            <p>Подключите профиль через Facebook Login for Business или вручную с помощью маркера доступа.</p>
-            <button class="btn btn-primary" onclick="window.switchTab('add')">+ Подключить аккаунт</button>
+            <p>Подключите профиль через официальный Facebook Login в 1 клик или вручную по токену.</p>
+            <div style="display: flex; gap: 8px; justify-content: center; margin-top: 16px;">
+              <button class="btn btn-primary" onclick="window.startMetaOAuthFlow()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Подключить Facebook
+              </button>
+              <button class="btn btn-secondary" onclick="window.openManualTokenModal()">
+                По токену
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -1346,134 +1354,7 @@
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- TAB 4: ДОБАВИТЬ КАБИНЕТЫ (BATCH IMPORT) -->
-      <!-- ============================================== -->
-      <section id="tab-add" class="tab-content">
-        <div class="form-card meta-connect-card">
-          <div class="meta-connect-intro">
-            <div>
-              <span class="eyebrow">Рекомендуемый способ</span>
-              <h2>Подключение через Facebook</h2>
-              <p class="form-desc">Войдите в Facebook в текущем профиле браузера. Buyerly найдёт все доступные рекламные кабинеты — без ручного копирования ID и токенов.</p>
-            </div>
-            <button id="btnStartMetaOAuth" class="btn btn-primary btn-lg" type="button">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22 12.07C22 6.51 17.52 2 12 2S2 6.51 2 12.07C2 17.09 5.66 21.25 10.44 22v-7.03H7.9v-2.9h2.54V9.85c0-2.52 1.5-3.91 3.78-3.91 1.09 0 2.23.2 2.23.2v2.46H15.2c-1.24 0-1.63.77-1.63 1.56v1.91h2.77l-.44 2.9h-2.33V22C18.34 21.25 22 17.09 22 12.07Z"/></svg>
-              <span>Войти через Facebook</span>
-            </button>
-          </div>
-          <div id="metaOAuthStatus" class="meta-oauth-status">
-            <span class="status-dot dot-muted"></span>
-            <span>Проверяем готовность подключения…</span>
-          </div>
-          <div id="metaOAuthSetupNotice" class="meta-setup-notice hidden"></div>
-          <div id="metaConnectionsList" class="meta-connections-list"></div>
-        </div>
 
-        <div id="metaAssetsPanel" class="form-card meta-assets-panel hidden">
-          <div class="meta-assets-header">
-            <div>
-              <span class="eyebrow">Доступные кабинеты</span>
-              <h2 id="metaAssetsTitle">Выберите кабинеты</h2>
-              <p id="metaAssetsSubtitle" class="form-desc">Отметьте кабинеты, которые нужно добавить в Buyerly.</p>
-            </div>
-            <button id="btnRefreshMetaAssets" class="btn btn-secondary" type="button">Обновить список</button>
-          </div>
-          <div class="meta-assets-toolbar">
-            <label class="meta-select-all"><input id="metaSelectAll" type="checkbox"> Выбрать все неподключённые</label>
-            <span id="metaSelectionCount" class="label-badge">Выбрано: 0</span>
-          </div>
-          <div id="metaAssetsEmpty" class="empty-state hidden">
-            <h3>Доступных кабинетов не найдено</h3>
-            <p>Проверьте права Facebook-профиля или Configuration в Meta App Dashboard.</p>
-          </div>
-          <div id="metaAssetGroups" class="meta-asset-groups"></div>
-          <div class="form-actions">
-            <button id="btnImportMetaAssets" class="btn btn-primary btn-block btn-lg" type="button" disabled>
-              <span>Добавить выбранные кабинеты</span>
-            </button>
-          </div>
-        </div>
-
-        <details class="form-card legacy-import-card">
-          <summary class="legacy-import-summary">
-            <span><b>Ручное подключение по токену</b><small>Для системных пользователей и технических сценариев</small></span>
-            <span class="legacy-import-chevron">⌄</span>
-          </summary>
-          <div class="legacy-import-content">
-          <div class="form-header">
-            <h2>Ручное добавление рекламных кабинетов</h2>
-            <p class="form-desc">
-              Вставьте скопированный текст из <b>Facebook Business Manager</b> или список ID кабинетов. Умный парсер автоматически извлечет все <code>act_...</code> и сопоставит названия.
-            </p>
-          </div>
-
-          <!-- Step 1: Raw Text Input -->
-          <div class="form-group">
-            <div class="form-label-group">
-              <label for="rawAccountsInput">1. Текст из Facebook BM или ID кабинетов</label>
-              <span class="label-badge" id="parsedCountBadge">Найдено: 0</span>
-            </div>
-            <textarea 
-              id="rawAccountsInput" 
-              class="form-textarea" 
-              rows="5" 
-              placeholder="Вставьте сюда любой скопированный блок из Facebook Business Manager, например:&#10;Ad account ID: 1234567890123456&#10;Пример кабинета&#10;act_2345678901234567..."
-            ></textarea>
-          </div>
-
-          <!-- Live Preview of Parsed Accounts -->
-          <div id="parsedPreviewBox" class="parsed-preview-box hidden">
-            <span class="preview-title">Распознанные кабинеты для добавления:</span>
-            <div id="parsedChipsList" class="parsed-chips-list"></div>
-          </div>
-
-          <!-- Step 2: Batch Naming Prefix -->
-          <div class="form-group">
-            <label for="batchNameInput">2. Общее название для пачки (опционально)</label>
-            <input 
-              type="text" 
-              id="batchNameInput" 
-              class="form-input" 
-              placeholder="например: Швеция или Германия (бот пронумерует их: Швеция 1, Швеция 2...)"
-            >
-            <span class="input-hint">Оставьте пустым (или <code>-</code>), чтобы использовать названия из Facebook.</span>
-          </div>
-
-          <!-- Step 3: Meta Access Token -->
-          <div class="form-group">
-            <div class="form-label-group">
-              <label for="accessTokenInput">3. Meta System User Access Token</label>
-              <button type="button" class="btn-link" id="btnOpenTokenGuide">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:3px;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-                Как получить токен?
-              </button>
-            </div>
-            <div class="input-password-wrapper">
-              <input 
-                type="password" 
-                id="accessTokenInput" 
-                class="form-input" 
-                placeholder="EAA..." 
-                autocomplete="off"
-              >
-              <button type="button" id="btnToggleTokenVisibility" class="btn-eye" title="Показать/скрыть токен">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
-            </div>
-            <span class="input-hint">Бессрочный токен системного пользователя с правами <code>ads_management</code> и <code>ads_read</code>.</span>
-          </div>
-
-          <!-- Action Button -->
-          <div class="form-actions">
-            <button id="btnSubmitBatchAdd" class="btn btn-primary btn-block btn-lg" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span>Подключить кабинеты</span>
-            </button>
-          </div>
-          </div>
-        </details>
-      </section>
 
       <!-- ============================================== -->
       <!-- TAB 5: НАСТРОЙКИ (SETTINGS) -->
@@ -2929,6 +2810,111 @@
       </div>
     </div>
 
+    <!-- Meta Discovered Assets Modal -->
+    <div id="modalMetaAssets" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalMetaAssets')">
+      <div class="modal-card" style="max-width: 680px; width: 100%;">
+        <div class="modal-header">
+          <div>
+            <h3 id="metaAssetsTitle">Выберите кабинеты</h3>
+            <p id="metaAssetsSubtitle" class="modal-subtitle" style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">Отметьте рекламные кабинеты для импорта в Buyerly</p>
+          </div>
+          <button class="btn-close" type="button" onclick="window.closeModal('modalMetaAssets')">&times;</button>
+        </div>
+        <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+          <div class="meta-assets-toolbar" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);">
+            <label class="meta-select-all" style="font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; user-select: none;">
+              <input id="metaSelectAll" type="checkbox"> Выбрать все неподключённые
+            </label>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="metaSelectionCount" class="label-badge">Выбрано: 0</span>
+              <button id="btnRefreshMetaAssets" class="btn btn-secondary btn-xs" type="button">Обновить список</button>
+            </div>
+          </div>
+          <div id="metaAssetsEmpty" class="empty-state hidden">
+            <h3>Доступных кабинетов не найдено</h3>
+            <p>Проверьте права Facebook-профиля или конфигурацию в Meta App Dashboard.</p>
+          </div>
+          <div id="metaAssetGroups" class="meta-asset-groups"></div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalMetaAssets')">Отмена</button>
+          <button id="btnImportMetaAssets" class="btn btn-primary" type="button" disabled>
+            <span>Добавить выбранные кабинеты</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual Token Import Modal -->
+    <div id="modalManualToken" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalManualToken')">
+      <div class="modal-card" style="max-width: 580px; width: 100%;">
+        <div class="modal-header">
+          <div>
+            <h3>Ручное подключение по токену</h3>
+            <p class="modal-subtitle" style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">Для системных пользователей и технических сценариев</p>
+          </div>
+          <button class="btn-close" type="button" onclick="window.closeModal('modalManualToken')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <div class="form-label-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label for="rawAccountsInput" style="font-weight: 500; font-size: 13px;">1. Текст из Facebook BM или список ID</label>
+              <span class="label-badge" id="parsedCountBadge">Найдено: 0</span>
+            </div>
+            <textarea 
+              id="rawAccountsInput" 
+              class="form-textarea" 
+              rows="4" 
+              placeholder="Вставьте список ID кабинетов или скопированный текст из Business Manager, например:&#10;act_1018756607700064&#10;Швеция 1&#10;act_1009347965254238..."
+              style="width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); padding: 8px 12px; font-family: var(--font-mono); font-size: 12px; resize: vertical;"
+            ></textarea>
+          </div>
+
+          <div id="parsedPreviewBox" class="parsed-preview-box hidden" style="margin-bottom: 12px;">
+            <span class="preview-title" style="font-size: 12px; color: var(--text-muted); font-weight: 500; display: block; margin-bottom: 6px;">Распознанные кабинеты:</span>
+            <div id="parsedChipsList" class="parsed-chips-list" style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow-y: auto;"></div>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label for="batchNameInput" style="font-weight: 500; font-size: 13px; display: block; margin-bottom: 6px;">2. Название группы / BM (опционально)</label>
+            <input 
+              type="text" 
+              id="batchNameInput" 
+              class="form-input" 
+              placeholder="например: Основной BM или Швеция"
+              style="width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); padding: 8px 12px; font-size: 13px;"
+            >
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <div class="form-label-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label for="accessTokenInput" style="font-weight: 500; font-size: 13px;">3. Meta System User Access Token</label>
+              <button type="button" class="btn-link" id="btnOpenTokenGuide" style="font-size: 12px; background: none; border: none; color: var(--brand-accent); cursor: pointer;">Как получить токен?</button>
+            </div>
+            <div class="input-password-wrapper" style="position: relative;">
+              <input 
+                type="password" 
+                id="accessTokenInput" 
+                class="form-input" 
+                placeholder="EAA..." 
+                autocomplete="off"
+                style="width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); padding: 8px 36px 8px 12px; font-family: var(--font-mono); font-size: 12px;"
+              >
+              <button type="button" id="btnToggleTokenVisibility" class="btn-eye" title="Показать/скрыть токен" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-muted);">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalManualToken')">Отмена</button>
+          <button id="btnSubmitBatchAdd" class="btn btn-primary" disabled>
+            <span>Подключить кабинеты</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast Notification Container -->
     <div id="modalLogDetails" class="modal-overlay hidden">
       <div class="bottom-sheet log-details-sheet">
@@ -2965,6 +2951,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         <span>Кабинеты</span>
       </button>
+      <button class="mobile-nav-item" data-tab="fb_accounts" onclick="window.switchTab('fb_accounts');">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Профили FB</span>
+      </button>
       <button class="mobile-nav-item" data-tab="rules" onclick="window.switchTab('rules');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         <span>Правила</span>
@@ -2976,10 +2966,6 @@
       <button class="mobile-nav-item" data-tab="logs" onclick="window.switchTab('logs');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
         <span>Логи</span>
-      </button>
-      <button class="mobile-nav-item" data-tab="add" onclick="window.switchTab('add');">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-        <span>Добавить</span>
       </button>
     </nav>
 

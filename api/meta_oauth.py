@@ -96,7 +96,7 @@ def _oauth_client() -> MetaOAuthClient:
 
 
 def _safe_return_path(value: str) -> str:
-    return value if value in {"/add-accounts", "/settings"} else "/add-accounts"
+    return value if value in {"/facebook-accounts", "/add-accounts", "/settings"} else "/facebook-accounts"
 
 
 def _app_redirect(path: str, **params: str) -> str:
@@ -171,7 +171,7 @@ async def oauth_config(user: User = Depends(get_current_user)):
     dependencies=[Depends(rate_limit_dep(limit=10, window_seconds=60, scope="oauth_start"))],
 )
 async def start_oauth(
-    return_path: str = Query(default="/add-accounts"),
+    return_path: str = Query(default="/facebook-accounts"),
     user: User = Depends(get_current_user),
 ):
     client = _oauth_client()
@@ -202,12 +202,12 @@ async def oauth_callback(
 ):
     if error:
         return RedirectResponse(
-            _app_redirect("/add-accounts", meta_status="cancelled"),
+            _app_redirect("/facebook-accounts", meta_status="cancelled"),
             status_code=303,
         )
     if not state or not code:
         return RedirectResponse(
-            _app_redirect("/add-accounts", meta_status="invalid_callback"),
+            _app_redirect("/facebook-accounts", meta_status="invalid_callback"),
             status_code=303,
         )
 
@@ -224,7 +224,7 @@ async def oauth_callback(
             or _as_utc(oauth_state.expires_at) <= now
         ):
             return RedirectResponse(
-                _app_redirect("/add-accounts", meta_status="expired_state"),
+                _app_redirect("/facebook-accounts", meta_status="expired_state"),
                 status_code=303,
             )
         claim = await session.execute(
@@ -238,7 +238,7 @@ async def oauth_callback(
         if int(claim.rowcount or 0) != 1:
             await session.rollback()
             return RedirectResponse(
-                _app_redirect("/add-accounts", meta_status="expired_state"),
+                _app_redirect("/facebook-accounts", meta_status="expired_state"),
                 status_code=303,
             )
         await session.commit()
