@@ -13,7 +13,14 @@ from api.server import create_app
 from core.config import settings
 from core.meta_tokens import encrypt_meta_token
 from database.db import Base
-from database.models import Account, MetaConnection, User
+from database.models import (
+    Account,
+    AuditEvent,
+    MetaConnection,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 
 
 from tests.test_db_helper import create_test_engine, init_test_db
@@ -60,10 +67,26 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
                 is_approved=True,
             )
             session.add(user)
-            await session.commit()
-            await session.refresh(user)
+            await session.flush()
+            workspace = Workspace(
+                name="OAuth workspace",
+                slug="oauth-workspace",
+                owner_user_id=user.id,
+            )
+            session.add(workspace)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=workspace.id,
+                    user_id=user.id,
+                    role="owner",
+                )
+            )
+            user.active_workspace_id = workspace.id
             self.user_id = user.id
+            self.workspace_id = workspace.id
             connection = MetaConnection(
+                workspace_id=workspace.id,
                 owner_user_id=user.id,
                 provider_user_id="meta-user-1",
                 provider_user_name="Meta Test User",
@@ -164,6 +187,115 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
                 connection.granted_scopes,
                 ["ads_read", "ads_management", "business_management"],
             )
+
+    async def test_delete_connection_disables_linked_accounts_and_writes_audit(self):
+        async with self.sessions() as session:
+            account = Account(
+                account_id="act_987654321",
+                name="Linked account",
+                workspace_id=self.workspace_id,
+                owner_user_id=self.user_id,
+                meta_connection_id=self.connection_id,
+                access_token="",
+                currency="USD",
+                rules_enabled=True,
+                is_active=True,
+            )
+            session.add(account)
+            await session.commit()
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.delete(
+                f"/api/meta/connections/{self.connection_id}",
+                headers=self.headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["detached_account_count"], 1)
+        async with self.sessions() as session:
+            connection = await session.get(MetaConnection, self.connection_id)
+            account = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_987654321")
+                )
+            ).scalar_one()
+            audit = (
+                await session.execute(
+                    select(AuditEvent).where(
+                        AuditEvent.event_type == "META_CONNECTION_DISCONNECTED"
+                    )
+                )
+            ).scalar_one()
+
+        self.assertIsNone(connection)
+        self.assertIsNone(account.meta_connection_id)
+        self.assertFalse(account.rules_enabled)
+        self.assertFalse(account.is_active)
+        self.assertEqual(audit.workspace_id, self.workspace_id)
+        self.assertEqual(audit.details["account_ids"], ["act_987654321"])
+
+    async def test_delete_connection_blocks_viewer_and_foreign_workspace(self):
+        async with self.sessions() as session:
+            viewer = User(
+                telegram_id="10002",
+                username="oauth-viewer",
+                auth_token="oauth-viewer-token",
+                role="buyer",
+                is_approved=True,
+                active_workspace_id=self.workspace_id,
+            )
+            session.add(viewer)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=self.workspace_id,
+                    user_id=viewer.id,
+                    role="viewer",
+                )
+            )
+            second_workspace = Workspace(
+                name="Second OAuth workspace",
+                slug="second-oauth-workspace",
+                owner_user_id=self.user_id,
+            )
+            session.add(second_workspace)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=second_workspace.id,
+                    user_id=self.user_id,
+                    role="owner",
+                )
+            )
+            foreign_connection = MetaConnection(
+                workspace_id=second_workspace.id,
+                owner_user_id=self.user_id,
+                provider_user_id="meta-user-foreign",
+                provider_user_name="Foreign workspace Meta user",
+                access_token_encrypted=encrypt_meta_token("EAAB-foreign-token"),
+                status="active",
+            )
+            session.add(foreign_connection)
+            await session.commit()
+            foreign_connection_id = foreign_connection.id
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            viewer_response = await client.delete(
+                f"/api/meta/connections/{self.connection_id}",
+                headers={"Authorization": "Bearer oauth-viewer-token"},
+            )
+            foreign_response = await client.delete(
+                f"/api/meta/connections/{foreign_connection_id}",
+                headers=self.headers,
+            )
+
+        self.assertEqual(viewer_response.status_code, 403)
+        self.assertEqual(foreign_response.status_code, 404)
+        async with self.sessions() as session:
+            self.assertIsNotNone(await session.get(MetaConnection, self.connection_id))
+            self.assertIsNotNone(await session.get(MetaConnection, foreign_connection_id))
 
 
 if __name__ == "__main__":

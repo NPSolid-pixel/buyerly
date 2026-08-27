@@ -1,5 +1,6 @@
 import json
 import logging
+import secrets
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -35,6 +36,7 @@ from core.rule_examples import ensure_rule_examples
 from database.db import async_session_maker
 from database.models import (
     Account,
+    AuditEvent,
     RuleGroup,
     RuleGroupItem,
     RulePreset,
@@ -179,14 +181,38 @@ async def delete_preset(preset_id: int, user: User = Depends(get_current_user)):
         # Remove the exact preset ID from linked account snapshots in this workspace.
         acc_stmt = select(Account).where(Account.workspace_id == ws.id)
         acc_res = await session.execute(acc_stmt)
+        affected_account_ids = []
         for acc in acc_res.scalars().all():
             active_rules = _load_active_rules(acc.active_rules)
             remaining_rules = [r for r in active_rules if r.get("preset_id") != preset_id]
             if len(remaining_rules) != len(active_rules):
+                affected_account_ids.append(acc.account_id)
                 acc.active_rules = json.dumps(remaining_rules)
                 if not remaining_rules:
                     acc.rules_enabled = False
 
+        session.add(
+            AuditEvent(
+                workspace_id=ws.id,
+                owner_user_id=preset.owner_user_id or user.id,
+                actor_type="user",
+                actor_id=str(user.telegram_id or user.id),
+                category="MANUAL_ACTION",
+                event_type="DELETE_RULE_PRESET",
+                status="SUCCESS",
+                rule_id=preset.id,
+                rule_name=preset.name,
+                action="DELETE",
+                message=f"Правило '{preset.name}' удалено.",
+                before_state={
+                    "action": preset.action,
+                    "conditions": preset.conditions,
+                },
+                after_state={"deleted": True},
+                details={"affected_account_ids": affected_account_ids},
+                correlation_id=secrets.token_hex(16),
+            )
+        )
         await session.execute(delete(RuleGroupItem).where(RuleGroupItem.preset_id == preset_id))
         await session.execute(delete(RulePreset).where(RulePreset.id == preset_id))
         await session.commit()

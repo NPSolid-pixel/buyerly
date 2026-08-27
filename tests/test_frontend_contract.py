@@ -16,6 +16,16 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("/assign-rule", self.script)
         self.assertIn("/detach-rule/${presetId}", self.script)
 
+    def test_visible_mutations_use_supported_routes_and_partial_results(self):
+        self.assertIn("/api/meta/connections/${connectionId}", self.script)
+        self.assertIn("idsToDelete.map(id => apiRequest(`/api/presets/${id}`", self.script)
+        self.assertIn("Promise.allSettled", self.script)
+        self.assertIn("failedResults.length", self.script)
+        self.assertIn("state.selectedRuleIds.delete(id)", self.script)
+        self.assertNotIn("/api/rules/presets/", self.script)
+        self.assertNotIn("/api/worker/run-now", self.script)
+        self.assertNotIn("window.runRuleCheckNow", self.script + self.index)
+
     def test_account_cards_do_not_use_removed_single_rule_fields(self):
         for removed_field in (
             "acc.rule_conditions",
@@ -808,7 +818,6 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertNotIn("<b>${item.account_id}</b>", self.script)
         self.assertIn("(${escapeHtml(item.account_id)})", self.script)
         self.assertIn("<b>${escapeHtml(item.account_id)}</b>", self.script)
-
 
 
 
