@@ -298,7 +298,11 @@ if ! wait_for_container buyerly-redis; then
     exit 1
 fi
 if ! docker compose run --rm migrate; then
-    docker compose logs --tail=120 migrate db
+    # `docker compose run` already streamed the failing one-off migration
+    # container above. Only append database logs here; a named, stopped
+    # `migrate` container may contain unrelated traceback output from an old
+    # release and must not contaminate the current diagnosis.
+    docker compose logs --tail=120 db
     rollback
     exit 1
 fi
