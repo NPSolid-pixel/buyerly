@@ -37,6 +37,11 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("wait_for_container buyerly-web", self.script)
         self.assertIn("rollback", self.script)
 
+    def test_deploy_waits_for_scheduler_cycle_and_rejects_owner_failures(self):
+        self.assertIn("buyerly-worker-day-boundary-cycle-complete", self.script)
+        self.assertIn("Failed to persist audit event", self.script)
+        self.assertIn("NotNullViolation", self.script)
+
     def test_production_mini_app_has_https_url(self):
         self.assertIn(
             "WEBAPP_URL: ${WEBAPP_URL:-https://buyerly.app}",

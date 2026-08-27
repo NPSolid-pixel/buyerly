@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 import unittest
@@ -12,6 +13,7 @@ import api.routes as api_routes_module
 import api.server as api_server_module
 from api.server import create_app
 from core.config import settings
+from core.rate_limit import limiter
 from database.db import Base, hash_password
 from database.models import (
     Account,
@@ -31,6 +33,7 @@ from tests.test_db_helper import create_test_engine, init_test_db
 class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
+        await limiter.reset()
         api_routes_module._summary_cache.clear()
         self.test_engine = create_test_engine()
         self.test_session_maker = async_sessionmaker(self.test_engine, class_=AsyncSession, expire_on_commit=False)
@@ -537,6 +540,97 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                 dave_member = (await session.execute(select(WorkspaceMember).where(WorkspaceMember.workspace_id == ws_id, WorkspaceMember.user_id == dave_db.id))).scalar_one()
                 self.assertEqual(dave_member.role, 'viewer')
 
+    async def test_single_use_invite_is_atomic_and_winner_retry_is_idempotent(self):
+        artem_headers = {
+            'Authorization': f"tma {generate_valid_telegram_init_data(settings.BOT_TOKEN, {'id': 777000111, 'first_name': 'Artem', 'username': 'artem'})}"
+        }
+        async with self.test_session_maker() as session:
+            contenders = [
+                User(
+                    telegram_id='777001001',
+                    username='invite_contender_one',
+                    full_name='Invite Contender One',
+                    role='buyer',
+                    is_approved=True,
+                ),
+                User(
+                    telegram_id='777001002',
+                    username='invite_contender_two',
+                    full_name='Invite Contender Two',
+                    role='buyer',
+                    is_approved=True,
+                ),
+            ]
+            session.add_all(contenders)
+            ws = (
+                await session.execute(
+                    select(Workspace).where(Workspace.slug == 'buyerly')
+                )
+            ).scalar_one()
+            await session.commit()
+            contender_ids = [contender.id for contender in contenders]
+            ws_id = ws.id
+
+        contender_headers = [
+            {
+                'Authorization': f"tma {generate_valid_telegram_init_data(settings.BOT_TOKEN, {'id': int(telegram_id), 'first_name': username, 'username': username})}"
+            }
+            for telegram_id, username in (
+                ('777001001', 'invite_contender_one'),
+                ('777001002', 'invite_contender_two'),
+            )
+        ]
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+            created = await client.post(
+                f'/api/workspaces/{ws_id}/invites',
+                json={'role': 'buyer', 'expires_in_days': 7, 'max_uses': 1},
+                headers=artem_headers,
+            )
+            self.assertEqual(created.status_code, 200)
+            token = created.json()['token']
+
+            attempts = await asyncio.gather(
+                *(
+                    client.post(
+                        f'/api/invites/{token}/accept',
+                        headers=headers,
+                    )
+                    for headers in contender_headers
+                )
+            )
+
+            self.assertEqual(sorted(response.status_code for response in attempts), [200, 400])
+            winner_index = next(
+                index for index, response in enumerate(attempts)
+                if response.status_code == 200
+            )
+            repeated = await client.post(
+                f'/api/invites/{token}/accept',
+                headers=contender_headers[winner_index],
+            )
+            self.assertEqual(repeated.status_code, 200)
+            self.assertEqual(repeated.json()['status'], 'ok')
+
+        async with self.test_session_maker() as session:
+            invite = (
+                await session.execute(
+                    select(WorkspaceInvite).where(WorkspaceInvite.token == token)
+                )
+            ).scalar_one()
+            memberships = (
+                await session.execute(
+                    select(WorkspaceMember).where(
+                        WorkspaceMember.workspace_id == ws_id,
+                        WorkspaceMember.user_id.in_(contender_ids),
+                    )
+                )
+            ).scalars().all()
+            self.assertEqual(invite.used_count, 1)
+            self.assertEqual(invite.status, 'accepted')
+            self.assertEqual(len(memberships), 1)
+
     async def test_workspace_resource_scoping_and_viewer_rbac_protection(self):
         artem_data = generate_valid_telegram_init_data(
             settings.BOT_TOKEN,
@@ -950,6 +1044,4 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn(raw_token, e.message)
                     details_str = json.dumps(e.details)
                     self.assertNotIn(raw_token, details_str)
-
-
 

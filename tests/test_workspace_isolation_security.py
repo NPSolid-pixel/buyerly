@@ -233,7 +233,21 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
             session.add(viewer_user)
             await session.flush()
             session.add(WorkspaceMember(workspace_id=self.ws_a.id, user_id=viewer_user.id, role="viewer"))
+            viewer_visible_event = AuditEvent(
+                workspace_id=self.ws_a.id,
+                owner_user_id=self.tenant_a_user.id,
+                category="RULE_ACTION",
+                event_type="STOP",
+                status="SUCCESS",
+                account_id=self.acc_a.account_id,
+                adset_id="viewer-undo-target",
+                action="STOP",
+                before_state={"status": "ACTIVE"},
+                after_state={"status": "PAUSED"},
+            )
+            session.add(viewer_visible_event)
             await session.commit()
+            viewer_visible_event_id = viewer_visible_event.id
 
         viewer_headers = self._headers_for(viewer_user)
         transport = httpx.ASGITransport(app=self.app)
@@ -251,6 +265,21 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(patch_res.status_code, 403)
             self.assertIn("Viewer", patch_res.json()["detail"])
+
+            audit_res = await client.get("/api/audit-events", headers=viewer_headers)
+            self.assertEqual(audit_res.status_code, 200)
+            viewer_item = next(
+                item for item in audit_res.json()["items"]
+                if item["id"] == viewer_visible_event_id
+            )
+            self.assertFalse(viewer_item["can_undo"])
+            self.assertIn("Viewer", viewer_item["undo_reason"])
+
+            undo_res = await client.post(
+                f"/api/audit-events/{viewer_visible_event_id}/undo",
+                headers=viewer_headers,
+            )
+            self.assertEqual(undo_res.status_code, 403)
 
     async def test_admin_support_session_lifecycle(self):
         """Admin creates bounded support session, accesses workspace, and revokes session."""
@@ -338,12 +367,68 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
         admin_headers = self._headers_for(self.admin_user)
         transport = httpx.ASGITransport(app=self.app)
 
+        async with self.test_session_maker() as session:
+            admin_audit_account = Account(
+                account_id="shared-audit-account",
+                name="Admin audit account",
+                workspace_id=self.ws_admin.id,
+                owner_user_id=self.admin_user.id,
+                access_token="mock-token",
+                timezone_name="UTC",
+                currency="USD",
+                is_active=True,
+            )
+            source = AuditEvent(
+                workspace_id=self.ws_admin.id,
+                owner_user_id=self.admin_user.id,
+                category="RULE_ACTION",
+                event_type="STOP",
+                status="SUCCESS",
+                account_id="shared-audit-account",
+                adset_id="shared-audit-adset",
+                action="STOP",
+                before_state={"status": "ACTIVE"},
+                after_state={"status": "PAUSED"},
+            )
+            legacy = AuditEvent(
+                workspace_id=None,
+                owner_user_id=self.admin_user.id,
+                category="RULE_ACTION",
+                event_type="STOP",
+                status="SUCCESS",
+                account_id="legacy-null-workspace",
+                adset_id="legacy-null-adset",
+                action="STOP",
+                before_state={"status": "ACTIVE"},
+                after_state={"status": "PAUSED"},
+            )
+            session.add_all([admin_audit_account, source, legacy])
+            await session.flush()
+            foreign_newer = AuditEvent(
+                workspace_id=self.ws_b.id,
+                owner_user_id=self.tenant_b_user.id,
+                category="RULE_ACTION",
+                event_type="MANUAL_REACTIVATE",
+                status="SUCCESS",
+                account_id="shared-audit-account",
+                adset_id="shared-audit-adset",
+                action="REACTIVATE_ADSET",
+                before_state={"status": "PAUSED"},
+                after_state={"status": "ACTIVE"},
+            )
+            session.add(foreign_newer)
+            await session.commit()
+            source_id = source.id
+
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # 1. Admin in Admin HQ only sees their own workspace audit events (not Tenant B's)
             audit_res = await client.get("/api/audit-events", headers=admin_headers)
             self.assertEqual(audit_res.status_code, 200)
             items = audit_res.json()["items"]
             self.assertFalse(any(item["account_id"] == "act_222222" for item in items))
+            self.assertFalse(any(item["account_id"] == "legacy-null-workspace" for item in items))
+            source_item = next(item for item in items if item["id"] == source_id)
+            self.assertTrue(source_item["can_undo"])
 
             # 2. Cross-workspace undo attempt is blocked
             undo_res = await client.post(
@@ -351,6 +436,29 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
                 headers=admin_headers,
             )
             self.assertEqual(undo_res.status_code, 403)
+
+            with (
+                patch.object(
+                    api_routes_module.meta_client,
+                    "get_adset_state",
+                    new=AsyncMock(
+                        return_value={
+                            "status": "PAUSED",
+                            "daily_budget": 50.0,
+                        }
+                    ),
+                ),
+                patch.object(
+                    api_routes_module.meta_client,
+                    "set_adset_status",
+                    new=AsyncMock(return_value=True),
+                ),
+            ):
+                own_undo = await client.post(
+                    f"/api/audit-events/{source_id}/undo",
+                    headers=admin_headers,
+                )
+            self.assertEqual(own_undo.status_code, 200)
 
 
 if __name__ == "__main__":

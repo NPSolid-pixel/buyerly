@@ -30,6 +30,20 @@ wait_for_container() {
     return 1
 }
 
+wait_for_container_file() {
+    local container_name="$1"
+    local file_path="$2"
+    local deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
+    while (( SECONDS < deadline )); do
+        if docker exec "${container_name}" test -f "${file_path}" 2>/dev/null; then
+            return 0
+        fi
+        sleep 3
+    done
+    echo "[ERROR] ${container_name} did not complete the required scheduler cycle."
+    return 1
+}
+
 ensure_postgres_password() {
     if grep -q '^POSTGRES_PASSWORD=' .env 2>/dev/null; then
         return
@@ -175,6 +189,18 @@ if ! wait_for_container buyerly-api; then
 fi
 if ! wait_for_container buyerly-telegram-bot || ! wait_for_container buyerly-worker; then
     docker compose logs --tail=120 bot worker
+    rollback
+    exit 1
+fi
+if ! wait_for_container_file buyerly-worker /tmp/buyerly-worker-day-boundary-cycle-complete; then
+    docker compose logs --tail=160 worker
+    rollback
+    exit 1
+fi
+if docker compose logs --since=5m worker 2>&1 \
+    | grep -Eiq 'Failed to persist audit event.*(owner_id|owner_user_id)|NotNullViolation.*(owner_id|owner_user_id)'; then
+    echo "[ERROR] Worker audit ownership failure detected after a full scheduler cycle."
+    docker compose logs --tail=160 worker
     rollback
     exit 1
 fi

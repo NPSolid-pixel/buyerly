@@ -661,7 +661,7 @@ async def revoke_workspace_invite(
                 select(WorkspaceInvite).where(
                     WorkspaceInvite.id == invite_id,
                     WorkspaceInvite.workspace_id == workspace_id,
-                )
+                ).with_for_update()
             )
         ).scalar_one_or_none()
         if not invite:
@@ -816,23 +816,6 @@ async def accept_workspace_invite(
             await session.commit()
             raise HTTPException(status_code=400, detail="Срок действия приглашения истёк")
 
-        if invite.max_uses > 0 and invite.used_count >= invite.max_uses:
-            session.add(
-                AuditEvent(
-                    workspace_id=invite.workspace_id,
-                    owner_user_id=user.id,
-                    actor_type="user",
-                    actor_id=str(user.id),
-                    category="WORKSPACE_INVITE",
-                    event_type="INVITE_REJECT",
-                    status="FAILED",
-                    message="Лимит использований приглашения исчерпан",
-                    details={"invite_id": invite.id, "reason": "max_uses_reached"},
-                )
-            )
-            await session.commit()
-            raise HTTPException(status_code=400, detail="Лимит использований приглашения исчерпан")
-
         ws = (await session.execute(select(Workspace).where(Workspace.id == invite.workspace_id))).scalar_one_or_none()
         if not ws:
             raise HTTPException(status_code=404, detail="Воркспейс не найден")
@@ -890,6 +873,30 @@ async def accept_workspace_invite(
                 )
             )
         ).scalar_one_or_none()
+
+        # A retry by the user who already joined is idempotent: it must not
+        # consume another use even after a single-use invite became accepted.
+        # Other users still observe the exhausted state while this row lock is
+        # held, so concurrent accepts cannot exceed max_uses.
+        if not existing_m and (
+            invite.status == "accepted"
+            or (invite.max_uses > 0 and invite.used_count >= invite.max_uses)
+        ):
+            session.add(
+                AuditEvent(
+                    workspace_id=invite.workspace_id,
+                    owner_user_id=user.id,
+                    actor_type="user",
+                    actor_id=str(user.id),
+                    category="WORKSPACE_INVITE",
+                    event_type="INVITE_REJECT",
+                    status="FAILED",
+                    message="Лимит использований приглашения исчерпан",
+                    details={"invite_id": invite.id, "reason": "max_uses_reached"},
+                )
+            )
+            await session.commit()
+            raise HTTPException(status_code=400, detail="Лимит использований приглашения исчерпан")
 
         db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = ws.id

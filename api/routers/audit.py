@@ -3,14 +3,13 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import false, func, or_, select
 
 from api.auth import get_current_user
 from api.deps import (
     _load_json_object,
     _utc_iso,
     ensure_workspace_write_access,
-    get_user_workspace,
     get_user_workspace_member,
 )
 from core.action_undo import (
@@ -20,7 +19,6 @@ from core.action_undo import (
     event_is_within_undo_window,
     undo_audit_action,
 )
-from core.ownership import owned_by
 from database.db import async_session_maker
 from database.models import AuditEvent, User
 from meta_api.client import MetaClient
@@ -46,17 +44,17 @@ async def list_audit_events(
 ):
     """Return an owner-isolated, filterable audit history for the web UI."""
     async with async_session_maker() as session:
-        ws = await get_user_workspace(session, user)
-        filters = []
-        if ws:
-            filters.append(
-                or_(
-                    AuditEvent.workspace_id == ws.id,
-                    and_(AuditEvent.workspace_id.is_(None), owned_by(AuditEvent, user)),
-                )
-            )
-        else:
-            filters.append(owned_by(AuditEvent, user))
+        ws, member = await get_user_workspace_member(session, user)
+        workspace_id = ws.id if ws else None
+        can_write_workspace = bool(member and member.role != "viewer")
+        # Legacy NULL rows are intentionally quarantined from the tenant UI.
+        # owner_user_id cannot identify one active workspace when the same user
+        # belongs to multiple workspaces.
+        filters = [
+            AuditEvent.workspace_id == workspace_id
+            if workspace_id is not None
+            else false()
+        ]
         if category:
             filters.append(AuditEvent.category == category.upper())
         if account_id:
@@ -87,7 +85,8 @@ async def list_audit_events(
                 filters.append(
                     AuditEvent.id.in_(
                         select(AuditEvent.reverts_event_id).where(
-                            AuditEvent.reverts_event_id.is_not(None)
+                            AuditEvent.reverts_event_id.is_not(None),
+                            AuditEvent.workspace_id == workspace_id,
                         )
                     )
                 )
@@ -132,7 +131,8 @@ async def list_audit_events(
             reversal_rows = (
                 await session.execute(
                     select(AuditEvent.reverts_event_id, AuditEvent.id).where(
-                        AuditEvent.reverts_event_id.in_(row_ids)
+                        AuditEvent.reverts_event_id.in_(row_ids),
+                        AuditEvent.workspace_id == workspace_id,
                     )
                 )
             ).all()
@@ -163,6 +163,7 @@ async def list_audit_events(
                         AuditEvent.adset_id.in_(adset_ids),
                         AuditEvent.status == "SUCCESS",
                         AuditEvent.event_type.in_(MUTATING_EVENT_TYPES),
+                        AuditEvent.workspace_id == workspace_id,
                     )
                     .group_by(AuditEvent.account_id, AuditEvent.adset_id)
                 )
@@ -182,12 +183,15 @@ async def list_audit_events(
         )
         latest_id = latest_mutating_by_target.get((row.account_id, row.adset_id))
         can_undo = bool(
-            is_reversible
+            can_write_workspace
+            and is_reversible
             and reversal_id is None
             and latest_id == row.id
             and event_is_within_undo_window(row)
         )
-        if reversal_id is not None:
+        if not can_write_workspace:
+            undo_reason = "Роль Наблюдатель (Viewer) не может отменять действия."
+        elif reversal_id is not None:
             undo_reason = "Действие уже отменено."
         elif not is_reversible:
             undo_reason = "Это событие не меняется обратной командой."
