@@ -56,7 +56,7 @@ class TestBotAccessChecks(unittest.IsolatedAsyncioTestCase):
         settings.ADMIN_CHAT_ID = self.original_admin_chat_id
         await self.engine.dispose()
 
-    async def test_owner_and_admin_can_manage_but_other_buyer_cannot(self):
+    async def test_unscoped_legacy_account_has_no_global_admin_bypass(self):
         async with self.sessions() as session:
             owner = (await session.execute(select(User).where(User.telegram_id == "owner"))).scalar_one()
             account = Account(
@@ -69,7 +69,7 @@ class TestBotAccessChecks(unittest.IsolatedAsyncioTestCase):
             session.add(account)
             await session.commit()
             self.assertTrue(await _can_manage_account(session, "owner", account))
-            self.assertTrue(await _can_manage_account(session, "admin-test", account))
+            self.assertFalse(await _can_manage_account(session, "admin-test", account))
             self.assertFalse(await _can_manage_account(session, "other", account))
             self.assertTrue(await _is_admin_user(session, "admin-test"))
             self.assertFalse(await _is_admin_user(session, "other"))
