@@ -914,7 +914,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-            self.assertEqual(version, "0008_rule_workspace_scope")
+                self.assertEqual(version, "0009_web_sessions")
 
             command.downgrade(alembic_cfg, "base")
         finally:
