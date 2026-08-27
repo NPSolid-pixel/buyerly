@@ -82,7 +82,8 @@ flowchart LR
 
 ```bash
 cp .env.example .env
-# Заполните BOT_TOKEN, ADMIN_CHAT_ID, POSTGRES_PASSWORD, WEBAPP_URL, RESEND_API_KEY и EMAIL_FROM
+# Заполните BOT_TOKEN, POSTGRES_PASSWORD, WEBAPP_URL, RESEND_API_KEY, EMAIL_FROM и OTP_PEPPER.
+# Для Facebook OAuth также заполните все META_* значения из примера.
 docker compose up -d --build
 curl -fsS http://127.0.0.1:8080/health/ready
 ```
@@ -99,6 +100,8 @@ pip install -r requirements.txt
 
 # Настройка переменных окружения
 cp .env.example .env
+# Для запуска вне Compose укажите localhost в DATABASE_URL/REDIS_URL.
+# На локальном HTTP задайте SESSION_COOKIE_SECURE=false; ENABLE_DEV_AUTH включайте только осознанно.
 
 # Запуск API
 uvicorn services.api:app --host 0.0.0.0 --port 8000 --reload

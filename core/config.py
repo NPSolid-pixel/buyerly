@@ -87,11 +87,7 @@ class Settings(BaseSettings):
         default="Buyerly <team@buyerly.app>",
         description="Default sender email header for transactional emails",
     )
-    SMTP_HOST: str = Field(default="", description="Optional SMTP host")
-    SMTP_PORT: int = Field(default=587, description="Optional SMTP port")
-    SMTP_USER: str = Field(default="", description="Optional SMTP user")
-    SMTP_PASSWORD: str = Field(default="", description="Optional SMTP password")
-    
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -4,17 +4,53 @@
 
 Docker Compose запускает `buyerly-web`, `buyerly-api`, `buyerly-telegram-bot`, `buyerly-worker`, `buyerly-db` и `buyerly-redis`. Публичный порт `8080` принадлежит только веб-сервису; API доступен через его reverse proxy. PostgreSQL хранится в томе `buyerly-postgres`, Redis AOF для общих rate limits — в `buyerly-redis`, журналы — в `/opt/buyerly/logs`.
 
-Обязательные значения в `/opt/buyerly/.env`:
+Минимальные значения для production в `/opt/buyerly/.env`:
 
 ```dotenv
 BOT_TOKEN=...
-ADMIN_CHAT_ID=...
 POSTGRES_PASSWORD=...
 WEBAPP_URL=https://buyerly.app
 TRUSTED_PROXY_CIDRS=172.16.0.0/12
+SESSION_COOKIE_SECURE=true
+RESEND_API_KEY=...
+EMAIL_FROM="Buyerly <team@buyerly.app>"
+OTP_PEPPER=...
 ```
 
 Если `POSTGRES_PASSWORD` отсутствует, deploy-скрипт один раз создаёт случайное значение локально на сервере и ограничивает права файла `.env`.
+`OTP_PEPPER` должен быть отдельным длинным случайным секретом; fallback на
+`BOT_TOKEN` сохранён только для совместимости. `ADMIN_CHAT_ID` необязателен и
+нужен только для Telegram-алертов.
+
+Для рабочего подключения Facebook дополнительно обязательны:
+
+```dotenv
+META_GRAPH_VERSION=v26.0
+META_APP_ID=...
+META_APP_SECRET=...
+META_LOGIN_CONFIG_ID=...
+META_OAUTH_REDIRECT_URI=https://buyerly.app/api/meta/oauth/callback
+META_TOKEN_ENCRYPTION_KEY=...
+```
+
+`META_TOKEN_ENCRYPTION_KEY` — URL-safe base64 Fernet key. При ротации новый ключ
+указывается первым, старые decrypt-only ключи — после него через запятую.
+
+Параметры `APP_VERSION`, `DATABASE_URL`, `REDIS_URL`, `API_HOST`, `API_PORT` и
+`SERVE_STATIC` для Docker Compose задаются deploy/compose и не требуют ручного
+production override. `CORS_ORIGINS` нужен только для явно разрешённых
+cross-origin клиентов; `ENABLE_DEV_AUTH` в production всегда должен оставаться
+`false`.
+
+Допустимые операционные overrides: `ADMIN_CHAT_ID`,
+`DEFAULT_POLL_INTERVAL_MINUTES`, `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS`,
+`WEB_SESSION_TTL_HOURS` и `WEB_SESSION_ROTATE_MINUTES`. Пара
+`BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` используется только при
+первом запуске пустой установки и после создания администратора должна быть
+удалена. Полный перечень с безопасными значениями находится в `.env.example`.
+
+Поддерживаемый почтовый transport — Resend REST API; SMTP-параметры runtime не
+использует.
 
 ## Автодеплой
 
