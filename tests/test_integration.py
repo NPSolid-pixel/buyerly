@@ -275,6 +275,12 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             account.last_day_start_date = "2026-08-17"
             account.rules_enabled = False
             account.is_active = False
+            workspace = await session.get(Workspace, account.workspace_id)
+            expected_owner_user_id = workspace.owner_user_id
+            expected_workspace_id = workspace.id
+            # Reproduce the legacy production row that caused owner_id /
+            # owner_user_id failures for scheduler-generated audit events.
+            account.owner_user_id = None
             await session.commit()
 
         sent_alerts = []
@@ -318,6 +324,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             self.assertEqual(account.timezone_name, "Pacific/Honolulu")
             self.assertEqual(account.last_day_start_date, "2026-08-18")
+            self.assertEqual(account.owner_user_id, expected_owner_user_id)
             events = (
                 await session.execute(
                     select(AuditEvent).where(AuditEvent.event_type == "ACCOUNT_DAY_STARTED")
@@ -325,6 +332,8 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             ).scalars().all()
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0].status, "SUCCESS")
+            self.assertEqual(events[0].owner_user_id, expected_owner_user_id)
+            self.assertEqual(events[0].workspace_id, expected_workspace_id)
 
     async def test_first_observation_anchors_date_without_midday_notification(self):
         hawaii = ZoneInfo("Pacific/Honolulu")

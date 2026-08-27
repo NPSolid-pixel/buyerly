@@ -20,6 +20,7 @@ from database.models import (
     RuleExecutionState,
     StoppedAdSet,
     User,
+    Workspace,
 )
 from core.audit import build_audit_event
 from core.currency import normalize_currency
@@ -630,20 +631,38 @@ class MonitoringWorker:
         """Persist audit independently from Telegram without breaking automation."""
 
         try:
-            audit_event = build_audit_event(
-                    account=account,
-                    event_type=event_type,
-                    status=status,
-                    correlation_id=self._current_cycle_id,
-                    category=category,
-                    evaluation=evaluation,
-                    action=action,
-                    message=message,
-                    before_state=before_state,
-                    after_state=after_state,
-                    details=details,
-                    duration_ms=duration_ms,
+            if account.workspace_id is None:
+                raise ValueError(
+                    f"Account {account.account_id} has no workspace; audit event is quarantined"
                 )
+            if account.owner_user_id is None:
+                workspace_owner_id = (
+                    await session.execute(
+                        select(Workspace.owner_user_id).where(
+                            Workspace.id == account.workspace_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if workspace_owner_id is None:
+                    raise ValueError(
+                        f"Account {account.account_id} has no resolvable audit owner"
+                    )
+                account.owner_user_id = workspace_owner_id
+
+            audit_event = build_audit_event(
+                account=account,
+                event_type=event_type,
+                status=status,
+                correlation_id=self._current_cycle_id,
+                category=category,
+                evaluation=evaluation,
+                action=action,
+                message=message,
+                before_state=before_state,
+                after_state=after_state,
+                details=details,
+                duration_ms=duration_ms,
+            )
             session.add(audit_event)
             await session.flush()
             audit_event_id = audit_event.id

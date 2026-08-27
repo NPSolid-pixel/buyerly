@@ -8,6 +8,7 @@ from database.db import (
     migrate_account_day_boundary_contract,
     migrate_account_currency_contract,
     migrate_automation_settings_contract,
+    migrate_audit_event_ownership_contract,
     migrate_audit_undo_contract,
     migrate_legacy_account_rules,
     migrate_rule_groups_position,
@@ -547,6 +548,91 @@ class TestRuleGroupsPositionMigration(unittest.IsolatedAsyncioTestCase):
             await engine.dispose()
 
 
+class TestAuditEventOwnershipContractMigration(unittest.IsolatedAsyncioTestCase):
+    async def test_legacy_owner_constraint_is_removed_and_scope_is_backfilled(self):
+        engine = create_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP TABLE IF EXISTS audit_events CASCADE"))
+                await conn.execute(text("DROP TABLE IF EXISTS accounts CASCADE"))
+                await conn.execute(
+                    text(
+                        "CREATE TABLE accounts ("
+                        "id SERIAL PRIMARY KEY, "
+                        "account_id VARCHAR UNIQUE NOT NULL, "
+                        "owner_user_id INTEGER, "
+                        "workspace_id INTEGER)"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "CREATE TABLE audit_events ("
+                        "id SERIAL PRIMARY KEY, "
+                        "owner_id VARCHAR NOT NULL, "
+                        "owner_user_id INTEGER, "
+                        "workspace_id INTEGER, "
+                        "account_id VARCHAR NOT NULL, "
+                        "event_type VARCHAR NOT NULL)"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO accounts "
+                        "(account_id, owner_user_id, workspace_id) "
+                        "VALUES ('act-worker', 17, 23)"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO audit_events "
+                        "(owner_id, account_id, event_type) "
+                        "VALUES ('legacy-owner', 'act-worker', 'ACCOUNT_DAY_STARTED')"
+                    )
+                )
+
+                first = await migrate_audit_event_ownership_contract(conn)
+                second = await migrate_audit_event_ownership_contract(conn)
+                owner_column = await conn.run_sync(
+                    lambda sync_conn: next(
+                        column
+                        for column in inspect(sync_conn).get_columns("audit_events")
+                        if column["name"] == "owner_id"
+                    )
+                )
+                migrated_row = (
+                    await conn.execute(
+                        text(
+                            "SELECT owner_user_id, workspace_id "
+                            "FROM audit_events WHERE account_id = 'act-worker'"
+                        )
+                    )
+                ).one()
+                await conn.execute(
+                    text(
+                        "INSERT INTO audit_events "
+                        "(owner_user_id, workspace_id, account_id, event_type) "
+                        "VALUES (17, 23, 'act-worker', 'TOKEN_EXPIRED')"
+                    )
+                )
+
+            self.assertTrue(first["legacy_owner_constraint_removed"])
+            self.assertEqual(first["owners_backfilled"], 1)
+            self.assertEqual(first["workspaces_backfilled"], 1)
+            self.assertEqual(
+                second,
+                {
+                    "legacy_owner_constraint_removed": False,
+                    "owners_backfilled": 0,
+                    "workspaces_backfilled": 0,
+                },
+            )
+            self.assertTrue(owner_column["nullable"])
+            self.assertEqual(migrated_row, (17, 23))
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
+
 class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
     async def test_alembic_upgrade_head_applies_successfully(self):
         from alembic.config import Config
@@ -569,7 +655,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-            self.assertEqual(version, "0005_workspace_support_grants")
+            self.assertEqual(version, "0006_audit_ws_ownership")
 
             command.downgrade(alembic_cfg, "base")
         finally:

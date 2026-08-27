@@ -73,9 +73,9 @@ Production: `https://buyerly.app`.
 |---|---|---|
 | `POST /api/workspaces/{id}/invites` | `email?`, `role`, `max_uses?`, `expires_in_days?` | создание персонального инвайта (с письмом через Resend) или публичной ссылки |
 | `GET /api/workspaces/{id}/invites` | — | список активных и истекших приглашений воркспейса |
-| `DELETE /api/workspaces/{id}/invites/{invite_id}` | — | отзыв активного приглашения |
+| `DELETE /api/workspaces/{id}/invites/{invite_id}` | — | атомарный отзыв активного приглашения относительно конкурентного принятия |
 | `GET /api/invites/{token}` | — | публичная проверка валидности токена приглашения перед вступлением |
-| `POST /api/invites/{token}/accept` | — | принятие инвайта авторизованным пользователем и добавление в команду |
+| `POST /api/invites/{token}/accept` | — | атомарное принятие инвайта и добавление в команду; повтор уже вступившего пользователя идемпотентен |
 
 ## Онбординг (Onboarding Flow)
 
@@ -241,8 +241,8 @@ View payload принимает `view_mode` (`all`, `overview`, `delivery`, `tra
 
 | Метод и путь | Параметры | Назначение |
 |---|---|---|
-| `GET /api/audit-events` | `page`, `page_size`, `category?`, `status?`, `account_id?`, `search?`, `date_from?`, `date_to?` | изолированная история с пагинацией и счётчиками |
-| `POST /api/audit-events/{event_id}/undo` | — | безопасно отменяет последнее обратимое действие |
+| `GET /api/audit-events` | `page`, `page_size`, `category?`, `status?`, `account_id?`, `search?`, `date_from?`, `date_to?` | история только активного workspace с пагинацией и счётчиками; legacy NULL rows скрыты |
+| `POST /api/audit-events/{event_id}/undo` | — | безопасно отменяет последнее обратимое действие только при write-role в активном workspace |
 
 Статусы истории: `SUCCESS` (Выполнено), `ERROR` (Ошибка), `SKIPPED` (Пропущено); исходное событие с успешной отменой отображается как `REVERTED`. Ответ каждого элемента содержит `before_state`, `after_state`, `correlation_id`, `can_undo` и `undo_reason`.
 
@@ -329,4 +329,3 @@ curl -fsS https://buyerly.app/api/me \
 ## Совместимость
 
 Текущая OpenAPI-версия приложения — `1.0.0`; пути пока не имеют префикса версии. Добавление полей в ответы считается совместимым. Удаление/переименование полей, изменение смысла метрики или допустимых enum требует миграции данных, обновления web/bot/worker одним релизом, contract-тестов и явной записи в `DECISIONS.md` и `PRODUCT_BACKLOG.md`.
-

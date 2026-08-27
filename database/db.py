@@ -418,6 +418,94 @@ async def migrate_stable_owner_contract(conn) -> dict[str, int]:
     return counts
 
 
+async def migrate_audit_event_ownership_contract(conn) -> dict[str, int | bool]:
+    """Make legacy audit ownership compatible with workspace-scoped events.
+
+    Older production tables still contain ``owner_id VARCHAR NOT NULL`` while
+    the current ORM writes ``owner_user_id``. Keeping that legacy constraint
+    makes scheduler-generated events fail even when their stable owner and
+    workspace are present. The column is retained for historical reads but is
+    made nullable; stable ownership is backfilled from the matching account.
+    """
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    if "audit_events" not in table_names or "accounts" not in table_names:
+        return {
+            "legacy_owner_constraint_removed": False,
+            "owners_backfilled": 0,
+            "workspaces_backfilled": 0,
+        }
+
+    audit_columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"]: column
+            for column in inspect(sync_conn).get_columns("audit_events")
+        }
+    )
+    account_columns = await conn.run_sync(
+        lambda sync_conn: {
+            column["name"]
+            for column in inspect(sync_conn).get_columns("accounts")
+        }
+    )
+
+    legacy_constraint_removed = False
+    owner_column = audit_columns.get("owner_id")
+    if owner_column and not owner_column.get("nullable", True):
+        await conn.execute(
+            text("ALTER TABLE audit_events ALTER COLUMN owner_id DROP NOT NULL")
+        )
+        legacy_constraint_removed = True
+
+    owners_backfilled = 0
+    if {
+        "owner_user_id",
+        "account_id",
+    }.issubset(audit_columns) and {
+        "owner_user_id",
+        "account_id",
+    }.issubset(account_columns):
+        result = await conn.execute(
+            text(
+                "UPDATE audit_events AS event "
+                "SET owner_user_id = account.owner_user_id "
+                "FROM accounts AS account "
+                "WHERE event.owner_user_id IS NULL "
+                "AND event.account_id = account.account_id "
+                "AND account.owner_user_id IS NOT NULL"
+            )
+        )
+        owners_backfilled = max(0, int(result.rowcount or 0))
+
+    workspaces_backfilled = 0
+    if {
+        "workspace_id",
+        "account_id",
+    }.issubset(audit_columns) and {
+        "workspace_id",
+        "account_id",
+    }.issubset(account_columns):
+        result = await conn.execute(
+            text(
+                "UPDATE audit_events AS event "
+                "SET workspace_id = account.workspace_id "
+                "FROM accounts AS account "
+                "WHERE event.workspace_id IS NULL "
+                "AND event.account_id = account.account_id "
+                "AND account.workspace_id IS NOT NULL"
+            )
+        )
+        workspaces_backfilled = max(0, int(result.rowcount or 0))
+
+    return {
+        "legacy_owner_constraint_removed": legacy_constraint_removed,
+        "owners_backfilled": owners_backfilled,
+        "workspaces_backfilled": workspaces_backfilled,
+    }
+
+
 async def migrate_account_currency_contract(conn) -> bool:
     """Persist account currency without silently treating legacy rows as USD."""
 
@@ -847,6 +935,12 @@ async def init_schema():
         migrated_workspaces = await migrate_workspaces_contract(conn)
         if migrated_workspaces:
             logger.info("Backfilled default workspace for %s user(s).", migrated_workspaces)
+        audit_ownership_migration = await migrate_audit_event_ownership_contract(conn)
+        if any(audit_ownership_migration.values()):
+            logger.info(
+                "Migrated audit event ownership contract: %s",
+                audit_ownership_migration,
+            )
         migrated_rules = await migrate_legacy_account_rules(conn)
         if migrated_rules:
             logger.info(

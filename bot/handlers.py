@@ -23,6 +23,7 @@ from database.db import async_session_maker
 from database.models import (
     Account,
     AppSettings,
+    AuditEvent,
     StoppedAdSet,
     User,
     WorkspaceMember,
@@ -1236,6 +1237,37 @@ async def cb_undo_action(callback: CallbackQuery):
         if not user or not user.is_approved:
             await callback.answer("⛔️ Доступ не подтверждён.", show_alert=True)
             return
+
+        source = await session.get(AuditEvent, event_id)
+        workspace_id = user.active_workspace_id
+        if source is None or workspace_id is None or source.workspace_id != workspace_id:
+            await callback.answer("⛔️ Действие недоступно в активном воркспейсе.", show_alert=True)
+            return
+
+        member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        can_write = bool(member and member.role in ("owner", "admin", "buyer"))
+        if not can_write and user.role == "admin":
+            grant = (
+                await session.execute(
+                    select(WorkspaceSupportGrant).where(
+                        WorkspaceSupportGrant.workspace_id == workspace_id,
+                        WorkspaceSupportGrant.user_id == user.id,
+                        WorkspaceSupportGrant.expires_at > datetime.now(timezone.utc),
+                        WorkspaceSupportGrant.revoked_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            can_write = grant is not None
+        if not can_write:
+            await callback.answer("⛔️ Недостаточно прав для отмены действия.", show_alert=True)
+            return
         try:
             result = await undo_audit_action(
                 session,
@@ -1245,6 +1277,7 @@ async def cb_undo_action(callback: CallbackQuery):
                 actor_id=user_id,
                 owner_id=user_id,
                 owner_user_id=user.id,
+                workspace_id=workspace_id,
                 is_admin=user.role == "admin",
             )
         except UndoError as error:

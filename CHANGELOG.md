@@ -10,6 +10,13 @@
 ## [Unreleased]
 
 ### Security
+- **Атомарное принятие workspace invites (`86eyr5ywq`)**:
+  - Принятие и отзыв приглашения сериализуются блокировкой строки PostgreSQL; membership и `used_count` фиксируются одной транзакцией.
+  - Повтор победившего пользователя для одноразового invite идемпотентен, а конкурентные запросы не могут превысить `max_uses`.
+- **Строгая workspace-изоляция audit history и undo (`86eyr5z4u`)**:
+  - История, статусы, reversal links и выбор последнего мутирующего события ограничены активным `workspace_id`.
+  - Legacy audit rows без workspace скрыты из tenant UI; Viewer видит историю, но не может выполнять undo.
+  - Web и Telegram undo требуют write-role именно в активном workspace.
 - **Удаление скомпрометированного секрета Resend и безопасная передача ключей в CI/CD**:
   - Удалён захардкоженный ключ Resend API из `scripts/deploy.sh`.
   - Реализована безопасная передача `RESEND_API_KEY` через переменные окружения и GitHub Secrets без сохранения секретов в коде репозитория.
@@ -51,6 +58,10 @@
   - Добавлен контрактный тест `test_toast_and_error_sanitization_contract` в `tests/test_frontend_contract.py`.
 
 ### Fixed
+- **Восстановлена запись системных audit events воркера (`86eyr5v27`)**:
+  - Legacy `audit_events.owner_id NOT NULL` безопасно ослаблен, а `owner_user_id` и `workspace_id` backfill-ятся по кабинету.
+  - Воркер восстанавливает отсутствующего владельца из владельца workspace перед записью `ACCOUNT_DAY_STARTED` и других системных событий.
+  - Production deploy ждёт завершения полного day-boundary scheduler-cycle и откатывается при повторении ownership constraint failure.
 - **Обработка ошибок доставки транзакционных писем (Resend OTP)**:
   - В `api/routers/auth.py` (`POST /api/auth/request-temporary-password`) добавлена проверка статуса отправки письма с проверочным кодом: при сбое внешнего почтового сервиса возвращается статус 502 Bad Gateway с понятным сообщением вместо ложного ответа об успехе.
   - Добавлен тест `test_otp_request_delivery_failure_raises_502` в `tests/test_api.py`.

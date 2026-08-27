@@ -16,6 +16,13 @@ async def _touch_heartbeat() -> None:
     Path("/tmp/buyerly-worker-heartbeat").touch()
 
 
+async def _run_day_boundary_tick(worker: MonitoringWorker) -> None:
+    """Run one complete account-day scheduling pass and expose readiness."""
+
+    await worker.run_day_boundary_cycle()
+    Path("/tmp/buyerly-worker-day-boundary-cycle-complete").touch()
+
+
 async def main() -> None:
     logger = configure_logging("worker")
     if not settings.BOT_TOKEN:
@@ -34,6 +41,10 @@ async def main() -> None:
     )
 
     heartbeat_file = Path("/tmp/buyerly-worker-heartbeat")
+    day_boundary_cycle_file = Path(
+        "/tmp/buyerly-worker-day-boundary-cycle-complete"
+    )
+    day_boundary_cycle_file.unlink(missing_ok=True)
     heartbeat_file.touch()
     Path("/tmp/buyerly-worker-ready").touch()
 
@@ -57,13 +68,14 @@ async def main() -> None:
         coalesce=True,
     )
     scheduler.add_job(
-        day_boundary_worker.run_day_boundary_cycle,
+        _run_day_boundary_tick,
         "interval",
         minutes=1,
         id="account_day_boundary_job",
         next_run_time=datetime.now(timezone.utc),
         max_instances=1,
         coalesce=True,
+        args=[day_boundary_worker],
     )
     scheduler.start()
     logger.info(
@@ -83,6 +95,7 @@ async def main() -> None:
     finally:
         scheduler.shutdown(wait=False)
         heartbeat_file.unlink(missing_ok=True)
+        day_boundary_cycle_file.unlink(missing_ok=True)
         Path("/tmp/buyerly-worker-ready").unlink(missing_ok=True)
         await monitoring_worker.meta_client.aclose()
         await day_boundary_worker.meta_client.aclose()

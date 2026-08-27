@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.audit import build_audit_event
@@ -169,20 +169,22 @@ async def reverse_audit_event(
     if source is None:
         raise UndoError("Событие не найдено.", 404)
 
-    if workspace_id is not None:
-        source_accessible = (
-            source.workspace_id == workspace_id
-            or (source.workspace_id is None and source.owner_user_id == owner_user_id)
-        )
-    else:
-        source_accessible = source.owner_user_id == owner_user_id if source.owner_user_id is not None else False
+    # Tenant undo is always scoped by an explicit workspace. Legacy NULL rows
+    # stay quarantined because ownership alone is ambiguous for multi-workspace
+    # users.
+    source_accessible = bool(
+        workspace_id is not None and source.workspace_id == workspace_id
+    )
 
     if not source_accessible:
         raise UndoError("Доступ к этому действию запрещён.", 403)
 
     existing_reversal = (
         await session.execute(
-            select(AuditEvent).where(AuditEvent.reverts_event_id == source.id)
+            select(AuditEvent).where(
+                AuditEvent.reverts_event_id == source.id,
+                AuditEvent.workspace_id == workspace_id,
+            )
         )
     ).scalar_one_or_none()
     if existing_reversal is not None:
@@ -209,6 +211,7 @@ async def reverse_audit_event(
                 AuditEvent.adset_id == source.adset_id,
                 AuditEvent.status == "SUCCESS",
                 AuditEvent.event_type.in_(MUTATING_EVENT_TYPES),
+                AuditEvent.workspace_id == workspace_id,
             ).limit(1)
         )
     ).scalar_one_or_none()
@@ -216,20 +219,15 @@ async def reverse_audit_event(
         raise UndoError("После этого события ad set уже изменялся. Старая отмена заблокирована.")
 
     account = (
-        await session.execute(select(Account).where(Account.account_id == source.account_id))
-    ).scalar_one_or_none()
-    if workspace_id is not None:
-        account_accessible = (
-            account is not None
-            and (
-                account.workspace_id == workspace_id
-                or (account.workspace_id is None and account.owner_user_id == owner_user_id)
+        await session.execute(
+            select(Account).where(
+                Account.account_id == source.account_id,
+                Account.workspace_id == workspace_id,
             )
         )
-    else:
-        account_accessible = bool(account and account.owner_user_id == owner_user_id)
+    ).scalar_one_or_none()
 
-    if account is None or not account_accessible:
+    if account is None:
         raise UndoError("Кабинет для этого действия не найден или недоступен.", 403)
 
     undo_state = (
