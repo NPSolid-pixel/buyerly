@@ -147,7 +147,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             "rules: '/rules'",
             "summary: '/summary'",
             "logs: '/logs'",
-            "add: '/add-accounts'",
+            "fb_accounts: '/facebook-accounts'",
             "settings: '/settings'",
             'TAB_ROUTES',
             'ROUTE_TABS',

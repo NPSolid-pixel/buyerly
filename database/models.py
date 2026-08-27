@@ -510,7 +510,7 @@ class MetaOAuthState(Base):
         nullable=False,
         index=True,
     )
-    return_path = Column(String, default="/add-accounts", nullable=False)
+    return_path = Column(String, default="/facebook-accounts", nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)

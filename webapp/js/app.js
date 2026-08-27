@@ -61,14 +61,14 @@
     rules: '/rules',
     summary: '/summary',
     logs: '/logs',
-    add: '/add-accounts',
     settings: '/settings'
   });
   const ROUTE_TABS = Object.freeze({
     ...Object.fromEntries(Object.entries(TAB_ROUTES).map(([tab, route]) => [route, tab])),
     '/fb-accounts': 'fb_accounts',
     '/fb_accounts': 'fb_accounts',
-    '/add': 'add',
+    '/add-accounts': 'fb_accounts',
+    '/add': 'fb_accounts',
     '/main': 'home',
     '/dashboard': 'home'
   });
@@ -573,7 +573,8 @@
   }
 
   window.switchTab = function (requestedTab, options = {}) {
-    const tabName = Object.hasOwn(TAB_ROUTES, requestedTab) ? requestedTab : 'accounts';
+    const target = requestedTab === 'add' ? 'fb_accounts' : requestedTab;
+    const tabName = Object.hasOwn(TAB_ROUTES, target) ? target : 'accounts';
     state.activeTab = tabName;
     if (tabName !== 'accounts') {
       state.accountGroupFilter = 'all';
@@ -3919,6 +3920,7 @@
     const emptyEl = document.getElementById('fbAccountsEmptyState');
     if (!tableBody) return;
     
+    const callback = consumeMetaOAuthCallback();
     const epoch = state.workspaceEpoch || 0;
     try {
       const [connections, accounts] = await Promise.all([
@@ -3932,6 +3934,10 @@
         state.accounts = accounts;
       }
       renderFacebookAccounts();
+
+      if (callback.status === 'connected' && callback.connectionId) {
+        await discoverMetaAssets(callback.connectionId);
+      }
     } catch (e) {
       if (state.workspaceEpoch !== epoch) return;
       console.error('Error loading facebook accounts:', e);
@@ -4054,8 +4060,25 @@
     }
   };
 
-  window.startMetaOAuthFlow = function () {
-    window.switchTab('add');
+  window.startMetaOAuthFlow = async function () {
+    const btns = document.querySelectorAll('button[onclick*="startMetaOAuthFlow"]');
+    btns.forEach(b => { b.disabled = true; });
+    try {
+      showLoading();
+      const slug = (typeof getWorkspaceSlug === 'function' ? getWorkspaceSlug() : '') || (state.activeWorkspace?.slug || '');
+      const returnPath = slug ? `/${slug}/facebook-accounts` : '/facebook-accounts';
+      const result = await apiRequest(`/api/meta/oauth/start?return_path=${encodeURIComponent(returnPath)}`, { method: 'POST' });
+      window.location.assign(result.authorization_url);
+    } catch (err) {
+      showToast(err.message || 'Ошибка запуска авторизации Facebook', 'error');
+      btns.forEach(b => { b.disabled = false; });
+    } finally {
+      hideLoading();
+    }
+  };
+
+  window.openManualTokenModal = function () {
+    window.openModal('modalManualToken');
   };
 
   function getAccountMetaState(account) {
@@ -9543,7 +9566,9 @@
     button.disabled = true;
     button.querySelector('span').textContent = 'Открываем Facebook…';
     try {
-      const result = await apiRequest('/api/meta/oauth/start?return_path=/add-accounts', { method: 'POST' });
+      const slug = (typeof getWorkspaceSlug === 'function' ? getWorkspaceSlug() : '') || (state.activeWorkspace?.slug || '');
+      const returnPath = slug ? `/${slug}/facebook-accounts` : '/facebook-accounts';
+      const result = await apiRequest(`/api/meta/oauth/start?return_path=${encodeURIComponent(returnPath)}`, { method: 'POST' });
       window.location.assign(result.authorization_url);
     } catch (err) {
       showToast(err.message, 'error');
@@ -9562,27 +9587,28 @@
   };
 
   async function discoverMetaAssets(connectionId) {
-    const panel = document.getElementById('metaAssetsPanel');
-    const groups = document.getElementById('metaAssetGroups');
     state.metaOAuth.activeConnectionId = connectionId;
     state.metaOAuth.selectedAccountIds.clear();
-    panel.classList.remove('hidden');
-    groups.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Получаем доступные кабинеты из Meta…</p></div>';
-    document.getElementById('metaAssetsEmpty').classList.add('hidden');
+    window.openModal('modalMetaAssets');
+    const groups = document.getElementById('metaAssetGroups');
+    if (groups) groups.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Получаем доступные кабинеты из Meta…</p></div>';
+    document.getElementById('metaAssetsEmpty')?.classList.add('hidden');
     try {
       const result = await apiRequest(`/api/meta/connections/${connectionId}/discover`, { method: 'POST' });
       state.metaOAuth.assets = result.accounts || [];
-      document.getElementById('metaAssetsTitle').textContent = result.connection?.provider_user_name || 'Доступные кабинеты';
-      document.getElementById('metaAssetsSubtitle').textContent = `Найдено ${result.count || 0} · уже подключено ${result.imported_count || 0}`;
+      const titleEl = document.getElementById('metaAssetsTitle');
+      const subEl = document.getElementById('metaAssetsSubtitle');
+      if (titleEl) titleEl.textContent = result.connection?.provider_user_name || 'Доступные кабинеты Facebook';
+      if (subEl) subEl.textContent = `Найдено кабинетов: ${result.count || 0} · уже подключено: ${result.imported_count || 0}`;
       renderMetaAssets();
-      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
-      groups.innerHTML = '';
-      document.getElementById('metaAssetsEmpty').classList.remove('hidden');
-      document.querySelector('#metaAssetsEmpty h3').textContent = 'Не удалось получить кабинеты';
-      document.querySelector('#metaAssetsEmpty p').textContent = err.message;
+      if (groups) groups.innerHTML = '';
+      document.getElementById('metaAssetsEmpty')?.classList.remove('hidden');
+      const errTitle = document.querySelector('#metaAssetsEmpty h3');
+      const errP = document.querySelector('#metaAssetsEmpty p');
+      if (errTitle) errTitle.textContent = 'Не удалось получить кабинеты';
+      if (errP) errP.textContent = err.message;
       showToast(err.message, 'error');
-      await loadMetaConnections();
     }
   }
 
@@ -9678,7 +9704,9 @@
       document.getElementById('btnBatchDone').classList.remove('hidden');
       if (result.success_count > 0) document.getElementById('btnBatchOpenRules').classList.remove('hidden');
       state.metaOAuth.selectedAccountIds.clear();
-      await discoverMetaAssets(state.metaOAuth.activeConnectionId);
+      window.closeModal('modalMetaAssets');
+      await loadFacebookAccounts();
+      await loadAccounts();
     } catch (err) {
       document.getElementById('batchProgressText').textContent = `Ошибка: ${err.message}`;
       document.getElementById('btnBatchDone').classList.remove('hidden');
@@ -9850,9 +9878,13 @@
 
   });
 
-  window.closeBatchProgress = function (targetTab = 'accounts') {
+  window.closeBatchProgress = function (targetTab = 'fb_accounts') {
     window.closeModal('modalBatchProgress');
+    window.closeModal('modalMetaAssets');
+    window.closeModal('modalManualToken');
     window.switchTab(targetTab);
+    loadFacebookAccounts();
+    loadAccounts();
   };
 
   // ==========================================================
