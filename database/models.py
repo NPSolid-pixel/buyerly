@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -605,13 +606,9 @@ class Account(Base):
 
 
 class AccountGroup(Base):
-    """Owner-scoped, reusable grouping of advertising accounts."""
+    """Workspace-scoped, reusable grouping of advertising accounts."""
 
     __tablename__ = "account_groups"
-    __table_args__ = (
-        UniqueConstraint("owner_user_id", "name", name="uq_account_group_owner_name"),
-    )
-
     id = Column(Integer, primary_key=True, autoincrement=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
     owner_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
@@ -620,8 +617,18 @@ class AccountGroup(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
+    __table_args__ = (
+        Index(
+            "uq_account_groups_workspace_name_ci",
+            workspace_id,
+            func.lower(func.btrim(name)),
+            unique=True,
+            postgresql_where=workspace_id.is_not(None),
+        ),
+    )
+
     def __repr__(self):
-        return f"<AccountGroup(id={self.id}, name='{self.name}', owner_user_id={self.owner_user_id})>"
+        return f"<AccountGroup(id={self.id}, workspace_id={self.workspace_id}, name='{self.name}')>"
 
 
 class AccountGroupMember(Base):

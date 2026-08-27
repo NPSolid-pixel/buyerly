@@ -25,6 +25,7 @@ from database.rule_workspace_contract import (
 )
 from database.models import (
     Account,
+    AccountGroup,
     RuleGroup,
     RuleGroupItem,
     RulePreset,
@@ -893,6 +894,123 @@ class TestRuleWorkspaceMigration(unittest.IsolatedAsyncioTestCase):
 
 
 class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
+    async def test_account_group_uniqueness_migration_preserves_and_scopes_names(self):
+        from alembic.config import Config
+        from alembic import command
+        import os
+
+        engine = create_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
+
+            config = Config(
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+            )
+            config.set_main_option(
+                "script_location",
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
+            )
+            command.upgrade(config, "0011_workspace_slugs")
+
+            session_maker = async_sessionmaker(
+                engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+            async with session_maker() as session:
+                first_owner = User(username="group-owner-one")
+                second_owner = User(username="group-owner-two")
+                session.add_all([first_owner, second_owner])
+                await session.flush()
+                workspace = Workspace(
+                    name="Group Workspace",
+                    slug="group-workspace",
+                    owner_user_id=first_owner.id,
+                )
+                session.add(workspace)
+                await session.flush()
+                session.add(
+                    WorkspaceMember(
+                        workspace_id=workspace.id,
+                        user_id=first_owner.id,
+                        role="owner",
+                    )
+                )
+                first_owner.active_workspace_id = workspace.id
+                session.add_all(
+                    [
+                        AccountGroup(
+                            workspace_id=workspace.id,
+                            owner_user_id=first_owner.id,
+                            name="  Alpha  ",
+                        ),
+                        AccountGroup(
+                            workspace_id=workspace.id,
+                            owner_user_id=second_owner.id,
+                            name="alpha",
+                        ),
+                        AccountGroup(
+                            workspace_id=None,
+                            owner_user_id=first_owner.id,
+                            name="Legacy",
+                        ),
+                    ]
+                )
+                await session.commit()
+
+            command.upgrade(config, "head")
+
+            async with engine.connect() as conn:
+                rows = (
+                    await conn.execute(
+                        text(
+                            "SELECT workspace_id, name FROM account_groups ORDER BY id ASC"
+                        )
+                    )
+                ).all()
+                self.assertEqual(
+                    [(row.workspace_id, row.name) for row in rows],
+                    [
+                        (workspace.id, "Alpha"),
+                        (workspace.id, "alpha (2)"),
+                        (workspace.id, "Legacy"),
+                    ],
+                )
+
+            async with session_maker() as session:
+                second_workspace = Workspace(
+                    name="Second Group Workspace",
+                    slug="second-group-workspace",
+                    owner_user_id=first_owner.id,
+                )
+                session.add(second_workspace)
+                await session.flush()
+                session.add(
+                    AccountGroup(
+                        workspace_id=second_workspace.id,
+                        owner_user_id=first_owner.id,
+                        name="Alpha",
+                    )
+                )
+                await session.commit()
+
+            async with session_maker() as session:
+                session.add(
+                    AccountGroup(
+                        workspace_id=workspace.id,
+                        owner_user_id=first_owner.id,
+                        name="ALPHA",
+                    )
+                )
+                with self.assertRaises(Exception):
+                    await session.commit()
+                await session.rollback()
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
     async def test_workspace_slug_migration_normalizes_reserved_and_colliding_rows(self):
         from alembic.config import Config
         from alembic import command
@@ -978,7 +1096,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-                self.assertEqual(version, "0011_workspace_slugs")
+                self.assertEqual(version, "0012_group_ws_unique")
 
             command.downgrade(alembic_cfg, "base")
         finally:
@@ -1001,7 +1119,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0011_workspace_slugs")
+                self.assertEqual(version, "0012_group_ws_unique")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -1035,7 +1153,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0011_workspace_slugs")
+                self.assertEqual(version, "0012_group_ws_unique")
         finally:
             await init_test_db(engine)
             await engine.dispose()

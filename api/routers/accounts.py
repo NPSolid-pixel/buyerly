@@ -4,6 +4,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 
 from api.auth import get_current_user
 from api.deps import (
@@ -114,16 +115,12 @@ async def create_account_group(
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "создания групп кабинетов")
 
-        scope_clause = (
-            or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
-            if ws
-            else owned_by(AccountGroup, user)
-        )
+        scope_clause = AccountGroup.workspace_id == ws.id if ws else owned_by(AccountGroup, user)
         duplicate = (
             await session.execute(
                 select(AccountGroup.id).where(
                     scope_clause,
-                    func.lower(AccountGroup.name) == name.lower(),
+                    func.lower(func.btrim(AccountGroup.name)) == name.lower(),
                 )
             )
         ).scalar_one_or_none()
@@ -137,11 +134,15 @@ async def create_account_group(
             name=name,
             description=payload.description.strip(),
         )
-        session.add(group)
-        await session.flush()
-        for position, account in enumerate(accounts):
-            session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
-        await session.commit()
+        try:
+            session.add(group)
+            await session.flush()
+            for position, account in enumerate(accounts):
+                session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=409, detail="Группа с таким названием уже существует") from exc
         invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         items = await _account_group_items(session, user)
         return next(item for item in items if item.id == group.id)
@@ -160,11 +161,7 @@ async def update_account_group(
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "редактирования групп кабинетов")
 
-        scope_clause = (
-            or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
-            if ws
-            else owned_by(AccountGroup, user)
-        )
+        scope_clause = AccountGroup.workspace_id == ws.id if ws else owned_by(AccountGroup, user)
         group = (
             await session.execute(
                 select(AccountGroup).where(
@@ -179,7 +176,7 @@ async def update_account_group(
             await session.execute(
                 select(AccountGroup.id).where(
                     scope_clause,
-                    func.lower(AccountGroup.name) == name.lower(),
+                    func.lower(func.btrim(AccountGroup.name)) == name.lower(),
                     AccountGroup.id != group_id,
                 )
             )
@@ -188,13 +185,17 @@ async def update_account_group(
             raise HTTPException(status_code=409, detail="Группа с таким названием уже существует")
 
         accounts = await _validate_account_group_members(session, user, payload.account_ids)
-        group.name = name
-        group.description = payload.description.strip()
-        group.updated_at = datetime.now(timezone.utc)
-        await session.execute(delete(AccountGroupMember).where(AccountGroupMember.group_id == group.id))
-        for position, account in enumerate(accounts):
-            session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
-        await session.commit()
+        try:
+            group.name = name
+            group.description = payload.description.strip()
+            group.updated_at = datetime.now(timezone.utc)
+            await session.execute(delete(AccountGroupMember).where(AccountGroupMember.group_id == group.id))
+            for position, account in enumerate(accounts):
+                session.add(AccountGroupMember(group_id=group.id, account_id=account.id, position=position))
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(status_code=409, detail="Группа с таким названием уже существует") from exc
         invalidate_summary_cache(workspace_id=ws.id if ws else None, owner_user_id=user.id)
         items = await _account_group_items(session, user)
         return next(item for item in items if item.id == group.id)
@@ -209,11 +210,7 @@ async def delete_account_group(
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "удаления групп кабинетов")
 
-        scope_clause = (
-            or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
-            if ws
-            else owned_by(AccountGroup, user)
-        )
+        scope_clause = AccountGroup.workspace_id == ws.id if ws else owned_by(AccountGroup, user)
         group = (
             await session.execute(
                 select(AccountGroup).where(

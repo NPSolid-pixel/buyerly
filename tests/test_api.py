@@ -587,6 +587,77 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 0,
             )
 
+    async def test_account_group_names_are_atomic_and_unique_per_workspace(self):
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            primary = await client.post(
+                "/api/account-groups",
+                headers=headers,
+                json={"name": "Shared Name", "account_ids": []},
+            )
+            self.assertEqual(primary.status_code, 201)
+
+            first_race, second_race = await asyncio.gather(
+                client.post(
+                    "/api/account-groups",
+                    headers=headers,
+                    json={"name": "Concurrent", "account_ids": []},
+                ),
+                client.post(
+                    "/api/account-groups",
+                    headers=headers,
+                    json={"name": "CONCURRENT", "account_ids": []},
+                ),
+            )
+            self.assertEqual(
+                sorted((first_race.status_code, second_race.status_code)),
+                [201, 409],
+            )
+
+            second_workspace = await client.post(
+                "/api/workspaces",
+                headers=headers,
+                json={"name": "Secondary Group Scope"},
+            )
+            self.assertEqual(second_workspace.status_code, 200)
+
+            same_name_other_workspace = await client.post(
+                "/api/account-groups",
+                headers=headers,
+                json={"name": "Shared Name", "account_ids": []},
+            )
+            self.assertEqual(same_name_other_workspace.status_code, 201)
+
+            switch_back = await client.post(
+                "/api/workspaces/switch",
+                headers=headers,
+                json={"slug": "buyer-workspace"},
+            )
+            self.assertEqual(switch_back.status_code, 200)
+            duplicate_primary = await client.post(
+                "/api/account-groups",
+                headers=headers,
+                json={"name": "  SHARED NAME  ", "account_ids": []},
+            )
+            self.assertEqual(duplicate_primary.status_code, 409)
+
+        async with self.test_session_maker() as session:
+            shared_rows = (
+                await session.execute(
+                    select(AccountGroup.workspace_id).where(
+                        func.lower(AccountGroup.name) == "shared name"
+                    )
+                )
+            ).scalars().all()
+            self.assertEqual(len(shared_rows), 2)
+            self.assertEqual(len(set(shared_rows)), 2)
+
     async def test_account_profile_and_latest_saved_metrics_are_owner_isolated(self):
         async with self.test_session_maker() as session:
             buyer = (
@@ -634,6 +705,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
             )
             account_group = AccountGroup(
+                workspace_id=buyer.active_workspace_id,
                 owner_user_id=buyer.id,
                 name="NL",
                 description="Netherlands",

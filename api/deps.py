@@ -460,11 +460,7 @@ async def _account_group_ids_by_account(
 ) -> Dict[str, List[int]]:
     """Return live workspace/owner-scoped group membership keyed by Meta account ID."""
     ws = await get_user_workspace(session, user, workspace_id=workspace_id)
-    scope_clause = (
-        or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
-        if ws
-        else owned_by(AccountGroup, user)
-    )
+    scope_clause = AccountGroup.workspace_id == ws.id if ws else owned_by(AccountGroup, user)
 
     rows = (
         await session.execute(
@@ -487,11 +483,7 @@ async def _account_group_items(
     workspace_id: Optional[int] = None,
 ) -> List[AccountGroupItem]:
     ws = await get_user_workspace(session, user, workspace_id=workspace_id)
-    scope_clause = (
-        or_(AccountGroup.workspace_id == ws.id, and_(AccountGroup.workspace_id.is_(None), owned_by(AccountGroup, user)))
-        if ws
-        else owned_by(AccountGroup, user)
-    )
+    scope_clause = AccountGroup.workspace_id == ws.id if ws else owned_by(AccountGroup, user)
 
     groups = (
         await session.execute(
