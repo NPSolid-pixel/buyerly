@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -25,6 +24,7 @@ from core.metrics import (
     validate_runtime_rule,
 )
 from core.ownership import owned_by, owned_by_ids
+from core.workspace_slugs import RESERVED_WORKSPACE_SLUGS, normalize_workspace_slug
 from database.db import verify_password
 from database.models import (
     Account,
@@ -41,6 +41,7 @@ from database.models import (
     WorkspaceMember,
     WorkspaceSupportGrant,
 )
+from services.workspace_slugs import allocate_workspace_slug
 
 logger = logging.getLogger(__name__)
 
@@ -138,40 +139,9 @@ SUMMARY_DEFAULT_COLUMN_WIDTHS = {
 # ----------------------------------------------------
 # Workspace Helpers & Scoping
 # ----------------------------------------------------
-RESERVED_WORKSPACE_SLUGS = {
-    "api",
-    "admin",
-    "app",
-    "auth",
-    "static",
-    "uploads",
-    "settings",
-    "terms",
-    "privacy",
-    "data-deletion",
-    "onboarding",
-    "login",
-    "sign-in",
-    "dashboard",
-    "accounts",
-    "rules",
-    "chats",
-    "summary",
-    "logs",
-    "invite",
-    "invites",
-    "null",
-    "undefined",
-}
-
-
 def slugify(text: str) -> str:
-    """Generate a clean URL slug from name."""
-    text = text.lower().strip()
-    text = re.sub(r"[^\w\s-]", "", text)
-    text = re.sub(r"[\s_-]+", "-", text)
-    text = re.sub(r"^-+|-+$", "", text)
-    return text or "workspace"
+    """Compatibility wrapper for the canonical workspace slug normalizer."""
+    return normalize_workspace_slug(text)
 
 
 async def _active_support_grant(
@@ -312,10 +282,7 @@ async def get_user_workspace(
             return ws
 
     # Create default workspace if user has none
-    ws_slug = "buyerly"
-    existing = (await session.execute(select(Workspace).where(Workspace.slug == ws_slug))).scalar_one_or_none()
-    if existing:
-        ws_slug = f"buyerly-{user.id}"
+    ws_slug = await allocate_workspace_slug(session, "buyerly")
 
     ws = Workspace(
         name="Buyerly",

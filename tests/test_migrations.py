@@ -893,6 +893,70 @@ class TestRuleWorkspaceMigration(unittest.IsolatedAsyncioTestCase):
 
 
 class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
+    async def test_workspace_slug_migration_normalizes_reserved_and_colliding_rows(self):
+        from alembic.config import Config
+        from alembic import command
+        import os
+
+        engine = create_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
+
+            config = Config(
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+            )
+            config.set_main_option(
+                "script_location",
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
+            )
+            command.upgrade(config, "0010_atomic_otp")
+
+            session_maker = async_sessionmaker(
+                engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+            async with session_maker() as session:
+                owner = User(username="slug-migration-owner")
+                session.add(owner)
+                await session.flush()
+                session.add_all(
+                    [
+                        Workspace(name="API", slug="api", owner_user_id=owner.id),
+                        Workspace(
+                            name="Канада Трафик",
+                            slug="Канада-Трафик",
+                            owner_user_id=owner.id,
+                        ),
+                        Workspace(
+                            name="Canada Traffic",
+                            slug="kanada-trafik",
+                            owner_user_id=owner.id,
+                        ),
+                    ]
+                )
+                await session.commit()
+
+            command.upgrade(config, "head")
+
+            async with engine.connect() as conn:
+                slugs = list(
+                    (
+                        await conn.execute(
+                            text("SELECT slug FROM workspaces ORDER BY id ASC")
+                        )
+                    ).scalars()
+                )
+                self.assertEqual(
+                    slugs,
+                    ["api-workspace", "kanada-trafik-2", "kanada-trafik"],
+                )
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
     async def test_alembic_upgrade_head_applies_successfully(self):
         from alembic.config import Config
         from alembic import command
@@ -914,7 +978,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-                self.assertEqual(version, "0010_atomic_otp")
+                self.assertEqual(version, "0011_workspace_slugs")
 
             command.downgrade(alembic_cfg, "base")
         finally:
@@ -937,7 +1001,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0010_atomic_otp")
+                self.assertEqual(version, "0011_workspace_slugs")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -971,7 +1035,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0010_atomic_otp")
+                self.assertEqual(version, "0011_workspace_slugs")
         finally:
             await init_test_db(engine)
             await engine.dispose()

@@ -1,5 +1,4 @@
 import logging
-import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +10,6 @@ from api.deps import (
     get_user_workspaces_list,
     invalidate_summary_cache,
     record_security_event_and_raise,
-    slugify,
 )
 from api.schemas import (
     CreateWorkspaceRequest,
@@ -21,6 +19,7 @@ from api.schemas import (
 )
 from database.db import async_session_maker
 from database.models import User, Workspace, WorkspaceMember
+from services.workspace_slugs import allocate_workspace_slug
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Workspaces"])
@@ -38,39 +37,26 @@ async def create_workspace(req: CreateWorkspaceRequest, user: User = Depends(get
     if not name:
         raise HTTPException(status_code=400, detail="Название воркспейса обязательно")
 
-    raw_slug = slugify(req.slug.strip()) if req.slug else slugify(name)
-    slug = raw_slug or "workspace"
+    requested_slug = req.slug.strip() if req.slug else name
     badge_color = req.badge_color or "#F5A300"
     badge_text = req.badge_text.strip() if req.badge_text else name[:1].upper()
     logo_url = req.logo_url.strip() if req.logo_url else ""
 
     async with async_session_maker() as session:
-        existing = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
-        if existing and existing.owner_user_id == user.id:
-            # Re-use & update existing workspace owned by user
-            existing.name = name
-            existing.badge_color = badge_color
-            existing.badge_text = badge_text
-            if logo_url:
-                existing.logo_url = logo_url
-            ws = existing
-        else:
-            if existing:
-                slug = f"{slug}-{uuid.uuid4().hex[:6]}"
+        slug = await allocate_workspace_slug(session, requested_slug)
+        ws = Workspace(
+            name=name,
+            slug=slug,
+            badge_text=badge_text,
+            badge_color=badge_color,
+            logo_url=logo_url,
+            owner_user_id=user.id,
+        )
+        session.add(ws)
+        await session.flush()
 
-            ws = Workspace(
-                name=name,
-                slug=slug,
-                badge_text=badge_text,
-                badge_color=badge_color,
-                logo_url=logo_url,
-                owner_user_id=user.id,
-            )
-            session.add(ws)
-            await session.flush()
-
-            member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
-            session.add(member)
+        member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
+        session.add(member)
 
         db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         db_user.active_workspace_id = ws.id

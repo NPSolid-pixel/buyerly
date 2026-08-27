@@ -14,6 +14,11 @@ import api.server as api_server_module
 from api.server import create_app
 from core.config import settings
 from core.rate_limit import limiter
+from core.workspace_slugs import (
+    MAX_WORKSPACE_SLUG_LENGTH,
+    normalize_workspace_slug,
+    reservation_safe_workspace_slug,
+)
 from database.db import Base, hash_password
 from database.models import (
     Account,
@@ -31,6 +36,20 @@ from tests.test_db_helper import create_test_engine, init_test_db
 
 
 class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
+
+    def test_workspace_slug_normalization_is_bounded_and_deterministic(self):
+        self.assertEqual(normalize_workspace_slug("Канада Трафик"), "kanada-trafik")
+        self.assertEqual(normalize_workspace_slug("Crème & Media"), "creme-media")
+        self.assertEqual(
+            normalize_workspace_slug("广告投放"),
+            normalize_workspace_slug("广告投放"),
+        )
+        self.assertTrue(normalize_workspace_slug("广告投放").startswith("workspace-"))
+        self.assertEqual(reservation_safe_workspace_slug("api"), "api-workspace")
+        self.assertLessEqual(
+            len(normalize_workspace_slug("a" * 100)),
+            MAX_WORKSPACE_SLUG_LENGTH,
+        )
 
     async def asyncSetUp(self):
         await limiter.reset()
@@ -207,6 +226,58 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                 headers=headers,
             )
             self.assertEqual(del_only.status_code, 400)
+
+    async def test_workspace_creation_allocates_stable_reserved_safe_suffixes(self):
+        artem_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000111, 'first_name': 'Artem', 'username': 'artem'},
+        )
+        headers = {'Authorization': f'tma {artem_data}'}
+        transport = httpx.ASGITransport(app=self.app)
+
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+            first, second = await asyncio.gather(
+                client.post('/api/workspaces', headers=headers, json={'name': 'Канада Трафик'}),
+                client.post('/api/workspaces', headers=headers, json={'name': 'Канада Трафик'}),
+            )
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(second.status_code, 200)
+            self.assertEqual(
+                sorted([first.json()['slug'], second.json()['slug']]),
+                ['kanada-trafik', 'kanada-trafik-2'],
+            )
+
+            third = await client.post(
+                '/api/workspaces',
+                headers=headers,
+                json={'name': 'Канада Трафик'},
+            )
+            self.assertEqual(third.status_code, 200)
+            self.assertEqual(third.json()['slug'], 'kanada-trafik-3')
+
+            reserved_check = await client.get(
+                '/api/onboarding/check-slug',
+                headers=headers,
+                params={'slug': 'api'},
+            )
+            self.assertEqual(reserved_check.status_code, 200)
+            self.assertFalse(reserved_check.json()['available'])
+
+            reserved_create = await client.post(
+                '/api/workspaces',
+                headers=headers,
+                json={'name': 'API', 'slug': 'api'},
+            )
+            self.assertEqual(reserved_create.status_code, 200)
+            self.assertEqual(reserved_create.json()['slug'], 'api-workspace')
+
+            async with self.test_session_maker() as session:
+                names = (
+                    await session.execute(
+                        select(Workspace.name).where(Workspace.name == 'Канада Трафик')
+                    )
+                ).scalars().all()
+                self.assertEqual(len(names), 3)
 
     async def test_spa_workspace_slug_routes(self):
         transport = httpx.ASGITransport(app=self.app)
@@ -1044,4 +1115,3 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn(raw_token, e.message)
                     details_str = json.dumps(e.details)
                     self.assertNotIn(raw_token, details_str)
-

@@ -14,7 +14,6 @@ from api.deps import (
     _utc_iso,
     get_user_workspace,
     get_user_workspaces_list,
-    slugify,
 )
 from api.schemas import (
     CheckSlugResponse,
@@ -29,8 +28,10 @@ from api.schemas import (
 )
 from core.email import send_workspace_invitation_email
 from core.rate_limit import rate_limit_dep
+from core.workspace_slugs import normalize_workspace_slug
 from database.db import async_session_maker
 from database.models import AuditEvent, User, Workspace, WorkspaceInvite, WorkspaceMember
+from services.workspace_slugs import allocate_workspace_slug
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Onboarding"])
@@ -215,7 +216,7 @@ async def check_workspace_slug(
 ):
     """Check availability and validity of workspace slug in real-time."""
     raw_slug = slug.strip().lower()
-    cleaned_slug = slugify(raw_slug)
+    cleaned_slug = normalize_workspace_slug(raw_slug)
 
     if not cleaned_slug or len(cleaned_slug) < 2:
         return CheckSlugResponse(
@@ -257,22 +258,14 @@ async def submit_onboarding_workspace(
     if not name:
         raise HTTPException(status_code=400, detail="Название воркспейса обязательно")
 
-    raw_slug = req.slug.strip().lower() if req.slug else slugify(name)
-    slug = slugify(raw_slug) if raw_slug else "workspace"
-    if not slug or len(slug) < 2:
-        slug = f"ws-{secrets.token_hex(3)}"
-
-    if slug in RESERVED_WORKSPACE_SLUGS:
-        slug = f"{slug}-{secrets.token_hex(3)}"
+    requested_slug = req.slug.strip() if req.slug else name
 
     badge_color = req.badge_color or "#F5A300"
     badge_text = req.badge_text.strip() if req.badge_text else name[:1].upper()
     logo_url = req.logo_url.strip() if req.logo_url else ""
 
     async with async_session_maker() as session:
-        existing = (await session.execute(select(Workspace).where(Workspace.slug == slug))).scalar_one_or_none()
-        if existing:
-            slug = f"{slug}-{secrets.token_hex(3)}"
+        slug = await allocate_workspace_slug(session, requested_slug)
 
         ws = Workspace(
             name=name,
