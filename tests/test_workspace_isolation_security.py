@@ -16,6 +16,7 @@ from database.db import hash_password
 from database.models import (
     Account,
     AuditEvent,
+    RuleGroup,
     RulePreset,
     User,
     Workspace,
@@ -233,6 +234,20 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
             session.add(viewer_user)
             await session.flush()
             session.add(WorkspaceMember(workspace_id=self.ws_a.id, user_id=viewer_user.id, role="viewer"))
+            preset = RulePreset(
+                workspace_id=self.ws_a.id,
+                owner_user_id=self.tenant_a_user.id,
+                name="Viewer protected preset",
+                action="turn_off",
+                conditions=[],
+            )
+            group = RuleGroup(
+                workspace_id=self.ws_a.id,
+                owner_user_id=self.tenant_a_user.id,
+                name="Viewer protected group",
+                position=0,
+            )
+            session.add_all([preset, group])
             viewer_visible_event = AuditEvent(
                 workspace_id=self.ws_a.id,
                 owner_user_id=self.tenant_a_user.id,
@@ -248,6 +263,8 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
             session.add(viewer_visible_event)
             await session.commit()
             viewer_visible_event_id = viewer_visible_event.id
+            preset_id = preset.id
+            group_id = group.id
 
         viewer_headers = self._headers_for(viewer_user)
         transport = httpx.ASGITransport(app=self.app)
@@ -280,6 +297,211 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
                 headers=viewer_headers,
             )
             self.assertEqual(undo_res.status_code, 403)
+
+            rule_writes = [
+                await client.post(
+                    "/api/presets",
+                    headers=viewer_headers,
+                    json={
+                        "name": "Blocked",
+                        "action": "turn_off",
+                        "conditions": [
+                            {"metric": "spend", "operator": "gte", "value": 1}
+                        ],
+                    },
+                ),
+                await client.put(
+                    f"/api/presets/{preset_id}",
+                    headers=viewer_headers,
+                    json={
+                        "name": "Blocked",
+                        "action": "turn_off",
+                        "conditions": [
+                            {"metric": "spend", "operator": "gte", "value": 1}
+                        ],
+                    },
+                ),
+                await client.delete(
+                    f"/api/presets/{preset_id}", headers=viewer_headers
+                ),
+                await client.post(
+                    "/api/rule-groups",
+                    headers=viewer_headers,
+                    json={"name": "Blocked", "preset_ids": []},
+                ),
+                await client.put(
+                    "/api/rule-groups/reorder",
+                    headers=viewer_headers,
+                    json={"group_ids": [group_id]},
+                ),
+                await client.put(
+                    f"/api/rule-groups/{group_id}",
+                    headers=viewer_headers,
+                    json={"name": "Blocked", "preset_ids": []},
+                ),
+                await client.delete(
+                    f"/api/rule-groups/{group_id}", headers=viewer_headers
+                ),
+                await client.post(
+                    f"/api/accounts/{self.acc_a.account_id}/assign-rule",
+                    headers=viewer_headers,
+                    json={"preset_id": preset_id},
+                ),
+                await client.post(
+                    f"/api/accounts/{self.acc_a.account_id}/assign-rule-group/{group_id}",
+                    headers=viewer_headers,
+                ),
+                await client.post(
+                    f"/api/accounts/{self.acc_a.account_id}/detach-rule/{preset_id}",
+                    headers=viewer_headers,
+                ),
+                await client.post(
+                    f"/api/accounts/{self.acc_a.account_id}/toggle-rules",
+                    headers=viewer_headers,
+                ),
+            ]
+            self.assertTrue(all(response.status_code == 403 for response in rule_writes))
+
+    async def test_same_owner_rule_libraries_are_isolated_by_active_workspace(self):
+        async with self.test_session_maker() as session:
+            second_workspace = Workspace(
+                name="Tenant A Second Space",
+                slug="tenant-a-second-space",
+                owner_user_id=self.tenant_a_user.id,
+            )
+            session.add(second_workspace)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=second_workspace.id,
+                    user_id=self.tenant_a_user.id,
+                    role="owner",
+                )
+            )
+            foreign_preset = RulePreset(
+                workspace_id=second_workspace.id,
+                owner_user_id=self.tenant_a_user.id,
+                name="Second workspace preset",
+                action="turn_off",
+                conditions=[],
+            )
+            legacy_preset = RulePreset(
+                workspace_id=None,
+                owner_user_id=self.tenant_a_user.id,
+                name="Legacy unscoped preset",
+                action="turn_off",
+                conditions=[],
+            )
+            foreign_group = RuleGroup(
+                workspace_id=second_workspace.id,
+                owner_user_id=self.tenant_a_user.id,
+                name="Second workspace group",
+                position=0,
+            )
+            legacy_group = RuleGroup(
+                workspace_id=None,
+                owner_user_id=self.tenant_a_user.id,
+                name="Legacy unscoped group",
+                position=0,
+            )
+            foreign_account = Account(
+                account_id="act_111112",
+                name="Tenant A second workspace account",
+                workspace_id=second_workspace.id,
+                owner_user_id=self.tenant_a_user.id,
+                timezone_name="UTC",
+                currency="USD",
+                is_active=True,
+            )
+            session.add_all(
+                [
+                    foreign_preset,
+                    legacy_preset,
+                    foreign_group,
+                    legacy_group,
+                    foreign_account,
+                ]
+            )
+            await session.commit()
+            foreign_preset_id = foreign_preset.id
+            foreign_group_id = foreign_group.id
+
+        headers = self._headers_for(self.tenant_a_user)
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            presets = await client.get("/api/presets", headers=headers)
+            groups = await client.get("/api/rule-groups", headers=headers)
+            visible_preset_ids = {item["id"] for item in presets.json()}
+            visible_group_ids = {item["id"] for item in groups.json()}
+            self.assertNotIn(foreign_preset_id, visible_preset_ids)
+            self.assertNotIn(legacy_preset.id, visible_preset_ids)
+            self.assertNotIn(foreign_group_id, visible_group_ids)
+            self.assertNotIn(legacy_group.id, visible_group_ids)
+
+            inaccessible_responses = [
+                await client.put(
+                    f"/api/presets/{foreign_preset_id}",
+                    headers=headers,
+                    json={
+                        "name": "Blocked",
+                        "action": "turn_off",
+                        "conditions": [
+                            {"metric": "spend", "operator": "gte", "value": 1}
+                        ],
+                    },
+                ),
+                await client.delete(
+                    f"/api/presets/{foreign_preset_id}", headers=headers
+                ),
+                await client.post(
+                    "/api/rule-groups",
+                    headers=headers,
+                    json={"name": "Blocked", "preset_ids": [foreign_preset_id]},
+                ),
+                await client.put(
+                    "/api/rule-groups/reorder",
+                    headers=headers,
+                    json={"group_ids": [foreign_group_id]},
+                ),
+                await client.put(
+                    f"/api/rule-groups/{foreign_group_id}",
+                    headers=headers,
+                    json={"name": "Blocked", "preset_ids": []},
+                ),
+                await client.delete(
+                    f"/api/rule-groups/{foreign_group_id}", headers=headers
+                ),
+                await client.post(
+                    "/api/accounts/act_111112/assign-rule",
+                    headers=headers,
+                    json={"preset_id": foreign_preset_id},
+                ),
+                await client.post(
+                    f"/api/accounts/act_111112/assign-rule-group/{foreign_group_id}",
+                    headers=headers,
+                ),
+                await client.post(
+                    f"/api/accounts/act_111112/detach-rule/{foreign_preset_id}",
+                    headers=headers,
+                ),
+                await client.post(
+                    "/api/accounts/act_111112/toggle-rules", headers=headers
+                ),
+            ]
+            self.assertTrue(
+                all(response.status_code in {400, 404} for response in inaccessible_responses)
+            )
+
+            switched = await client.post(
+                "/api/workspaces/switch",
+                headers=headers,
+                json={"workspace_id": second_workspace.id},
+            )
+            self.assertEqual(switched.status_code, 200)
+            second_presets = await client.get("/api/presets", headers=headers)
+            second_groups = await client.get("/api/rule-groups", headers=headers)
+            self.assertIn(foreign_preset_id, {item["id"] for item in second_presets.json()})
+            self.assertIn(foreign_group_id, {item["id"] for item in second_groups.json()})
 
     async def test_admin_support_session_lifecycle(self):
         """Admin creates bounded support session, accesses workspace, and revokes session."""

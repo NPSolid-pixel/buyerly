@@ -125,6 +125,17 @@ class RuleEngine:
         if not active_rules or not isinstance(active_rules, list) or len(active_rules) == 0:
             return noop("Правила не настроены.")
 
+        account_workspace_id = getattr(account, "workspace_id", None)
+        if account_workspace_id is not None:
+            active_rules = [
+                rule
+                for rule in active_rules
+                if isinstance(rule, dict)
+                and rule.get("workspace_id") == account_workspace_id
+            ]
+            if not active_rules:
+                return noop("Правила этого рабочего пространства не настроены.")
+
         try:
             validate_rule_set_compatibility(active_rules)
         except (TypeError, ValueError) as error:

@@ -12,6 +12,8 @@ from database.models import (
     RuleGroupItem,
     RulePreset,
     User,
+    Workspace,
+    WorkspaceMember,
 )
 
 
@@ -46,10 +48,34 @@ class TestRuleExamples(unittest.IsolatedAsyncioTestCase):
                 rules_enabled=False,
             )
             session.add_all([user, account])
+            await session.flush()
+            workspace = Workspace(
+                name="Examples",
+                slug="examples",
+                owner_user_id=user.id,
+            )
+            session.add(workspace)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=workspace.id,
+                    user_id=user.id,
+                    role="owner",
+                )
+            )
+            user.active_workspace_id = workspace.id
+            account.workspace_id = workspace.id
+            account.owner_user_id = user.id
             await session.commit()
             await session.refresh(user)
 
-            self.assertTrue(await ensure_rule_examples(session, user))
+            self.assertTrue(
+                await ensure_rule_examples(
+                    session,
+                    user,
+                    workspace_id=workspace.id,
+                )
+            )
             presets = (
                 await session.execute(
                     select(RulePreset)
@@ -89,7 +115,13 @@ class TestRuleExamples(unittest.IsolatedAsyncioTestCase):
             await session.execute(delete(RuleGroup).where(RuleGroup.id == deleted_group_id))
             await session.commit()
 
-            self.assertFalse(await ensure_rule_examples(session, user))
+            self.assertFalse(
+                await ensure_rule_examples(
+                    session,
+                    user,
+                    workspace_id=workspace.id,
+                )
+            )
             remaining_presets = (
                 await session.execute(
                     select(func.count())
@@ -121,12 +153,49 @@ class TestRuleExamples(unittest.IsolatedAsyncioTestCase):
             first = User(telegram_id="201", username="first", is_approved=True)
             second = User(telegram_id="202", username="second", is_approved=True)
             session.add_all([first, second])
+            await session.flush()
+            first_workspace = Workspace(
+                name="First",
+                slug="first",
+                owner_user_id=first.id,
+            )
+            second_workspace = Workspace(
+                name="Second",
+                slug="second",
+                owner_user_id=second.id,
+            )
+            session.add_all([first_workspace, second_workspace])
+            await session.flush()
+            session.add_all(
+                [
+                    WorkspaceMember(
+                        workspace_id=first_workspace.id,
+                        user_id=first.id,
+                        role="owner",
+                    ),
+                    WorkspaceMember(
+                        workspace_id=second_workspace.id,
+                        user_id=second.id,
+                        role="owner",
+                    ),
+                ]
+            )
+            first.active_workspace_id = first_workspace.id
+            second.active_workspace_id = second_workspace.id
             await session.commit()
             await session.refresh(first)
             await session.refresh(second)
 
-            await ensure_rule_examples(session, first)
-            await ensure_rule_examples(session, second)
+            await ensure_rule_examples(
+                session,
+                first,
+                workspace_id=first_workspace.id,
+            )
+            await ensure_rule_examples(
+                session,
+                second,
+                workspace_id=second_workspace.id,
+            )
 
             counts = {}
             for user in (first, second):

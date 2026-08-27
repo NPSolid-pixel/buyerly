@@ -16,6 +16,7 @@ from core.metrics import (
     validate_runtime_rule,
 )
 from database.jsonb_contract import JSONB_NATIVE_COLUMNS, decode_legacy_jsonb_string
+from database.rule_workspace_contract import scope_runtime_rule_snapshots
 
 logger = logging.getLogger(__name__)
 
@@ -828,6 +829,279 @@ async def migrate_workspaces_contract(conn) -> int:
     return created_workspaces
 
 
+async def migrate_rule_workspace_contract(conn) -> dict[str, int]:
+    """Backfill rule workspaces and fail closed for ambiguous runtime links."""
+
+    table_names = await conn.run_sync(
+        lambda sync_conn: set(inspect(sync_conn).get_table_names())
+    )
+    required = {"users", "workspace_members", "rule_presets", "rule_groups"}
+    if not required.issubset(table_names):
+        return {
+            "presets_backfilled": 0,
+            "groups_backfilled": 0,
+            "group_links_removed": 0,
+            "snapshots_changed": 0,
+            "snapshots_disabled": 0,
+        }
+
+    counts = {
+        "presets_backfilled": 0,
+        "groups_backfilled": 0,
+        "group_links_removed": 0,
+        "snapshots_changed": 0,
+        "snapshots_disabled": 0,
+    }
+    for table_name, count_key in (
+        ("rule_presets", "presets_backfilled"),
+        ("rule_groups", "groups_backfilled"),
+    ):
+        result = await conn.execute(
+            text(
+                f"""
+                UPDATE {table_name} AS target
+                SET workspace_id = owner.active_workspace_id
+                FROM users AS owner
+                WHERE target.workspace_id IS NULL
+                  AND target.owner_user_id = owner.id
+                  AND owner.active_workspace_id IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM workspace_members AS member
+                      WHERE member.user_id = owner.id
+                        AND member.workspace_id = owner.active_workspace_id
+                  )
+                """
+            )
+        )
+        counts[count_key] = max(result.rowcount or 0, 0)
+
+    if "rule_group_items" in table_names:
+        removed = await conn.execute(
+            text(
+                """
+                DELETE FROM rule_group_items AS item
+                USING rule_groups AS rule_group, rule_presets AS preset
+                WHERE item.group_id = rule_group.id
+                  AND item.preset_id = preset.id
+                  AND (
+                      rule_group.workspace_id IS NULL
+                      OR preset.workspace_id IS NULL
+                      OR rule_group.workspace_id <> preset.workspace_id
+                  )
+                """
+            )
+        )
+        counts["group_links_removed"] = max(removed.rowcount or 0, 0)
+
+    await conn.execute(
+        text(
+            """
+            WITH ranked AS (
+                SELECT id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id
+                           ORDER BY position, id
+                       ) - 1 AS scoped_position
+                FROM rule_groups
+                WHERE workspace_id IS NOT NULL
+            )
+            UPDATE rule_groups AS rule_group
+            SET position = ranked.scoped_position
+            FROM ranked
+            WHERE rule_group.id = ranked.id
+              AND rule_group.position <> ranked.scoped_position
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_rule_groups_workspace_position "
+            "ON rule_groups (workspace_id, position, id)"
+        )
+    )
+
+    if "rule_examples_bootstrap" in table_names:
+        marker_columns = await conn.run_sync(
+            lambda sync_conn: {
+                column["name"]
+                for column in inspect(sync_conn).get_columns("rule_examples_bootstrap")
+            }
+        )
+        if "workspace_id" not in marker_columns:
+            await conn.execute(
+                text("ALTER TABLE rule_examples_bootstrap ADD COLUMN workspace_id INTEGER")
+            )
+        await conn.execute(
+            text(
+                """
+                UPDATE rule_examples_bootstrap AS marker
+                SET workspace_id = owner.active_workspace_id
+                FROM users AS owner
+                WHERE marker.owner_user_id = owner.id
+                  AND marker.workspace_id IS NULL
+                  AND owner.active_workspace_id IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM workspace_members AS member
+                      WHERE member.user_id = owner.id
+                        AND member.workspace_id = owner.active_workspace_id
+                  )
+                """
+            )
+        )
+        await conn.execute(
+            text("DELETE FROM rule_examples_bootstrap WHERE workspace_id IS NULL")
+        )
+        unique_constraints = await conn.run_sync(
+            lambda sync_conn: inspect(sync_conn).get_unique_constraints(
+                "rule_examples_bootstrap"
+            )
+        )
+        for constraint in unique_constraints:
+            if constraint.get("column_names") != ["owner_user_id"]:
+                continue
+            constraint_name = str(constraint.get("name") or "")
+            if constraint_name:
+                quoted_name = '"' + constraint_name.replace('"', '""') + '"'
+                await conn.execute(
+                    text(
+                        "ALTER TABLE rule_examples_bootstrap "
+                        f"DROP CONSTRAINT IF EXISTS {quoted_name}"
+                    )
+                )
+        await conn.execute(
+            text(
+                "ALTER TABLE rule_examples_bootstrap "
+                "ALTER COLUMN workspace_id SET NOT NULL"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_rule_examples_bootstrap_workspace_id "
+                "ON rule_examples_bootstrap (workspace_id)"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_rule_examples_ws_owner "
+                "ON rule_examples_bootstrap (workspace_id, owner_user_id)"
+            )
+        )
+        marker_foreign_keys = await conn.run_sync(
+            lambda sync_conn: inspect(sync_conn).get_foreign_keys(
+                "rule_examples_bootstrap"
+            )
+        )
+        has_workspace_foreign_key = any(
+            foreign_key.get("constrained_columns") == ["workspace_id"]
+            for foreign_key in marker_foreign_keys
+        )
+        if not has_workspace_foreign_key and conn.dialect.name == "postgresql":
+            await conn.execute(
+                text(
+                    "ALTER TABLE rule_examples_bootstrap "
+                    "ADD CONSTRAINT fk_rule_examples_bootstrap_workspace "
+                    "FOREIGN KEY (workspace_id) REFERENCES workspaces(id) "
+                    "ON DELETE CASCADE"
+                )
+            )
+
+    preset_workspaces = {
+        int(row["id"]): row["workspace_id"]
+        for row in (
+            await conn.execute(text("SELECT id, workspace_id FROM rule_presets"))
+        ).mappings()
+    }
+    if "accounts" in table_names:
+        account_columns = await conn.run_sync(
+            lambda sync_conn: {
+                column["name"] for column in inspect(sync_conn).get_columns("accounts")
+            }
+        )
+        if {"workspace_id", "active_rules", "rules_enabled"}.issubset(account_columns):
+            account_rows = (
+                await conn.execute(
+                    text(
+                        "SELECT id, workspace_id, active_rules, rules_enabled "
+                        "FROM accounts"
+                    )
+                )
+            ).mappings()
+            for row in account_rows:
+                normalized, changed, disabled = scope_runtime_rule_snapshots(
+                    row["active_rules"],
+                    account_workspace_id=row["workspace_id"],
+                    preset_workspaces=preset_workspaces,
+                )
+                if not changed:
+                    continue
+                has_executable = any(
+                    rule.get("workspace_id") == row["workspace_id"]
+                    and rule.get("enabled", True) is not False
+                    and rule.get("needs_review", False) is not True
+                    for rule in normalized
+                )
+                await conn.execute(
+                    text(
+                        "UPDATE accounts SET active_rules = :active_rules, "
+                        "rules_enabled = :rules_enabled WHERE id = :id"
+                    ),
+                    {
+                        "id": row["id"],
+                        "active_rules": json.dumps(
+                            normalized,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                        "rules_enabled": bool(row["rules_enabled"] and has_executable),
+                    },
+                )
+                counts["snapshots_changed"] += 1
+                counts["snapshots_disabled"] += disabled
+
+    if conn.dialect.name == "postgresql" and "rule_group_items" in table_names:
+        await conn.execute(
+            text(
+                """
+                CREATE OR REPLACE FUNCTION enforce_rule_group_item_workspace()
+                RETURNS trigger AS $$
+                DECLARE
+                    group_workspace INTEGER;
+                    preset_workspace INTEGER;
+                BEGIN
+                    SELECT workspace_id INTO group_workspace
+                    FROM rule_groups WHERE id = NEW.group_id;
+                    SELECT workspace_id INTO preset_workspace
+                    FROM rule_presets WHERE id = NEW.preset_id;
+                    IF group_workspace IS NULL
+                       OR preset_workspace IS NULL
+                       OR group_workspace <> preset_workspace THEN
+                        RAISE EXCEPTION 'rule group and preset must share workspace';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                "DROP TRIGGER IF EXISTS trg_rule_group_item_workspace "
+                "ON rule_group_items"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE TRIGGER trg_rule_group_item_workspace "
+                "BEFORE INSERT OR UPDATE ON rule_group_items "
+                "FOR EACH ROW EXECUTE FUNCTION enforce_rule_group_item_workspace()"
+            )
+        )
+
+    return counts
+
+
 async def migrate_rule_groups_position(conn) -> bool:
     """Add position column to rule_groups table if missing."""
     table_names = await conn.run_sync(
@@ -1018,6 +1292,12 @@ async def init_schema():
         migrated_workspaces = await migrate_workspaces_contract(conn)
         if migrated_workspaces:
             logger.info("Backfilled default workspace for %s user(s).", migrated_workspaces)
+        rule_workspace_migration = await migrate_rule_workspace_contract(conn)
+        if any(rule_workspace_migration.values()):
+            logger.warning(
+                "Migrated workspace-scoped rule contract: %s",
+                rule_workspace_migration,
+            )
         audit_ownership_migration = await migrate_audit_event_ownership_contract(conn)
         if any(audit_ownership_migration.values()):
             logger.info(

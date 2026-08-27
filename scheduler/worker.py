@@ -62,14 +62,25 @@ class MonitoringWorker:
         self._action_semaphore = asyncio.Semaphore(1)
 
     @staticmethod
-    def _load_rules(raw_rules: Any) -> list[dict[str, Any]]:
+    def _load_rules(
+        raw_rules: Any,
+        *,
+        workspace_id: int | None,
+    ) -> list[dict[str, Any]]:
         try:
             rules = json.loads(raw_rules) if isinstance(raw_rules, str) else raw_rules
         except (TypeError, ValueError):
             return []
         if not isinstance(rules, list):
             return []
-        return [rule for rule in rules if isinstance(rule, dict)]
+        if workspace_id is None:
+            return []
+        return [
+            rule
+            for rule in rules
+            if isinstance(rule, dict)
+            and rule.get("workspace_id") == workspace_id
+        ]
 
     @staticmethod
     def _interval_minutes(value: Any, fallback: int) -> int:
@@ -979,7 +990,10 @@ class MonitoringWorker:
                 account_ref = str(acc.account_id)
                 notification_target = owner_chat_ids.get(acc.owner_user_id) or ""
                 now = self._clock()
-                active_rules = self._load_rules(acc.active_rules)
+                active_rules = self._load_rules(
+                    acc.active_rules,
+                    workspace_id=acc.workspace_id,
+                )
                 due_rule_entries = []
                 if acc.rules_enabled:
                     for index, rule in enumerate(active_rules):

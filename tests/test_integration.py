@@ -157,6 +157,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                 active_rules=json.dumps([
                     {
                         "preset_id": 1,
+                        "workspace_id": ws.id,
                         "name": "Stop spend without leads",
                         "action": "turn_off",
                         "conditions": [
@@ -179,6 +180,22 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.test_engine.dispose()
+
+    async def test_worker_rejects_missing_and_cross_workspace_snapshots(self):
+        rules = [
+            {"preset_id": 1, "workspace_id": 11, "name": "safe"},
+            {"preset_id": 2, "workspace_id": 12, "name": "cross"},
+            {"preset_id": 3, "name": "legacy"},
+        ]
+
+        self.assertEqual(
+            MonitoringWorker._load_rules(rules, workspace_id=11),
+            [rules[0]],
+        )
+        self.assertEqual(
+            MonitoringWorker._load_rules(rules, workspace_id=None),
+            [],
+        )
 
     async def test_rules_disabled_mode_skips_stopping(self):
         """Если авто-правила выключены, адсеты не должны останавливаться."""
@@ -372,6 +389,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             acc.active_rules = json.dumps([
                 {
                     "preset_id": 3,
+                    "workspace_id": acc.workspace_id,
                     "name": "Stop yesterday spend",
                     "action": "turn_off",
                     "conditions": [
@@ -535,6 +553,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             acc.active_rules = json.dumps([
                 {
                     "preset_id": 4,
+                    "workspace_id": acc.workspace_id,
                     "name": "Five minute notification",
                     "action": "notify_only",
                     "conditions": [
@@ -683,6 +702,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             acc.active_rules = json.dumps([
                 {
                     "preset_id": 5,
+                    "workspace_id": acc.workspace_id,
                     "name": "Fast notification",
                     "action": "notify_only",
                     "conditions": [
@@ -694,6 +714,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
                 },
                 {
                     "preset_id": 6,
+                    "workspace_id": acc.workspace_id,
                     "name": "Slow stop",
                     "action": "turn_off",
                     "conditions": [
@@ -733,6 +754,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             account.active_rules = json.dumps([
                 {
                     "preset_id": 22,
+                    "workspace_id": account.workspace_id,
                     "name": "Durable scale",
                     "action": "increase_budget",
                     "conditions": [{"metric": "leads", "operator": "gte", "value": 1.0}],
@@ -778,6 +800,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             account.active_rules = json.dumps([
                 {
                     "preset_id": 23,
+                    "workspace_id": account.workspace_id,
                     "name": "Reconcile scale",
                     "action": "increase_budget",
                     "conditions": [{"metric": "leads", "operator": "gte", "value": 1.0}],
@@ -826,6 +849,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             acc.active_rules = json.dumps([
                 {
                     "preset_id": 2,
+                    "workspace_id": acc.workspace_id,
                     "name": "Scale good CPL",
                     "action": "increase_budget",
                     "conditions": [
@@ -868,6 +892,7 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             acc.active_rules = json.dumps([
                 {
                     "preset_id": 7,
+                    "workspace_id": acc.workspace_id,
                     "name": "Reactivate after lead",
                     "action": "turn_on",
                     "conditions": [

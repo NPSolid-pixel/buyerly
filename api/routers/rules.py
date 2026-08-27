@@ -3,7 +3,7 @@ import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy import delete, func, select
 
 from api.auth import get_current_user
 from api.deps import (
@@ -11,7 +11,7 @@ from api.deps import (
     _ensure_compatible_presets,
     _ensure_compatible_rule_set,
     _ensure_stable_account_owner,
-    _get_owned_presets,
+    _get_workspace_presets,
     _load_active_rules,
     _load_group_presets,
     _preset_response,
@@ -21,7 +21,6 @@ from api.deps import (
     ensure_workspace_write_access,
     get_user_workspace,
     get_user_workspace_member,
-    record_security_event_and_raise,
 )
 from api.schemas import (
     ApplyPresetRequest,
@@ -32,7 +31,6 @@ from api.schemas import (
     RuleGroupWriteRequest,
     RulePresetItem,
 )
-from core.ownership import owned_by
 from core.rule_examples import ensure_rule_examples
 from database.db import async_session_maker
 from database.models import (
@@ -50,14 +48,13 @@ router = APIRouter(tags=["Rules & Presets"])
 @router.get("/presets", response_model=List[RulePresetItem])
 async def list_presets(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
-        await ensure_rule_examples(session, user)
         ws = await get_user_workspace(session, user)
-        scope_clause = (
-            or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
-            if ws
-            else owned_by(RulePreset, user)
+        await ensure_rule_examples(session, user, workspace_id=ws.id)
+        stmt = (
+            select(RulePreset)
+            .where(RulePreset.workspace_id == ws.id)
+            .order_by(RulePreset.id.desc())
         )
-        stmt = select(RulePreset).where(scope_clause).order_by(RulePreset.id.desc())
         res = await session.execute(stmt)
         presets = res.scalars().all()
         return [_preset_response(preset) for preset in presets]
@@ -108,12 +105,10 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: User
         ensure_workspace_write_access(user, member, "редактирования правил")
 
         condition_payloads = _validated_condition_payloads(payload.conditions)
-        scope_clause = (
-            or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
-            if ws
-            else owned_by(RulePreset, user)
+        stmt = select(RulePreset).where(
+            RulePreset.id == preset_id,
+            RulePreset.workspace_id == ws.id,
         )
-        stmt = select(RulePreset).where(RulePreset.id == preset_id, scope_clause)
         res = await session.execute(stmt)
         preset = res.scalar_one_or_none()
         if not preset:
@@ -136,11 +131,7 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: User
             preset.budget_max_daily = payload.budget_max_daily
 
         updated_snapshot = _preset_snapshot(preset)
-        acc_stmt = select(Account)
-        if ws:
-            acc_stmt = acc_stmt.where(or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user))))
-        else:
-            acc_stmt = acc_stmt.where(owned_by(Account, user))
+        acc_stmt = select(Account).where(Account.workspace_id == ws.id)
         account_res = await session.execute(acc_stmt)
         for account in account_res.scalars().all():
             active_rules = _load_active_rules(account.active_rules)
@@ -176,23 +167,17 @@ async def delete_preset(preset_id: int, user: User = Depends(get_current_user)):
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "удаления правил")
 
-        scope_clause = (
-            or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
-            if ws
-            else owned_by(RulePreset, user)
+        stmt = select(RulePreset).where(
+            RulePreset.id == preset_id,
+            RulePreset.workspace_id == ws.id,
         )
-        stmt = select(RulePreset).where(RulePreset.id == preset_id, scope_clause)
         res = await session.execute(stmt)
         preset = res.scalar_one_or_none()
         if not preset:
             raise HTTPException(status_code=404, detail="Пресет не найден")
 
         # Remove the exact preset ID from linked account snapshots in this workspace.
-        acc_stmt = select(Account)
-        if ws:
-            acc_stmt = acc_stmt.where(or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user))))
-        else:
-            acc_stmt = acc_stmt.where(owned_by(Account, user))
+        acc_stmt = select(Account).where(Account.workspace_id == ws.id)
         acc_res = await session.execute(acc_stmt)
         for acc in acc_res.scalars().all():
             active_rules = _load_active_rules(acc.active_rules)
@@ -211,21 +196,20 @@ async def delete_preset(preset_id: int, user: User = Depends(get_current_user)):
 @router.get("/rule-groups", response_model=List[RuleGroupResponse])
 async def list_rule_groups(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
-        await ensure_rule_examples(session, user)
         ws = await get_user_workspace(session, user)
-        scope_clause = (
-            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
-            if ws
-            else owned_by(RuleGroup, user)
-        )
+        await ensure_rule_examples(session, user, workspace_id=ws.id)
         groups = (
             await session.execute(
                 select(RuleGroup)
-                .where(scope_clause)
+                .where(RuleGroup.workspace_id == ws.id)
                 .order_by(RuleGroup.position.asc(), RuleGroup.id.asc())
             )
         ).scalars().all()
-        presets_by_group = await _load_group_presets(session, [group.id for group in groups])
+        presets_by_group = await _load_group_presets(
+            session,
+            [group.id for group in groups],
+            workspace_id=ws.id,
+        )
         return [
             _rule_group_response(group, presets_by_group.get(group.id, []))
             for group in groups
@@ -238,33 +222,39 @@ async def reorder_rule_groups(
     user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
-        ws = await get_user_workspace(session, user)
-        scope_clause = (
-            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
-            if ws
-            else owned_by(RuleGroup, user)
-        )
+        ws, member = await get_user_workspace_member(session, user)
+        ensure_workspace_write_access(user, member, "изменения порядка групп правил")
         groups = (
             await session.execute(
-                select(RuleGroup).where(scope_clause)
+                select(RuleGroup).where(RuleGroup.workspace_id == ws.id)
             )
         ).scalars().all()
         group_map = {g.id: g for g in groups}
 
-        for idx, gid in enumerate(payload.group_ids):
-            if gid in group_map:
-                group_map[gid].position = idx
+        requested_ids = list(dict.fromkeys(payload.group_ids))
+        if len(requested_ids) != len(payload.group_ids):
+            raise HTTPException(status_code=400, detail="Список групп содержит дубликаты.")
+        inaccessible_ids = [group_id for group_id in requested_ids if group_id not in group_map]
+        if inaccessible_ids:
+            raise HTTPException(status_code=404, detail="Одна или несколько групп недоступны.")
+
+        for idx, gid in enumerate(requested_ids):
+            group_map[gid].position = idx
 
         await session.commit()
 
         ordered_groups = (
             await session.execute(
                 select(RuleGroup)
-                .where(scope_clause)
+                .where(RuleGroup.workspace_id == ws.id)
                 .order_by(RuleGroup.position.asc(), RuleGroup.id.asc())
             )
         ).scalars().all()
-        presets_by_group = await _load_group_presets(session, [g.id for g in ordered_groups])
+        presets_by_group = await _load_group_presets(
+            session,
+            [g.id for g in ordered_groups],
+            workspace_id=ws.id,
+        )
         return [
             _rule_group_response(g, presets_by_group.get(g.id, []))
             for g in ordered_groups
@@ -280,19 +270,20 @@ async def create_rule_group(
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "создания групп правил")
 
-        presets = await _get_owned_presets(session, user, payload.preset_ids)
-        _ensure_compatible_presets(presets)
-        scope_clause = (
-            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
-            if ws
-            else owned_by(RuleGroup, user)
+        presets = await _get_workspace_presets(
+            session,
+            payload.preset_ids,
+            workspace_id=ws.id,
         )
+        _ensure_compatible_presets(presets)
         if payload.position is not None:
             position = payload.position
         else:
             max_pos = (
                 await session.execute(
-                    select(func.max(RuleGroup.position)).where(owned_by(RuleGroup, user))
+                    select(func.max(RuleGroup.position)).where(
+                        RuleGroup.workspace_id == ws.id
+                    )
                 )
             ).scalar()
             position = (max_pos + 1) if max_pos is not None else 0
@@ -325,23 +316,22 @@ async def update_rule_group(
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "редактирования групп правил")
 
-        scope_clause = (
-            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
-            if ws
-            else owned_by(RuleGroup, user)
-        )
         group = (
             await session.execute(
                 select(RuleGroup).where(
                     RuleGroup.id == group_id,
-                    scope_clause,
+                    RuleGroup.workspace_id == ws.id,
                 )
             )
         ).scalar_one_or_none()
         if not group:
             raise HTTPException(status_code=404, detail="Группа правил не найдена.")
 
-        presets = await _get_owned_presets(session, user, payload.preset_ids)
+        presets = await _get_workspace_presets(
+            session,
+            payload.preset_ids,
+            workspace_id=ws.id,
+        )
         _ensure_compatible_presets(presets)
         group.name = _clean_rule_group_name(payload.name)
         group.description = payload.description.strip()
@@ -366,16 +356,11 @@ async def delete_rule_group(
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "удаления групп правил")
 
-        scope_clause = (
-            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
-            if ws
-            else owned_by(RuleGroup, user)
-        )
         group = (
             await session.execute(
                 select(RuleGroup).where(
                     RuleGroup.id == group_id,
-                    scope_clause,
+                    RuleGroup.workspace_id == ws.id,
                 )
             )
         ).scalar_one_or_none()
@@ -399,12 +384,10 @@ async def assign_rule_to_account(
         ensure_workspace_write_access(user, member, "привязки правил к кабинету")
 
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
-        scope_clause = (
-            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
-            if ws
-            else owned_by(Account, user)
+        stmt = select(Account).where(
+            Account.account_id == acc_id,
+            Account.workspace_id == ws.id,
         )
-        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -414,12 +397,10 @@ async def assign_rule_to_account(
 
         # If preset_id provided, load preset
         if payload.preset_id:
-            p_scope = (
-                or_(RulePreset.workspace_id == ws.id, and_(RulePreset.workspace_id.is_(None), owned_by(RulePreset, user)))
-                if ws
-                else owned_by(RulePreset, user)
+            p_stmt = select(RulePreset).where(
+                RulePreset.id == payload.preset_id,
+                RulePreset.workspace_id == ws.id,
             )
-            p_stmt = select(RulePreset).where(RulePreset.id == payload.preset_id, p_scope)
             p_res = await session.execute(p_stmt)
             preset = p_res.scalar_one_or_none()
             if not preset:
@@ -466,23 +447,19 @@ async def assign_rule_group_to_account(
         ensure_workspace_write_access(user, member, "назначения группы правил")
 
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
-        scope_clause = (
-            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
-            if ws
-            else owned_by(Account, user)
+        account_stmt = select(Account).where(
+            Account.account_id == acc_id,
+            Account.workspace_id == ws.id,
         )
-        account_stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
         account = (await session.execute(account_stmt)).scalar_one_or_none()
         if not account:
             raise HTTPException(status_code=404, detail="Кабинет не найден.")
         await _ensure_stable_account_owner(session, account)
 
-        group_scope = (
-            or_(RuleGroup.workspace_id == ws.id, and_(RuleGroup.workspace_id.is_(None), owned_by(RuleGroup, user)))
-            if ws
-            else owned_by(RuleGroup, user)
+        group_stmt = select(RuleGroup).where(
+            RuleGroup.id == group_id,
+            RuleGroup.workspace_id == ws.id,
         )
-        group_stmt = select(RuleGroup).where(RuleGroup.id == group_id, group_scope)
         group = (await session.execute(group_stmt)).scalar_one_or_none()
         if not group:
             raise HTTPException(status_code=404, detail="Группа правил не найдена.")
@@ -497,11 +474,10 @@ async def assign_rule_group_to_account(
         if not group_items:
             raise HTTPException(status_code=400, detail="В группе нет правил.")
 
-        presets = await _get_owned_presets(
+        presets = await _get_workspace_presets(
             session,
-            user,
             [item.preset_id for item in group_items],
-            owner_user_id=account.owner_user_id,
+            workspace_id=ws.id,
         )
         active_rules = _load_active_rules(account.active_rules)
         attached_ids = {rule.get("preset_id") for rule in active_rules}
@@ -548,12 +524,10 @@ async def detach_rule_from_account(
         ensure_workspace_write_access(user, member, "отвязки правил от кабинета")
 
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
-        scope_clause = (
-            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
-            if ws
-            else owned_by(Account, user)
+        stmt = select(Account).where(
+            Account.account_id == acc_id,
+            Account.workspace_id == ws.id,
         )
-        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()
@@ -588,12 +562,10 @@ async def toggle_rules(account_id: str, user: User = Depends(get_current_user)):
         ensure_workspace_write_access(user, member, "включения/выключения правил")
 
         acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
-        scope_clause = (
-            or_(Account.workspace_id == ws.id, and_(Account.workspace_id.is_(None), owned_by(Account, user)))
-            if ws
-            else owned_by(Account, user)
+        stmt = select(Account).where(
+            Account.account_id == acc_id,
+            Account.workspace_id == ws.id,
         )
-        stmt = select(Account).where(Account.account_id == acc_id, scope_clause)
 
         res = await session.execute(stmt)
         acc = res.scalar_one_or_none()

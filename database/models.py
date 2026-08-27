@@ -390,12 +390,24 @@ class RuleExamplesBootstrap(Base):
     """One-time marker so deleted examples are never silently recreated."""
 
     __tablename__ = "rule_examples_bootstrap"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "owner_user_id",
+            name="uq_rule_examples_ws_owner",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     owner_user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
-        unique=True,
         nullable=False,
         index=True,
     )
@@ -403,7 +415,10 @@ class RuleExamplesBootstrap(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):
-        return f"<RuleExamplesBootstrap(owner_user_id={self.owner_user_id}, version={self.version})>"
+        return (
+            f"<RuleExamplesBootstrap(workspace_id={self.workspace_id}, "
+            f"owner_user_id={self.owner_user_id}, version={self.version})>"
+        )
 
 
 class MetaConnection(Base):
