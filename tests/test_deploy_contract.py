@@ -95,6 +95,9 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("BUYERLY_DEPLOY_RESULT=success", self.workflow)
         self.assertIn("BUYERLY_DEPLOY_RESULT=failure", self.workflow)
         self.assertIn("Production deploy failure", self.workflow)
+        self.assertIn("[REDACTED_FERNET_TOKEN]", self.workflow)
+        self.assertIn("[REDACTED_META_TOKEN]", self.workflow)
+        self.assertIn("grep -Ev '(parameters:|UPDATE accounts|INSERT INTO)'", self.workflow)
         self.assertNotIn('cat "${deploy_log}"', self.workflow)
 
     def test_production_repository_owner_and_origin_are_fail_closed(self):
