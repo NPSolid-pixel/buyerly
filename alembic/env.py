@@ -3,6 +3,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
+from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -33,10 +34,31 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    lock_acquired = True
+    if connection.dialect.name == "postgresql":
+        lock_acquired = bool(
+            connection.execute(
+                text(
+                    "SELECT pg_try_advisory_lock("
+                    "hashtext('buyerly-alembic-migrations'))"
+                )
+            ).scalar()
+        )
+    if not lock_acquired:
+        raise RuntimeError("Another Buyerly Alembic migration is already running")
 
-    with context.begin_transaction():
-        context.run_migrations()
+    try:
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+    finally:
+        if connection.dialect.name == "postgresql" and lock_acquired:
+            connection.execute(
+                text(
+                    "SELECT pg_advisory_unlock("
+                    "hashtext('buyerly-alembic-migrations'))"
+                )
+            )
 
 
 async def run_async_migrations() -> None:

@@ -67,7 +67,7 @@
 ### 2.6 Повышение надежности CI/CD и автодеплоя
 - Исправлена инициализация \`postgres_state\` в \`scripts/backup_db.sh\`.
 - Пайплайн \`.github/workflows/deploy.yml\` гарантирует предварительную синхронизацию кода на сервере до вызова скриптов деплоя.
-- Автомигратор \`services/database.py\` автоматически накатывает недостающие колонки (\`admin_chat_id\`, \`updated_at\`) в существующие таблицы на бою.
+- Production-runner `services/database.py` выполняет только Alembic-цепочку под PostgreSQL advisory lock. После `upgrade head` он сверяет revision и обязательный schema contract; ручные изменения схемы и `create_all()` оставлены вне production-пути.
 
 ---
 

@@ -1302,89 +1302,10 @@ async def migrate_legacy_web_auth_tokens(conn) -> int:
 
 
 async def init_schema():
-    # Importing the models registers every table on Base.metadata. This makes
-    # database initialization reliable for all independent process entrypoints.
-    import database.models  # noqa: F401
+    """Compatibility entry point; schema changes are Alembic-only."""
+    from database.migrations import run_production_migrations
 
-    async with engine.begin() as conn:
-        if await migrate_users_table_contract(conn):
-            logger.info("Migrated legacy telegram_users table to users.")
-        await conn.run_sync(Base.metadata.create_all)
-        migrated_sessions = await migrate_legacy_web_auth_tokens(conn)
-        if migrated_sessions:
-            logger.info(
-                "Migrated %s persistent browser token(s) to expiring sessions.",
-                migrated_sessions,
-            )
-        if await migrate_otp_security_contract(conn):
-            logger.info("Added failed_attempts to email_verification_codes.")
-        if await migrate_user_email_verified_contract(conn):
-            logger.info("Migrated user verified email and unconfirmed email columns.")
-        if await migrate_rule_groups_position(conn):
-            logger.info("Added position column to rule_groups.")
-        if await migrate_onboarding_contract(conn):
-            logger.info("Migrated onboarding profile and workspace contracts.")
-        audit_undo_migrated = await migrate_audit_undo_contract(conn)
-        if audit_undo_migrated:
-            logger.info("Added immutable audit reversal links.")
-        owner_migration = await migrate_stable_owner_contract(conn)
-        if any(owner_migration.values()):
-            logger.info("Backfilled stable ownership: %s", owner_migration)
-        if await migrate_account_currency_contract(conn):
-            logger.info("Added the persisted account currency contract.")
-        if await migrate_account_day_boundary_contract(conn):
-            logger.info("Added the account-local day boundary contract.")
-        if await migrate_meta_connection_contract(conn):
-            logger.info("Added encrypted Meta connection links to accounts.")
-        if await migrate_account_profile_contract(conn):
-            logger.info("Added editable Buyerly account names and notes.")
-        automation_settings_added = await migrate_automation_settings_contract(conn)
-        if automation_settings_added:
-            logger.info(
-                "Added automation polling controls: %s",
-                ", ".join(automation_settings_added),
-            )
-        migrated_workspaces = await migrate_workspaces_contract(conn)
-        if migrated_workspaces:
-            logger.info("Backfilled default workspace for %s user(s).", migrated_workspaces)
-        rule_workspace_migration = await migrate_rule_workspace_contract(conn)
-        if any(rule_workspace_migration.values()):
-            logger.warning(
-                "Migrated workspace-scoped rule contract: %s",
-                rule_workspace_migration,
-            )
-        audit_ownership_migration = await migrate_audit_event_ownership_contract(conn)
-        if any(audit_ownership_migration.values()):
-            logger.info(
-                "Migrated audit event ownership contract: %s",
-                audit_ownership_migration,
-            )
-        jsonb_migration = await migrate_jsonb_native_contract(conn)
-        if jsonb_migration["converted"]:
-            logger.info(
-                "Converted %s legacy JSONB string value(s) to native structures.",
-                jsonb_migration["converted"],
-            )
-        if jsonb_migration["malformed"]:
-            logger.warning(
-                "Detected %s malformed or wrong-type structured JSONB value(s).",
-                jsonb_migration["malformed"],
-            )
-        migrated_rules = await migrate_legacy_account_rules(conn)
-        if migrated_rules:
-            logger.info(
-                "Migrated %s account(s) from legacy rule fields to active_rules.",
-                migrated_rules,
-            )
-        metric_migration = await migrate_rule_metric_contract(conn)
-        if any(metric_migration.values()):
-            logger.info("Migrated rule metric contract: %s", metric_migration)
-        safety_migration = await migrate_rule_safety_contract(conn)
-        if safety_migration:
-            logger.warning(
-                "Disabled unsafe runtime rules for %s account(s).",
-                safety_migration,
-            )
+    await run_production_migrations()
 
 
 async def ensure_bootstrap_admin():

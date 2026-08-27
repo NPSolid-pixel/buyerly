@@ -921,6 +921,59 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
             await init_test_db(engine)
             await engine.dispose()
 
+    async def test_production_migration_runner_is_idempotent_on_fresh_database(self):
+        from database.migrations import run_production_migrations
+
+        engine = create_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
+
+            await run_production_migrations()
+            await run_production_migrations()
+
+            async with engine.connect() as conn:
+                version = (
+                    await conn.execute(text("SELECT version_num FROM alembic_version"))
+                ).scalar_one()
+                self.assertEqual(version, "0009_web_sessions")
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
+    async def test_production_migration_runner_adopts_valid_legacy_schema(self):
+        from database.migrations import run_production_migrations
+
+        engine = create_test_engine()
+        try:
+            await init_test_db(engine)
+            await run_production_migrations()
+
+            async with engine.connect() as conn:
+                version = (
+                    await conn.execute(text("SELECT version_num FROM alembic_version"))
+                ).scalar_one()
+                self.assertEqual(version, "0009_web_sessions")
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
+    async def test_production_migration_runner_rejects_legacy_schema_drift(self):
+        from database.migrations import run_production_migrations
+
+        engine = create_test_engine()
+        try:
+            await init_test_db(engine)
+            async with engine.begin() as conn:
+                await conn.execute(text("ALTER TABLE users DROP COLUMN first_name"))
+
+            with self.assertRaisesRegex(RuntimeError, "schema drift"):
+                await run_production_migrations()
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
 
 if __name__ == "__main__":
     unittest.main()

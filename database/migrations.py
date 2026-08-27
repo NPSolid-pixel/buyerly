@@ -1,0 +1,122 @@
+import asyncio
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import inspect
+
+from database.db import Base, engine
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
+LEGACY_BASELINE_REVISION = "0009_web_sessions"
+
+
+def alembic_config() -> Config:
+    config = Config(str(ALEMBIC_INI))
+    config.set_main_option("script_location", str(PROJECT_ROOT / "alembic"))
+    return config
+
+
+def _schema_snapshot(sync_connection) -> dict[str, set[str]]:
+    inspector = inspect(sync_connection)
+    return {
+        table_name: {
+            column["name"]
+            for column in inspector.get_columns(table_name)
+        }
+        for table_name in inspector.get_table_names()
+        if table_name != "alembic_version"
+    }
+
+
+def _contract_errors(snapshot: dict[str, set[str]]) -> list[str]:
+    errors = []
+    expected_tables = Base.metadata.tables
+    for table_name, table in sorted(expected_tables.items()):
+        actual_columns = snapshot.get(table_name)
+        if actual_columns is None:
+            errors.append(f"missing table {table_name}")
+            continue
+        missing_columns = sorted(set(table.columns.keys()) - actual_columns)
+        if missing_columns:
+            errors.append(
+                f"missing columns {table_name}: {', '.join(missing_columns)}"
+            )
+    return errors
+
+
+async def _read_schema_snapshot() -> dict[str, set[str]]:
+    import database.models  # noqa: F401
+
+    async with engine.connect() as connection:
+        return await connection.run_sync(_schema_snapshot)
+
+
+async def _has_alembic_version_table() -> bool:
+    async with engine.connect() as connection:
+        return await connection.run_sync(
+            lambda sync_connection: "alembic_version"
+            in inspect(sync_connection).get_table_names()
+        )
+
+
+async def _adopt_legacy_schema_if_needed(config: Config) -> None:
+    if await _has_alembic_version_table():
+        return
+
+    snapshot = await _read_schema_snapshot()
+    if not snapshot:
+        return
+
+    errors = _contract_errors(snapshot)
+    if errors:
+        joined = "; ".join(errors[:20])
+        raise RuntimeError(
+            "Refusing to stamp an unversioned database with schema drift: "
+            f"{joined}"
+        )
+
+    # Buyerly production predates Alembic execution but already contains the
+    # schema/data transformations through 0009. Stamp that explicit baseline;
+    # every later revision is then applied normally by `upgrade head`.
+    await asyncio.to_thread(command.stamp, config, LEGACY_BASELINE_REVISION)
+
+
+async def _assert_database_at_head(config: Config) -> None:
+    expected_heads = set(ScriptDirectory.from_config(config).get_heads())
+
+    async with engine.connect() as connection:
+        current_heads = set(
+            await connection.run_sync(
+                lambda sync_connection: MigrationContext.configure(
+                    sync_connection
+                ).get_current_heads()
+            )
+        )
+    if current_heads != expected_heads:
+        raise RuntimeError(
+            "Alembic revision mismatch after upgrade: "
+            f"database={sorted(current_heads)}, expected={sorted(expected_heads)}"
+        )
+
+
+async def _assert_schema_contract() -> None:
+    errors = _contract_errors(await _read_schema_snapshot())
+    if errors:
+        raise RuntimeError(
+            "Database schema does not match application models after Alembic: "
+            + "; ".join(errors[:20])
+        )
+
+
+async def run_production_migrations() -> None:
+    """Run the sole production schema path and fail closed on schema drift."""
+    config = alembic_config()
+    await _adopt_legacy_schema_if_needed(config)
+    await asyncio.to_thread(command.upgrade, config, "head")
+    await _assert_database_at_head(config)
+    await _assert_schema_contract()
