@@ -9,6 +9,14 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://buyerly:buyerly_secret@localhost:5432/buyerly",
         description="Async SQLAlchemy database URL",
     )
+    REDIS_URL: str = Field(
+        default="",
+        description="Shared Redis URL for atomic production rate limiting",
+    )
+    TRUSTED_PROXY_CIDRS: str = Field(
+        default="",
+        description="Comma-separated proxy networks allowed to supply forwarding headers",
+    )
     DEFAULT_POLL_INTERVAL_MINUTES: int = Field(default=5, description="Monitoring interval in minutes")
     ADMIN_CHAT_ID: str = Field(default="", description="Default Telegram Chat ID for alerts")
     WEBAPP_URL: str = Field(default="", description="Public HTTPS URL for Telegram Web App")

@@ -10,6 +10,7 @@ from sqlalchemy import text
 from api.routes import router as api_router
 from api.meta_oauth import router as meta_oauth_router
 from core.config import settings
+from core.rate_limit import limiter
 from database.db import async_session_maker
 
 logger = logging.getLogger(__name__)
@@ -84,8 +85,10 @@ def create_app() -> FastAPI:
         try:
             async with async_session_maker() as session:
                 await session.execute(text("SELECT 1"))
+            if not await limiter.ready():
+                raise RuntimeError("rate-limit backend is unavailable")
         except Exception:
-            logger.exception("Readiness database check failed")
+            logger.exception("Readiness dependency check failed")
             return JSONResponse(
                 status_code=503,
                 content={"status": "not_ready", "version": settings.APP_VERSION},
