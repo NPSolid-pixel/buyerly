@@ -1,8 +1,12 @@
 import asyncio
+import os
 import time
 import unittest
+import uuid
+from unittest.mock import AsyncMock, patch
 
 import httpx
+from starlette.requests import Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import api.auth as api_auth_module
@@ -10,7 +14,7 @@ import api.routes as api_routes_module
 import api.server as api_server_module
 from api.server import create_app
 from core.config import settings
-from core.rate_limit import RateLimiter, limiter
+from core.rate_limit import RateLimitBackendUnavailable, RateLimiter, get_client_ip, limiter
 from database.db import Base, hash_password
 from database.models import User, Workspace
 
@@ -46,6 +50,59 @@ class TestRateLimiterCore(unittest.IsolatedAsyncioTestCase):
         custom_limiter._cleanup_stale(time.time())
         self.assertNotIn("old_key", custom_limiter._records)
         self.assertIn("recent_key", custom_limiter._records)
+
+    def test_forwarded_headers_require_a_trusted_direct_peer(self):
+        original = settings.TRUSTED_PROXY_CIDRS
+        try:
+            settings.TRUSTED_PROXY_CIDRS = "10.0.0.0/8"
+            spoofed = Request({
+                "type": "http",
+                "method": "GET",
+                "path": "/",
+                "headers": [(b"x-forwarded-for", b"203.0.113.8")],
+                "client": ("198.51.100.10", 1234),
+            })
+            self.assertEqual(get_client_ip(spoofed), "198.51.100.10")
+
+            trusted_chain = Request({
+                "type": "http",
+                "method": "GET",
+                "path": "/",
+                "headers": [(b"x-forwarded-for", b"203.0.113.8, 10.1.2.3")],
+                "client": ("10.9.8.7", 1234),
+            })
+            self.assertEqual(get_client_ip(trusted_chain), "203.0.113.8")
+
+            malformed = Request({
+                "type": "http",
+                "method": "GET",
+                "path": "/",
+                "headers": [(b"x-forwarded-for", b"not-an-ip")],
+                "client": ("10.9.8.7", 1234),
+            })
+            self.assertEqual(get_client_ip(malformed), "10.9.8.7")
+        finally:
+            settings.TRUSTED_PROXY_CIDRS = original
+
+
+@unittest.skipUnless(os.getenv("REDIS_URL"), "REDIS_URL is required")
+class TestSharedRedisRateLimiter(unittest.IsolatedAsyncioTestCase):
+
+    async def test_limit_is_shared_atomically_between_instances(self):
+        namespace = f"buyerly:test-rate-limit:{uuid.uuid4()}"
+        first = RateLimiter(redis_url=os.environ["REDIS_URL"], namespace=namespace)
+        second = RateLimiter(redis_url=os.environ["REDIS_URL"], namespace=namespace)
+        await first.reset()
+        try:
+            results = await asyncio.gather(*(
+                (first if index % 2 == 0 else second).is_allowed("shared", 5, 60)
+                for index in range(20)
+            ))
+            self.assertEqual(sum(1 for allowed, _ in results if allowed), 5)
+            self.assertTrue(all(retry >= 1 for allowed, retry in results if not allowed))
+        finally:
+            await first.reset()
+            await second.reset()
 
 
 from tests.test_db_helper import create_test_engine, init_test_db
@@ -111,6 +168,44 @@ class TestApiRateLimitingAndDosProtection(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(rate_limited_res.status_code, 429)
             self.assertIn("Retry-After", rate_limited_res.headers)
             self.assertIn("Слишком много запросов", rate_limited_res.json()["detail"])
+
+    async def test_login_identity_limit_cannot_be_bypassed_by_rotating_ips(self):
+        original = settings.TRUSTED_PROXY_CIDRS
+        settings.TRUSTED_PROXY_CIDRS = "127.0.0.1/32"
+        try:
+            transport = httpx.ASGITransport(app=self.app, client=("127.0.0.1", 123))
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                for index in range(10):
+                    response = await client.post(
+                        "/api/auth/login",
+                        headers={"X-Forwarded-For": f"203.0.113.{index + 1}"},
+                        json={"username": "test_buyer", "password": "wrong-password"},
+                    )
+                    self.assertEqual(response.status_code, 401)
+
+                blocked = await client.post(
+                    "/api/auth/login",
+                    headers={"X-Forwarded-For": "198.51.100.200"},
+                    json={"username": "test_buyer", "password": "correct-password"},
+                )
+                self.assertEqual(blocked.status_code, 429)
+        finally:
+            settings.TRUSTED_PROXY_CIDRS = original
+
+    async def test_protected_endpoint_fails_closed_when_redis_is_unavailable(self):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            with patch.object(
+                limiter,
+                "is_allowed",
+                new=AsyncMock(side_effect=RateLimitBackendUnavailable()),
+            ):
+                response = await client.post(
+                    "/api/auth/login",
+                    json={"username": "test_buyer", "password": "correct-password"},
+                )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.headers.get("Retry-After"), "1")
 
     async def test_check_slug_rate_limiting(self):
         headers = {"Authorization": "Bearer test-valid-auth-token-12345"}

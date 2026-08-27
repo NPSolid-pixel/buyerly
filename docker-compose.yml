@@ -6,6 +6,8 @@ x-app: &app
   environment: &app-environment
     APP_VERSION: ${APP_VERSION:-local}
     DATABASE_URL: postgresql+asyncpg://buyerly:${POSTGRES_PASSWORD:-buyerly-local-change-me}@db:5432/buyerly
+    REDIS_URL: redis://redis:6379/0
+    TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.16.0.0/12}
     WEBAPP_URL: ${WEBAPP_URL:-https://buyerly.app}
     TZ: UTC
   volumes:
@@ -31,6 +33,20 @@ services:
       retries: 20
       start_period: 10s
 
+  redis:
+    image: redis:7-alpine
+    container_name: buyerly-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - buyerly-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   migrate:
     <<: *app
     container_name: buyerly-migrate
@@ -52,6 +68,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3).read()"]
       interval: 10s
@@ -101,3 +119,5 @@ services:
 volumes:
   buyerly-postgres:
     name: buyerly-postgres
+  buyerly-redis:
+    name: buyerly-redis

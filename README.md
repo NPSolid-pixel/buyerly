@@ -74,11 +74,11 @@ flowchart LR
     R --> B
 ```
 
-В production запускаются независимые сервисы `web`, `api`, `bot`, `worker` и `db`. Разделение процессов изолирует сбои: фоновые задачи и Telegram polling не влияют на доступность веб-интерфейса и API.
+В production запускаются независимые сервисы `web`, `api`, `bot`, `worker`, `db` и `redis`. Redis обеспечивает единый атомарный rate limit для всех экземпляров API; фоновые задачи и Telegram polling изолированы от веб-интерфейса.
 
 ## Быстрый старт
 
-Требуются Docker с Docker Compose, Telegram Bot Token и параметры базы данных PostgreSQL.
+Требуются Docker с Docker Compose, Telegram Bot Token и параметры базы данных PostgreSQL. Redis поднимается автоматически внутри Compose и наружу не публикуется.
 
 ```bash
 cp .env.example .env

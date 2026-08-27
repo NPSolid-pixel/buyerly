@@ -52,7 +52,12 @@ router = APIRouter(tags=["Auth & Profile"])
 
 @router.post(
     "/auth/request-temporary-password",
-    dependencies=[Depends(rate_limit_dep(limit=5, window_seconds=60, scope="otp_req"))],
+    dependencies=[Depends(rate_limit_dep(
+        limit=5,
+        window_seconds=60,
+        scope="otp_req",
+        identity_fields=("email",),
+    ))],
 )
 async def request_temporary_password(req: RequestTemporaryPasswordRequest):
     """Generate and email a 6-digit one-time password (OTP) for login/registration."""
@@ -136,7 +141,12 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
 @router.post(
     "/auth/login",
     response_model=LoginResponse,
-    dependencies=[Depends(rate_limit_dep(limit=10, window_seconds=60, scope="login"))],
+    dependencies=[Depends(rate_limit_dep(
+        limit=10,
+        window_seconds=60,
+        scope="login",
+        identity_fields=("username",),
+    ))],
 )
 async def login_user(req: LoginRequest, request: Request, response: Response):
     async with async_session_maker() as session:

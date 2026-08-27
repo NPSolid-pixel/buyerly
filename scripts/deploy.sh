@@ -126,6 +126,7 @@ if [[ -n "${EXPECTED_SHA}" ]]; then
     BOT_HEALTH=$(docker inspect --format '{{.State.Health.Status}}' buyerly-telegram-bot 2>/dev/null || true)
     WORKER_HEALTH=$(docker inspect --format '{{.State.Health.Status}}' buyerly-worker 2>/dev/null || true)
     DB_HEALTH=$(docker inspect --format '{{.State.Health.Status}}' buyerly-db 2>/dev/null || true)
+    REDIS_HEALTH=$(docker inspect --format '{{.State.Health.Status}}' buyerly-redis 2>/dev/null || true)
     if [[ "${CURRENT_REPO_SHA}" == "${EXPECTED_SHA}" \
           && "${DEPLOYED_API_IMAGE}" == "buyerly-app:${EXPECTED_SHA}" \
           && "${DEPLOYED_WEB_IMAGE}" == "buyerly-web:${EXPECTED_SHA}" \
@@ -135,7 +136,8 @@ if [[ -n "${EXPECTED_SHA}" ]]; then
           && "${WEB_HEALTH}" == "healthy" \
           && "${BOT_HEALTH}" == "healthy" \
           && "${WORKER_HEALTH}" == "healthy" \
-          && "${DB_HEALTH}" == "healthy" ]]; then
+          && "${DB_HEALTH}" == "healthy" \
+          && "${REDIS_HEALTH}" == "healthy" ]]; then
         echo "[SUCCESS] Buyerly ${EXPECTED_SHA} is already deployed and healthy."
         exit 0
     fi
@@ -169,9 +171,13 @@ echo "[3/6] Building versioned API and web images..."
 docker compose build --pull api web
 
 echo "[4/6] Preparing PostgreSQL database..."
-docker compose up -d db
+docker compose up -d db redis
 if ! wait_for_container buyerly-db; then
     docker compose logs --tail=120 db
+    exit 1
+fi
+if ! wait_for_container buyerly-redis; then
+    docker compose logs --tail=120 redis
     exit 1
 fi
 if ! docker compose run --rm migrate; then
