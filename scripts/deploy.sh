@@ -8,6 +8,7 @@ EXPECTED_SHA="${EXPECTED_SHA:-}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"
 DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-/var/lock/buyerly-deploy.lock}"
 DEPLOY_LOCK_TIMEOUT_SECONDS="${DEPLOY_LOCK_TIMEOUT_SECONDS:-180}"
+EXPECTED_GIT_REPOSITORY="${EXPECTED_GIT_REPOSITORY:-hiurano/buyerly}"
 
 wait_for_container() {
     local container_name="$1"
@@ -78,15 +79,6 @@ rollback() {
     echo "[ROLLBACK] Stopping the failed service set..."
     docker compose stop web api bot worker 2>/dev/null || true
 
-    if [[ "${HAD_LEGACY}" == "true" && -n "${PREVIOUS_LEGACY_IMAGE}" ]]; then
-        docker tag "${PREVIOUS_LEGACY_IMAGE}" "buyerly-app:${CURRENT_SHA}"
-        export APP_VERSION="${CURRENT_SHA}"
-        docker compose --profile legacy up -d --no-deps buyerly
-        wait_for_container buyerly-bot
-        echo "[ROLLBACK] Previous monolith restored."
-        return
-    fi
-
     if [[ -n "${PREVIOUS_APP_IMAGE}" && -n "${PREVIOUS_WEB_IMAGE}" ]]; then
         docker tag "${PREVIOUS_APP_IMAGE}" "buyerly-app:${CURRENT_SHA}"
         docker tag "${PREVIOUS_WEB_IMAGE}" "buyerly-web:${CURRENT_SHA}"
@@ -106,6 +98,24 @@ rollback() {
 }
 
 cd "${APP_DIR}"
+
+REPOSITORY_OWNER_UID=$(stat -c '%u' "${APP_DIR}")
+DEPLOY_UID=$(id -u)
+if [[ "${REPOSITORY_OWNER_UID}" != "${DEPLOY_UID}" ]]; then
+    echo "[ERROR] ${APP_DIR} is owned by uid ${REPOSITORY_OWNER_UID}, but deploy runs as uid ${DEPLOY_UID}."
+    exit 1
+fi
+
+ORIGIN_URL=$(git remote get-url origin 2>/dev/null || true)
+case "${ORIGIN_URL}" in
+    "git@github.com:${EXPECTED_GIT_REPOSITORY}.git"|"https://github.com/${EXPECTED_GIT_REPOSITORY}.git")
+        ;;
+    *)
+        echo "[ERROR] Unexpected production repository origin: ${ORIGIN_URL:-missing}"
+        exit 1
+        ;;
+esac
+
 exec 9>"${DEPLOY_LOCK_FILE}"
 if ! flock -w "${DEPLOY_LOCK_TIMEOUT_SECONDS}" 9; then
     echo "[ERROR] Another Buyerly deployment is still running."
@@ -149,11 +159,6 @@ bash "${SCRIPT_DIR}/backup_db.sh"
 CURRENT_SHA=$(git rev-parse HEAD 2>/dev/null || true)
 PREVIOUS_APP_IMAGE=$(docker inspect --format '{{.Image}}' buyerly-api 2>/dev/null || true)
 PREVIOUS_WEB_IMAGE=$(docker inspect --format '{{.Image}}' buyerly-web 2>/dev/null || true)
-PREVIOUS_LEGACY_IMAGE=$(docker inspect --format '{{.Image}}' buyerly-bot 2>/dev/null || true)
-HAD_LEGACY=false
-if [[ -n "${PREVIOUS_LEGACY_IMAGE}" ]]; then
-    HAD_LEGACY=true
-fi
 
 echo "[2/6] Synchronizing ${BRANCH}..."
 git fetch origin "${BRANCH}"
@@ -219,10 +224,6 @@ if ! wait_for_container buyerly-web; then
     exit 1
 fi
 curl -fsS http://127.0.0.1:8080/health/ready >/dev/null
-
-if [[ "${HAD_LEGACY}" == "true" ]]; then
-    docker rm buyerly-bot >/dev/null
-fi
 
 echo "[SUCCESS] Buyerly ${TARGET_SHA} deployed as web/api/bot/worker/db."
 docker compose ps

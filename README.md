@@ -126,7 +126,7 @@ nix-shell -p "python3.withPackages(ps: with ps; [ sqlalchemy httpx aiogram crypt
 api/                 FastAPI приложение, эндпоинты аутентификации, воркспейсов, кабинетов, правил и сводок
 bot/                 Telegram-бот (aiogram 3), обработчики команд и сервис нотификаций
 core/                Конфигурация, аудит, валюты, метрики, часовые пояса, почта Resend и симметричное шифрование
-database/            Модели SQLAlchemy, сессии, подключение к PostgreSQL и сиды данных
+database/            Модели SQLAlchemy, Alembic-runner, сессии и подключение к PostgreSQL
 docs/                Архитектурная, продуктовая и юридическая документация проекта
 meta_api/            Клиент Meta Marketing API, OAuth и парсинг квот
 rules/               Движок валидации и вычисления условий и действий автоправил

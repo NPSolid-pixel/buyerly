@@ -32,6 +32,16 @@ scratch/
 *.mp3
 *.wav
 transcription.txt
+client_responses.txt
+scratch_*.py
+batch_transcribe.py
+transcribe.py
+
+# Design research captures are not production source material
+app.attio-structure-login-workspaces/
+docs/attio_*.json
+webapp/attio-reference.html
+webapp/prototype.html
 
 # OS / IDE
 .DS_Store

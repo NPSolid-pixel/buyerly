@@ -208,7 +208,7 @@ async def start_add_wizard(message: Message, bot: Bot, state: FSMContext):
         "Отправьте список ID кабинетов или <b>скопируйте текст прямо из Facebook Business Manager</b>!\n\n"
         "💡 <i>Бот сам автоматически распознает все ID кабинетов и их названия из текста.</i>\n\n"
         "<b>Пример:</b>\n"
-        "<code>act_1083480094013618\n"
+        "<code>act_1234567890123456\n"
         "1070862758952340</code>\n"
         "<i>или вставьте скопированный блок с 'Ad account ID: ...'</i>"
     )

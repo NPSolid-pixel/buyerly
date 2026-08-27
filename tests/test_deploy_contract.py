@@ -11,6 +11,8 @@ class TestDeployContract(unittest.TestCase):
         cls.worker_service = (project_root / "services" / "worker.py").read_text()
         cls.monitoring_worker = (project_root / "scheduler" / "worker.py").read_text()
         cls.notifier = (project_root / "bot" / "notifier.py").read_text()
+        cls.dockerfile = (project_root / "Dockerfile").read_text()
+        cls.codeowners = (project_root / ".github" / "CODEOWNERS").read_text()
 
     def test_deployments_are_serialized(self):
         self.assertIn("DEPLOY_LOCK_FILE", self.script)
@@ -62,6 +64,48 @@ class TestDeployContract(unittest.TestCase):
         import re
         self.assertIsNone(re.search(r"\bre_[A-Za-z0-9_]{10,}", self.script))
         self.assertIn("ensure_email_settings", self.script)
+
+    def test_production_repository_owner_and_origin_are_fail_closed(self):
+        self.assertIn("EXPECTED_GIT_REPOSITORY", self.script)
+        self.assertIn("REPOSITORY_OWNER_UID", self.script)
+        self.assertIn("git remote get-url origin", self.script)
+        self.assertIn("@hiurano", self.codeowners)
+
+    def test_legacy_monolith_cannot_return(self):
+        self.assertNotIn("--profile legacy", self.script)
+        self.assertNotIn("PREVIOUS_LEGACY_IMAGE", self.script)
+        self.assertNotIn("buyerly-bot", self.script)
+
+    def test_runtime_image_uses_explicit_production_sources(self):
+        self.assertNotIn("COPY . .", self.dockerfile)
+        for runtime_dir in (
+            "alembic",
+            "api",
+            "bot",
+            "core",
+            "database",
+            "meta_api",
+            "rules",
+            "scheduler",
+            "services",
+        ):
+            self.assertIn(f"COPY {runtime_dir} ./{runtime_dir}", self.dockerfile)
+
+    def test_repository_has_no_workstation_or_captured_design_artifacts(self):
+        root = Path(__file__).parents[1]
+        forbidden = (
+            "main.py",
+            "batch_transcribe.py",
+            "transcribe.py",
+            "scratch_active.py",
+            "scratch_check.py",
+            "client_responses.txt",
+            "app.attio-structure-login-workspaces",
+            "webapp/attio-reference.html",
+            "webapp/prototype.html",
+        )
+        for relative_path in forbidden:
+            self.assertFalse((root / relative_path).exists(), relative_path)
 
 
 

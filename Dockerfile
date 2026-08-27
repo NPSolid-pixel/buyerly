@@ -11,8 +11,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копирование исходного кода
-COPY . .
+# Copy only production runtime ownership. Documentation, tests, captures and
+# workstation utilities never enter the API/bot/worker image.
+COPY alembic.ini ./alembic.ini
+COPY alembic ./alembic
+COPY api ./api
+COPY bot ./bot
+COPY core ./core
+COPY database ./database
+COPY meta_api ./meta_api
+COPY rules ./rules
+COPY scheduler ./scheduler
+COPY services ./services
 
 # The command is selected per service in docker-compose.yml.
 CMD ["python", "-m", "services.api"]

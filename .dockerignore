@@ -23,3 +23,10 @@ transcription.txt
 client_responses.txt
 scratch_*.py
 tests
+docs
+app.attio-structure-login-workspaces
+batch_transcribe.py
+transcribe.py
+main.py
+webapp/attio-reference.html
+webapp/prototype.html

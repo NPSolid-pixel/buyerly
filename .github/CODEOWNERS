@@ -1,0 +1,11 @@
+# Canonical production repository ownership.
+* @hiurano
+
+# Security-sensitive production boundaries require the repository owner.
+/.github/ @hiurano
+/alembic/ @hiurano
+/core/ @hiurano
+/database/ @hiurano
+/scripts/deploy.sh @hiurano
+/docker-compose.yml @hiurano
+/Dockerfile @hiurano
