@@ -109,6 +109,15 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("NORMALIZED_ORIGIN", self.script)
         self.assertIn("@hiurano", self.codeowners)
 
+    def test_production_build_context_matches_the_exact_git_revision(self):
+        reset_position = self.script.index('git reset --hard "${TARGET_SHA}"')
+        clean_position = self.script.index("git clean -ffd -q")
+        build_position = self.script.index("docker compose build --pull api web")
+        self.assertLess(reset_position, clean_position)
+        self.assertLess(clean_position, build_position)
+        self.assertIn("git status --short --untracked-files=all", self.script)
+        self.assertIn("Production source tree does not match", self.script)
+
     def test_legacy_monolith_cannot_return(self):
         self.assertNotIn("--profile legacy", self.script)
         self.assertNotIn("PREVIOUS_LEGACY_IMAGE", self.script)

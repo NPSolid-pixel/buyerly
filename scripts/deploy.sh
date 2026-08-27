@@ -269,6 +269,15 @@ if [[ -n "${EXPECTED_SHA}" && "${TARGET_SHA}" != "${EXPECTED_SHA}" ]]; then
     exit 1
 fi
 git reset --hard "${TARGET_SHA}"
+# `reset --hard` leaves untracked source files behind. That is unsafe for a
+# Docker build because retired Python/Alembic files can still be copied into
+# the image and executed. Runtime state is gitignored; remove only untracked,
+# non-ignored repository files so the build context matches TARGET_SHA.
+git clean -ffd -q
+if [[ -n "$(git status --short --untracked-files=all)" ]]; then
+    echo "[ERROR] Production source tree does not match ${TARGET_SHA}."
+    exit 1
+fi
 export APP_VERSION="${TARGET_SHA}"
 ensure_postgres_password
 ensure_email_settings
