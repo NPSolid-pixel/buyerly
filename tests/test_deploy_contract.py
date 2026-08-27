@@ -53,6 +53,11 @@ class TestDeployContract(unittest.TestCase):
         self.assertNotIn("start_spend", executable_contract)
         self.assertNotIn("starts_notified", executable_contract)
 
+    def test_no_hardcoded_secrets_in_deploy_script(self):
+        self.assertNotIn("re_", self.script)
+        self.assertIn("ensure_email_settings", self.script)
+
+
 
 if __name__ == "__main__":
     unittest.main()
