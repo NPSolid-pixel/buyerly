@@ -13,6 +13,7 @@
 - **Удаление скомпрометированного секрета Resend и безопасная передача ключей в CI/CD**:
   - Удалён захардкоженный ключ Resend API из `scripts/deploy.sh`.
   - Реализована безопасная передача `RESEND_API_KEY` через переменные окружения и GitHub Secrets без сохранения секретов в коде репозитория.
+  - Расширено маскирование Resend-ключей и паролей в логах.
   - Добавлен контрактный тест `test_no_hardcoded_secrets_in_deploy_script` в `tests/test_deploy_contract.py`.
 - **Ужесточение доступа к Production VPS и отключение парольного входа по SSH (`[86eyr5v1f]`)**:
   - На боевом сервере отключена аутентификация по паролям (`PasswordAuthentication no`) и интерактивные методы (`KbdInteractiveAuthentication no`).

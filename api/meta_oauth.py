@@ -525,7 +525,8 @@ async def import_accounts(
                         existing.last_day_start_date = ""
                     account.name = str(account_info.get("name") or asset.name or account_id)
                     account.workspace_id = ws.id if ws else account.workspace_id
-                    account.owner_user_id = user.id
+                    if not existing:
+                        account.owner_user_id = user.id
                     account.batch_name = asset.business_name if asset.business_id else ""
                     account.access_token = ""
                     account.meta_connection_id = connection.id

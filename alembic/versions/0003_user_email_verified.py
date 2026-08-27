@@ -33,6 +33,13 @@ def upgrade() -> None:
     op.execute("UPDATE users SET email = NULL WHERE email IS NOT NULL AND TRIM(email) = ''")
     op.execute("UPDATE users SET email = LOWER(TRIM(email)) WHERE email IS NOT NULL")
 
+    # Existing targeted links were issued before verified-email enforcement.
+    # Revoke them so owners can explicitly reissue fresh invitations.
+    op.execute(
+        "UPDATE workspace_invites SET status = 'revoked' "
+        "WHERE status = 'pending' AND email IS NOT NULL"
+    )
+
     # 3. Deduplicate duplicate emails keeping active user
     op.execute(
         """
@@ -65,10 +72,7 @@ def upgrade() -> None:
         ["unconfirmed_email"],
     )
     # Drop previous non-unique index if it exists and replace with unique index
-    try:
-        op.drop_index("ix_users_email", table_name="users")
-    except Exception:
-        pass
+    op.execute("DROP INDEX IF EXISTS ix_users_email")
 
     op.create_index(
         "ix_users_email",
@@ -79,11 +83,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    try:
-        op.drop_index("ix_users_email", table_name="users")
-        op.create_index("ix_users_email", "users", ["email"], unique=False)
-    except Exception:
-        pass
+    op.execute("DROP INDEX IF EXISTS ix_users_email")
+    op.create_index("ix_users_email", "users", ["email"], unique=False)
     op.drop_index("ix_users_unconfirmed_email", table_name="users")
     op.drop_index("ix_users_email_verified_at", table_name="users")
     op.drop_column("users", "unconfirmed_email")

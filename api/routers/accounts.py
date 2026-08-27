@@ -401,7 +401,6 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
                     existing.meta_connection_id = None
                     existing.timezone_name = timezone_name
                     existing.currency = currency
-                    existing.owner_user_id = user.id
                     existing.workspace_id = ws.id if ws else existing.workspace_id
                     existing.batch_name = batch_name if batch_name != "-" else ""
                     existing.account_status = status_code

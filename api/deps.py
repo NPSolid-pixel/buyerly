@@ -61,14 +61,13 @@ def invalidate_summary_cache(
         return
     stale_keys = []
     for k in list(_summary_cache.keys()):
-        match = True
-        if workspace_id is not None:
-            if f"ws:{workspace_id}:" not in k and f"ws:{workspace_id}" != k:
-                match = False
-        if owner_user_id is not None:
-            if f"user:{owner_user_id}:" not in k and not k.startswith(f"{owner_user_id}:"):
-                match = False
-        if match:
+        workspace_match = workspace_id is not None and (
+            k == f"ws:{workspace_id}" or k.startswith(f"ws:{workspace_id}:")
+        )
+        owner_match = owner_user_id is not None and (
+            k.startswith(f"user:{owner_user_id}:") or k.startswith(f"{owner_user_id}:")
+        )
+        if workspace_match or owner_match:
             stale_keys.append(k)
     for k in stale_keys:
         _summary_cache.pop(k, None)
@@ -254,6 +253,7 @@ async def get_user_workspace(
                 if grant:
                     return ws
             return None
+        return None
 
     if workspace_id:
         member = (
@@ -302,11 +302,13 @@ async def get_user_workspace(
     if first_member:
         ws = (await session.execute(select(Workspace).where(Workspace.id == first_member.workspace_id))).scalar_one_or_none()
         if ws:
+            db_user = (
+                await session.execute(select(User).where(User.id == user.id))
+            ).scalar_one_or_none()
+            if db_user is not None:
+                db_user.active_workspace_id = ws.id
+                await session.commit()
             user.active_workspace_id = ws.id
-            try:
-                await session.flush()
-            except Exception:
-                pass
             return ws
 
     # Create default workspace if user has none
@@ -328,11 +330,13 @@ async def get_user_workspace(
 
     member = WorkspaceMember(workspace_id=ws.id, user_id=user.id, role="owner")
     session.add(member)
+    db_user = (
+        await session.execute(select(User).where(User.id == user.id))
+    ).scalar_one_or_none()
+    if db_user is not None:
+        db_user.active_workspace_id = ws.id
     user.active_workspace_id = ws.id
-    try:
-        await session.flush()
-    except Exception:
-        pass
+    await session.commit()
     return ws
 
 

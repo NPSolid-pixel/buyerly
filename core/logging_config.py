@@ -8,6 +8,8 @@ _SECRET_PATTERNS = (
     re.compile(r"\b([0-9]{8,12}):AA[A-Za-z0-9_-]{20,}\b"),
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bre_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"(?i)(password(?:=|%3D|:\s*\"|:\s*'))([^&\"'\s]+)"),
 )
 
 
@@ -21,6 +23,8 @@ def redact_secrets(message: str) -> str:
     redacted = _SECRET_PATTERNS[3].sub(r"\1:[REDACTED]", redacted)
     redacted = _SECRET_PATTERNS[4].sub("[REDACTED_GITHUB_TOKEN]", redacted)
     redacted = _SECRET_PATTERNS[5].sub("[REDACTED_GITHUB_TOKEN]", redacted)
+    redacted = _SECRET_PATTERNS[6].sub("[REDACTED_RESEND_KEY]", redacted)
+    redacted = _SECRET_PATTERNS[7].sub(r"\1[REDACTED]", redacted)
     return redacted
 
 

@@ -301,6 +301,39 @@ async def process_token_and_save(message: Message, state: FSMContext):
             await state.clear()
             await progress_msg.edit_text("⛔️ Доступ не подтверждён.")
             return
+
+        active_workspace_id = owner_user.active_workspace_id
+        if active_workspace_id is None:
+            await state.clear()
+            await progress_msg.edit_text("⛔️ Сначала выберите активный воркспейс.")
+            return
+
+        member = (
+            await session.execute(
+                select(WorkspaceMember).where(
+                    WorkspaceMember.workspace_id == active_workspace_id,
+                    WorkspaceMember.user_id == owner_user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        caller_role = member.role if member else None
+        if caller_role is None and owner_user.role == "admin":
+            grant = (
+                await session.execute(
+                    select(WorkspaceSupportGrant).where(
+                        WorkspaceSupportGrant.workspace_id == active_workspace_id,
+                        WorkspaceSupportGrant.user_id == owner_user.id,
+                        WorkspaceSupportGrant.expires_at > datetime.now(timezone.utc),
+                        WorkspaceSupportGrant.revoked_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            caller_role = grant.role if grant else None
+        if caller_role not in ("owner", "admin", "buyer"):
+            await state.clear()
+            await progress_msg.edit_text("⛔️ Нет прав на изменение активного воркспейса.")
+            return
+
         for idx, item in enumerate(parsed_accounts, start=1):
             acc_id = item["account_id"]
             parsed_name = item.get("parsed_name", "")
@@ -328,13 +361,14 @@ async def process_token_and_save(message: Message, state: FSMContext):
                 existing = res.scalar_one_or_none()
 
                 if existing:
-                    if (
-                        existing.owner_user_id is not None
-                        and existing.owner_user_id != owner_user.id
-                        and not is_admin
-                    ):
+                    if existing.workspace_id != active_workspace_id:
                         error_results.append(
-                            f"• <code>{acc_id}</code>: Кабинет уже привязан к другому пользователю."
+                            f"• <code>{acc_id}</code>: Кабинет уже подключён в другом воркспейсе."
+                        )
+                        continue
+                    if existing.owner_user_id != owner_user.id and caller_role not in ("owner", "admin"):
+                        error_results.append(
+                            f"• <code>{acc_id}</code>: Кабинет добавлен другим байером; обновить его может владелец или администратор воркспейса."
                         )
                         continue
 
@@ -344,12 +378,11 @@ async def process_token_and_save(message: Message, state: FSMContext):
                     existing.access_token = token
                     existing.timezone_name = timezone_name
                     existing.currency = currency
-                    existing.owner_user_id = owner_user.id
                     existing.batch_name = batch_name if batch_name != "-" else ""
                     existing.is_active = True
                 else:
                     new_acc = Account(
-                        workspace_id=owner_user.active_workspace_id,
+                        workspace_id=active_workspace_id,
                         account_id=acc_id,
                         name=display_name,
                         access_token=token,
@@ -479,8 +512,6 @@ async def _can_manage_account(session, user_id: str, account: Account) -> bool:
             ).scalar_one_or_none()
             if grant:
                 return True
-    elif user.role == "admin":
-        return True
     return entity_is_owned_by(account, user)
 
 

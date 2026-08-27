@@ -293,10 +293,17 @@ async def request_email_verification(user: User = Depends(get_current_user)):
         session.add(otp_record)
         await session.commit()
 
+        sent = False
         try:
-            await send_otp_verification_email(target_email, code)
+            sent = await send_otp_verification_email(target_email, code)
         except Exception as e:
             logger.error("Failed to send verification email to %s: %s", target_email, e)
+
+        if not sent and settings.RESEND_API_KEY:
+            raise HTTPException(
+                status_code=502,
+                detail="Не удалось доставить письмо с проверочным кодом. Пожалуйста, попробуйте позже.",
+            )
 
         return {"ok": True, "message": "Код подтверждения отправлен на вашу почту"}
 
@@ -367,10 +374,17 @@ async def request_email_change(
         session.add(otp_record)
         await session.commit()
 
+        sent = False
         try:
-            await send_otp_verification_email(clean_email, code)
+            sent = await send_otp_verification_email(clean_email, code)
         except Exception as e:
             logger.error("Failed to send email change OTP to %s: %s", clean_email, e)
+
+        if not sent and settings.RESEND_API_KEY:
+            raise HTTPException(
+                status_code=502,
+                detail="Не удалось доставить письмо с проверочным кодом. Пожалуйста, попробуйте позже.",
+            )
 
         return {"ok": True, "message": "Код подтверждения отправлен на новый email", "unconfirmed_email": clean_email}
 

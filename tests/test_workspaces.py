@@ -686,6 +686,65 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(acc.owner_user_id, artem.id)
             self.assertEqual(acc.name, 'Buyerly Account 1')
 
+    async def test_workspace_admin_can_refresh_account_without_reassigning_owner(self):
+        async with self.test_session_maker() as session:
+            artem = (await session.execute(select(User).where(User.username == 'artem'))).scalar_one()
+            ws = (await session.execute(select(Workspace).where(Workspace.slug == 'buyerly'))).scalar_one()
+            workspace_admin = User(
+                telegram_id='777000555',
+                username='workspace_admin',
+                full_name='Workspace Admin',
+                password_hash=hash_password('workspace-admin-password'),
+                role='buyer',
+                is_approved=True,
+                active_workspace_id=ws.id,
+            )
+            session.add(workspace_admin)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=ws.id,
+                    user_id=workspace_admin.id,
+                    role='admin',
+                )
+            )
+            original_owner_id = artem.id
+            await session.commit()
+
+        admin_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {'id': 777000555, 'first_name': 'Workspace', 'username': 'workspace_admin'},
+        )
+        headers = {'Authorization': f'tma {admin_data}'}
+        mock_meta_info = {
+            'id': 'act_111111',
+            'name': 'Refreshed Account',
+            'account_status': 1,
+            'status_label': 'Активен',
+            'timezone_name': 'UTC',
+            'currency': 'USD',
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(api_routes_module.meta_client, 'get_account_info', new=AsyncMock(return_value=mock_meta_info)):
+            async with httpx.AsyncClient(transport=transport, base_url='http://test') as client:
+                response = await client.post(
+                    '/api/accounts/batch-add',
+                    json={
+                        'accounts': [{'account_id': 'act_111111', 'name': 'Refreshed'}],
+                        'access_token': 'replacement_token',
+                    },
+                    headers=headers,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['success_count'], 1)
+        async with self.test_session_maker() as session:
+            account = (
+                await session.execute(select(Account).where(Account.account_id == 'act_111111'))
+            ).scalar_one()
+            self.assertEqual(account.owner_user_id, original_owner_id)
+
     async def test_targeted_workspace_invite_rejects_mismatched_email(self):
         artem_data = generate_valid_telegram_init_data(
             settings.BOT_TOKEN,
@@ -891,7 +950,6 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn(raw_token, e.message)
                     details_str = json.dumps(e.details)
                     self.assertNotIn(raw_token, details_str)
-
 
 
 

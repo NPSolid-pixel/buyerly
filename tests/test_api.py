@@ -140,6 +140,24 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.test_engine.dispose()
 
+    def test_summary_cache_invalidation_matches_workspace_or_owner(self):
+        api_routes_module._summary_cache.update(
+            {
+                "ws:10:today": (1.0, {}),
+                "user:20:today": (1.0, {}),
+                "ws:30:today": (1.0, {}),
+            }
+        )
+
+        api_routes_module.invalidate_summary_cache(
+            workspace_id=10,
+            owner_user_id=20,
+        )
+
+        self.assertNotIn("ws:10:today", api_routes_module._summary_cache)
+        self.assertNotIn("user:20:today", api_routes_module._summary_cache)
+        self.assertIn("ws:30:today", api_routes_module._summary_cache)
+
     def test_init_data_validation(self):
         user_info = {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"}
         now = 2_000_000_000
