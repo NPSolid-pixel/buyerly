@@ -76,6 +76,18 @@ class TestDeployContract(unittest.TestCase):
         self.assertIsNone(re.search(r"\bre_[A-Za-z0-9_]{10,}", self.script))
         self.assertIn("ensure_email_settings", self.script)
 
+    def test_meta_token_key_is_generated_and_validated_without_logging_it(self):
+        self.assertIn("ensure_meta_token_encryption_key", self.script)
+        self.assertIn("META_KEY_CANDIDATE", self.script)
+        self.assertIn("len(decoded) == 32", self.script)
+        self.assertNotIn('echo "${configured_key}"', self.script)
+
+    def test_rollback_restores_the_previous_image_version(self):
+        self.assertIn("PREVIOUS_APP_TAG", self.script)
+        self.assertIn("PREVIOUS_WEB_TAG", self.script)
+        self.assertIn('export APP_VERSION="${PREVIOUS_SHA}"', self.script)
+        self.assertNotIn('export APP_VERSION="${CURRENT_SHA}"', self.script)
+
     def test_production_repository_owner_and_origin_are_fail_closed(self):
         self.assertIn("EXPECTED_GIT_REPOSITORY", self.script)
         self.assertIn("normalize_repository_ownership", self.script)

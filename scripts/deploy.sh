@@ -75,6 +75,50 @@ ensure_email_settings() {
     fi
 }
 
+ensure_meta_token_encryption_key() {
+    local configured_key=""
+    local primary_key=""
+    if [[ -f .env ]]; then
+        configured_key=$(sed -n 's/^META_TOKEN_ENCRYPTION_KEY=//p' .env | tail -n 1)
+    fi
+    configured_key="${configured_key#\"}"
+    configured_key="${configured_key%\"}"
+    configured_key="${configured_key#\'}"
+    configured_key="${configured_key%\'}"
+
+    if [[ -z "${configured_key}" ]]; then
+        configured_key=$(python3 -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii"))')
+        if grep -q '^META_TOKEN_ENCRYPTION_KEY=' .env 2>/dev/null; then
+            sed -i "s|^META_TOKEN_ENCRYPTION_KEY=.*|META_TOKEN_ENCRYPTION_KEY=${configured_key}|" .env
+        else
+            printf '\nMETA_TOKEN_ENCRYPTION_KEY=%s\n' "${configured_key}" >> .env
+        fi
+        chmod 600 .env
+        echo "[INFO] Generated the Meta token encryption credential."
+    fi
+
+    primary_key="${configured_key%%,*}"
+    if ! META_KEY_CANDIDATE="${primary_key}" python3 - <<'PY'
+import base64
+import os
+import sys
+
+try:
+    decoded = base64.b64decode(
+        os.environ["META_KEY_CANDIDATE"].encode("ascii"),
+        altchars=b"-_",
+        validate=True,
+    )
+except (KeyError, UnicodeEncodeError, ValueError):
+    sys.exit(1)
+sys.exit(0 if len(decoded) == 32 else 1)
+PY
+    then
+        echo "[ERROR] META_TOKEN_ENCRYPTION_KEY has an invalid primary Fernet key."
+        return 1
+    fi
+}
+
 preserve_legacy_uploads() {
     local uploads_volume="buyerly-uploads"
     local legacy_upload_dir=""
@@ -130,10 +174,11 @@ rollback() {
     echo "[ROLLBACK] Stopping the failed service set..."
     docker compose stop web api bot worker 2>/dev/null || true
 
-    if [[ -n "${PREVIOUS_APP_IMAGE}" && -n "${PREVIOUS_WEB_IMAGE}" ]]; then
-        docker tag "${PREVIOUS_APP_IMAGE}" "buyerly-app:${CURRENT_SHA}"
-        docker tag "${PREVIOUS_WEB_IMAGE}" "buyerly-web:${CURRENT_SHA}"
-        export APP_VERSION="${CURRENT_SHA}"
+    if [[ -n "${PREVIOUS_APP_IMAGE}" && -n "${PREVIOUS_WEB_IMAGE}" \
+          && -n "${PREVIOUS_SHA}" ]]; then
+        docker tag "${PREVIOUS_APP_IMAGE}" "buyerly-app:${PREVIOUS_SHA}"
+        docker tag "${PREVIOUS_WEB_IMAGE}" "buyerly-web:${PREVIOUS_SHA}"
+        export APP_VERSION="${PREVIOUS_SHA}"
         docker compose up -d --no-deps api bot worker
         wait_for_container buyerly-api
         wait_for_container buyerly-telegram-bot
@@ -171,6 +216,7 @@ fi
 
 ensure_postgres_password
 ensure_email_settings
+ensure_meta_token_encryption_key
 
 if [[ -n "${EXPECTED_SHA}" ]]; then
     CURRENT_REPO_SHA=$(git rev-parse HEAD 2>/dev/null || true)
@@ -203,9 +249,17 @@ fi
 echo "[1/6] Creating a mandatory database backup..."
 bash "${SCRIPT_DIR}/backup_db.sh"
 
-CURRENT_SHA=$(git rev-parse HEAD 2>/dev/null || true)
 PREVIOUS_APP_IMAGE=$(docker inspect --format '{{.Image}}' buyerly-api 2>/dev/null || true)
 PREVIOUS_WEB_IMAGE=$(docker inspect --format '{{.Image}}' buyerly-web 2>/dev/null || true)
+PREVIOUS_APP_TAG=$(docker inspect --format '{{.Config.Image}}' buyerly-api 2>/dev/null || true)
+PREVIOUS_WEB_TAG=$(docker inspect --format '{{.Config.Image}}' buyerly-web 2>/dev/null || true)
+PREVIOUS_SHA=""
+if [[ "${PREVIOUS_APP_TAG}" =~ ^buyerly-app:([0-9a-f]{40})$ ]]; then
+    PREVIOUS_SHA_CANDIDATE="${BASH_REMATCH[1]}"
+    if [[ "${PREVIOUS_WEB_TAG}" == "buyerly-web:${PREVIOUS_SHA_CANDIDATE}" ]]; then
+        PREVIOUS_SHA="${PREVIOUS_SHA_CANDIDATE}"
+    fi
+fi
 
 echo "[2/6] Synchronizing ${BRANCH}..."
 git fetch origin "${BRANCH}"
@@ -218,6 +272,7 @@ git reset --hard "${TARGET_SHA}"
 export APP_VERSION="${TARGET_SHA}"
 ensure_postgres_password
 ensure_email_settings
+ensure_meta_token_encryption_key
 
 echo "[3/6] Building versioned API and web images..."
 docker compose build --pull api web

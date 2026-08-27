@@ -15,6 +15,9 @@
    fallback for a row not yet reached by the migration.
 4. Rotate OAuth connections and manual account ciphertext with
    `python -m scripts.rotate_meta_tokens` after prepending a new primary key.
+5. Generate a missing production Fernet key before migration, validate an
+   existing primary key without exposing it, and retain the previous image SHA
+   for truthful rollback health reporting.
 
 ## Safety and rollback
 
