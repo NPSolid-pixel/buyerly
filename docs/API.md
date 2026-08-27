@@ -163,6 +163,7 @@ Slug нормализуется в ASCII и ограничивается 60 си
 | `POST /api/meta/oauth/start` | `return_path?` | создаёт одноразовый state на 10 минут и возвращает URL входа Facebook |
 | `GET /api/meta/connections` | — | список Meta-профилей текущего владельца без access token |
 | `DELETE /api/meta/connections/{connection_id}` | — | удаляет собственное подключение в активном workspace, отключает связанные кабинеты и их автоматику до переподключения |
+| `POST /api/meta/connections/{connection_id}/validate` | — | проверяет статус токена в Meta, выявляет отозванные права и обновляет оставшийся срок действия |
 | `POST /api/meta/connections/{connection_id}/discover` | — | проверяет токен и обновляет полный список доступных кабинетов из `/me/adaccounts` |
 | `GET /api/meta/connections/{connection_id}/assets` | — | возвращает последнее сохранённое обнаружение с признаком уже импортированных кабинетов |
 | `POST /api/meta/connections/{connection_id}/import` | `account_ids[]` | повторно проверяет выбранные кабинеты в Meta и связывает их с зашифрованным подключением |

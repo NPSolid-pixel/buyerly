@@ -512,6 +512,12 @@ class MetaOAuthState(Base):
         index=True,
     )
     return_path = Column(String, default="/facebook-accounts", nullable=False)
+    reconnect_connection_id = Column(
+        Integer,
+        ForeignKey("meta_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)

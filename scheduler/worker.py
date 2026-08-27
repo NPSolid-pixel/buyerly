@@ -987,6 +987,17 @@ class MonitoringWorker:
 
             prepared_accounts = []
             for acc in accounts:
+                if acc.meta_connection_id and acc.meta_connection_id in connection_cache:
+                    conn = connection_cache[acc.meta_connection_id]
+                    if conn.status in ("expired", "needs_reconnect", "missing_scopes", "error"):
+                        logger.info(
+                            "Skipping rule checks for account %s: Meta connection %s is in %s state",
+                            acc.account_id,
+                            conn.id,
+                            conn.status,
+                        )
+                        continue
+
                 account_ref = str(acc.account_id)
                 notification_target = owner_chat_ids.get(acc.owner_user_id) or ""
                 now = self._clock()

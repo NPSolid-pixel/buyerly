@@ -297,6 +297,160 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(await session.get(MetaConnection, self.connection_id))
             self.assertIsNotNone(await session.get(MetaConnection, foreign_connection_id))
 
+    async def test_validate_connection_returns_health_status(self):
+        fake_oauth = AsyncMock()
+        fake_oauth.debug_token.return_value = {
+            "is_valid": True,
+            "app_id": settings.META_APP_ID,
+            "scopes": ["ads_read", "ads_management", "business_management"],
+            "expires_at": 1893456000,
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/meta/connections/{self.connection_id}/validate",
+                    headers=self.headers,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "active")
+        self.assertEqual(data["missing_scopes"], [])
+        self.assertIn("ads_management", data["granted_scopes"])
+        self.assertIsNotNone(data["days_until_expiration"])
+        self.assertIsNotNone(data["last_validated_at"])
+
+    async def test_validate_connection_detects_missing_scopes(self):
+        fake_oauth = AsyncMock()
+        fake_oauth.debug_token.return_value = {
+            "is_valid": True,
+            "app_id": settings.META_APP_ID,
+            "scopes": ["ads_read"],  # missing ads_management and business_management
+            "expires_at": 1893456000,
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/meta/connections/{self.connection_id}/validate",
+                    headers=self.headers,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "missing_scopes")
+        self.assertIn("ads_management", data["missing_scopes"])
+        self.assertIn("business_management", data["missing_scopes"])
+
+    async def test_reconnect_start_and_callback_flow(self):
+        async with self.sessions() as session:
+            account = Account(
+                account_id="act_555666777",
+                name="Inactive Linked Account",
+                workspace_id=self.workspace_id,
+                owner_user_id=self.user_id,
+                meta_connection_id=self.connection_id,
+                access_token="",
+                currency="USD",
+                rules_enabled=False,
+                is_active=False,
+                status_label="Требуется подключение Meta",
+            )
+            session.add(account)
+            await session.commit()
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            start_resp = await client.post(
+                f"/api/meta/oauth/start?return_path=/facebook-accounts&reconnect_connection_id={self.connection_id}",
+                headers=self.headers,
+            )
+            self.assertEqual(start_resp.status_code, 200)
+
+            fake_oauth = AsyncMock()
+            fake_oauth.exchange_code.return_value = {
+                "access_token": "EAAB-new-reconnected-token",
+                "identity": {"id": "meta-user-1", "name": "Meta Test User (Updated)"},
+                "debug": {
+                    "is_valid": True,
+                    "app_id": settings.META_APP_ID,
+                    "scopes": ["ads_read", "ads_management", "business_management"],
+                    "expires_at": 1893456000,
+                },
+            }
+
+            from urllib.parse import parse_qs, urlparse
+            auth_url = start_resp.json()["authorization_url"]
+            state = parse_qs(urlparse(auth_url).query)["state"][0]
+
+            with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+                cb_resp = await client.get(
+                    f"/api/meta/oauth/callback?state={state}&code=test-auth-code",
+                    follow_redirects=False,
+                )
+
+        self.assertEqual(cb_resp.status_code, 303)
+        self.assertIn("meta_status=connected", cb_resp.headers["location"])
+
+        async with self.sessions() as session:
+            conn = await session.get(MetaConnection, self.connection_id)
+            self.assertEqual(conn.provider_user_name, "Meta Test User (Updated)")
+            self.assertEqual(conn.status, "active")
+
+            acc = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_555666777")
+                )
+            ).scalar_one()
+            self.assertTrue(acc.is_active)
+            self.assertEqual(acc.status_label, "Активен")
+
+            audit = (
+                await session.execute(
+                    select(AuditEvent).where(
+                        AuditEvent.event_type == "META_CONNECTION_RECONNECTED"
+                    )
+                )
+            ).scalar_one()
+            self.assertEqual(audit.action, "RECONNECT_CONNECTION")
+
+    async def test_reconnect_blocks_identity_mismatch(self):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            start_resp = await client.post(
+                f"/api/meta/oauth/start?return_path=/facebook-accounts&reconnect_connection_id={self.connection_id}",
+                headers=self.headers,
+            )
+            self.assertEqual(start_resp.status_code, 200)
+
+            fake_oauth = AsyncMock()
+            fake_oauth.exchange_code.return_value = {
+                "access_token": "EAAB-different-token",
+                "identity": {"id": "meta-user-DIFFERENT-ID", "name": "Different Meta User"},
+                "debug": {
+                    "is_valid": True,
+                    "app_id": settings.META_APP_ID,
+                    "scopes": ["ads_read", "ads_management", "business_management"],
+                },
+            }
+
+            from urllib.parse import parse_qs, urlparse
+            auth_url = start_resp.json()["authorization_url"]
+            state = parse_qs(urlparse(auth_url).query)["state"][0]
+
+            with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+                cb_resp = await client.get(
+                    f"/api/meta/oauth/callback?state={state}&code=test-auth-code",
+                    follow_redirects=False,
+                )
+
+        self.assertEqual(cb_resp.status_code, 303)
+        self.assertIn("meta_status=identity_mismatch", cb_resp.headers["location"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

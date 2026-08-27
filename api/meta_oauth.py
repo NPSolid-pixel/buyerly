@@ -39,7 +39,13 @@ from database.models import (
     User,
 )
 from meta_api.client import MetaClient
-from meta_api.oauth import MetaOAuthClient, MetaOAuthRemoteError, meta_token_expiry
+from meta_api.oauth import (
+    REQUIRED_META_SCOPES,
+    MetaOAuthClient,
+    MetaOAuthRemoteError,
+    evaluate_meta_connection_health,
+    meta_token_expiry,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -96,7 +102,10 @@ def _oauth_client() -> MetaOAuthClient:
 
 
 def _safe_return_path(value: str) -> str:
-    return value if value in {"/facebook-accounts", "/add-accounts", "/settings"} else "/facebook-accounts"
+    path = str(value or "").strip()
+    if path.endswith("/facebook-accounts") or path.endswith("/add-accounts") or path.endswith("/settings"):
+        return path
+    return "/facebook-accounts"
 
 
 def _app_redirect(path: str, **params: str) -> str:
@@ -172,18 +181,29 @@ async def oauth_config(user: User = Depends(get_current_user)):
 )
 async def start_oauth(
     return_path: str = Query(default="/facebook-accounts"),
+    reconnect_connection_id: int | None = Query(default=None),
     user: User = Depends(get_current_user),
 ):
     client = _oauth_client()
     raw_state = secrets.token_urlsafe(32)
     state_hash = hashlib.sha256(raw_state.encode("utf-8")).hexdigest()
     now = datetime.now(timezone.utc)
+
     async with async_session_maker() as session:
+        if reconnect_connection_id:
+            await _workspace_connection(
+                session,
+                reconnect_connection_id,
+                user,
+                require_write=True,
+            )
+
         session.add(
             MetaOAuthState(
                 state_hash=state_hash,
                 owner_user_id=user.id,
                 return_path=_safe_return_path(return_path),
+                reconnect_connection_id=reconnect_connection_id,
                 expires_at=now + timedelta(minutes=OAUTH_STATE_TTL_MINUTES),
             )
         )
@@ -244,6 +264,7 @@ async def oauth_callback(
         await session.commit()
         owner_user_id = oauth_state.owner_user_id
         return_path = _safe_return_path(oauth_state.return_path)
+        reconnect_id = oauth_state.reconnect_connection_id
 
     try:
         client = _oauth_client()
@@ -253,36 +274,84 @@ async def oauth_callback(
         debug = result["debug"]
         provider_user_id = str(identity["id"])
         provider_user_name = str(identity.get("name") or "Meta user")
-        scopes = debug.get("scopes") if isinstance(debug.get("scopes"), list) else []
+        health = evaluate_meta_connection_health(debug, now)
 
         async with async_session_maker() as session:
             owner = await session.get(User, owner_user_id)
             if not owner:
                 raise MetaOAuthRemoteError("Buyerly user no longer exists")
-            existing = (
-                await session.execute(
-                    select(MetaConnection).where(
-                        MetaConnection.owner_user_id == owner_user_id,
-                        MetaConnection.provider_user_id == provider_user_id,
+
+            if reconnect_id:
+                reconnect_target = await session.get(MetaConnection, reconnect_id)
+                if reconnect_target and reconnect_target.owner_user_id == owner_user_id:
+                    if reconnect_target.provider_user_id != provider_user_id:
+                        return RedirectResponse(
+                            _app_redirect(
+                                return_path,
+                                meta_status="identity_mismatch",
+                                expected_user=reconnect_target.provider_user_name or reconnect_target.provider_user_id,
+                                actual_user=provider_user_name,
+                            ),
+                            status_code=303,
+                        )
+                    connection = reconnect_target
+                else:
+                    reconnect_id = None
+
+            if not reconnect_id:
+                existing = (
+                    await session.execute(
+                        select(MetaConnection).where(
+                            MetaConnection.owner_user_id == owner_user_id,
+                            MetaConnection.provider_user_id == provider_user_id,
+                        )
                     )
+                ).scalar_one_or_none()
+                connection = existing or MetaConnection(
+                    workspace_id=owner.active_workspace_id,
+                    owner_user_id=owner_user_id,
+                    provider_user_id=provider_user_id,
                 )
-            ).scalar_one_or_none()
-            connection = existing or MetaConnection(
-                workspace_id=owner.active_workspace_id,
-                owner_user_id=owner_user_id,
-                provider_user_id=provider_user_id,
-                access_token_encrypted=encrypted_token,
-            )
+                if not existing:
+                    connection.connected_at = now
+                    session.add(connection)
+
             connection.provider_user_name = provider_user_name
             connection.access_token_encrypted = encrypted_token
-            connection.granted_scopes = scopes
-            connection.token_expires_at = meta_token_expiry(debug)
-            connection.status = "active"
-            connection.last_error = ""
+            connection.granted_scopes = health["granted_scopes"]
+            connection.token_expires_at = health["token_expires_at"]
+            connection.status = health["status"]
+            connection.last_error = health["error"]
             connection.last_validated_at = now
-            connection.connected_at = now
-            if not existing:
-                session.add(connection)
+
+            if reconnect_id:
+                # Re-activate accounts linked to this connection
+                await session.execute(
+                    update(Account)
+                    .where(Account.meta_connection_id == connection.id)
+                    .values(is_active=True, status_label="Активен")
+                )
+
+            session.add(
+                AuditEvent(
+                    workspace_id=owner.active_workspace_id,
+                    owner_user_id=owner_user_id,
+                    actor_type="user",
+                    actor_id=str(owner.telegram_id or owner.id),
+                    category="MANUAL_ACTION",
+                    event_type="META_CONNECTION_RECONNECTED" if reconnect_id else "META_CONNECTION_CONNECTED",
+                    status="SUCCESS",
+                    action="RECONNECT_CONNECTION" if reconnect_id else "CONNECT_CONNECTION",
+                    message="Подключение Meta успешно обновлено." if reconnect_id else "Подключение Meta успешно создано.",
+                    details={
+                        "provider_user_id": provider_user_id,
+                        "provider_user_name": provider_user_name,
+                        "status": connection.status,
+                    },
+                    correlation_id=secrets.token_hex(16),
+                )
+            )
+
             await session.commit()
             await session.refresh(connection)
             connection_id = connection.id
@@ -310,6 +379,7 @@ async def oauth_callback(
 
 @router.get("/connections")
 async def list_connections(user: User = Depends(get_current_user)):
+    now = datetime.now(timezone.utc)
     async with async_session_maker() as session:
         ws = await get_user_workspace(session, user)
         rows = (
@@ -322,20 +392,33 @@ async def list_connections(user: User = Depends(get_current_user)):
                 .order_by(MetaConnection.updated_at.desc())
             )
         ).scalars().all()
-    return [
-        {
-            "id": item.id,
-            "provider_user_id": item.provider_user_id,
-            "provider_user_name": item.provider_user_name,
-            "status": item.status,
-            "granted_scopes": _json_list(item.granted_scopes),
-            "token_expires_at": item.token_expires_at.isoformat()
-            if item.token_expires_at
-            else None,
-            "connected_at": item.connected_at.isoformat(),
-        }
-        for item in rows
-    ]
+    output = []
+    for item in rows:
+        scopes = _json_list(item.granted_scopes)
+        days_left: int | None = None
+        if item.token_expires_at:
+            diff = (_as_utc(item.token_expires_at) - now).total_seconds()
+            days_left = max(0, int(diff // 86400))
+        output.append(
+            {
+                "id": item.id,
+                "provider_user_id": item.provider_user_id,
+                "provider_user_name": item.provider_user_name,
+                "status": item.status,
+                "granted_scopes": scopes,
+                "missing_scopes": [s for s in REQUIRED_META_SCOPES if s not in scopes],
+                "token_expires_at": item.token_expires_at.isoformat()
+                if item.token_expires_at
+                else None,
+                "days_until_expiration": days_left,
+                "last_validated_at": item.last_validated_at.isoformat()
+                if item.last_validated_at
+                else None,
+                "last_error": item.last_error,
+                "connected_at": item.connected_at.isoformat(),
+            }
+        )
+    return output
 
 
 @router.delete("/connections/{connection_id}")
@@ -343,7 +426,7 @@ async def delete_connection(
     connection_id: int,
     user: User = Depends(get_current_user),
 ):
-    """Delete encrypted Meta credentials and safely disable linked accounts."""
+    """Delete encrypted Meta credentials, revoke Meta permissions best-effort, and safely disable linked accounts."""
 
     async with async_session_maker() as session:
         connection, ws, _ = await _workspace_connection(
@@ -352,6 +435,15 @@ async def delete_connection(
             user,
             require_write=True,
         )
+
+        # Best-effort revocation of Meta permissions
+        try:
+            raw_token = decrypt_meta_token(connection.access_token_encrypted)
+            client = _oauth_client()
+            await client.revoke_permissions(raw_token)
+        except Exception:
+            logger.info("Meta Graph API permission revocation skipped or failed for connection %s", connection_id)
+
         linked_accounts = (
             await session.execute(
                 select(Account).where(
@@ -408,6 +500,58 @@ async def delete_connection(
     }
 
 
+@router.post("/connections/{connection_id}/validate")
+async def validate_connection(
+    connection_id: int,
+    user: User = Depends(get_current_user),
+):
+    """Explicitly validate Meta token and update health status."""
+    now = datetime.now(timezone.utc)
+    async with async_session_maker() as session:
+        connection, ws, _ = await _workspace_connection(
+            session,
+            connection_id,
+            user,
+            require_write=True,
+        )
+        try:
+            access_token = decrypt_meta_token(connection.access_token_encrypted)
+            client = _oauth_client()
+            debug = await client.debug_token(access_token)
+            health = evaluate_meta_connection_health(debug, now)
+        except (MetaOAuthRemoteError, MetaTokenError) as exc:
+            health = {
+                "status": "needs_reconnect",
+                "days_until_expiration": None,
+                "missing_scopes": list(REQUIRED_META_SCOPES),
+                "granted_scopes": [],
+                "token_expires_at": None,
+                "error": redact_secrets(str(exc)),
+            }
+
+        connection.status = health["status"]
+        connection.granted_scopes = health["granted_scopes"]
+        connection.token_expires_at = health["token_expires_at"]
+        connection.last_error = health["error"]
+        connection.last_validated_at = now
+        await session.commit()
+
+        return {
+            "connection_id": connection.id,
+            "provider_user_id": connection.provider_user_id,
+            "provider_user_name": connection.provider_user_name,
+            "status": connection.status,
+            "days_until_expiration": health["days_until_expiration"],
+            "granted_scopes": health["granted_scopes"],
+            "missing_scopes": health["missing_scopes"],
+            "token_expires_at": connection.token_expires_at.isoformat()
+            if connection.token_expires_at
+            else None,
+            "last_validated_at": connection.last_validated_at.isoformat(),
+            "last_error": connection.last_error,
+        }
+
+
 @router.post("/connections/{connection_id}/discover")
 async def discover_accounts(
     connection_id: int,
@@ -428,7 +572,8 @@ async def discover_accounts(
             discovered = await client.discover_ad_accounts(access_token)
         except (MetaOAuthRemoteError, MetaTokenError) as exc:
             connection.status = "needs_reconnect"
-            connection.last_error = str(exc)
+            connection.last_error = redact_secrets(str(exc))
+            connection.last_validated_at = now
             await session.commit()
             raise HTTPException(
                 status_code=502,
@@ -479,10 +624,12 @@ async def discover_accounts(
                     MetaConnectionAsset.meta_account_id.in_(stale_ids),
                 )
             )
-        scopes = debug.get("scopes") if isinstance(debug.get("scopes"), list) else []
-        connection.granted_scopes = scopes
-        connection.status = "active"
-        connection.last_error = ""
+
+        health = evaluate_meta_connection_health(debug, now)
+        connection.granted_scopes = health["granted_scopes"]
+        connection.token_expires_at = health["token_expires_at"]
+        connection.status = health["status"]
+        connection.last_error = health["error"]
         connection.last_validated_at = now
         await session.commit()
 

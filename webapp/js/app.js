@@ -4035,9 +4035,36 @@
       });
       const spendFormatted = totalSpend > 0 ? `$${totalSpend.toFixed(2)}` : '$0.00';
 
-      const isTokenActive = conn.status === 'active';
-      const tokenClass = isTokenActive ? 'green' : 'amber';
-      const tokenText = isTokenActive ? 'Активен' : 'Требует внимания';
+      let tokenClass = 'green';
+      let tokenText = 'Активен';
+      if (conn.status === 'active') {
+        if (typeof conn.days_until_expiration === 'number') {
+          tokenClass = 'green';
+          tokenText = `Активен (${conn.days_until_expiration} дн.)`;
+        } else {
+          tokenClass = 'green';
+          tokenText = 'Активен';
+        }
+      } else if (conn.status === 'expiring') {
+        tokenClass = 'amber';
+        tokenText = `Истекает (${conn.days_until_expiration || 0} дн.)`;
+      } else if (conn.status === 'expired') {
+        tokenClass = 'red';
+        tokenText = 'Срок истёк';
+      } else if (conn.status === 'missing_scopes') {
+        tokenClass = 'red';
+        tokenText = 'Отозваны права';
+      } else {
+        tokenClass = 'red';
+        tokenText = 'Требует внимания';
+      }
+
+      const tooltipParts = [
+        `Статус: ${conn.status}`,
+        conn.token_expires_at ? `Истекает: ${new Date(conn.token_expires_at).toLocaleDateString()}` : 'Бессрочный',
+        conn.last_validated_at ? `Проверено: ${new Date(conn.last_validated_at).toLocaleTimeString()}` : '',
+        conn.last_error ? `Ошибка: ${conn.last_error}` : ''
+      ].filter(Boolean).join('\n');
 
       return `
         <tr class="attio-row">
@@ -4069,13 +4096,15 @@
             <span class="num-bold">${escapeHtml(spendFormatted)}</span>
           </td>
           <td class="attio-td" style="width: 160px;">
-            <span class="status-pill ${tokenClass}">
+            <span class="status-pill ${tokenClass}" title="${escapeHtml(tooltipParts)}">
               <span class="status-dot"></span>
               ${tokenText}
             </span>
           </td>
-          <td class="attio-td" style="width: 110px; text-align: right;">
+          <td class="attio-td" style="width: 130px; text-align: right;">
             <div style="display: inline-flex; align-items: center; gap: 4px;">
+              <button class="btn btn-secondary btn-xs" onclick="window.validateMetaConnection(${conn.id})" title="Проверить статус токена" style="padding: 2px 6px;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
+              <button class="btn btn-secondary btn-xs" onclick="window.reconnectMetaConnection(${conn.id})" title="Переподключить токен" style="padding: 2px 6px; color: var(--accent-primary);"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></button>
               <button class="btn btn-secondary btn-xs" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты" style="padding: 2px 6px;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
               <button class="btn btn-secondary btn-xs" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение" style="padding: 2px 6px; color: #BA2525;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
@@ -4096,6 +4125,40 @@
       await loadAccounts();
     } catch (e) {
       showToast(e.message || 'Ошибка синхронизации', 'error');
+    } finally {
+      hideLoading();
+    }
+  };
+
+  window.validateMetaConnection = async function (connectionId) {
+    try {
+      showLoading();
+      const res = await apiRequest(`/api/meta/connections/${connectionId}/validate`, { method: 'POST' });
+      if (res.status === 'active') {
+        const days = res.days_until_expiration != null ? ` (осталось ${res.days_until_expiration} дн.)` : '';
+        showToast(`Токен валиден${days}`, 'success');
+      } else if (res.status === 'expiring') {
+        showToast(`Токен истекает через ${res.days_until_expiration} дн. Рекомендуется переподключить.`, 'warning');
+      } else {
+        showToast(`Требуется внимание: ${res.last_error || res.status}`, 'error');
+      }
+      await loadFacebookAccounts();
+    } catch (err) {
+      showToast(err.message || 'Ошибка проверки токена', 'error');
+    } finally {
+      hideLoading();
+    }
+  };
+
+  window.reconnectMetaConnection = async function (connectionId) {
+    try {
+      showLoading();
+      const slug = (typeof getWorkspaceSlug === 'function' ? getWorkspaceSlug() : '') || (state.activeWorkspace?.slug || '');
+      const returnPath = slug ? `/${slug}/facebook-accounts` : '/facebook-accounts';
+      const result = await apiRequest(`/api/meta/oauth/start?return_path=${encodeURIComponent(returnPath)}&reconnect_connection_id=${connectionId}`, { method: 'POST' });
+      window.location.assign(result.authorization_url);
+    } catch (err) {
+      showToast(err.message || 'Ошибка запуска переподключения', 'error');
     } finally {
       hideLoading();
     }
@@ -9553,7 +9616,8 @@
         expired_state: ['Ссылка входа истекла. Запустите подключение ещё раз.', 'error'],
         invalid_callback: ['Meta вернула неполный ответ. Запустите подключение ещё раз.', 'error'],
         not_configured: ['OAuth Meta ещё не настроен на сервере.', 'error'],
-        connection_failed: ['Не удалось подтвердить подключение Meta. Попробуйте войти ещё раз.', 'error']
+        connection_failed: ['Не удалось подтвердить подключение Meta. Попробуйте войти ещё раз.', 'error'],
+        identity_mismatch: ['Вы вошли под другим профилем Facebook. Пожалуйста, войдите под исходным аккаунтом.', 'error']
       };
       const item = messages[status] || ['Не удалось завершить подключение Meta.', 'error'];
       showToast(item[0], item[1]);
