@@ -10,6 +10,10 @@
 ## [Unreleased]
 
 ### Security
+- **Удаление скомпрометированного секрета Resend и безопасная передача ключей в CI/CD**:
+  - Удалён захардкоженный ключ Resend API из `scripts/deploy.sh`.
+  - Реализована безопасная передача `RESEND_API_KEY` через переменные окружения и GitHub Secrets без сохранения секретов в коде репозитория.
+  - Добавлен контрактный тест `test_no_hardcoded_secrets_in_deploy_script` в `tests/test_deploy_contract.py`.
 - **Ужесточение доступа к Production VPS и отключение парольного входа по SSH (`[86eyr5v1f]`)**:
   - На боевом сервере отключена аутентификация по паролям (`PasswordAuthentication no`) и интерактивные методы (`KbdInteractiveAuthentication no`).
   - Доступ по SSH переведён исключительно на доверенные асимметричные криптографические ключи Ed25519 в `~/.ssh/authorized_keys` с запретом входа root по паролю (`PermitRootLogin prohibit-password`).
@@ -30,6 +34,9 @@
   - Добавлен контрактный тест `test_toast_and_error_sanitization_contract` в `tests/test_frontend_contract.py`.
 
 ### Fixed
+- **Обработка ошибок доставки транзакционных писем (Resend OTP)**:
+  - В `api/routers/auth.py` (`POST /api/auth/request-temporary-password`) добавлена проверка статуса отправки письма с проверочным кодом: при сбое внешнего почтового сервиса возвращается статус 502 Bad Gateway с понятным сообщением вместо ложного ответа об успехе.
+  - Добавлен тест `test_otp_request_delivery_failure_raises_502` в `tests/test_api.py`.
 - **Устранение утечки стейта между воркспейсами (Multi-Tenancy Bleed)**:
   - Добавлена функция `resetWorkspaceState()` в `webapp/js/app.js` для полной очистки временных выборок чекбоксов (`selectedAccounts`, `selectedRuleIds`, `linkRuleSelectedAccountIds`, `metaOAuth.selectedAccountIds`), кэша аналитики и сводки (`summaryCache`, `summary`), остановленных адсетов, аудит-логов и блокировок запросов.
   - Введено версионирование стейта через `state.workspaceEpoch`: критические асинхронные загрузчики (`loadAccounts`, `loadSummary`, `loadLogsTab`, `loadFacebookAccounts`, `loadPresets`, `loadRuleGroups`) защищены от состояний гонки (Race Conditions) и отбрасывают ответы от запросов предыдущего воркспейса.

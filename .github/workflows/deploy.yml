@@ -82,7 +82,7 @@ jobs:
               git fetch origin main
               git reset --hard origin/main
               chmod +x scripts/deploy.sh scripts/backup_db.sh || true
-              EXPECTED_SHA="${{ github.sha }}" bash scripts/deploy.sh
+              EXPECTED_SHA="${{ github.sha }}" RESEND_API_KEY="${{ secrets.RESEND_API_KEY }}" bash scripts/deploy.sh
             else
               echo "❌ Error: /opt/buyerly directory does not exist on server!"
               exit 1

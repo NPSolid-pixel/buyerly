@@ -16,6 +16,7 @@ from api.schemas import (
     UpdateProfileRequest,
     UserProfileResponse,
 )
+from core.config import settings
 from core.email import send_otp_verification_email
 from core.rate_limit import rate_limit_dep
 from database.db import (
@@ -114,10 +115,17 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
         await session.commit()
 
         # Send email via Resend / SMTP
+        sent = False
         try:
-            await send_otp_verification_email(email_clean, code)
+            sent = await send_otp_verification_email(email_clean, code)
         except Exception as e:
             logger.error("Failed to send OTP email to %s: %s", email_clean, e)
+
+        if not sent and settings.RESEND_API_KEY:
+            raise HTTPException(
+                status_code=502,
+                detail="Не удалось доставить письмо с проверочным кодом. Пожалуйста, попробуйте позже.",
+            )
 
         return {"ok": True, "message": "Временный пароль отправлен на вашу почту"}
 
