@@ -177,6 +177,28 @@ class MetaOAuthClient:
         raise MetaOAuthRemoteError("Meta returned too many account pages")
 
 
+    async def revoke_permissions(self, access_token: str) -> bool:
+        """Best-effort revocation of granted permissions in Meta Graph API."""
+        try:
+            proof = self.appsecret_proof(access_token)
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.delete(
+                    f"{self.graph_url}/me/permissions",
+                    params={
+                        "access_token": access_token,
+                        "appsecret_proof": proof,
+                    },
+                )
+            payload = response.json() if response.content else {}
+            return bool(payload.get("success", False))
+        except Exception:
+            return False
+
+
+REQUIRED_META_SCOPES = ("ads_read", "ads_management", "business_management")
+EXPIRING_THRESHOLD_DAYS = 7
+
+
 def meta_token_expiry(debug_data: Dict[str, Any]) -> Optional[datetime]:
     raw_expiry = debug_data.get("expires_at")
     try:
@@ -186,3 +208,70 @@ def meta_token_expiry(debug_data: Dict[str, Any]) -> Optional[datetime]:
     if timestamp <= 0:
         return None
     return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
+
+def evaluate_meta_connection_health(
+    debug_data: Dict[str, Any],
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Classify token health into active, expiring, expired, missing_scopes, or needs_reconnect."""
+    now = now or datetime.now(timezone.utc)
+    is_valid = bool(debug_data.get("is_valid", False))
+    if not is_valid:
+        return {
+            "status": "needs_reconnect",
+            "days_until_expiration": None,
+            "missing_scopes": list(REQUIRED_META_SCOPES),
+            "granted_scopes": [],
+            "token_expires_at": None,
+            "error": "Токен недействителен или отозван в Meta",
+        }
+
+    raw_scopes = debug_data.get("scopes") or []
+    granted_scopes = [str(s) for s in raw_scopes if s]
+    missing_scopes = [s for s in REQUIRED_META_SCOPES if s not in granted_scopes]
+
+    expires_at = meta_token_expiry(debug_data)
+    days_until_expiration: Optional[int] = None
+    if expires_at is not None:
+        diff_seconds = (expires_at - now).total_seconds()
+        days_until_expiration = max(0, int(diff_seconds // 86400))
+        if diff_seconds <= 0:
+            return {
+                "status": "expired",
+                "days_until_expiration": 0,
+                "missing_scopes": missing_scopes,
+                "granted_scopes": granted_scopes,
+                "token_expires_at": expires_at,
+                "error": "Срок действия токена истёк",
+            }
+
+    if missing_scopes:
+        return {
+            "status": "missing_scopes",
+            "days_until_expiration": days_until_expiration,
+            "missing_scopes": missing_scopes,
+            "granted_scopes": granted_scopes,
+            "token_expires_at": expires_at,
+            "error": f"Отсутствуют обязательные права: {', '.join(missing_scopes)}",
+        }
+
+    if days_until_expiration is not None and days_until_expiration <= EXPIRING_THRESHOLD_DAYS:
+        return {
+            "status": "expiring",
+            "days_until_expiration": days_until_expiration,
+            "missing_scopes": [],
+            "granted_scopes": granted_scopes,
+            "token_expires_at": expires_at,
+            "error": "",
+        }
+
+    return {
+        "status": "active",
+        "days_until_expiration": days_until_expiration,
+        "missing_scopes": [],
+        "granted_scopes": granted_scopes,
+        "token_expires_at": expires_at,
+        "error": "",
+    }
+

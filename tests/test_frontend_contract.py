@@ -743,6 +743,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.clearAccountSelection',
             'window.toggleBulkGroupDropdown',
             'window.assignSelectedAccountsToGroup',
+            'window.reconnectMetaConnection',
+            'window.validateMetaConnection',
             'window.toggleSidebarSection',
             'applySidebarSectionsCollapsedState',
         ):
