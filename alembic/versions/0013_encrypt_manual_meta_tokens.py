@@ -31,17 +31,21 @@ def _encrypted_value(raw_token: str) -> str:
 
 
 def upgrade() -> None:
-    op.add_column(
-        "accounts",
-        sa.Column(
-            "access_token_encrypted",
-            sa.Text(),
-            nullable=True,
-            server_default="",
-        ),
-    )
-
     bind = op.get_bind()
+    columns = {
+        col["name"] for col in sa.inspect(bind).get_columns("accounts")
+    }
+    if "access_token_encrypted" not in columns:
+        op.add_column(
+            "accounts",
+            sa.Column(
+                "access_token_encrypted",
+                sa.Text(),
+                nullable=True,
+                server_default="",
+            ),
+        )
+
     rows = list(
         bind.execute(
             sa.text(

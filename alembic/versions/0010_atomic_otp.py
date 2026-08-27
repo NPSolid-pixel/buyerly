@@ -18,22 +18,30 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "email_verification_codes",
-        sa.Column("code_hash", sa.String(length=64), nullable=True),
-    )
-    op.add_column(
-        "email_verification_codes",
-        sa.Column("purpose", sa.String(length=32), nullable=True),
-    )
-    op.add_column(
-        "email_verification_codes",
-        sa.Column("scope", sa.String(length=320), nullable=True),
-    )
-    op.add_column(
-        "email_verification_codes",
-        sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
-    )
+    bind = op.get_bind()
+    columns = {
+        col["name"] for col in sa.inspect(bind).get_columns("email_verification_codes")
+    }
+    if "code_hash" not in columns:
+        op.add_column(
+            "email_verification_codes",
+            sa.Column("code_hash", sa.String(length=64), nullable=True),
+        )
+    if "purpose" not in columns:
+        op.add_column(
+            "email_verification_codes",
+            sa.Column("purpose", sa.String(length=32), nullable=True),
+        )
+    if "scope" not in columns:
+        op.add_column(
+            "email_verification_codes",
+            sa.Column("scope", sa.String(length=320), nullable=True),
+        )
+    if "delivered_at" not in columns:
+        op.add_column(
+            "email_verification_codes",
+            sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
+        )
 
     # Codes issued by older application versions are intentionally revoked:
     # their plaintext values cannot be safely promoted to the new HMAC contract.
@@ -45,6 +53,7 @@ def upgrade() -> None:
                 code_hash = repeat('0', 64),
                 purpose = 'legacy',
                 scope = 'legacy:' || id::text
+            WHERE code_hash IS NULL OR code_hash = ''
             """
         )
     )
@@ -52,25 +61,31 @@ def upgrade() -> None:
     op.alter_column("email_verification_codes", "purpose", nullable=False)
     op.alter_column("email_verification_codes", "scope", nullable=False)
 
-    op.create_index(
-        "ix_email_verification_codes_scope",
-        "email_verification_codes",
-        ["scope"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_email_verification_codes_delivered_at",
-        "email_verification_codes",
-        ["delivered_at"],
-        unique=False,
-    )
-    op.create_index(
-        "uq_email_verification_codes_active_scope",
-        "email_verification_codes",
-        ["scope"],
-        unique=True,
-        postgresql_where=sa.text("is_used = false"),
-    )
+    indexes = {
+        idx["name"] for idx in sa.inspect(bind).get_indexes("email_verification_codes")
+    }
+    if "ix_email_verification_codes_scope" not in indexes:
+        op.create_index(
+            "ix_email_verification_codes_scope",
+            "email_verification_codes",
+            ["scope"],
+            unique=False,
+        )
+    if "ix_email_verification_codes_delivered_at" not in indexes:
+        op.create_index(
+            "ix_email_verification_codes_delivered_at",
+            "email_verification_codes",
+            ["delivered_at"],
+            unique=False,
+        )
+    if "uq_email_verification_codes_active_scope" not in indexes:
+        op.create_index(
+            "uq_email_verification_codes_active_scope",
+            "email_verification_codes",
+            ["scope"],
+            unique=True,
+            postgresql_where=sa.text("is_used = false"),
+        )
 
 
 def downgrade() -> None:
