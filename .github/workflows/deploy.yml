@@ -54,7 +54,7 @@ jobs:
         run: |
           set -o pipefail
           python -m unittest discover tests -v 2>&1 | tee /tmp/buyerly-test-output.log || {
-            failure_excerpt=$(tail -n 120 /tmp/buyerly-test-output.log | tr '\n' ' ' | sed 's/%/%25/g')
+            failure_excerpt=$(grep -E -B 12 -A 35 '^(FAIL|ERROR):|Traceback|AssertionError|^FAILED|^Ran [0-9]+' /tmp/buyerly-test-output.log | tail -n 180 | tr '\n' ' ' | sed 's/%/%25/g')
             echo "::error title=Unit test failure::${failure_excerpt}"
             exit 1
           }
