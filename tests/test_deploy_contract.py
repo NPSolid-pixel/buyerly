@@ -12,6 +12,7 @@ class TestDeployContract(unittest.TestCase):
         cls.monitoring_worker = (project_root / "scheduler" / "worker.py").read_text()
         cls.notifier = (project_root / "bot" / "notifier.py").read_text()
         cls.dockerfile = (project_root / "Dockerfile").read_text()
+        cls.workflow = (project_root / ".github" / "workflows" / "deploy.yml").read_text()
         cls.codeowners = (project_root / ".github" / "CODEOWNERS").read_text()
 
     def test_deployments_are_serialized(self):
@@ -87,6 +88,14 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("PREVIOUS_WEB_TAG", self.script)
         self.assertIn('export APP_VERSION="${PREVIOUS_SHA}"', self.script)
         self.assertNotIn('export APP_VERSION="${CURRENT_SHA}"', self.script)
+
+    def test_remote_deploy_failure_exposes_only_safe_stage_diagnostics(self):
+        self.assertIn("appleboy/ssh-action@v1.2.2", self.workflow)
+        self.assertIn("capture_stdout: true", self.workflow)
+        self.assertIn("BUYERLY_DEPLOY_RESULT=success", self.workflow)
+        self.assertIn("BUYERLY_DEPLOY_RESULT=failure", self.workflow)
+        self.assertIn("Production deploy failure", self.workflow)
+        self.assertNotIn('cat "${deploy_log}"', self.workflow)
 
     def test_production_repository_owner_and_origin_are_fail_closed(self):
         self.assertIn("EXPECTED_GIT_REPOSITORY", self.script)

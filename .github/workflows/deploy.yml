@@ -84,7 +84,8 @@ jobs:
 
     steps:
       - name: Execute Remote SSH Commands for Deployment
-        uses: appleboy/ssh-action@v1.0.3
+        id: production_ssh
+        uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME || 'root' }}
@@ -92,7 +93,7 @@ jobs:
           passphrase: ${{ secrets.VPS_SSH_PASSPHRASE || '' }}
           password: ${{ secrets.VPS_PASSWORD || '' }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          script_stop: true
+          capture_stdout: true
           script: |
             set -e
             echo "🚀 [Deploy] Connected to VPS. Starting deployment for Buyerly..."
@@ -102,8 +103,41 @@ jobs:
               git fetch origin main
               git reset --hard origin/main
               chmod +x scripts/deploy.sh scripts/backup_db.sh || true
-              EXPECTED_SHA="${{ github.sha }}" RESEND_API_KEY="${{ secrets.RESEND_API_KEY }}" bash scripts/deploy.sh
+              deploy_log="/tmp/buyerly-deploy-${{ github.sha }}.log"
+              umask 077
+              : >"${deploy_log}"
+              if EXPECTED_SHA="${{ github.sha }}" RESEND_API_KEY="${{ secrets.RESEND_API_KEY }}" bash scripts/deploy.sh >"${deploy_log}" 2>&1; then
+                echo "BUYERLY_DEPLOY_RESULT=success"
+                rm -f "${deploy_log}"
+              else
+                deploy_status=$?
+                echo "BUYERLY_DEPLOY_RESULT=failure"
+                echo "BUYERLY_DEPLOY_EXIT=${deploy_status}"
+                grep -E '^\[([1-6]/6|ERROR|ROLLBACK)\]' "${deploy_log}" \
+                  | tail -n 20 \
+                  | sed -E 's/(re_)[A-Za-z0-9_]{6,}/\1[REDACTED]/g' \
+                  || true
+              fi
             else
               echo "❌ Error: /opt/buyerly directory does not exist on server!"
-              exit 1
+              echo "BUYERLY_DEPLOY_RESULT=failure"
+              echo "[ERROR] Production application directory is missing."
             fi
+            exit 0
+
+      - name: Assert Remote Deployment Result
+        env:
+          DEPLOY_OUTPUT: ${{ steps.production_ssh.outputs.stdout }}
+        run: |
+          if printf '%s\n' "${DEPLOY_OUTPUT}" | grep -q '^BUYERLY_DEPLOY_RESULT=success$'; then
+            exit 0
+          fi
+          diagnostic=$(printf '%s\n' "${DEPLOY_OUTPUT}" \
+            | grep -E '^(BUYERLY_DEPLOY_EXIT=|\[([1-6]/6|ERROR|ROLLBACK)\])' \
+            | tail -n 20 \
+            | tr '\n' ' ')
+          diagnostic=${diagnostic//%/%25}
+          diagnostic=${diagnostic//$'\r'/%0D}
+          diagnostic=${diagnostic//$'\n'/%0A}
+          echo "::error title=Production deploy failure::${diagnostic:-Remote deploy did not return a success marker.}"
+          exit 1
