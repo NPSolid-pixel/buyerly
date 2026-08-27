@@ -221,10 +221,16 @@ def upgrade() -> None:
                     END IF;
                     RETURN NEW;
                 END;
-                $$ LANGUAGE plpgsql;
+                $$ LANGUAGE plpgsql
+                """
+            )
+        )
+        bind.execute(
+            sa.text(
+                """
                 CREATE TRIGGER trg_rule_group_item_workspace
                 BEFORE INSERT OR UPDATE ON rule_group_items
-                FOR EACH ROW EXECUTE FUNCTION enforce_rule_group_item_workspace();
+                FOR EACH ROW EXECUTE FUNCTION enforce_rule_group_item_workspace()
                 """
             )
         )
@@ -236,12 +242,12 @@ def downgrade() -> None:
     if bind.dialect.name == "postgresql" and "rule_group_items" in table_names:
         bind.execute(
             sa.text(
-                """
-                DROP TRIGGER IF EXISTS trg_rule_group_item_workspace
-                ON rule_group_items;
-                DROP FUNCTION IF EXISTS enforce_rule_group_item_workspace();
-                """
+                "DROP TRIGGER IF EXISTS trg_rule_group_item_workspace "
+                "ON rule_group_items"
             )
+        )
+        bind.execute(
+            sa.text("DROP FUNCTION IF EXISTS enforce_rule_group_item_workspace()")
         )
     if "rule_groups" in table_names:
         op.drop_index("ix_rule_groups_workspace_position", table_name="rule_groups")
