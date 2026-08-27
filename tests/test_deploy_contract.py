@@ -67,8 +67,11 @@ class TestDeployContract(unittest.TestCase):
 
     def test_production_repository_owner_and_origin_are_fail_closed(self):
         self.assertIn("EXPECTED_GIT_REPOSITORY", self.script)
-        self.assertIn("REPOSITORY_OWNER_UID", self.script)
+        self.assertIn("normalize_repository_ownership", self.script)
+        self.assertIn("chown -R", self.script)
+        self.assertIn("sudo -n", self.script)
         self.assertIn("git remote get-url origin", self.script)
+        self.assertIn("NORMALIZED_ORIGIN", self.script)
         self.assertIn("@hiurano", self.codeowners)
 
     def test_legacy_monolith_cannot_return(self):

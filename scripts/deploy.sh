@@ -75,6 +75,32 @@ ensure_email_settings() {
     fi
 }
 
+normalize_repository_ownership() {
+    local owner_uid deploy_uid deploy_gid
+    owner_uid=$(stat -c '%u' "${APP_DIR}")
+    deploy_uid=$(id -u)
+    deploy_gid=$(id -g)
+    if [[ "${owner_uid}" == "${deploy_uid}" ]]; then
+        return
+    fi
+
+    echo "[INFO] Normalizing ${APP_DIR} ownership from uid ${owner_uid} to deploy uid ${deploy_uid}."
+    if [[ "${deploy_uid}" == "0" ]]; then
+        chown -R "${deploy_uid}:${deploy_gid}" "${APP_DIR}"
+    elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        sudo -n chown -R "${deploy_uid}:${deploy_gid}" "${APP_DIR}"
+    else
+        echo "[ERROR] Cannot normalize ${APP_DIR} ownership without root or passwordless sudo."
+        return 1
+    fi
+
+    owner_uid=$(stat -c '%u' "${APP_DIR}")
+    if [[ "${owner_uid}" != "${deploy_uid}" ]]; then
+        echo "[ERROR] ${APP_DIR} ownership normalization did not take effect."
+        return 1
+    fi
+}
+
 rollback() {
     echo "[ROLLBACK] Stopping the failed service set..."
     docker compose stop web api bot worker 2>/dev/null || true
@@ -98,17 +124,13 @@ rollback() {
 }
 
 cd "${APP_DIR}"
-
-REPOSITORY_OWNER_UID=$(stat -c '%u' "${APP_DIR}")
-DEPLOY_UID=$(id -u)
-if [[ "${REPOSITORY_OWNER_UID}" != "${DEPLOY_UID}" ]]; then
-    echo "[ERROR] ${APP_DIR} is owned by uid ${REPOSITORY_OWNER_UID}, but deploy runs as uid ${DEPLOY_UID}."
-    exit 1
-fi
+normalize_repository_ownership
 
 ORIGIN_URL=$(git remote get-url origin 2>/dev/null || true)
-case "${ORIGIN_URL}" in
-    "git@github.com:${EXPECTED_GIT_REPOSITORY}.git"|"https://github.com/${EXPECTED_GIT_REPOSITORY}.git")
+NORMALIZED_ORIGIN="${ORIGIN_URL%/}"
+NORMALIZED_ORIGIN="${NORMALIZED_ORIGIN%.git}"
+case "${NORMALIZED_ORIGIN}" in
+    "git@github.com:${EXPECTED_GIT_REPOSITORY}"|"https://github.com/${EXPECTED_GIT_REPOSITORY}"|"ssh://git@github.com/${EXPECTED_GIT_REPOSITORY}")
         ;;
     *)
         echo "[ERROR] Unexpected production repository origin: ${ORIGIN_URL:-missing}"
