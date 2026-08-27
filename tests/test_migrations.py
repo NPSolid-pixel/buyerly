@@ -1174,7 +1174,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-                self.assertEqual(version, "0013_manual_tokens")
+                self.assertEqual(version, "0014_legacy_columns_nullable")
 
             command.downgrade(alembic_cfg, "base")
         finally:
@@ -1197,7 +1197,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0013_manual_tokens")
+                self.assertEqual(version, "0014_legacy_columns_nullable")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -1231,7 +1231,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0013_manual_tokens")
+                self.assertEqual(version, "0014_legacy_columns_nullable")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -1265,7 +1265,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0013_manual_tokens")
+                self.assertEqual(version, "0014_legacy_columns_nullable")
         finally:
             await init_test_db(engine)
             await engine.dispose()
