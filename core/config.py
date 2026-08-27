@@ -79,6 +79,10 @@ class Settings(BaseSettings):
         default="",
         description="Resend.com API Key for sending transactional emails",
     )
+    OTP_PEPPER: str = Field(
+        default="",
+        description="Optional dedicated HMAC secret for OTP storage; BOT_TOKEN is the compatibility fallback",
+    )
     EMAIL_FROM: str = Field(
         default="Buyerly <team@buyerly.app>",
         description="Default sender email header for transactional emails",

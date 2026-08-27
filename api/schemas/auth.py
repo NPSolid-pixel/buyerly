@@ -28,6 +28,12 @@ class RequestTemporaryPasswordRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
 
 
+class VerifyTemporaryPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(..., min_length=3, max_length=255)
+    code: str = Field(..., min_length=6, max_length=6)
+
+
 class RequestEmailChangeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     new_email: str = Field(..., min_length=3, max_length=255)

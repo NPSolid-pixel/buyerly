@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -2496,6 +2497,24 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     )
                     self.assertEqual(resp.status_code, 502)
                     self.assertIn("Не удалось доставить письмо", resp.json()["detail"])
+            async with self.test_session_maker() as session:
+                user = (
+                    await session.execute(
+                        select(User).where(User.username == "deliveryfail@example.com")
+                    )
+                ).scalar_one_or_none()
+                self.assertIsNone(user)
+                otp = (
+                    await session.execute(
+                        select(EmailVerificationCode).where(
+                            EmailVerificationCode.email == "deliveryfail@example.com"
+                        )
+                    )
+                ).scalar_one()
+                self.assertTrue(otp.is_used)
+                self.assertIsNone(otp.delivered_at)
+                self.assertEqual(otp.code, "")
+                self.assertEqual(len(otp.code_hash), 64)
         finally:
             settings.RESEND_API_KEY = orig_key
 
@@ -2512,15 +2531,15 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             # 4 failed attempts
             for _ in range(4):
                 failed = await client.post(
-                    "/api/auth/login",
-                    json={"username": "bruteforce@example.com", "password": "000000"},
+                    "/api/auth/verify-temporary-password",
+                    json={"email": "bruteforce@example.com", "code": "000000"},
                 )
                 self.assertEqual(failed.status_code, 401)
 
             # 5th failed attempt locks out the OTP
             fifth = await client.post(
-                "/api/auth/login",
-                json={"username": "bruteforce@example.com", "password": "000000"},
+                "/api/auth/verify-temporary-password",
+                json={"email": "bruteforce@example.com", "code": "000000"},
             )
             self.assertEqual(fifth.status_code, 401)
             self.assertIn("Превышено максимальное количество попыток", fifth.json()["detail"])
@@ -2535,6 +2554,42 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     )
                 ).scalar_one()
                 self.assertTrue(code_record.is_used)
+
+    async def test_otp_is_consumed_once_and_user_is_created_only_after_verification(self):
+        delivered = {}
+
+        async def capture_code(email, code):
+            delivered[email] = code
+            return True
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            with patch("api.routers.auth.send_otp_verification_email", new=capture_code):
+                requested = await client.post(
+                    "/api/auth/request-temporary-password",
+                    json={"email": "atomic@example.com"},
+                )
+            self.assertEqual(requested.status_code, 200)
+
+            async with self.test_session_maker() as session:
+                pending_user = (
+                    await session.execute(select(User).where(User.username == "atomic@example.com"))
+                ).scalar_one_or_none()
+                self.assertIsNone(pending_user)
+
+            payload = {"email": "atomic@example.com", "code": delivered["atomic@example.com"]}
+            first, second = await asyncio.gather(
+                client.post("/api/auth/verify-temporary-password", json=payload),
+                client.post("/api/auth/verify-temporary-password", json=payload),
+            )
+            self.assertEqual(sorted((first.status_code, second.status_code)), [200, 401])
+
+            async with self.test_session_maker() as session:
+                users = (
+                    await session.execute(select(User).where(User.username == "atomic@example.com"))
+                ).scalars().all()
+                self.assertEqual(len(users), 1)
+                self.assertIsNotNone(users[0].email_verified_at)
 
     async def test_avatar_and_logo_disallow_svg(self):
         buyer_data = generate_valid_telegram_init_data(
@@ -2620,10 +2675,16 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
         )
         headers = {"Authorization": f"tma {buyer_data}"}
+        delivered = {}
+
+        async def capture_code(email, code):
+            delivered[email] = code
+            return True
+
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # 1. Request email change
-            with patch("api.routers.auth.send_otp_verification_email", new=AsyncMock()):
+            with patch("api.routers.auth.send_otp_verification_email", new=capture_code):
                 req_res = await client.post(
                     "/api/auth/request-email-change",
                     headers=headers,
@@ -2639,7 +2700,6 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(user.unconfirmed_email, "nick_new@example.com")
                 self.assertIsNone(user.email_verified_at)
 
-                # Fetch OTP code
                 otp = (
                     await session.execute(
                         select(EmailVerificationCode)
@@ -2647,7 +2707,9 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         .order_by(EmailVerificationCode.id.desc())
                     )
                 ).scalar_one()
-                code = otp.code
+                self.assertEqual(otp.code, "")
+                self.assertEqual(len(otp.code_hash), 64)
+                code = delivered["nick_new@example.com"]
 
             # 2. Try invalid code -> 400
             bad_verify = await client.post(
@@ -2698,9 +2760,15 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             {"id": 8948797999, "first_name": "Old", "username": "old_buyer"},
         )
         headers = {"Authorization": f"tma {user_data}"}
+        delivered = {}
+
+        async def capture_code(email, code):
+            delivered[email] = code
+            return True
+
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            with patch("api.routers.auth.send_otp_verification_email", new=AsyncMock()):
+            with patch("api.routers.auth.send_otp_verification_email", new=capture_code):
                 req_res = await client.post("/api/auth/request-email-verification", headers=headers)
                 self.assertEqual(req_res.status_code, 200)
 
@@ -2711,7 +2779,8 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                         .where(EmailVerificationCode.email == "existing_unverified@corp.com")
                     )
                 ).scalar_one()
-                code = otp.code
+                self.assertEqual(otp.code, "")
+                code = delivered["existing_unverified@corp.com"]
 
             verify_res = await client.post(
                 "/api/auth/verify-email-change",

@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from database.db import Base
@@ -263,13 +264,26 @@ class WorkspaceSupportGrant(Base):
 
 class EmailVerificationCode(Base):
     __tablename__ = "email_verification_codes"
+    __table_args__ = (
+        Index(
+            "uq_email_verification_codes_active_scope",
+            "scope",
+            unique=True,
+            postgresql_where=text("is_used = false"),
+            sqlite_where=text("is_used = 0"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     email = Column(String, nullable=False, index=True, doc="Email получателя кода")
-    code = Column(String(10), nullable=False, doc="6-значный одноразовый OTP-пароль")
+    code = Column(String(10), default="", nullable=False, doc="Legacy field; new OTP values are never stored in plaintext")
+    code_hash = Column(String(64), nullable=False, doc="HMAC-SHA256 проверочного кода")
+    purpose = Column(String(32), nullable=False, doc="Назначение кода: login/email_change/email_verification")
+    scope = Column(String(320), nullable=False, index=True, doc="Изолированная область одноразового кода")
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True, doc="Срок действия кода (UTC)")
     is_used = Column(Boolean, default=False, nullable=False, doc="Был ли код использован")
     failed_attempts = Column(Integer, default=0, nullable=False, doc="Количество неудачных попыток ввода кода")
+    delivered_at = Column(DateTime(timezone=True), nullable=True, index=True, doc="Код успешно передан почтовому провайдеру")
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     def __repr__(self):

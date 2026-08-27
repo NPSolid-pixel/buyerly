@@ -1,7 +1,6 @@
 import logging
-import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select, update
@@ -16,6 +15,7 @@ from api.schemas import (
     RequestTemporaryPasswordRequest,
     UpdateProfileRequest,
     UserProfileResponse,
+    VerifyTemporaryPasswordRequest,
     WebSessionItem,
     VerifyEmailChangeRequest,
 )
@@ -34,7 +34,6 @@ from database.models import (
     AnalyticsViewPreference,
     AuditEvent,
     AutomationScheduleState,
-    EmailVerificationCode,
     RuleExecutionState,
     RuleGroup,
     RulePreset,
@@ -44,6 +43,18 @@ from database.models import (
     Workspace,
     WorkspaceInvite,
     WorkspaceMember,
+)
+from services.otp import (
+    OTP_EMAIL_CHANGE,
+    OTP_EMAIL_VERIFICATION,
+    OTP_LOGIN,
+    consume_otp,
+    create_otp,
+    email_scope,
+    has_recent_active_otp,
+    invalidate_otp,
+    login_scope,
+    mark_otp_delivered,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,74 +77,39 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
         raise HTTPException(status_code=400, detail="Некорректный адрес электронной почты")
 
     async with async_session_maker() as session:
-        now_dt = datetime.now(timezone.utc)
-
-        # Rate limiting: max 1 request per 60 seconds per email
-        recent_otp = (
-            await session.execute(
-                select(EmailVerificationCode)
-                .where(
-                    (func.lower(EmailVerificationCode.email) == email_clean)
-                    & (EmailVerificationCode.created_at > now_dt - timedelta(seconds=60))
-                )
-                .order_by(EmailVerificationCode.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if recent_otp:
+        scope = login_scope(email_clean)
+        if await has_recent_active_otp(session, scope=scope):
             raise HTTPException(
                 status_code=429,
                 detail="Код уже был отправлен недавно. Подождите 1 минуту перед повторным запросом.",
             )
 
-        stmt = select(User).where(
-            (func.lower(User.email) == email_clean)
-            | (func.lower(User.username) == email_clean)
-        )
-        res = await session.execute(stmt)
-        user = res.scalar_one_or_none()
-
-        if not user:
-            user = User(
-                username=email_clean,
-                email=email_clean,
-                role="buyer",
-                is_approved=True,
-                onboarding_completed=False,
-                onboarding_step="personal_details",
-            )
-            session.add(user)
-            await session.flush()
-        elif not user.email:
-            user.email = email_clean
-
-        # Generate 6-digit random code
-        code = str(secrets.randbelow(900000) + 100000)
-        expires_at = now_dt + timedelta(minutes=15)
-
-        otp_record = EmailVerificationCode(
+        issued = await create_otp(
+            session,
             email=email_clean,
-            code=code,
-            expires_at=expires_at,
-            is_used=False,
-            failed_attempts=0,
-            created_at=now_dt,
+            purpose=OTP_LOGIN,
+            scope=scope,
         )
-        session.add(otp_record)
         await session.commit()
 
-        # Send email via Resend / SMTP
         sent = False
         try:
-            sent = await send_otp_verification_email(email_clean, code)
+            sent = await send_otp_verification_email(email_clean, issued.code)
         except Exception as e:
             logger.error("Failed to send OTP email to %s: %s", email_clean, e)
 
         if not sent and settings.RESEND_API_KEY:
+            await invalidate_otp(session, issued.record_id)
+            await session.commit()
             raise HTTPException(
                 status_code=502,
                 detail="Не удалось доставить письмо с проверочным кодом. Пожалуйста, попробуйте позже.",
             )
+
+        if not await mark_otp_delivered(session, issued.record_id):
+            await session.rollback()
+            raise HTTPException(status_code=409, detail="Запрос кода был заменён более новым запросом")
+        await session.commit()
 
         return {"ok": True, "message": "Временный пароль отправлен на вашу почту"}
 
@@ -171,53 +147,14 @@ async def login_user(req: LoginRequest, request: Request, response: Response):
             if len(display_name_matches) == 1:
                 user = display_name_matches[0]
 
-        is_password_valid = user and verify_password(req.password, user.password_hash)
-        otp_valid = False
-
-        if not is_password_valid and user:
-            # Check for valid unexpired OTP code
-            now_dt = datetime.now(timezone.utc)
-            check_email = (user.email or uname).lower()
-            otp_stmt = (
-                select(EmailVerificationCode)
-                .where(
-                    (func.lower(EmailVerificationCode.email) == check_email)
-                    & (EmailVerificationCode.is_used == False)
-                    & (EmailVerificationCode.expires_at > now_dt)
-                )
-                .order_by(EmailVerificationCode.id.desc())
-                .limit(1)
-            )
-            otp_res = await session.execute(otp_stmt)
-            otp_record = otp_res.scalar_one_or_none()
-            if otp_record:
-                import hmac
-                entered_code = req.password.strip()
-                if hmac.compare_digest(otp_record.code, entered_code):
-                    otp_record.is_used = True
-                    otp_valid = True
-                else:
-                    otp_record.failed_attempts = (otp_record.failed_attempts or 0) + 1
-                    if otp_record.failed_attempts >= 5:
-                        otp_record.is_used = True
-                        await session.commit()
-                        raise HTTPException(
-                            status_code=401,
-                            detail="Превышено максимальное количество попыток ввода кода. Запросите новый код.",
-                        )
-                    await session.commit()
-
-        if not user or (not is_password_valid and not otp_valid):
+        if not user or not verify_password(req.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
         if not user.is_approved:
             raise HTTPException(status_code=403, detail="Ваш аккаунт ожидает одобрения администратора.")
 
-        if is_password_valid and password_needs_rehash(user.password_hash):
+        if password_needs_rehash(user.password_hash):
             user.password_hash = hash_password(req.password)
-
-        if otp_valid and not user.email_verified_at:
-            user.email_verified_at = now_dt
 
         await create_web_session(
             session,
@@ -227,6 +164,83 @@ async def login_user(req: LoginRequest, request: Request, response: Response):
         )
         await session.commit()
 
+        return LoginResponse(
+            username=user.username,
+            full_name=user.full_name or user.username,
+            role=user.role,
+            message="Авторизация успешна",
+        )
+
+
+@router.post(
+    "/auth/verify-temporary-password",
+    response_model=LoginResponse,
+    dependencies=[Depends(rate_limit_dep(
+        limit=10,
+        window_seconds=60,
+        scope="verify_login_otp",
+        identity_fields=("email",),
+    ))],
+)
+async def verify_temporary_password(
+    req: VerifyTemporaryPasswordRequest,
+    request: Request,
+    response: Response,
+):
+    """Atomically verify a delivered login OTP, then create/sign in the user."""
+    email_clean = req.email.strip().lower()
+    if "@" not in email_clean or "." not in email_clean:
+        raise HTTPException(status_code=400, detail="Некорректный адрес электронной почты")
+
+    async with async_session_maker() as session:
+        result = await consume_otp(
+            session,
+            scope=login_scope(email_clean),
+            entered_code=req.code,
+        )
+        if result.status != "consumed" or result.purpose != OTP_LOGIN:
+            await session.commit()
+            if result.status == "locked":
+                raise HTTPException(
+                    status_code=401,
+                    detail="Превышено максимальное количество попыток ввода кода. Запросите новый код.",
+                )
+            raise HTTPException(status_code=401, detail="Неверный или просроченный временный пароль")
+
+        user = (
+            await session.execute(
+                select(User).where(
+                    (func.lower(User.email) == email_clean)
+                    | (func.lower(User.username) == email_clean)
+                )
+            )
+        ).scalar_one_or_none()
+        if user is None:
+            user = User(
+                username=email_clean,
+                email=email_clean,
+                email_verified_at=datetime.now(timezone.utc),
+                role="buyer",
+                is_approved=True,
+                onboarding_completed=False,
+                onboarding_step="personal_details",
+            )
+            session.add(user)
+            await session.flush()
+        elif not user.email_verified_at:
+            user.email_verified_at = datetime.now(timezone.utc)
+
+        if not user.is_approved:
+            await session.commit()
+            raise HTTPException(status_code=403, detail="Ваш аккаунт ожидает одобрения администратора.")
+
+        await create_web_session(
+            session,
+            user=user,
+            request=request,
+            response=response,
+        )
+        await session.commit()
         return LoginResponse(
             username=user.username,
             full_name=user.full_name or user.username,
@@ -256,6 +270,25 @@ async def change_password(req: ChangePasswordRequest, user: User = Depends(get_c
         return {"message": "Пароль успешно обновлен"}
 
 
+async def _deliver_otp(session, *, issued, email: str, log_context: str) -> None:
+    sent = False
+    try:
+        sent = await send_otp_verification_email(email, issued.code)
+    except Exception as exc:
+        logger.error("Failed to send %s to %s: %s", log_context, email, exc)
+
+    if not sent and settings.RESEND_API_KEY:
+        await invalidate_otp(session, issued.record_id)
+        await session.commit()
+        raise HTTPException(
+            status_code=502,
+            detail="Не удалось доставить письмо с проверочным кодом. Пожалуйста, попробуйте позже.",
+        )
+    if not await mark_otp_delivered(session, issued.record_id):
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Запрос кода был заменён более новым запросом")
+
+
 @router.post(
     "/auth/request-email-verification",
     dependencies=[Depends(rate_limit_dep(limit=5, window_seconds=60, scope="verify_req"))],
@@ -270,50 +303,24 @@ async def request_email_verification(user: User = Depends(get_current_user)):
         if db_user.email_verified_at is not None:
             return {"ok": True, "message": "Email уже подтвержден", "already_verified": True}
 
-        now_dt = datetime.now(timezone.utc)
-        recent_otp = (
-            await session.execute(
-                select(EmailVerificationCode)
-                .where(
-                    (func.lower(EmailVerificationCode.email) == target_email)
-                    & (EmailVerificationCode.created_at > now_dt - timedelta(seconds=60))
-                )
-                .order_by(EmailVerificationCode.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if recent_otp:
+        scope = email_scope(db_user.id)
+        if await has_recent_active_otp(session, scope=scope):
             raise HTTPException(
                 status_code=429,
                 detail="Код уже был отправлен недавно. Подождите 1 минуту перед повторным запросом.",
             )
 
-        code = str(secrets.randbelow(900000) + 100000)
-        expires_at = now_dt + timedelta(minutes=15)
-        db_user.unconfirmed_email = target_email
-
-        otp_record = EmailVerificationCode(
+        issued = await create_otp(
+            session,
             email=target_email,
-            code=code,
-            expires_at=expires_at,
-            is_used=False,
-            failed_attempts=0,
-            created_at=now_dt,
+            purpose=OTP_EMAIL_VERIFICATION,
+            scope=scope,
         )
-        session.add(otp_record)
         await session.commit()
-
-        sent = False
-        try:
-            sent = await send_otp_verification_email(target_email, code)
-        except Exception as e:
-            logger.error("Failed to send verification email to %s: %s", target_email, e)
-
-        if not sent and settings.RESEND_API_KEY:
-            raise HTTPException(
-                status_code=502,
-                detail="Не удалось доставить письмо с проверочным кодом. Пожалуйста, попробуйте позже.",
-            )
+        await _deliver_otp(session, issued=issued, email=target_email, log_context="verification OTP")
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
+        db_user.unconfirmed_email = target_email
+        await session.commit()
 
         return {"ok": True, "message": "Код подтверждения отправлен на вашу почту"}
 
@@ -351,50 +358,24 @@ async def request_email_change(
         if collision is not None:
             raise HTTPException(status_code=409, detail="Этот адрес электронной почты уже используется другим пользователем")
 
-        now_dt = datetime.now(timezone.utc)
-        recent_otp = (
-            await session.execute(
-                select(EmailVerificationCode)
-                .where(
-                    (func.lower(EmailVerificationCode.email) == clean_email)
-                    & (EmailVerificationCode.created_at > now_dt - timedelta(seconds=60))
-                )
-                .order_by(EmailVerificationCode.id.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if recent_otp:
+        scope = email_scope(db_user.id)
+        if await has_recent_active_otp(session, scope=scope):
             raise HTTPException(
                 status_code=429,
                 detail="Код уже был отправлен недавно. Подождите 1 минуту перед повторным запросом.",
             )
 
-        code = str(secrets.randbelow(900000) + 100000)
-        expires_at = now_dt + timedelta(minutes=15)
-        db_user.unconfirmed_email = clean_email
-
-        otp_record = EmailVerificationCode(
+        issued = await create_otp(
+            session,
             email=clean_email,
-            code=code,
-            expires_at=expires_at,
-            is_used=False,
-            failed_attempts=0,
-            created_at=now_dt,
+            purpose=OTP_EMAIL_CHANGE,
+            scope=scope,
         )
-        session.add(otp_record)
         await session.commit()
-
-        sent = False
-        try:
-            sent = await send_otp_verification_email(clean_email, code)
-        except Exception as e:
-            logger.error("Failed to send email change OTP to %s: %s", clean_email, e)
-
-        if not sent and settings.RESEND_API_KEY:
-            raise HTTPException(
-                status_code=502,
-                detail="Не удалось доставить письмо с проверочным кодом. Пожалуйста, попробуйте позже.",
-            )
+        await _deliver_otp(session, issued=issued, email=clean_email, log_context="email change OTP")
+        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
+        db_user.unconfirmed_email = clean_email
+        await session.commit()
 
         return {"ok": True, "message": "Код подтверждения отправлен на новый email", "unconfirmed_email": clean_email}
 
@@ -407,8 +388,7 @@ async def verify_email_change(
     req: VerifyEmailChangeRequest,
     user: User = Depends(get_current_user),
 ):
-    """Verify OTP and activate new email."""
-    import hmac
+    """Atomically verify OTP and activate the email bound to this user."""
     async with async_session_maker() as session:
         db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
         target_email = db_user.unconfirmed_email or db_user.email
@@ -416,36 +396,27 @@ async def verify_email_change(
             raise HTTPException(status_code=400, detail="Нет активного запроса на подтверждение email")
 
         target_email = target_email.strip().lower()
-        now_dt = datetime.now(timezone.utc)
-
-        otp_stmt = (
-            select(EmailVerificationCode)
-            .where(
-                (func.lower(EmailVerificationCode.email) == target_email)
-                & (EmailVerificationCode.is_used == False)
-                & (EmailVerificationCode.expires_at > now_dt)
-            )
-            .order_by(EmailVerificationCode.id.desc())
-            .limit(1)
+        result = await consume_otp(
+            session,
+            scope=email_scope(db_user.id),
+            entered_code=req.code,
         )
-        otp_res = await session.execute(otp_stmt)
-        otp_record = otp_res.scalar_one_or_none()
-
-        if not otp_record:
-            raise HTTPException(status_code=400, detail="Код подтверждения не найден или срок его действия истёк")
-
-        entered_code = req.code.strip()
-        if not hmac.compare_digest(otp_record.code, entered_code):
-            otp_record.failed_attempts = (otp_record.failed_attempts or 0) + 1
-            if otp_record.failed_attempts >= 5:
-                otp_record.is_used = True
-                await session.commit()
+        if result.status != "consumed" or result.purpose not in {
+            OTP_EMAIL_CHANGE,
+            OTP_EMAIL_VERIFICATION,
+        }:
+            await session.commit()
+            if result.status == "locked":
                 raise HTTPException(
                     status_code=401,
                     detail="Превышено максимальное количество попыток ввода кода. Запросите новый код.",
                 )
-            await session.commit()
             raise HTTPException(status_code=400, detail="Неверный код подтверждения")
+        if result.email != target_email:
+            await session.rollback()
+            raise HTTPException(status_code=400, detail="Код не соответствует активному запросу email")
+
+        now_dt = datetime.now(timezone.utc)
 
         # Check collision right before committing
         collision = (
@@ -469,7 +440,6 @@ async def verify_email_change(
         for other_u in other_unverified:
             other_u.email = None
 
-        otp_record.is_used = True
         db_user.email = target_email
         db_user.email_verified_at = now_dt
         db_user.unconfirmed_email = None

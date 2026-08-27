@@ -11280,11 +11280,11 @@
     if (errorEl) errorEl.classList.add('hidden');
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/verify-temporary-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ username: email, password: code })
+        body: JSON.stringify({ email, code })
       });
       const data = await res.json();
 

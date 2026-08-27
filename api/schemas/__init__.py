@@ -15,6 +15,7 @@ from api.schemas.members import (
 from api.schemas.auth import (
     UserProfileResponse,
     RequestTemporaryPasswordRequest,
+    VerifyTemporaryPasswordRequest,
     RequestEmailChangeRequest,
     VerifyEmailChangeRequest,
     LoginRequest,
@@ -73,6 +74,7 @@ __all__ = [
     "PublicInviteInfoResponse",
     "UserProfileResponse",
     "RequestTemporaryPasswordRequest",
+    "VerifyTemporaryPasswordRequest",
     "RequestEmailChangeRequest",
     "VerifyEmailChangeRequest",
     "LoginRequest",
