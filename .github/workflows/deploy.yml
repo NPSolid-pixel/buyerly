@@ -126,6 +126,10 @@ jobs:
                     -e 's#(://)[^:/[:space:]]+:[^@/[:space:]]+@#\1[REDACTED]@#g' \
                     -e 's/(password=)[^&[:space:]]+/\1[REDACTED]/Ig' \
                   || true
+                grep -E '(File "/app/|alembic\.runtime\.migration.*Running (upgrade|stamp))' "${deploy_log}" \
+                  | grep -Ev '(parameters:|UPDATE accounts|INSERT INTO)' \
+                  | tail -n 24 \
+                  || true
               fi
             else
               echo "❌ Error: /opt/buyerly directory does not exist on server!"
@@ -142,8 +146,8 @@ jobs:
             exit 0
           fi
           diagnostic=$(printf '%s\n' "${DEPLOY_OUTPUT}" \
-            | grep -E '(^(BUYERLY_DEPLOY_EXIT=|\[([1-6]/6|ERROR|ROLLBACK)\])|MetaTokenError|RuntimeError|alembic\.util\.exc\.|sqlalchemy\.exc\.|ProgrammingError|OperationalError|IntegrityError|InvalidToken|ValueError|KeyError|FAILED:)' \
-            | tail -n 32 \
+            | grep -E '(^(BUYERLY_DEPLOY_EXIT=|\[([1-6]/6|ERROR|ROLLBACK)\])|File "/app/|Running (upgrade|stamp)|MetaTokenError|RuntimeError|alembic\.util\.exc\.|sqlalchemy\.exc\.|ProgrammingError|OperationalError|IntegrityError|InvalidToken|ValueError|KeyError|FAILED:)' \
+            | tail -n 56 \
             | tr '\n' ' ')
           diagnostic=${diagnostic//%/%25}
           diagnostic=${diagnostic//$'\r'/%0D}

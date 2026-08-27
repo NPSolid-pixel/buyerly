@@ -97,6 +97,8 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("Production deploy failure", self.workflow)
         self.assertIn("[REDACTED_FERNET_TOKEN]", self.workflow)
         self.assertIn("[REDACTED_META_TOKEN]", self.workflow)
+        self.assertIn('File "/app/', self.workflow)
+        self.assertIn("Running (upgrade|stamp)", self.workflow)
         self.assertIn("grep -Ev '(parameters:|UPDATE accounts|INSERT INTO)'", self.workflow)
         self.assertNotIn('cat "${deploy_log}"', self.workflow)
 
