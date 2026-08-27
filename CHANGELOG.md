@@ -58,6 +58,10 @@
   - Добавлен контрактный тест `test_toast_and_error_sanitization_contract` в `tests/test_frontend_contract.py`.
 
 ### Fixed
+- **Нативный контракт для структурированных JSONB (`86eyr5z4v`)**:
+  - Meta scopes, условия пресетов, runtime/execution state воркера и undo state теперь записываются как native JSON arrays/objects без двойного `json.dumps`.
+  - Readers временно поддерживают native и legacy string representation для безопасного поэтапного rollout.
+  - Идемпотентная миграция `0007_native_jsonb` преобразует валидные legacy strings, сохраняет повреждённые значения для расследования и сообщает их количество.
 - **Восстановлена запись системных audit events воркера (`86eyr5v27`)**:
   - Legacy `audit_events.owner_id NOT NULL` безопасно ослаблен, а `owner_user_id` и `workspace_id` backfill-ятся по кабинету.
   - Воркер восстанавливает отсутствующего владельца из владельца workspace перед записью `ACCOUNT_DAY_STARTED` и других системных событий.

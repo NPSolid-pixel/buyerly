@@ -646,7 +646,11 @@ def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
 
 def _preset_response(preset: RulePreset) -> RulePresetItem:
     try:
-        raw_conditions = json.loads(preset.conditions) if preset.conditions else []
+        raw_conditions = (
+            json.loads(preset.conditions)
+            if isinstance(preset.conditions, str)
+            else preset.conditions or []
+        )
     except (TypeError, ValueError):
         raw_conditions = []
     normalized_conditions, _, _ = normalize_rule_conditions(raw_conditions)

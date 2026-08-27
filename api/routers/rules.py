@@ -121,7 +121,7 @@ async def update_preset(preset_id: int, payload: CreatePresetRequest, user: User
 
         preset.name = payload.name.strip() or preset.name
         preset.action = payload.action or "turn_off"
-        preset.conditions = json.dumps(condition_payloads)
+        preset.conditions = condition_payloads
         if payload.condition_logic is not None:
             preset.condition_logic = payload.condition_logic
         if payload.cooldown_minutes is not None:

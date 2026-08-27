@@ -53,8 +53,8 @@ def _load_state(raw_value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _json_state(value: dict[str, Any]) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+def _json_state(value: dict[str, Any]) -> dict[str, Any]:
+    return dict(value)
 
 
 def _utc_timestamp(value: Optional[datetime]) -> float:

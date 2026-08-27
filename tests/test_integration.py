@@ -12,6 +12,7 @@ from database.models import (
     Account,
     AppSettings,
     AuditEvent,
+    AutomationRuntimeState,
     AutomationScheduleState,
     RuleExecutionState,
     StoppedAdSet,
@@ -200,6 +201,10 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["adsets_stopped"], 0)
         self.assertEqual(mock_meta.adsets_state["adset_1"]["status"], "ACTIVE")
         self.assertEqual(mock_meta.adsets_state["adset_2"]["status"], "ACTIVE")
+        async with self.test_session_maker() as session:
+            runtime = await session.get(AutomationRuntimeState, "monitoring")
+            self.assertIsInstance(runtime.payload, dict)
+            self.assertIn("cycle_id", runtime.payload)
 
     async def test_custom_rule_stops_adset(self):
         """Пользовательское правило: Спенд >= $10 И Лиды = 0 → STOP."""
@@ -517,6 +522,9 @@ class TestEndToEndFlow(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             details = _json_val(state.details)
             self.assertEqual(state.status, "STOP_CONFIRMING")
+            self.assertIsInstance(state.before_state, dict)
+            self.assertIsInstance(state.after_state, dict)
+            self.assertIsInstance(state.details, dict)
             self.assertEqual(details["first_seen_at"], now[0])
             self.assertEqual(details["observations"], 1)
 

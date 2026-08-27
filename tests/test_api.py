@@ -22,6 +22,7 @@ from database.models import (
     Account,
     AccountGroup,
     AccountGroupMember,
+    ActionUndoState,
     AppSettings,
     AuditEvent,
     EmailVerificationCode,
@@ -767,6 +768,10 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 f"/api/presets/{p_data['id']}", headers=headers, json=updated_payload
             )
             self.assertEqual(u_resp.status_code, 200)
+
+            async with self.test_session_maker() as session:
+                stored_preset = await session.get(RulePreset, p_data["id"])
+                self.assertIsInstance(stored_preset.conditions, list)
 
             accounts_resp = await client.get("/api/accounts", headers=headers)
             runtime_rule = accounts_resp.json()[0]["active_rules"][0]
@@ -2205,6 +2210,13 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                     select(AuditEvent).where(AuditEvent.reverts_event_id == source_id)
                 )
             ).scalar_one()
+            undo_state = (
+                await session.execute(
+                    select(ActionUndoState).where(
+                        ActionUndoState.original_event_id == source_id
+                    )
+                )
+            ).scalar_one()
             stopped = (
                 await session.execute(
                     select(StoppedAdSet).where(StoppedAdSet.adset_id == "undo_stop_adset")
@@ -2212,6 +2224,8 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             ).scalar_one()
             self.assertEqual(source_row.status, "SUCCESS")
             self.assertEqual(reversal.event_type, "UNDO_ACTION")
+            self.assertIsInstance(undo_state.expected_state, dict)
+            self.assertIsInstance(undo_state.desired_state, dict)
             after_st = json.loads(reversal.after_state) if isinstance(reversal.after_state, str) else reversal.after_state
             self.assertEqual(after_st["status"], "ACTIVE")
             self.assertTrue(stopped.is_resolved)

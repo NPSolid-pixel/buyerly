@@ -10,6 +10,7 @@ from database.db import (
     migrate_automation_settings_contract,
     migrate_audit_event_ownership_contract,
     migrate_audit_undo_contract,
+    migrate_jsonb_native_contract,
     migrate_legacy_account_rules,
     migrate_rule_groups_position,
     migrate_rule_metric_contract,
@@ -633,6 +634,81 @@ class TestAuditEventOwnershipContractMigration(unittest.IsolatedAsyncioTestCase)
             await engine.dispose()
 
 
+class TestNativeJsonbMigration(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.engine = create_test_engine()
+        await init_test_db(self.engine)
+        async with self.engine.begin() as conn:
+            await conn.execute(text("DROP TABLE IF EXISTS rule_presets CASCADE"))
+            await conn.execute(text("DROP TABLE IF EXISTS automation_runtime_states CASCADE"))
+            await conn.execute(
+                text(
+                    "CREATE TABLE rule_presets ("
+                    "id INTEGER PRIMARY KEY, conditions JSONB NOT NULL)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE TABLE automation_runtime_states ("
+                    "state_key VARCHAR PRIMARY KEY, payload JSONB NOT NULL)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO rule_presets (id, conditions) VALUES "
+                    "(1, to_jsonb(CAST(:legacy_array AS TEXT))), "
+                    "(2, CAST(:native_array AS JSONB)), "
+                    "(3, to_jsonb(CAST(:malformed AS TEXT)))"
+                ),
+                {
+                    "legacy_array": '[{"metric":"spend"}]',
+                    "native_array": '[{"metric":"cpl"}]',
+                    "malformed": "not-json",
+                },
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO automation_runtime_states (state_key, payload) "
+                    "VALUES ('monitoring', to_jsonb(CAST(:legacy_object AS TEXT)))"
+                ),
+                {"legacy_object": '{"cycle_id":"cycle-1"}'},
+            )
+
+    async def asyncTearDown(self):
+        await init_test_db(self.engine)
+        await self.engine.dispose()
+
+    async def test_converts_valid_strings_and_reports_bad_values_idempotently(self):
+        async with self.engine.begin() as conn:
+            first = await migrate_jsonb_native_contract(conn)
+            rows = (
+                await conn.execute(
+                    text(
+                        "SELECT id, jsonb_typeof(conditions) AS kind, conditions "
+                        "FROM rule_presets ORDER BY id"
+                    )
+                )
+            ).mappings().all()
+            runtime = (
+                await conn.execute(
+                    text(
+                        "SELECT jsonb_typeof(payload) AS kind, payload "
+                        "FROM automation_runtime_states WHERE state_key = 'monitoring'"
+                    )
+                )
+            ).mappings().one()
+            second = await migrate_jsonb_native_contract(conn)
+
+        self.assertEqual(first, {"converted": 2, "malformed": 1})
+        self.assertEqual(rows[0]["kind"], "array")
+        self.assertEqual(rows[0]["conditions"], [{"metric": "spend"}])
+        self.assertEqual(rows[1]["kind"], "array")
+        self.assertEqual(rows[2]["kind"], "string")
+        self.assertEqual(runtime["kind"], "object")
+        self.assertEqual(runtime["payload"], {"cycle_id": "cycle-1"})
+        self.assertEqual(second, {"converted": 0, "malformed": 1})
+
+
 class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
     async def test_alembic_upgrade_head_applies_successfully(self):
         from alembic.config import Config
@@ -655,7 +731,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-            self.assertEqual(version, "0006_audit_ws_ownership")
+            self.assertEqual(version, "0007_native_jsonb")
 
             command.downgrade(alembic_cfg, "base")
         finally:

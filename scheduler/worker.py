@@ -213,11 +213,7 @@ class MonitoringWorker:
                 if row is None:
                     row = AutomationRuntimeState(state_key="monitoring")
                     session.add(row)
-                row.payload = json.dumps(
-                    payload,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
+                row.payload = payload
                 await session.commit()
         except Exception as error:
             logger.error("Failed to persist monitoring runtime state: %s", error)
@@ -470,52 +466,36 @@ class MonitoringWorker:
             state.owner_user_id = account.owner_user_id
             state.correlation_id = self._current_cycle_id
             state.last_attempt_at = now
-            state.before_state = json.dumps(
-                {"status": "ACTIVE"}, ensure_ascii=False, separators=(",", ":")
-            )
-            state.after_state = json.dumps(
-                {"status": "PAUSED"}, ensure_ascii=False, separators=(",", ":")
-            )
-            state.details = json.dumps(
-                {
-                    "first_seen_at": now,
-                    "last_seen_at": now,
-                    "observations": 1,
-                    "confirmation_seconds": confirmation_seconds,
-                },
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
+            state.before_state = {"status": "ACTIVE"}
+            state.after_state = {"status": "PAUSED"}
+            state.details = {
+                "first_seen_at": now,
+                "last_seen_at": now,
+                "observations": 1,
+                "confirmation_seconds": confirmation_seconds,
+            }
             await session.commit()
             return False, "started", state
 
         observations += 1
         state.last_attempt_at = now
-        state.details = json.dumps(
-            {
-                "first_seen_at": first_seen_at,
-                "last_seen_at": now,
-                "observations": observations,
-                "confirmation_seconds": confirmation_seconds,
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        state.details = {
+            "first_seen_at": first_seen_at,
+            "last_seen_at": now,
+            "observations": observations,
+            "confirmation_seconds": confirmation_seconds,
+        }
         if now - first_seen_at < confirmation_seconds:
             await session.commit()
             return False, "waiting", state
 
         state.status = "IDLE"
-        state.details = json.dumps(
-            {
-                "confirmed_at": now,
-                "first_seen_at": first_seen_at,
-                "observations": observations,
-                "confirmation_seconds": confirmation_seconds,
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        state.details = {
+            "confirmed_at": now,
+            "first_seen_at": first_seen_at,
+            "observations": observations,
+            "confirmation_seconds": confirmation_seconds,
+        }
         await session.commit()
         return True, "confirmed", state
 
@@ -548,14 +528,10 @@ class MonitoringWorker:
                 continue
             state.status = "IDLE"
             state.correlation_id = self._current_cycle_id
-            state.details = json.dumps(
-                {
-                    "cancelled_at": now,
-                    "reason": "stop_condition_no_longer_matched",
-                },
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
+            state.details = {
+                "cancelled_at": now,
+                "reason": "stop_condition_no_longer_matched",
+            }
             reset_count += 1
         if reset_count:
             await session.commit()
@@ -572,7 +548,7 @@ class MonitoringWorker:
         state.status = status
         if status == "SUCCESS":
             state.last_success_at = now
-        state.details = json.dumps(details or {}, ensure_ascii=False, separators=(",", ":"))
+        state.details = details or {}
 
     @staticmethod
     async def _record_stopped_adset(session, account: Account, result: RuleEvaluationResult) -> None:
