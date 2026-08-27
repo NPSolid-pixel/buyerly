@@ -20,6 +20,11 @@
   - По клику на «По токену» открывается модальное окно ручного добавления без перехода на сторонние экраны.
   - Устаревший адрес `/add-accounts` перенаправляет в `/facebook-accounts`.
 
+### Fixed
+- **Снятие устаревших NOT NULL ограничений с legacy-полей PostgreSQL (`owner_id`, `access_token`)**:
+  - Добавлена миграция `0014_legacy_columns_nullable`, делающая устаревшие колонки `owner_id` и `access_token` nullable со значением по умолчанию `''`.
+  - Устранена ошибка базы данных при импорте найденных Meta OAuth аккаунтов.
+
 ### Documentation & Integrations
 - **Подготовка пакета модерации Meta App Review и фиксация настроек пилота Meta OAuth (`[86eyr6078]`)**:
   - Создан полный пакет подачи заявки на модерацию в `docs/META_APP_REVIEW_SUBMISSION.md`: обоснования на английском языке для прав `ads_read`, `ads_management`, `business_management`, пошаговый сценарий скринкаста и инструкции для проверяющих инженеров Meta.
