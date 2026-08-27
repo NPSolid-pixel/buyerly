@@ -9,6 +9,11 @@
 
 ## [Unreleased]
 
+### Documentation & Integrations
+- **Подготовка пакета модерации Meta App Review и фиксация настроек пилота Meta OAuth (`[86eyr6078]`)**:
+  - Создан полный пакет подачи заявки на модерацию в `docs/META_APP_REVIEW_SUBMISSION.md`: обоснования на английском языке для прав `ads_read`, `ads_management`, `business_management`, пошаговый сценарий скринкаста и инструкции для проверяющих инженеров Meta.
+  - Актуализирован план и чек-лист интеграции в `docs/FACEBOOK_AUTHORIZATION_PLAN.md`: зафиксированы `App ID` (`1363654095968021`), `Login Configuration ID` (`1796379231385440`), настройки редиректов `https://buyerly.app/api/meta/oauth/callback`, привязка домена и публичных политик.
+
 ### Security
 - **Строгая workspace-изоляция rule groups и presets (`86eyr5ywm`)**:
   - CRUD, reorder, назначение, отключение и удаление правил теперь используют только точный активный `workspace_id`; legacy-записи без workspace скрыты.

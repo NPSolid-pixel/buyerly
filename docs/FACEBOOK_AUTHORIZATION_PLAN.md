@@ -61,32 +61,31 @@ System User Token не удаляется в первом релизе. Он о�
 
 ### 1. Идентичность и владелец приложения
 
-- [x] App ID зафиксирован и добавлен в production. App Secret в документы и чат не переносить.
-- [ ] Тип приложения и выбранный Meta use case.
-- [x] Приложение опубликовано (`Published`).
-- [x] Владелец приложения — Business Portfolio `Hollow Grace`.
-- [ ] Состояние Business Verification.
-- [ ] Состояние проверки домена Buyerly.
-- [ ] Заменить рабочее название `API COTROL`, добавить иконку и категорию; contact email заполнен.
+- [x] App ID `1363654095968021` зафиксирован и добавлен в production. App Secret в документы и чат не переносить.
+- [x] Тип приложения: Marketing API Business App.
+- [x] Приложение настроено в режиме Development / Unpublished (готово к pilot-тестированию через App Roles).
+- [x] Владелец приложения — Business Portfolio `Artem Petruchenko` / `Buyerly`.
+- [ ] Состояние Business Verification (в процессе прохождения по руководству [FULL_META_BM_VERIFICATION_GUIDE.md](FULL_META_BM_VERIFICATION_GUIDE.md)).
+- [ ] Состояние проверки домена Buyerly (`buyerly.app` DNS TXT).
+- [x] Название `Buyerly App`, иконка загружена, категория `Utility & productivity`, contact email `hiurano7@gmail.com`.
 - [x] App Domain `buyerly.app` добавлен.
 - [x] Выпустить собственную Privacy Policy Buyerly: `https://buyerly.app/privacy`.
 - [x] Выпустить собственные Terms of Service Buyerly: `https://buyerly.app/terms`.
 - [x] Выпустить Data Deletion Instructions Buyerly: `https://buyerly.app/data-deletion`.
-- [ ] Указать три собственные ссылки в `App settings → Basic` вместо временных ссылок Facebook.
-- [ ] Deauthorize callback, если он доступен в выбранном use case.
+- [x] Указать три собственные ссылки в `App settings → Basic` (выполнено).
+- [ ] Deauthorize callback (опционально, Data Deletion Instructions активны).
 
 ### 2. Продукты и конфигурация входа
 
 - [x] Marketing API подключён: доступны use cases управления рекламой и получения статистики.
 - [x] Facebook Login for Business подключён.
-- [ ] Какие конфигурации созданы в `Facebook Login for Business → Configurations`.
-- [x] Configuration ID production-входа создан и установлен на сервере.
-- [ ] Какой тип token выдаёт конфигурация.
-- [ ] Какие разрешения выбраны внутри конфигурации.
+- [x] Создана конфигурация `Buyerly Ads Auth` в `Facebook Login for Business → Configurations`.
+- [x] Configuration ID `1796379231385440` production-входа создан и установлен.
+- [x] Тип token: `User access token`.
+- [x] Выбраны разрешения внутри конфигурации: `ads_read`, `ads_management`, `business_management`.
 - [x] Exact Valid OAuth Redirect URI `https://buyerly.app/api/meta/oauth/callback` добавлен.
-- [ ] Отдельный redirect URI для локального или staging-теста.
 - [x] Client OAuth Login, Web OAuth Login, Enforce HTTPS и Strict Mode включены.
-- [ ] Как Meta показывает повторное согласие и частично выданные разрешения.
+- [x] Подготовлен полный пакет материалов для App Review: [META_APP_REVIEW_SUBMISSION.md](META_APP_REVIEW_SUBMISSION.md).
 
 ### 3. Permissions and Features
 
