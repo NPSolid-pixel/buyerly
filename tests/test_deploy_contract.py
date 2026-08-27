@@ -50,6 +50,17 @@ class TestDeployContract(unittest.TestCase):
             self.compose,
         )
 
+    def test_user_uploads_are_durable_and_served_by_web(self):
+        nginx = (Path(__file__).parents[1] / "webapp" / "nginx.conf").read_text()
+        self.assertIn("buyerly-uploads:/app/webapp/uploads", self.compose)
+        self.assertIn(
+            "buyerly-uploads:/usr/share/nginx/html/uploads:ro",
+            self.compose,
+        )
+        self.assertIn("preserve_legacy_uploads", self.script)
+        self.assertIn("location /uploads/", nginx)
+        self.assertIn('X-Content-Type-Options "nosniff"', nginx)
+
     def test_account_day_boundary_has_an_independent_minute_job(self):
         self.assertIn('id="account_day_boundary_job"', self.worker_service)
         self.assertIn("run_day_boundary_cycle", self.worker_service)

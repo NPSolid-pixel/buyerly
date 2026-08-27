@@ -44,6 +44,7 @@ from database.models import (
     WorkspaceInvite,
     WorkspaceMember,
 )
+from services.image_uploads import delete_local_upload, is_owned_avatar
 from services.otp import (
     OTP_EMAIL_CHANGE,
     OTP_EMAIL_VERIFICATION,
@@ -479,8 +480,18 @@ async def update_profile(req: UpdateProfileRequest, user: User = Depends(get_cur
                     status_code=400,
                     detail="Прямое изменение email без подтверждения запрещено. Используйте процедуру верификации через код.",
                 )
+        old_avatar_url = db_user.avatar_url
         if req.avatar_url is not None:
-            db_user.avatar_url = req.avatar_url.strip()
+            new_avatar_url = req.avatar_url.strip()
+            if new_avatar_url.startswith("/uploads/avatars/") and not is_owned_avatar(
+                new_avatar_url,
+                user.id,
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Аватар не найден или принадлежит другому пользователю",
+                )
+            db_user.avatar_url = new_avatar_url
         if req.full_name is not None:
             db_user.full_name = req.full_name.strip()
         elif req.first_name is not None or req.last_name is not None:
@@ -503,6 +514,12 @@ async def update_profile(req: UpdateProfileRequest, user: User = Depends(get_cur
 
             db_user.telegram_id = new_telegram_id
         await session.commit()
+        if old_avatar_url and old_avatar_url != db_user.avatar_url:
+            delete_local_upload(
+                old_avatar_url,
+                "avatars",
+                owner_prefix=f"avatar_{user.id}_",
+            )
         return {
             "message": "Профиль успешно обновлен",
             "username": db_user.username,

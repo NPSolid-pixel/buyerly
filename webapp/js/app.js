@@ -886,6 +886,8 @@
     if (slugInput) slugInput.value = '';
 
     state.pageWorkspaceLogoDataUrl = null;
+    state.pageWorkspaceLogoFile = null;
+    state.pageWorkspaceLogoUrl = null;
     const fileInput = document.getElementById('createWsLogoFileInput');
     if (fileInput) fileInput.value = '';
 
@@ -908,11 +910,18 @@
     const file = event.target.files && event.target.files[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('Размер файла не должен превышать 10 МБ', 'error');
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Размер файла не должен превышать 5 МБ', 'error');
       event.target.value = '';
       return;
     }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      showToast('Поддерживаются только PNG, JPG и WEBP', 'error');
+      event.target.value = '';
+      return;
+    }
+    state.pageWorkspaceLogoFile = file;
+    state.pageWorkspaceLogoUrl = null;
 
     const reader = new FileReader();
     reader.onload = function (e) {
@@ -930,6 +939,7 @@
       showToast('Логотип загружен');
     };
     reader.onerror = function () {
+      state.pageWorkspaceLogoFile = null;
       showToast('Ошибка чтения файла изображения', 'error');
     };
     reader.readAsDataURL(file);
@@ -977,11 +987,36 @@
     if (btn) btn.disabled = true;
 
     try {
+      let logoUrl = state.pageWorkspaceLogoUrl || '';
+      if (state.pageWorkspaceLogoFile && !logoUrl) {
+        const formData = new FormData();
+        formData.append('file', state.pageWorkspaceLogoFile);
+        const uploadHeaders = {};
+        const telegramInitData = getTelegramInitData();
+        const authToken = getWebAuthToken();
+        const csrfToken = getCsrfToken();
+        if (telegramInitData) uploadHeaders.Authorization = `tma ${telegramInitData}`;
+        else if (authToken) uploadHeaders.Authorization = `Bearer ${authToken}`;
+        if (csrfToken) uploadHeaders['X-CSRF-Token'] = csrfToken;
+        const uploadResponse = await fetch('/api/onboarding/workspace/logo', {
+          method: 'POST',
+          headers: uploadHeaders,
+          credentials: 'same-origin',
+          body: formData
+        });
+        const uploadResult = await uploadResponse.json().catch(() => ({}));
+        if (!uploadResponse.ok) {
+          throw new Error(uploadResult.detail || 'Ошибка загрузки логотипа');
+        }
+        logoUrl = uploadResult.logo_url || '';
+        state.pageWorkspaceLogoUrl = logoUrl;
+      }
       const created = await apiRequest('/api/workspaces', {
         method: 'POST',
         body: JSON.stringify({
           name: name,
-          badge_color: '#F5A300'
+          badge_color: '#F5A300',
+          logo_url: logoUrl
         })
       });
 
@@ -11420,8 +11455,13 @@
     const file = event.target.files && event.target.files[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('Image file size must not exceed 10MB', 'error');
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image file size must not exceed 5MB', 'error');
+      event.target.value = '';
+      return;
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      showToast('Only PNG, JPG and WEBP images are supported', 'error');
       event.target.value = '';
       return;
     }
@@ -11447,12 +11487,15 @@
     formData.append('file', file);
 
     try {
+      const telegramInitData = getTelegramInitData();
       const authToken = getWebAuthToken();
       const csrfToken = getCsrfToken();
       const res = await fetch('/api/onboarding/avatar', {
         method: 'POST',
         headers: {
-          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          ...(telegramInitData
+            ? { 'Authorization': `tma ${telegramInitData}` }
+            : (authToken ? { 'Authorization': `Bearer ${authToken}` } : {})),
           ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
         },
         credentials: 'same-origin',

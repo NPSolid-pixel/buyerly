@@ -51,7 +51,7 @@
 | **Отсутствие Rate Limiting на эндпоинтах авторизации** | `P1 (Высокий)` | Реализован потокобезопасный `RateLimiter` на скользящем окне с автоматической сборкой устаревших ключей: `/api/auth/login` (10 req/min), `/api/auth/request-temporary-password` (5 req/min), `/api/invites` (30 req/min), `/api/onboarding/check-slug` (30 req/min). |
 | **ReDoS и исчерпание памяти при парсинге сырого текста Meta (`parse_fb_raw_accounts`)** | `P1 (Высокий)` | Входной текст жестко ограничен 64 КБ (65,536 символов) и 2000 строк. Имена кабинетов обрезаются до 120 символов, результат ограничен 500 элементами. |
 | **Отсутствие валидации границ строковых полей в DTO** | `P1 (Высокий)` | На всех Pydantic-моделях (`LoginRequest`, `ChangePasswordRequest`, `UpdateProfileRequest`, `BatchAddRequest`, `ParseRawRequest`) выставлены строгие `min_length` и `max_length`. |
-| **Memory Exhaustion через огромные тела запросов** | `P1 (Высокий)` | В HTTP-middleware внедрена проверка `Content-Length`: лимит 10 МБ для загрузки медиафайлов и 1 МБ для всех остальных API-запросов (HTTP 413 `Payload Too Large`). |
+| **Memory Exhaustion через огромные тела запросов** | `P1 (Высокий)` | В HTTP-middleware внедрена проверка `Content-Length`: лимит 6 МБ для multipart-конверта загрузки изображения (сам файл — до 5 МБ) и 1 МБ для остальных API-запросов (HTTP 413 `Payload Too Large`). Чтение файла дополнительно ограничено на сервере. |
 
 ---
 

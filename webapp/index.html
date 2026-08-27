@@ -104,7 +104,7 @@
 
       <!-- Profile picture section -->
       <div class="attio-avatar-section">
-        <input type="file" id="onboardingAvatarFileInput" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none;" onchange="window.handleOnboardingAvatarUpload(event)">
+        <input type="file" id="onboardingAvatarFileInput" accept=".png,.jpg,.jpeg,.webp" style="display:none;" onchange="window.handleOnboardingAvatarUpload(event)">
         <div class="attio-avatar-circle" id="onboardingAvatarBadge" title="Upload image" onclick="document.getElementById('onboardingAvatarFileInput').click()">
           <span id="onboardingAvatarLetter">B</span>
           <img id="onboardingAvatarImg" class="attio-avatar-img hidden" alt="Avatar">
@@ -119,7 +119,7 @@
               Remove
             </button>
           </div>
-          <div class="attio-avatar-hint">*.png, *.jpeg files up to 10MB at least 400px by 400px</div>
+          <div class="attio-avatar-hint">PNG, JPEG or WEBP up to 5MB. Recommended size: 400×400px.</div>
         </div>
       </div>
 
@@ -204,7 +204,7 @@
 
       <div class="ws-create-logo-row">
         <div class="ws-logo-avatar-wrapper">
-          <input type="file" id="createWsLogoFileInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display: none;" onchange="window.handleWorkspaceLogoUpload(event)">
+          <input type="file" id="createWsLogoFileInput" accept="image/png,image/jpeg,image/webp" style="display: none;" onchange="window.handleWorkspaceLogoUpload(event)">
           <div class="ws-logo-avatar" id="createWsLogoBadge" title="Загрузить логотип" onclick="document.getElementById('createWsLogoFileInput').click()">
             <span id="createWsBadgeLetter">W</span>
             <img id="createWsLogoImg" class="ws-logo-uploaded-img hidden" alt="Workspace Logo">
@@ -215,7 +215,7 @@
         </div>
         <div class="ws-logo-meta">
           <div class="ws-logo-title">Логотип воркспейса</div>
-          <div class="ws-logo-hint">Поддерживаются форматы PNG, JPEG и GIF до 10 МБ. Рекомендуемый размер 400×400px.</div>
+          <div class="ws-logo-hint">Поддерживаются PNG, JPEG и WEBP до 5 МБ. Рекомендуемый размер 400×400px.</div>
         </div>
       </div>
 

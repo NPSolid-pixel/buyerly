@@ -1,14 +1,19 @@
 import asyncio
 import hashlib
 import hmac
+import io
 import json
+import os
+import tempfile
 import time
 import unittest
 import urllib.parse
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
+from PIL import Image, PngImagePlugin
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -2613,6 +2618,139 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(logo_svg.status_code, 400)
 
+            disguised_text = await client.post(
+                "/api/onboarding/avatar",
+                headers=headers,
+                files={"file": ("avatar.png", b"this is not a png", "image/png")},
+            )
+            self.assertEqual(disguised_text.status_code, 400)
+
+    async def test_image_uploads_are_canonical_owned_and_cleaned(self):
+        buyer_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {buyer_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+
+        png_buffer = io.BytesIO()
+        png_metadata = PngImagePlugin.PngInfo()
+        png_metadata.add_text("Comment", "must-be-removed")
+        Image.new("RGBA", (48, 32), (20, 40, 60, 128)).save(
+            png_buffer,
+            format="PNG",
+            pnginfo=png_metadata,
+        )
+        png_bytes = png_buffer.getvalue()
+
+        with tempfile.TemporaryDirectory() as upload_root:
+            with patch("services.image_uploads.UPLOADS_ROOT", Path(upload_root)):
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://test",
+                ) as client:
+                    mismatched = await client.post(
+                        "/api/onboarding/avatar",
+                        headers=headers,
+                        files={"file": ("avatar.jpg", png_bytes, "image/jpeg")},
+                    )
+                    self.assertEqual(mismatched.status_code, 400)
+
+                    first_avatar = await client.post(
+                        "/api/onboarding/avatar",
+                        headers=headers,
+                        files={"file": ("avatar.png", png_bytes, "image/png")},
+                    )
+                    self.assertEqual(first_avatar.status_code, 200)
+                    first_avatar_path = (
+                        Path(upload_root)
+                        / first_avatar.json()["avatar_url"].removeprefix("/uploads/")
+                    )
+                    self.assertTrue(first_avatar_path.is_file())
+                    with Image.open(first_avatar_path) as stored_avatar:
+                        self.assertEqual(stored_avatar.format, "PNG")
+                        self.assertNotIn("Comment", stored_avatar.info)
+
+                    second_avatar = await client.post(
+                        "/api/onboarding/avatar",
+                        headers=headers,
+                        files={"file": ("avatar.png", png_bytes, "image/png")},
+                    )
+                    self.assertEqual(second_avatar.status_code, 200)
+                    self.assertFalse(first_avatar_path.exists())
+
+                    first_logo = await client.post(
+                        "/api/onboarding/workspace/logo",
+                        headers=headers,
+                        files={"file": ("logo.png", png_bytes, "image/png")},
+                    )
+                    self.assertEqual(first_logo.status_code, 200)
+                    first_logo_url = first_logo.json()["logo_url"]
+                    first_logo_path = (
+                        Path(upload_root) / first_logo_url.removeprefix("/uploads/")
+                    )
+                    os.utime(first_logo_path, (0, 0))
+
+                    second_logo = await client.post(
+                        "/api/onboarding/workspace/logo",
+                        headers=headers,
+                        files={"file": ("logo.png", png_bytes, "image/png")},
+                    )
+                    self.assertEqual(second_logo.status_code, 200)
+                    self.assertFalse(first_logo_path.exists())
+                    second_logo_url = second_logo.json()["logo_url"]
+                    second_logo_path = (
+                        Path(upload_root) / second_logo_url.removeprefix("/uploads/")
+                    )
+
+                    attach_logo = await client.patch(
+                        f"/api/workspaces/{self.ws_buyer_id}",
+                        headers=headers,
+                        json={"logo_url": second_logo_url},
+                    )
+                    self.assertEqual(attach_logo.status_code, 200)
+                    self.assertTrue(second_logo_path.exists())
+
+                    third_logo = await client.post(
+                        "/api/onboarding/workspace/logo",
+                        headers=headers,
+                        files={"file": ("logo.png", png_bytes, "image/png")},
+                    )
+                    self.assertEqual(third_logo.status_code, 200)
+                    third_logo_url = third_logo.json()["logo_url"]
+                    third_logo_path = (
+                        Path(upload_root) / third_logo_url.removeprefix("/uploads/")
+                    )
+                    replace_logo = await client.patch(
+                        f"/api/workspaces/{self.ws_buyer_id}",
+                        headers=headers,
+                        json={"logo_url": third_logo_url},
+                    )
+                    self.assertEqual(replace_logo.status_code, 200)
+                    self.assertFalse(second_logo_path.exists())
+
+                    foreign_logo = await client.patch(
+                        f"/api/workspaces/{self.ws_buyer_id}",
+                        headers=headers,
+                        json={"logo_url": "/uploads/workspaces/logo_999_stolen.png"},
+                    )
+                    self.assertEqual(foreign_logo.status_code, 400)
+
+                    unsafe_logo = await client.patch(
+                        f"/api/workspaces/{self.ws_buyer_id}",
+                        headers=headers,
+                        json={"logo_url": "javascript:alert(1)"},
+                    )
+                    self.assertEqual(unsafe_logo.status_code, 422)
+
+                    clear_logo = await client.patch(
+                        f"/api/workspaces/{self.ws_buyer_id}",
+                        headers=headers,
+                        json={"logo_url": ""},
+                    )
+                    self.assertEqual(clear_logo.status_code, 200)
+                    self.assertFalse(third_logo_path.exists())
+
     async def test_update_profile_avatar_url_validation(self):
         buyer_data = generate_valid_telegram_init_data(
             settings.BOT_TOKEN,
@@ -2637,11 +2775,10 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(res.status_code, 422, f"Failed to reject bad avatar: {bad_avatar}")
 
-            # 2. Valid HTTPS, HTTP, local /uploads/avatars/ and empty string must succeed
+            # 2. Valid remote URLs and empty string must succeed
             for good_avatar in (
                 "https://cdn.example.com/avatar.png",
                 "http://cdn.example.com/avatar.jpg",
-                "/uploads/avatars/avatar_123_abc.webp",
                 "",
             ):
                 res = await client.post(
@@ -2651,6 +2788,13 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(res.status_code, 200, f"Failed to accept good avatar: {good_avatar}")
                 self.assertEqual(res.json()["avatar_url"], good_avatar)
+
+            unowned_local_avatar = await client.post(
+                "/api/auth/update-profile",
+                headers=headers,
+                json={"avatar_url": "/uploads/avatars/avatar_123_abc.webp"},
+            )
+            self.assertEqual(unowned_local_avatar.status_code, 400)
 
     async def test_update_profile_cannot_bypass_email_verification(self):
         buyer_data = generate_valid_telegram_init_data(

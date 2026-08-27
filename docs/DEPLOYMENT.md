@@ -57,6 +57,12 @@ docker compose logs --tail=100 redis
 
 `migrate` изменяет production-схему только через `alembic upgrade head`. Одновременный запуск блокируется PostgreSQL advisory lock; после миграции контейнер сверяет текущий revision с Alembic head и проверяет наличие всех таблиц и колонок из моделей. Для исторической базы без `alembic_version` разрешён только одноразовый переход на явно зафиксированный baseline `0009_web_sessions`, причём перед stamp выполняется fail-closed проверка схемы. `create_all()` и ручные `ALTER TABLE` в production-runner не используются.
 
+Пользовательские аватары и логотипы хранятся в именованном Docker volume
+`buyerly-uploads`: API записывает файлы в `/app/webapp/uploads`, а web-контейнер
+монтирует тот же volume read-only в `/usr/share/nginx/html/uploads`. При первом
+переходе deploy сохраняет доступные файлы из старого API-контейнера до смены
+трафика; последующие релизы повторно используют volume.
+
 Production checkout `/opt/buyerly` приводится к владельцу системного deploy-пользователя через root/passwordless sudo, а `origin` обязан указывать на канонический `hiurano/buyerly` по SSH или HTTPS. Если ownership нельзя безопасно нормализовать либо remote отличается, выкладка останавливается до сборки. В production-образ входят только runtime-каталоги; тесты, документация, локальные диагностические скрипты, транскрипты и исследовательские снимки интерфейсов не копируются.
 
 ## Безопасность хоста и доступ по SSH

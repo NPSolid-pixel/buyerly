@@ -75,6 +75,31 @@ ensure_email_settings() {
     fi
 }
 
+preserve_legacy_uploads() {
+    local uploads_volume="buyerly-uploads"
+    local legacy_upload_dir=""
+
+    if docker volume inspect "${uploads_volume}" >/dev/null 2>&1; then
+        return
+    fi
+    docker volume create "${uploads_volume}" >/dev/null
+
+    if ! docker inspect buyerly-api >/dev/null 2>&1; then
+        return
+    fi
+
+    legacy_upload_dir=$(mktemp -d)
+    if docker cp buyerly-api:/app/webapp/uploads/. "${legacy_upload_dir}/" 2>/dev/null; then
+        docker run --rm \
+            -v "${uploads_volume}:/uploads" \
+            -v "${legacy_upload_dir}:/legacy:ro" \
+            "buyerly-app:${TARGET_SHA}" \
+            sh -c 'cp -a /legacy/. /uploads/'
+        echo "[INFO] Preserved legacy user uploads in the durable volume."
+    fi
+    rm -rf "${legacy_upload_dir}"
+}
+
 normalize_repository_ownership() {
     local owner_uid deploy_uid deploy_gid
     owner_uid=$(stat -c '%u' "${APP_DIR}")
@@ -196,6 +221,7 @@ ensure_email_settings
 
 echo "[3/6] Building versioned API and web images..."
 docker compose build --pull api web
+preserve_legacy_uploads
 
 echo "[4/6] Preparing PostgreSQL database..."
 docker compose up -d db redis

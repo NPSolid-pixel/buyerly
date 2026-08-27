@@ -833,4 +833,11 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("(${escapeHtml(item.account_id)})", self.script)
         self.assertIn("<b>${escapeHtml(item.account_id)}</b>", self.script)
 
-
+    def test_workspace_logo_upload_is_persisted_before_workspace_creation(self):
+        self.assertIn("state.pageWorkspaceLogoFile = file", self.script)
+        self.assertIn("/api/onboarding/workspace/logo", self.script)
+        self.assertIn("logo_url: logoUrl", self.script)
+        self.assertIn("5 * 1024 * 1024", self.script)
+        self.assertNotIn("image/gif", self.index)
+        self.assertNotIn("10 МБ", self.index)
+        self.assertNotIn("10MB", self.index)

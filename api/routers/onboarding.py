@@ -1,9 +1,7 @@
 import logging
-import os
 import secrets
-import time
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
@@ -31,6 +29,14 @@ from core.rate_limit import rate_limit_dep
 from core.workspace_slugs import normalize_workspace_slug
 from database.db import async_session_maker
 from database.models import AuditEvent, User, Workspace, WorkspaceInvite, WorkspaceMember
+from services.image_uploads import (
+    InvalidImageUpload,
+    MAX_UPLOAD_BYTES,
+    cleanup_stale_workspace_logos,
+    delete_local_upload,
+    is_owned_workspace_logo,
+    save_image_upload,
+)
 from services.workspace_slugs import allocate_workspace_slug
 
 logger = logging.getLogger(__name__)
@@ -139,54 +145,43 @@ async def submit_onboarding_personal_details(
         )
 
 
-def _cleanup_old_avatar_file(old_avatar_url: Optional[str], user_id: int):
-    if not old_avatar_url or not isinstance(old_avatar_url, str):
-        return
-    if not old_avatar_url.startswith("/uploads/avatars/"):
-        return
-    filename = os.path.basename(old_avatar_url)
-    if filename.startswith(f"avatar_{user_id}_"):
-        file_path = os.path.join("webapp", "uploads", "avatars", filename)
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except OSError:
-                pass
-
-
 @router.post("/onboarding/avatar")
 async def upload_onboarding_avatar(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
 ):
     """Upload user avatar during onboarding or settings."""
-    filename = file.filename or "avatar.png"
-    ext = os.path.splitext(filename)[1].lower()
-    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
-        raise HTTPException(status_code=400, detail="Поддерживаются только форматы PNG, JPG, WEBP")
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    try:
+        avatar_url = save_image_upload(
+            content,
+            filename=file.filename or "avatar.png",
+            content_type=file.content_type,
+            category="avatars",
+            owner_user_id=user.id,
+        )
+    except InvalidImageUpload as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Размер файла не должен превышать 5 МБ")
+    try:
+        async with async_session_maker() as session:
+            db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
+            old_avatar = db_user.avatar_url
+            db_user.avatar_url = avatar_url
+            await session.commit()
+    except Exception:
+        delete_local_upload(
+            avatar_url,
+            "avatars",
+            owner_prefix=f"avatar_{user.id}_",
+        )
+        raise
 
-    upload_dir = os.path.join("webapp", "uploads", "avatars")
-    os.makedirs(upload_dir, exist_ok=True)
-
-    unique_filename = f"avatar_{user.id}_{int(time.time())}_{secrets.token_hex(4)}{ext}"
-    target_path = os.path.join(upload_dir, unique_filename)
-
-    with open(target_path, "wb") as f:
-        f.write(content)
-
-    avatar_url = f"/uploads/avatars/{unique_filename}"
-
-    async with async_session_maker() as session:
-        db_user = (await session.execute(select(User).where(User.id == user.id))).scalar_one()
-        old_avatar = db_user.avatar_url
-        db_user.avatar_url = avatar_url
-        await session.commit()
-
-    _cleanup_old_avatar_file(old_avatar, user.id)
+    delete_local_upload(
+        old_avatar,
+        "avatars",
+        owner_prefix=f"avatar_{user.id}_",
+    )
 
     return {"status": "ok", "avatar_url": avatar_url}
 
@@ -200,7 +195,11 @@ async def delete_onboarding_avatar(user: User = Depends(get_current_user)):
         db_user.avatar_url = ""
         await session.commit()
 
-    _cleanup_old_avatar_file(old_avatar, user.id)
+    delete_local_upload(
+        old_avatar,
+        "avatars",
+        owner_prefix=f"avatar_{user.id}_",
+    )
 
     return {"status": "ok", "avatar_url": ""}
 
@@ -263,6 +262,11 @@ async def submit_onboarding_workspace(
     badge_color = req.badge_color or "#F5A300"
     badge_text = req.badge_text.strip() if req.badge_text else name[:1].upper()
     logo_url = req.logo_url.strip() if req.logo_url else ""
+    if logo_url.startswith("/uploads/workspaces/") and not is_owned_workspace_logo(
+        logo_url,
+        user.id,
+    ):
+        raise HTTPException(status_code=400, detail="Логотип не найден или принадлежит другому пользователю")
 
     async with async_session_maker() as session:
         slug = await allocate_workspace_slug(session, requested_slug)
@@ -308,25 +312,19 @@ async def upload_workspace_logo(
     user: User = Depends(get_current_user),
 ):
     """Upload workspace logo image."""
-    filename = file.filename or "logo.png"
-    ext = os.path.splitext(filename)[1].lower()
-    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
-        raise HTTPException(status_code=400, detail="Поддерживаются только форматы PNG, JPG, WEBP")
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Размер файла не должен превышать 5 МБ")
-
-    upload_dir = os.path.join("webapp", "uploads", "workspaces")
-    os.makedirs(upload_dir, exist_ok=True)
-
-    unique_filename = f"logo_{user.id}_{int(time.time())}_{secrets.token_hex(4)}{ext}"
-    target_path = os.path.join(upload_dir, unique_filename)
-
-    with open(target_path, "wb") as f:
-        f.write(content)
-
-    logo_url = f"/uploads/workspaces/{unique_filename}"
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    async with async_session_maker() as session:
+        await cleanup_stale_workspace_logos(session)
+    try:
+        logo_url = save_image_upload(
+            content,
+            filename=file.filename or "logo.png",
+            content_type=file.content_type,
+            category="workspaces",
+            owner_user_id=user.id,
+        )
+    except InvalidImageUpload as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "ok", "logo_url": logo_url}
 
 

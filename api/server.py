@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,14 +13,29 @@ from api.meta_oauth import router as meta_oauth_router
 from core.config import settings
 from core.rate_limit import limiter
 from database.db import async_session_maker
+from services.image_uploads import cleanup_stale_workspace_logos
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        async with async_session_maker() as session:
+            removed = await cleanup_stale_workspace_logos(session)
+        if removed:
+            logger.info("Removed %s stale workspace logo uploads", removed)
+    except Exception:
+        logger.exception("Failed to clean stale workspace logo uploads")
+    yield
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Buyerly Web App & API",
         version="1.0.0",
-        description="FastAPI Backend & Telegram Mini App for Buyerly AI Media Buyer"
+        description="FastAPI Backend & Telegram Mini App for Buyerly AI Media Buyer",
+        lifespan=lifespan,
     )
 
     # Security, payload size limit, and caching headers middleware
@@ -34,7 +50,7 @@ def create_app() -> FastAPI:
                     "/api/onboarding/avatar",
                     "/api/onboarding/workspace/logo",
                 )
-                max_allowed_bytes = (10 * 1024 * 1024) if is_upload_route else (1024 * 1024)
+                max_allowed_bytes = (6 * 1024 * 1024) if is_upload_route else (1024 * 1024)
                 if content_length > max_allowed_bytes:
                     return JSONResponse(
                         status_code=413,

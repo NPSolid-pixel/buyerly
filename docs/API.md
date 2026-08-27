@@ -93,11 +93,11 @@ Slug нормализуется в ASCII и ограничивается 60 си
 |---|---|---|
 | `GET /api/onboarding/status` | — | проверка текущего шага онбординга и профиля пользователя |
 | `POST /api/onboarding/personal-details` | `first_name`, `last_name`, `email?` | сохранение персональных данных на шаге 3 |
-| `POST /api/onboarding/avatar` | `file` (multipart) | загрузка фотографии профиля (PNG, JPG, WEBP до 5 МБ) |
+| `POST /api/onboarding/avatar` | `file` (multipart) | проверка реального содержимого и загрузка фотографии профиля (PNG, JPG, WEBP до 5 МБ) |
 | `DELETE /api/onboarding/avatar` | — | удаление аватара и возврат к инициальному бейджу |
 | `GET /api/onboarding/check-slug` | `slug` (query) | живая проверка доступности слага воркспейса в реальном времени |
 | `POST /api/onboarding/workspace` | `name`, `slug?`, `badge_color?`, `badge_text?`, `logo_url?` | создание воркспейса на шаге 4 онбординга |
-| `POST /api/onboarding/workspace/logo` | `file` (multipart) | загрузка логотипа компании для воркспейса (до 5 МБ) |
+| `POST /api/onboarding/workspace/logo` | `file` (multipart) | проверка реального содержимого и загрузка логотипа компании для воркспейса (PNG, JPG, WEBP до 5 МБ) |
 | `POST /api/onboarding/invites` | `invites[]` (`email`, `role`) | массовая отправка инвайтов на шаге 5 и завершение онбординга |
 | `POST /api/onboarding/skip` | — | быстрый пропуск шага инвайтов и завершение онбординга |
 

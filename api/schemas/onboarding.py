@@ -1,9 +1,9 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from api.schemas.auth import UserProfileResponse
 from api.schemas.members import WorkspaceInviteItem
-from api.schemas.workspaces import WorkspaceItem
+from api.schemas.workspaces import WorkspaceItem, validate_workspace_logo_url_value
 
 
 class OnboardingStatusResponse(BaseModel):
@@ -31,6 +31,8 @@ class OnboardingWorkspaceRequest(BaseModel):
     badge_color: Optional[str] = Field("#F5A300", max_length=30)
     badge_text: Optional[str] = Field(None, max_length=5)
     logo_url: Optional[str] = Field(None, max_length=500)
+
+    _validate_logo_url = field_validator("logo_url")(validate_workspace_logo_url_value)
 
 
 class BulkInviteItem(BaseModel):
