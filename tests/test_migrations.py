@@ -937,24 +937,41 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0009_web_sessions")
+                self.assertEqual(version, "0010_atomic_otp")
         finally:
             await init_test_db(engine)
             await engine.dispose()
 
     async def test_production_migration_runner_adopts_valid_legacy_schema(self):
         from database.migrations import run_production_migrations
+        from alembic import command
+        from alembic.config import Config
+        import os
 
         engine = create_test_engine()
         try:
-            await init_test_db(engine)
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
+
+            config = Config(
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+            )
+            config.set_main_option(
+                "script_location",
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
+            )
+            command.upgrade(config, "0009_web_sessions")
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP TABLE alembic_version"))
+
             await run_production_migrations()
 
             async with engine.connect() as conn:
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0009_web_sessions")
+                self.assertEqual(version, "0010_atomic_otp")
         finally:
             await init_test_db(engine)
             await engine.dispose()

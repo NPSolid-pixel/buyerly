@@ -16,6 +16,14 @@ from database.db import Base
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
 LEGACY_BASELINE_REVISION = "0009_web_sessions"
+POST_BASELINE_COLUMNS = {
+    "email_verification_codes": {
+        "code_hash",
+        "purpose",
+        "scope",
+        "delivered_at",
+    },
+}
 
 
 def alembic_config() -> Config:
@@ -36,7 +44,11 @@ def _schema_snapshot(sync_connection) -> dict[str, set[str]]:
     }
 
 
-def _contract_errors(snapshot: dict[str, set[str]]) -> list[str]:
+def _contract_errors(
+    snapshot: dict[str, set[str]],
+    *,
+    baseline: bool = False,
+) -> list[str]:
     errors = []
     expected_tables = Base.metadata.tables
     for table_name, table in sorted(expected_tables.items()):
@@ -44,7 +56,10 @@ def _contract_errors(snapshot: dict[str, set[str]]) -> list[str]:
         if actual_columns is None:
             errors.append(f"missing table {table_name}")
             continue
-        missing_columns = sorted(set(table.columns.keys()) - actual_columns)
+        expected_columns = set(table.columns.keys())
+        if baseline:
+            expected_columns -= POST_BASELINE_COLUMNS.get(table_name, set())
+        missing_columns = sorted(expected_columns - actual_columns)
         if missing_columns:
             errors.append(
                 f"missing columns {table_name}: {', '.join(missing_columns)}"
@@ -89,12 +104,26 @@ async def _adopt_legacy_schema_if_needed(config: Config) -> None:
     if not snapshot:
         return
 
-    errors = _contract_errors(snapshot)
+    errors = _contract_errors(snapshot, baseline=True)
     if errors:
         joined = "; ".join(errors[:20])
         raise RuntimeError(
             "Refusing to stamp an unversioned database with schema drift: "
             f"{joined}"
+        )
+
+    unexpected_future_columns = []
+    for table_name, future_columns in POST_BASELINE_COLUMNS.items():
+        present = sorted(snapshot.get(table_name, set()) & future_columns)
+        if present:
+            unexpected_future_columns.append(
+                f"{table_name}: {', '.join(present)}"
+            )
+    if unexpected_future_columns:
+        raise RuntimeError(
+            "Refusing to stamp an unversioned database that already contains "
+            "post-baseline columns: "
+            + "; ".join(unexpected_future_columns)
         )
 
     # Buyerly production predates Alembic execution but already contains the
