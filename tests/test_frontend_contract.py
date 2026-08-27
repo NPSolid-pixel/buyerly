@@ -51,14 +51,19 @@ class TestFrontendRuleContract(unittest.TestCase):
 
     def test_meta_oauth_is_primary_and_manual_token_is_advanced(self):
         for contract in (
-            'id="btnStartMetaOAuth"',
-            'id="metaConnectionsList"',
+            'id="fbAccountsTable"',
+            'id="modalMetaAssets"',
             'id="metaAssetGroups"',
             'id="metaSelectAll"',
             'id="btnImportMetaAssets"',
-            'class="form-card legacy-import-card"',
+            'id="modalManualToken"',
         ):
             self.assertIn(contract, self.index)
+        for contract in (
+            'window.startMetaOAuthFlow',
+            'window.openManualTokenModal',
+        ):
+            self.assertIn(contract, self.script)
         for endpoint in (
             "/api/meta/oauth/start",
             "/api/meta/connections",
