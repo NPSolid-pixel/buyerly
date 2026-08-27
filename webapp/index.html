@@ -1537,6 +1537,19 @@
             </div>
           </div>
 
+          <div class="settings-card settings-card-wide" data-settings-page="account">
+            <div class="card-header settings-sessions-header">
+              <div>
+                <h2>Активные устройства</h2>
+                <p class="setting-desc">Завершите отдельную сессию или выйдите сразу на всех устройствах.</p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="window.logoutAllWebSessions()">Завершить все</button>
+            </div>
+            <div id="settingsSessionsList" class="settings-sessions-list">
+              <span class="text-hint">Загрузка сессий…</span>
+            </div>
+          </div>
+
           <!-- Card 3: Protected Meta Automation Controls -->
           <div class="settings-card settings-card-wide automation-settings-card hidden" data-settings-page="automation">
             <div class="card-header automation-settings-head">

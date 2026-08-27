@@ -172,25 +172,36 @@
     }
   };
 
-  // Helper to get Web Auth Token
-  function getWebAuthToken() {
+  // One-time bridge for sessions created before HttpOnly cookie auth shipped.
+  // The legacy bearer is removed after the first successful authenticated API call.
+  let legacyWebAuthToken = (() => {
     try {
       return localStorage.getItem('buyerly_auth_token') || sessionStorage.getItem('buyerly_auth_token') || '';
     } catch (e) {
       return '';
     }
+  })();
+
+  function getWebAuthToken() {
+    return legacyWebAuthToken;
   }
 
   function setWebAuthToken(token) {
+    legacyWebAuthToken = token || '';
     try {
-      if (token) {
-        localStorage.setItem('buyerly_auth_token', token);
-        sessionStorage.setItem('buyerly_auth_token', token);
-      } else {
-        localStorage.removeItem('buyerly_auth_token');
-        sessionStorage.removeItem('buyerly_auth_token');
-      }
+      localStorage.removeItem('buyerly_auth_token');
+      sessionStorage.removeItem('buyerly_auth_token');
     } catch (e) {}
+  }
+
+  function getCsrfToken() {
+    try {
+      const prefix = 'buyerly_csrf=';
+      const item = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix));
+      return item ? decodeURIComponent(item.slice(prefix.length)) : '';
+    } catch (e) {
+      return '';
+    }
   }
 
   function getTelegramInitData() {
@@ -226,11 +237,17 @@
     } else if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
+    const method = String(options.method || 'GET').toUpperCase();
+    const csrfToken = getCsrfToken();
+    if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method) && csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
 
     try {
       const response = await fetch(endpoint, {
         ...options,
-        headers
+        headers,
+        credentials: 'same-origin'
       });
 
       if (!response.ok) {
@@ -248,6 +265,7 @@
         throw new Error(errorData.detail || `Ошибка сервера (${response.status})`);
       }
 
+      if (authToken) setWebAuthToken('');
       return await response.json();
     } catch (err) {
       console.error(`API Error on ${endpoint}:`, err);
@@ -9902,8 +9920,63 @@
         if (tgInput && state.user.telegram_id) tgInput.value = state.user.telegram_id;
         if (aLarge) aLarge.textContent = name.charAt(0).toUpperCase();
       }
+      await loadWebSessions();
     } catch (err) {}
   }
+
+  async function loadWebSessions() {
+    const container = document.getElementById('settingsSessionsList');
+    if (!container) return;
+    try {
+      const sessions = await apiRequest('/api/auth/sessions');
+      if (!sessions.length) {
+        container.innerHTML = '<span class="text-hint">Веб-сессий нет. Вход выполнен через Telegram.</span>';
+        return;
+      }
+      container.innerHTML = sessions.map((item) => {
+        const label = item.user_agent || 'Неизвестное устройство';
+        const lastSeen = formatSummaryTime(item.last_seen_at);
+        return `
+          <div class="settings-session-row">
+            <div class="settings-session-copy">
+              <b>${escapeHtml(label)}${item.current ? ' · Это устройство' : ''}</b>
+              <span>${escapeHtml(item.ip_address || 'IP не определён')} · Активность: ${escapeHtml(lastSeen)}</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.revokeWebSession('${item.id}', ${item.current === true})">
+              ${item.current ? 'Выйти' : 'Завершить'}
+            </button>
+          </div>`;
+      }).join('');
+    } catch (error) {
+      container.innerHTML = '<span class="text-hint">Не удалось загрузить список устройств.</span>';
+    }
+  }
+
+  window.revokeWebSession = async function (sessionId, isCurrent) {
+    try {
+      await apiRequest(`/api/auth/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+      showToast(isCurrent ? 'Вы вышли из системы' : 'Сессия завершена', 'success');
+      if (isCurrent) {
+        setWebAuthToken('');
+        window.location.assign('/auth/sign-in');
+        return;
+      }
+      await loadWebSessions();
+    } catch (error) {
+      showToast(`Ошибка: ${error.message}`, 'error');
+    }
+  };
+
+  window.logoutAllWebSessions = async function () {
+    try {
+      await apiRequest('/api/auth/logout-all', { method: 'POST' });
+      setWebAuthToken('');
+      showToast('Все сессии завершены', 'success');
+      window.location.assign('/auth/sign-in');
+    } catch (error) {
+      showToast(`Ошибка: ${error.message}`, 'error');
+    }
+  };
 
   function renderAutomationRuntime(runtime) {
     const lastCycle = document.getElementById('automationLastCycle');
@@ -10839,33 +10912,8 @@
       return;
     }
 
-    // Direct browser login uses a token; Telegram Mini App uses signed initData.
-    const authToken = getWebAuthToken();
-    const telegramInitData = getTelegramInitData();
-
-    if (!authToken && !telegramInitData) {
-      rememberReturnRoute();
-      // Immediate clean display of login screen
-      const loginScreen = document.getElementById('loginScreen');
-      const appEl = document.getElementById('app');
-      if (appEl) {
-        appEl.style.display = 'none';
-        appEl.classList.add('hidden');
-      }
-      if (loginScreen) {
-        loginScreen.style.display = 'flex';
-        loginScreen.classList.remove('hidden');
-        if (parsedLocation.authRoute === 'verify') {
-          state.onboardingEmail = parsedLocation.email || '';
-          window.showOnboardingStep('verify');
-        } else {
-          window.showOnboardingStep('signin');
-        }
-      }
-      return;
-    }
-
-    // Authenticate and load initial profile
+    // HttpOnly sessions cannot be inspected by JavaScript, so the server is
+    // always asked for the current profile before the sign-in view is shown.
     try {
       const user = await apiRequest('/api/me');
       state.user = user;
@@ -11004,7 +11052,12 @@
       if (loginScreen) {
         loginScreen.style.display = 'flex';
         loginScreen.classList.remove('hidden');
-        window.showOnboardingStep('signin');
+        if (parsedLocation.authRoute === 'verify') {
+          state.onboardingEmail = parsedLocation.email || '';
+          window.showOnboardingStep('verify');
+        } else {
+          window.showOnboardingStep('signin');
+        }
         const errEl = document.getElementById('onboardingSignInError');
         if (errEl) {
           errEl.textContent = e.message || 'Access not authorized';
@@ -11122,6 +11175,7 @@
       const res = await fetch('/api/auth/request-temporary-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ email: email })
       });
       const data = await res.json();
@@ -11177,6 +11231,7 @@
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ username: email, password })
       });
       const data = await res.json();
@@ -11185,7 +11240,7 @@
         throw new Error(data.detail || 'Invalid email address or password');
       }
 
-      setWebAuthToken(data.token);
+      setWebAuthToken('');
       showToast(`Welcome back, ${data.full_name || data.username}!`, 'success');
       await initApp();
     } catch (err) {
@@ -11228,6 +11283,7 @@
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ username: email, password: code })
       });
       const data = await res.json();
@@ -11236,7 +11292,7 @@
         throw new Error(data.detail || 'Please enter a valid temporary password');
       }
 
-      setWebAuthToken(data.token);
+      setWebAuthToken('');
       showToast(`Welcome, ${data.full_name || data.username}!`, 'success');
       await initApp();
     } catch (err) {
@@ -11312,9 +11368,14 @@
 
     try {
       const authToken = getWebAuthToken();
+      const csrfToken = getCsrfToken();
       const res = await fetch('/api/onboarding/avatar', {
         method: 'POST',
-        headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {},
+        headers: {
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
+        },
+        credentials: 'same-origin',
         body: formData
       });
       const data = await res.json();

@@ -76,7 +76,16 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertLess(sdk_position, app_position)
         self.assertIn("window.Telegram?.WebApp?.initData", self.script)
         self.assertIn("`tma ${telegramInitData}`", self.script)
-        self.assertIn("!authToken && !telegramInitData", self.script)
+        self.assertIn("const user = await apiRequest('/api/me')", self.script)
+
+    def test_browser_auth_uses_cookie_csrf_and_removes_legacy_storage(self):
+        self.assertIn("credentials: 'same-origin'", self.script)
+        self.assertIn("'X-CSRF-Token': csrfToken", self.script)
+        self.assertIn("/api/auth/sessions", self.script)
+        self.assertIn("/api/auth/logout-all", self.script)
+        self.assertIn('id="settingsSessionsList"', self.index)
+        self.assertNotIn("localStorage.setItem('buyerly_auth_token'", self.script)
+        self.assertNotIn("sessionStorage.setItem('buyerly_auth_token'", self.script)
 
     def test_desktop_shell_uses_quiet_palette_and_sidebar_grid(self):
         self.assertIn("QUIET GRAPHITE PALETTE", self.styles)
@@ -818,6 +827,5 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertNotIn("<b>${item.account_id}</b>", self.script)
         self.assertIn("(${escapeHtml(item.account_id)})", self.script)
         self.assertIn("<b>${escapeHtml(item.account_id)}</b>", self.script)
-
 
 

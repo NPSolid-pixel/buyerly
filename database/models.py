@@ -50,7 +50,7 @@ class User(Base):
         doc="Завершен ли полный онбординг пользователя",
     )
     password_hash = Column(String, default="", nullable=False, doc="Версионированный защищённый хэш пароля")
-    auth_token = Column(String, unique=True, nullable=True, index=True, doc="Постоянный токен авторизации веб-интерфейса")
+    auth_token = Column(String, unique=True, nullable=True, index=True, doc="Legacy browser token; migrated to web_sessions and cleared")
     role = Column(String, default="admin", nullable=False, doc="'admin' или 'buyer'")
     is_approved = Column(Boolean, default=True, nullable=False, doc="Одобрен ли доступ")
     active_workspace_id = Column(
@@ -69,6 +69,30 @@ class User(Base):
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
+
+
+class WebSession(Base):
+    __tablename__ = "web_sessions"
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(64), unique=True, nullable=False, index=True)
+    csrf_hash = Column(String(64), nullable=False)
+    user_agent = Column(String(500), default="", nullable=False)
+    ip_address = Column(String(64), default="", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    last_seen_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    rotated_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    def __repr__(self):
+        return f"<WebSession(id='{self.id}', user_id={self.user_id})>"
 
 
 # Backwards compatibility alias

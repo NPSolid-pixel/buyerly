@@ -34,6 +34,7 @@ from database.models import (
     MetaConnection,
     StoppedAdSet,
     User,
+    WebSession,
     Workspace,
     WorkspaceMember,
 )
@@ -248,7 +249,9 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(missing_password.status_code, 401)
         self.assertEqual(wrong_password.status_code, 401)
         self.assertEqual(login.status_code, 200)
-        self.assertTrue(login.json()["token"])
+        self.assertNotIn("token", login.json())
+        self.assertIn("buyerly_session=", login.headers.get("set-cookie", ""))
+        self.assertIn("HttpOnly", login.headers.get("set-cookie", ""))
 
         async with self.test_session_maker() as session:
             result = await session.execute(
@@ -257,6 +260,56 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             upgraded_buyer = result.scalar_one()
             self.assertTrue(upgraded_buyer.password_hash.startswith("pbkdf2_sha256$"))
             self.assertTrue(verify_password(legacy_password, upgraded_buyer.password_hash))
+
+    async def test_browser_sessions_are_hashed_csrf_protected_and_individually_revocable(self):
+        password = "browser-session-password"
+        async with self.test_session_maker() as session:
+            buyer = (
+                await session.execute(select(User).where(User.username == "buyer_nick"))
+            ).scalar_one()
+            buyer.password_hash = hash_password(password)
+            await session.commit()
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
+            login = await client.post(
+                "/api/auth/login",
+                headers={"User-Agent": "Buyerly test browser"},
+                json={"username": "buyer_nick", "password": password},
+            )
+            self.assertEqual(login.status_code, 200)
+            raw_token = client.cookies.get("buyerly_session")
+            csrf_token = client.cookies.get("buyerly_csrf")
+            self.assertTrue(raw_token)
+            self.assertTrue(csrf_token)
+
+            me = await client.get("/api/me")
+            self.assertEqual(me.status_code, 200)
+
+            csrf_blocked = await client.post(
+                "/api/auth/change-password",
+                json={"old_password": password, "new_password": "changed-password"},
+            )
+            self.assertEqual(csrf_blocked.status_code, 403)
+
+            sessions_response = await client.get("/api/auth/sessions")
+            self.assertEqual(sessions_response.status_code, 200)
+            sessions = sessions_response.json()
+            self.assertEqual(len(sessions), 1)
+            self.assertTrue(sessions[0]["current"])
+            self.assertEqual(sessions[0]["user_agent"], "Buyerly test browser")
+
+            revoke = await client.delete(
+                f"/api/auth/sessions/{sessions[0]['id']}",
+                headers={"X-CSRF-Token": csrf_token},
+            )
+            self.assertEqual(revoke.status_code, 200)
+            self.assertEqual((await client.get("/api/me")).status_code, 401)
+
+        async with self.test_session_maker() as session:
+            stored = (await session.execute(select(WebSession))).scalar_one()
+            self.assertNotEqual(stored.token_hash, raw_token)
+            self.assertIsNotNone(stored.revoked_at)
 
     async def test_change_password_requires_current_password(self):
         old_password = "old-password"

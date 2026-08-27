@@ -3,10 +3,10 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, select, update
 
-from api.auth import get_current_user
+from api.auth import clear_session_cookies, create_web_session, get_current_user
 from api.deps import _utc_iso, get_user_workspaces_list
 from api.schemas import (
     ChangePasswordRequest,
@@ -16,6 +16,7 @@ from api.schemas import (
     RequestTemporaryPasswordRequest,
     UpdateProfileRequest,
     UserProfileResponse,
+    WebSessionItem,
     VerifyEmailChangeRequest,
 )
 from core.config import settings
@@ -39,6 +40,7 @@ from database.models import (
     RulePreset,
     SummarySnapshot,
     User,
+    WebSession,
     Workspace,
     WorkspaceInvite,
     WorkspaceMember,
@@ -94,7 +96,6 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
                 is_approved=True,
                 onboarding_completed=False,
                 onboarding_step="personal_details",
-                auth_token=secrets.token_urlsafe(32),
             )
             session.add(user)
             await session.flush()
@@ -137,7 +138,7 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
     response_model=LoginResponse,
     dependencies=[Depends(rate_limit_dep(limit=10, window_seconds=60, scope="login"))],
 )
-async def login_user(req: LoginRequest):
+async def login_user(req: LoginRequest, request: Request, response: Response):
     async with async_session_maker() as session:
         uname = req.username.strip()
 
@@ -202,22 +203,21 @@ async def login_user(req: LoginRequest):
         if not user.is_approved:
             raise HTTPException(status_code=403, detail="Ваш аккаунт ожидает одобрения администратора.")
 
-        credentials_changed = False
         if is_password_valid and password_needs_rehash(user.password_hash):
             user.password_hash = hash_password(req.password)
-            credentials_changed = True
 
-        if not user.auth_token:
-            user.auth_token = secrets.token_urlsafe(32)
-            credentials_changed = True
+        if otp_valid and not user.email_verified_at:
+            user.email_verified_at = now_dt
 
-        if credentials_changed or otp_valid:
-            if otp_valid and not user.email_verified_at:
-                user.email_verified_at = now_dt
-            await session.commit()
+        await create_web_session(
+            session,
+            user=user,
+            request=request,
+            response=response,
+        )
+        await session.commit()
 
         return LoginResponse(
-            token=user.auth_token,
             username=user.username,
             full_name=user.full_name or user.username,
             role=user.role,
@@ -536,14 +536,107 @@ async def update_profile(req: UpdateProfileRequest, user: User = Depends(get_cur
 
 
 @router.post("/auth/logout")
-async def logout_user(user: User = Depends(get_current_user)):
+async def logout_user(
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+):
+    session_id = getattr(request.state, "web_session_id", None)
     async with async_session_maker() as session:
-        res = await session.execute(select(User).where(User.id == user.id))
-        db_user = res.scalar_one_or_none()
-        if db_user:
-            db_user.auth_token = secrets.token_urlsafe(32)
+        if session_id:
+            web_session = (
+                await session.execute(
+                    select(WebSession).where(
+                        WebSession.id == session_id,
+                        WebSession.user_id == user.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if web_session and web_session.revoked_at is None:
+                web_session.revoked_at = datetime.now(timezone.utc)
             await session.commit()
+    clear_session_cookies(response)
     return {"message": "Успешный выход"}
+
+
+@router.get("/auth/sessions", response_model=list[WebSessionItem])
+async def list_web_sessions(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    now = datetime.now(timezone.utc)
+    current_id = getattr(request.state, "web_session_id", None)
+    async with async_session_maker() as session:
+        rows = (
+            await session.execute(
+                select(WebSession)
+                .where(
+                    WebSession.user_id == user.id,
+                    WebSession.revoked_at.is_(None),
+                    WebSession.expires_at > now,
+                )
+                .order_by(WebSession.last_seen_at.desc(), WebSession.created_at.desc())
+            )
+        ).scalars().all()
+    return [
+        WebSessionItem(
+            id=item.id,
+            user_agent=item.user_agent,
+            ip_address=item.ip_address,
+            created_at=item.created_at,
+            expires_at=item.expires_at,
+            last_seen_at=item.last_seen_at,
+            current=item.id == current_id,
+        )
+        for item in rows
+    ]
+
+
+@router.delete("/auth/sessions/{session_id}")
+async def revoke_web_session(
+    session_id: str,
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+):
+    async with async_session_maker() as session:
+        web_session = (
+            await session.execute(
+                select(WebSession).where(
+                    WebSession.id == session_id,
+                    WebSession.user_id == user.id,
+                    WebSession.revoked_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if web_session is None:
+            raise HTTPException(status_code=404, detail="Сессия не найдена")
+        web_session.revoked_at = datetime.now(timezone.utc)
+        await session.commit()
+
+    if session_id == getattr(request.state, "web_session_id", None):
+        clear_session_cookies(response)
+    return {"message": "Сессия завершена"}
+
+
+@router.post("/auth/logout-all")
+async def logout_all_web_sessions(
+    response: Response,
+    user: User = Depends(get_current_user),
+):
+    now = datetime.now(timezone.utc)
+    async with async_session_maker() as session:
+        await session.execute(
+            update(WebSession)
+            .where(
+                WebSession.user_id == user.id,
+                WebSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+        await session.commit()
+    clear_session_cookies(response)
+    return {"message": "Все сессии завершены"}
 
 
 @router.get("/me", response_model=UserProfileResponse)

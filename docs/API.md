@@ -10,14 +10,15 @@ Production: `https://buyerly.app`.
 
 | Способ | Заголовок | Назначение |
 |---|---|---|
-| Web token | `Authorization: Bearer <token>` | прямой вход по логину и паролю |
-| Web token | `X-Auth-Token: <token>` | совместимый вариант для web-клиента |
+| Web session | Secure + HttpOnly cookie `buyerly_session` | прямой вход по логину, паролю или OTP |
+| CSRF | cookie `buyerly_csrf` + `X-CSRF-Token` | обязательная защита изменяющих запросов web-сессии |
+| Legacy web token | `Authorization: Bearer <token>` | одноразовый переход старой сессии на cookie до истечения |
 | Telegram Mini App | `Authorization: tma <initData>` | подписанные Telegram `initData` |
 | Telegram Mini App | `X-Init-Data: <initData>` | совместимый вариант |
 
 `dev_user_id` работает только в локальной среде при явно включённом `ENABLE_DEV_AUTH`; в production fallback выключен. Обычный пользователь получает только свои данные. Администратор имеет расширенный операционный обзор там, где это предусмотрено endpoint.
 
-Не записывайте web token или Meta access token в документацию, URL, issue и логи. После `POST /api/auth/logout` прежний web token перестаёт действовать.
+Не записывайте session cookie или Meta access token в документацию, URL, issue и логи. После `POST /api/auth/logout` текущая web-сессия немедленно перестаёт действовать.
 
 ## Healthcheck
 
@@ -34,10 +35,13 @@ Production: `https://buyerly.app`.
 | `POST /api/auth/request-email-verification` | — | высылает 6-значный одноразовый код на текущий неподтверждённый email |
 | `POST /api/auth/request-email-change` | `new_email` | высылает 6-значный код подтверждения для привязки нового email |
 | `POST /api/auth/verify-email-change` | `code` | верифицирует OTP и активирует подтверждённый email |
-| `POST /api/auth/login` | `username`, `password` | web token, профиль и роль (поддерживает пароль и OTP-код) |
+| `POST /api/auth/login` | `username`, `password` | создаёт ограниченную по времени HttpOnly web-сессию и возвращает профиль/роль |
 | `POST /api/auth/change-password` | `old_password`, `new_password` | меняет пароль; минимум 8 символов |
 | `POST /api/auth/update-profile` | `first_name?`, `last_name?`, `email?`, `avatar_url?`, `full_name?`, `telegram_id?` | обновляет персональные данные профиля и адрес Telegram-доставки |
-| `POST /api/auth/logout` | — | ротирует web token |
+| `POST /api/auth/logout` | — | немедленно отзывает текущую web-сессию |
+| `GET /api/auth/sessions` | — | список активных устройств с датами создания, истечения и последней активности |
+| `DELETE /api/auth/sessions/{session_id}` | — | отзывает выбранную собственную web-сессию |
+| `POST /api/auth/logout-all` | — | отзывает все web-сессии пользователя |
 | `GET /api/me` | — | `telegram_id`, `username`, `full_name`, `first_name`, `last_name`, `email`, `email_verified`, `unconfirmed_email`, `avatar_url`, `role`, `is_approved`, `active_workspace`, `workspaces` |
 | `GET /api/admin/overview` | — | сводная таблица всех пользователей, воркспейсов и инвайтов (только админ) |
 | `POST /api/admin/support-sessions` | `workspace_id`, `reason`, `duration_minutes?` | создание ограниченной по времени сессии техподдержки администратора платформы (5–240 мин) с обязательным обоснованием |

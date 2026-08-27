@@ -4,6 +4,8 @@ import hmac
 import json
 import logging
 import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -1252,6 +1254,53 @@ async def migrate_user_email_verified_contract(conn) -> bool:
     return migrated
 
 
+async def migrate_legacy_web_auth_tokens(conn) -> int:
+    """Move persistent User.auth_token values into expiring hashed sessions."""
+    rows = (
+        await conn.execute(
+            text("SELECT id, auth_token FROM users WHERE auth_token IS NOT NULL")
+        )
+    ).mappings().all()
+    if not rows:
+        return 0
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(hours=settings.WEB_SESSION_TTL_HOURS)
+    migrated = 0
+    for row in rows:
+        raw_token = row["auth_token"]
+        if not raw_token:
+            continue
+        await conn.execute(
+            text(
+                """
+                INSERT INTO web_sessions (
+                    id, user_id, token_hash, csrf_hash, user_agent, ip_address,
+                    created_at, expires_at, last_seen_at, rotated_at, revoked_at
+                ) VALUES (
+                    :id, :user_id, :token_hash, :csrf_hash, 'Legacy browser', '',
+                    :created_at, :expires_at, :last_seen_at, :rotated_at, NULL
+                )
+                ON CONFLICT (token_hash) DO NOTHING
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": row["id"],
+                "token_hash": hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+                "csrf_hash": hashlib.sha256(secrets.token_bytes(32)).hexdigest(),
+                "created_at": now,
+                "expires_at": expires_at,
+                "last_seen_at": now,
+                "rotated_at": now,
+            },
+        )
+        migrated += 1
+
+    await conn.execute(text("UPDATE users SET auth_token = NULL WHERE auth_token IS NOT NULL"))
+    return migrated
+
+
 async def init_schema():
     # Importing the models registers every table on Base.metadata. This makes
     # database initialization reliable for all independent process entrypoints.
@@ -1261,6 +1310,12 @@ async def init_schema():
         if await migrate_users_table_contract(conn):
             logger.info("Migrated legacy telegram_users table to users.")
         await conn.run_sync(Base.metadata.create_all)
+        migrated_sessions = await migrate_legacy_web_auth_tokens(conn)
+        if migrated_sessions:
+            logger.info(
+                "Migrated %s persistent browser token(s) to expiring sessions.",
+                migrated_sessions,
+            )
         if await migrate_otp_security_contract(conn):
             logger.info("Added failed_attempts to email_verification_codes.")
         if await migrate_user_email_verified_contract(conn):
@@ -1350,7 +1405,6 @@ async def ensure_bootstrap_admin():
                         username=settings.BOOTSTRAP_ADMIN_USERNAME,
                         full_name=settings.BOOTSTRAP_ADMIN_USERNAME,
                         password_hash=hash_password(settings.BOOTSTRAP_ADMIN_PASSWORD),
-                        auth_token=secrets.token_urlsafe(32),
                         role="admin",
                         is_approved=True,
                     )
