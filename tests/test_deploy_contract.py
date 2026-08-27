@@ -14,6 +14,7 @@ class TestDeployContract(unittest.TestCase):
         cls.dockerfile = (project_root / "Dockerfile").read_text()
         cls.workflow = (project_root / ".github" / "workflows" / "deploy.yml").read_text()
         cls.codeowners = (project_root / ".github" / "CODEOWNERS").read_text()
+        cls.alembic_env = (project_root / "alembic" / "env.py").read_text()
 
     def test_deployments_are_serialized(self):
         self.assertIn("DEPLOY_LOCK_FILE", self.script)
@@ -39,6 +40,11 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("wait_for_container buyerly-worker", self.script)
         self.assertIn("wait_for_container buyerly-web", self.script)
         self.assertIn("rollback", self.script)
+
+    def test_migration_lock_does_not_mask_the_primary_database_error(self):
+        self.assertIn("pg_try_advisory_xact_lock", self.alembic_env)
+        self.assertNotIn("pg_advisory_unlock", self.alembic_env)
+        self.assertNotIn("docker compose logs --tail=120 migrate db", self.script)
 
     def test_deploy_waits_for_scheduler_cycle_and_rejects_owner_failures(self):
         self.assertIn("buyerly-worker-day-boundary-cycle-complete", self.script)

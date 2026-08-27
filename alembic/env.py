@@ -41,24 +41,18 @@ def do_run_migrations(connection: Connection) -> None:
             lock_acquired = bool(
                 connection.execute(
                     text(
-                        "SELECT pg_try_advisory_lock("
+                        "SELECT pg_try_advisory_xact_lock("
                         "hashtext('buyerly-alembic-migrations'))"
                     )
                 ).scalar()
             )
         if not lock_acquired:
             raise RuntimeError("Another Buyerly Alembic migration is already running")
-
-        try:
-            context.run_migrations()
-        finally:
-            if connection.dialect.name == "postgresql" and lock_acquired:
-                connection.execute(
-                    text(
-                        "SELECT pg_advisory_unlock("
-                        "hashtext('buyerly-alembic-migrations'))"
-                    )
-                )
+        # The transaction-scoped lock is released automatically on commit or
+        # rollback. Do not issue an unlock query after a failed migration: a
+        # PostgreSQL transaction in the aborted state would mask the original
+        # exception with InFailedSQLTransactionError.
+        context.run_migrations()
 
 
 async def run_async_migrations() -> None:
