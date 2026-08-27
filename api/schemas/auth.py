@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -45,11 +46,20 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    token: str
     username: str
     full_name: str
     role: str
     message: str = "Авторизация успешна"
+
+
+class WebSessionItem(BaseModel):
+    id: str
+    user_agent: str = ""
+    ip_address: str = ""
+    created_at: datetime
+    expires_at: datetime
+    last_seen_at: datetime
+    current: bool = False
 
 
 class ChangePasswordRequest(BaseModel):

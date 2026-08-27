@@ -29,6 +29,7 @@ Buyerly — сервис контроля, мониторинга и автом�
 - Dual-Channel Auth: вход по постоянному паролю (bcrypt), одноразовому 6-значному OTP-паролю на email (Resend) и через Telegram Mini App (`initData`).
 - Интеграция с официальным REST API Resend для транзакционной отправки кодов верификации и приглашений в команду с адаптивными HTML-шаблонами.
 - Защита от брутфорса OTP (максимум 5 попыток) и sliding-window rate limiting.
+- Ограниченные серверные web-сессии с `HttpOnly` cookie, ротацией, CSRF-защитой и отзывом отдельных устройств.
 
 ### Управление кабинетами и подключение
 - Массовое добавление кабинетов из текстового экспорта Meta Business Manager.
@@ -146,4 +147,3 @@ webapp/              Фронтенд SPA в стиле Attio CRM, стили, �
 - [План официальной авторизации Facebook](docs/FACEBOOK_AUTHORIZATION_PLAN.md)
 - [Бэклог продукта](docs/PRODUCT_BACKLOG.md)
 - [Карта оставшихся продуктовых задач](docs/REMAINING_PRODUCT_WORK.md)
-

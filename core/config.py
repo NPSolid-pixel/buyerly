@@ -43,6 +43,22 @@ class Settings(BaseSettings):
         ge=60,
         description="Maximum accepted age of Telegram Mini App initData",
     )
+    WEB_SESSION_TTL_HOURS: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Absolute lifetime of a browser session",
+    )
+    WEB_SESSION_ROTATE_MINUTES: int = Field(
+        default=15,
+        ge=1,
+        le=1440,
+        description="Maximum age of a browser session token before rotation",
+    )
+    SESSION_COOKIE_SECURE: bool = Field(
+        default=True,
+        description="Send browser authentication cookies only over HTTPS",
+    )
     BOOTSTRAP_ADMIN_USERNAME: str = Field(
         default="",
         description="Optional first admin username for an empty installation",

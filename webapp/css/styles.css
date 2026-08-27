@@ -1498,6 +1498,35 @@ input:checked + .slider:before { transform: translateX(16px); }
   margin-bottom: 16px;
 }
 
+.settings-sessions-header,
+.settings-session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.settings-sessions-list { display: grid; gap: 8px; }
+.settings-session-row {
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-hover);
+}
+.settings-session-copy { min-width: 0; }
+.settings-session-copy b,
+.settings-session-copy span { display: block; }
+.settings-session-copy b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.settings-session-copy span { margin-top: 3px; font-size: 11.5px; color: var(--text-muted); }
+@media (max-width: 680px) {
+  .settings-sessions-header,
+  .settings-session-row { align-items: flex-start; flex-direction: column; }
+}
+
 /* ==========================================================
    TAB 1: ACCOUNTS (МОИ КАБИНЕТЫ)
    ========================================================== */
@@ -7718,5 +7747,3 @@ input[type="text"].attio-popover-name-input:focus,
     max-width: none;
   }
 }
-
-

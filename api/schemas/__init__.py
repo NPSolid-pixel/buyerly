@@ -19,6 +19,7 @@ from api.schemas.auth import (
     VerifyEmailChangeRequest,
     LoginRequest,
     LoginResponse,
+    WebSessionItem,
     ChangePasswordRequest,
     UpdateProfileRequest,
 )
@@ -76,6 +77,7 @@ __all__ = [
     "VerifyEmailChangeRequest",
     "LoginRequest",
     "LoginResponse",
+    "WebSessionItem",
     "ChangePasswordRequest",
     "UpdateProfileRequest",
     "OnboardingStatusResponse",
