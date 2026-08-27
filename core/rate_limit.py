@@ -66,6 +66,7 @@ class RateLimiter:
         self._redis_url = redis_url.strip()
         self._namespace = namespace.rstrip(":")
         self._redis: Optional[Redis] = None
+        self._redis_loop = None
 
     def _cleanup_stale(self, now: float) -> None:
         """Evict records where all timestamps are older than 10 minutes."""
@@ -80,7 +81,8 @@ class RateLimiter:
         self._last_cleanup = now
 
     def _redis_client(self) -> Redis:
-        if self._redis is None:
+        current_loop = asyncio.get_running_loop()
+        if self._redis is None or self._redis_loop is not current_loop:
             self._redis = Redis.from_url(
                 self._redis_url,
                 encoding="utf-8",
@@ -89,6 +91,7 @@ class RateLimiter:
                 socket_timeout=1,
                 health_check_interval=30,
             )
+            self._redis_loop = current_loop
         return self._redis
 
     def _redis_key(self, key: str) -> str:
@@ -163,6 +166,7 @@ class RateLimiter:
                     await client.delete(redis_key)
                 await client.aclose()
                 self._redis = None
+                self._redis_loop = None
                 return
             except RedisError as exc:
                 raise RateLimitBackendUnavailable from exc
