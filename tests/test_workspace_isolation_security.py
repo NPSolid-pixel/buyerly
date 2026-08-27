@@ -302,12 +302,24 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
                 await client.post(
                     "/api/presets",
                     headers=viewer_headers,
-                    json={"name": "Blocked", "action": "turn_off", "conditions": []},
+                    json={
+                        "name": "Blocked",
+                        "action": "turn_off",
+                        "conditions": [
+                            {"metric": "spend", "operator": "gte", "value": 1}
+                        ],
+                    },
                 ),
                 await client.put(
                     f"/api/presets/{preset_id}",
                     headers=viewer_headers,
-                    json={"name": "Blocked", "action": "turn_off", "conditions": []},
+                    json={
+                        "name": "Blocked",
+                        "action": "turn_off",
+                        "conditions": [
+                            {"metric": "spend", "operator": "gte", "value": 1}
+                        ],
+                    },
                 ),
                 await client.delete(
                     f"/api/presets/{preset_id}", headers=viewer_headers
@@ -430,7 +442,13 @@ class TestWorkspaceIsolationSecurity(unittest.IsolatedAsyncioTestCase):
                 await client.put(
                     f"/api/presets/{foreign_preset_id}",
                     headers=headers,
-                    json={"name": "Blocked", "action": "turn_off", "conditions": []},
+                    json={
+                        "name": "Blocked",
+                        "action": "turn_off",
+                        "conditions": [
+                            {"metric": "spend", "operator": "gte", "value": 1}
+                        ],
+                    },
                 ),
                 await client.delete(
                     f"/api/presets/{foreign_preset_id}", headers=headers
