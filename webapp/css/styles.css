@@ -6029,11 +6029,28 @@ input[type="text"].attio-popover-name-input:focus,
 }
 
 .attio-auth-brand-logo {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   text-decoration: none;
   cursor: pointer;
+  user-select: none;
+}
+
+.attio-auth-brand-name {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #0F172A;
+  line-height: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .attio-auth-brand-name {
+    color: #F8FAFC;
+  }
 }
 
 .attio-auth-card {
