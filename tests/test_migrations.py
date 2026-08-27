@@ -1236,6 +1236,40 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
             await init_test_db(engine)
             await engine.dispose()
 
+    async def test_production_migration_runner_repairs_empty_version_table(self):
+        from database.migrations import run_production_migrations
+        from alembic import command
+        from alembic.config import Config
+        import os
+
+        engine = create_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
+
+            config = Config(
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+            )
+            config.set_main_option(
+                "script_location",
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
+            )
+            command.upgrade(config, "0009_web_sessions")
+            async with engine.begin() as conn:
+                await conn.execute(text("DELETE FROM alembic_version"))
+
+            await run_production_migrations()
+
+            async with engine.connect() as conn:
+                version = (
+                    await conn.execute(text("SELECT version_num FROM alembic_version"))
+                ).scalar_one()
+                self.assertEqual(version, "0013_manual_tokens")
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
     async def test_production_migration_runner_rejects_legacy_schema_drift(self):
         from database.migrations import run_production_migrations
 

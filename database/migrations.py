@@ -84,7 +84,8 @@ async def _read_schema_snapshot() -> dict[str, set[str]]:
         await migration_engine.dispose()
 
 
-async def _has_alembic_version_table() -> bool:
+async def _read_alembic_heads() -> set[str] | None:
+    """Return current revisions, or ``None`` when the version table is absent."""
     migration_engine = create_async_engine(
         settings.DATABASE_URL,
         poolclass=NullPool,
@@ -92,15 +93,24 @@ async def _has_alembic_version_table() -> bool:
     try:
         async with migration_engine.connect() as connection:
             return await connection.run_sync(
-                lambda sync_connection: "alembic_version"
-                in inspect(sync_connection).get_table_names()
+                lambda sync_connection: (
+                    set(
+                        MigrationContext.configure(
+                            sync_connection
+                        ).get_current_heads()
+                    )
+                    if "alembic_version"
+                    in inspect(sync_connection).get_table_names()
+                    else None
+                )
             )
     finally:
         await migration_engine.dispose()
 
 
 async def _adopt_legacy_schema_if_needed(config: Config) -> None:
-    if await _has_alembic_version_table():
+    current_heads = await _read_alembic_heads()
+    if current_heads:
         return
 
     snapshot = await _read_schema_snapshot()
@@ -131,7 +141,9 @@ async def _adopt_legacy_schema_if_needed(config: Config) -> None:
 
     # Buyerly production predates Alembic execution but already contains the
     # schema/data transformations through 0009. Stamp that explicit baseline;
-    # every later revision is then applied normally by `upgrade head`.
+    # every later revision is then applied normally by `upgrade head`. Treat an
+    # existing but empty version table like a missing one: a failed/partial
+    # adoption can create the table before its version row is committed.
     await asyncio.to_thread(command.stamp, config, LEGACY_BASELINE_REVISION)
 
 
