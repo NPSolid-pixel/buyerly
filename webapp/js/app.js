@@ -5,6 +5,19 @@
 (function () {
   'use strict';
 
+  const {
+    isPlainObject,
+    resetBrowserPreference,
+    writeBrowserPreference,
+    readBrowserPreference,
+    isStringArray,
+    isIdArray,
+    isWidthRecord,
+    isStringRecord
+  } = window.BuyerlyBrowserPreferences;
+  const { slugifyText } = window.BuyerlyWorkspaceSlugs;
+  const { escapeHtml, sanitizeUrl, escapeJsArg } = window.BuyerlySecurity;
+
   const SUMMARY_AUTO_REFRESH_MS = 3 * 60 * 1000;
   const SUMMARY_COLUMNS = [
     { key: 'account', label: 'Кабинет', group: 'base', required: true },
@@ -54,106 +67,10 @@
   };
   const SUMMARY_COLUMN_MIN_WIDTH = 72;
   const SUMMARY_COLUMN_MAX_WIDTH = 420;
-  const RESERVED_WORKSPACE_SLUGS = new Set([
-    'api', 'admin', 'app', 'auth', 'static', 'uploads', 'health', 'docs', 'redoc',
-    'openapi', 'openapi-json', 'settings', 'terms', 'privacy', 'data-deletion',
-    'onboarding', 'login', 'sign-in', 'dashboard', 'home', 'accounts',
-    'facebook-accounts', 'facebook-groups', 'groups', 'lists', 'collection',
-    'rule-groups', 'add-accounts', 'rules', 'chats', 'summary', 'logs', 'invite',
-    'invites', 'null', 'undefined'
-  ]);
-  const WORKSPACE_SLUG_CYRILLIC = Object.freeze({
-    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh',
-    з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o',
-    п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts',
-    ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya'
-  });
   const DEFAULT_ACCOUNTS_COLUMN_ORDER = [
     'name', 'status', 'timezone', 'spend', 'cpm', 'cpc', 'ctr', 'leads', 'cpl',
     'registrations', 'cpreg', 'purchases', 'cpp', 'automation'
   ];
-
-  function isPlainObject(value) {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
-  }
-
-  function resetBrowserPreference(key) {
-    try {
-      localStorage.removeItem(key);
-    } catch (_) {
-      // Storage can be unavailable in hardened/private browser contexts.
-    }
-  }
-
-  function writeBrowserPreference(key, value, options = {}) {
-    try {
-      localStorage.setItem(key, options.json ? JSON.stringify(value) : String(value));
-    } catch (_) {
-      // UI state remains usable even when persistence is unavailable.
-    }
-  }
-
-  function readBrowserPreference(key, fallback, options = {}) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw === null) return fallback;
-      const value = options.json ? JSON.parse(raw) : raw;
-      if (options.validate && !options.validate(value)) {
-        throw new TypeError(`Invalid browser preference: ${key}`);
-      }
-      return value;
-    } catch (_) {
-      resetBrowserPreference(key);
-      return fallback;
-    }
-  }
-
-  const isStringArray = value => Array.isArray(value)
-    && value.every(item => typeof item === 'string' && item.trim().length > 0)
-    && new Set(value).size === value.length;
-  const isIdArray = value => {
-    if (!Array.isArray(value)) return false;
-    const ids = value.map(Number);
-    return ids.every(id => Number.isSafeInteger(id) && id > 0)
-      && new Set(ids).size === ids.length;
-  };
-  const isWidthRecord = value => isPlainObject(value) && Object.values(value)
-    .every(width => Number.isFinite(width) && width > 0 && width <= 2000);
-  const isStringRecord = value => isPlainObject(value) && Object.values(value)
-    .every(item => typeof item === 'string');
-
-  function stableWorkspaceSlugHash(value) {
-    let hash = 0x811c9dc5;
-    new TextEncoder().encode(value).forEach(byte => {
-      hash ^= byte;
-      hash = Math.imul(hash, 0x01000193) >>> 0;
-    });
-    return hash.toString(16).padStart(8, '0');
-  }
-
-  function slugifyText(value) {
-    const normalized = String(value || '').normalize('NFKC').trim().toLowerCase();
-    const transliterated = Array.from(normalized)
-      .map(char => Object.prototype.hasOwnProperty.call(WORKSPACE_SLUG_CYRILLIC, char)
-        ? WORKSPACE_SLUG_CYRILLIC[char]
-        : char)
-      .join('');
-    let slug = transliterated
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\x00-\x7F]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 60)
-      .replace(/-+$/g, '');
-    if (!slug) {
-      slug = normalized ? `workspace-${stableWorkspaceSlugHash(normalized)}` : 'workspace';
-    }
-    if (RESERVED_WORKSPACE_SLUGS.has(slug)) {
-      slug = `${slug.slice(0, 50).replace(/-+$/g, '')}-workspace`;
-    }
-    return slug;
-  }
 
   const TAB_ROUTES = Object.freeze({
     home: '/home',
@@ -11019,44 +10936,6 @@
         }
       }
     });
-  }
-
-  function escapeHtml(text) {
-    if (!text) return '';
-    return text.toString()
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  function sanitizeUrl(url) {
-    if (!url || typeof url !== 'string') return '';
-    const cleaned = url.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim();
-    if (!cleaned) return '';
-    if (cleaned.startsWith('//')) return '';
-    if (cleaned.startsWith('/') && !cleaned.startsWith('/\\')) {
-      return cleaned;
-    }
-    try {
-      const parsed = new URL(cleaned, window.location ? window.location.origin : 'https://buyerly.app');
-      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-        return cleaned;
-      }
-    } catch (e) {
-      return '';
-    }
-    return '';
-  }
-  window.sanitizeUrl = sanitizeUrl;
-
-  function escapeJsArg(value) {
-    if (value === undefined || value === null) return "''";
-    const serialized = JSON.stringify(String(value))
-      .replace(/\u2028/g, '\\u2028')
-      .replace(/\u2029/g, '\\u2029');
-    return escapeHtml(serialized);
   }
 
   // ==========================================================

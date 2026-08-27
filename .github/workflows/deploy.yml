@@ -45,6 +45,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Validate Frontend JavaScript Syntax
+        run: |
+          find webapp/js -type f -name '*.js' -print0 | sort -z | xargs -0 -n1 node --check
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

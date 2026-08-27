@@ -7,10 +7,49 @@ class TestFrontendRuleContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         webapp = Path(__file__).parents[1] / "webapp"
-        cls.script = (webapp / "js" / "app.js").read_text()
+        cls.scripts = {
+            path.name: path.read_text()
+            for path in sorted((webapp / "js").glob("*.js"))
+        }
+        cls.app_script = cls.scripts["app.js"]
+        cls.script = "\n".join(cls.scripts.values())
         cls.index = (webapp / "index.html").read_text()
         cls.styles = (webapp / "css" / "styles.css").read_text()
         cls.server = (Path(__file__).parents[1] / "api" / "server.py").read_text()
+        cls.workflow = (Path(__file__).parents[1] / ".github" / "workflows" / "deploy.yml").read_text()
+
+    def test_frontend_foundations_are_split_and_loaded_before_app(self):
+        script_paths = (
+            "/static/js/browser-preferences.js",
+            "/static/js/workspace-slugs.js",
+            "/static/js/security.js",
+            "/static/js/app.js",
+        )
+        positions = [self.index.index(path) for path in script_paths]
+        self.assertEqual(positions, sorted(positions))
+        cache_versions = [
+            re.search(rf'{re.escape(path)}\?v=([^"\s]+)', self.index).group(1)
+            for path in script_paths
+        ]
+        self.assertEqual(len(set(cache_versions)), 1)
+
+        for filename, namespace in (
+            ("browser-preferences.js", "BuyerlyBrowserPreferences"),
+            ("workspace-slugs.js", "BuyerlyWorkspaceSlugs"),
+            ("security.js", "BuyerlySecurity"),
+        ):
+            self.assertIn(namespace, self.scripts[filename])
+            self.assertIn(f"window.{namespace}", self.app_script)
+
+        for extracted_definition in (
+            "function readBrowserPreference(",
+            "function slugifyText(",
+            "function sanitizeUrl(",
+        ):
+            self.assertNotIn(extracted_definition, self.app_script)
+
+        self.assertIn("find webapp/js -type f -name '*.js'", self.workflow)
+        self.assertIn("node --check", self.workflow)
 
     def test_frontend_uses_current_rule_endpoints(self):
         self.assertNotIn("/apply-preset", self.script)
@@ -429,7 +468,6 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn('.summary-column-resizer', self.styles)
         self.assertIn('.summary-column-resizing', self.styles)
         self.assertIn('table-layout: fixed', self.styles)
-        self.assertTrue('v=9.22.0' in self.index or 'v=9.23.0' in self.index)
 
     def test_account_groups_scope_the_whole_summary_and_keep_profile_columns_configurable(self):
         for contract in (
