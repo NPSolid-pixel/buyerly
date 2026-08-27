@@ -2,6 +2,7 @@ import json
 import unittest
 
 from sqlalchemy import inspect, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from database.db import (
     migrate_account_profile_contract,
@@ -15,7 +16,21 @@ from database.db import (
     migrate_rule_groups_position,
     migrate_rule_metric_contract,
     migrate_rule_safety_contract,
+    migrate_rule_workspace_contract,
     migrate_stable_owner_contract,
+)
+from database.rule_workspace_contract import (
+    WORKSPACE_REVIEW_REASON,
+    scope_runtime_rule_snapshots,
+)
+from database.models import (
+    Account,
+    RuleGroup,
+    RuleGroupItem,
+    RulePreset,
+    User,
+    Workspace,
+    WorkspaceMember,
 )
 from tests.test_db_helper import create_test_engine, init_test_db
 
@@ -709,6 +724,174 @@ class TestNativeJsonbMigration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second, {"converted": 0, "malformed": 1})
 
 
+class TestRuleWorkspaceMigration(unittest.IsolatedAsyncioTestCase):
+    async def test_snapshot_helper_stamps_safe_rules_and_disables_unsafe_rules(self):
+        rules, changed, disabled = scope_runtime_rule_snapshots(
+            [
+                {"preset_id": 10, "name": "safe"},
+                {"preset_id": 20, "name": "cross"},
+                {"preset_id": 999, "name": "missing"},
+                "malformed",
+            ],
+            account_workspace_id=1,
+            preset_workspaces={10: 1, 20: 2},
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(disabled, 2)
+        self.assertEqual(rules[0]["workspace_id"], 1)
+        self.assertNotIn("needs_review", rules[0])
+        self.assertFalse(rules[1]["enabled"])
+        self.assertTrue(rules[1]["needs_review"])
+        self.assertEqual(rules[1]["review_reason"], WORKSPACE_REVIEW_REASON)
+        self.assertFalse(rules[2]["enabled"])
+        self.assertEqual(len(rules), 3)
+
+    async def test_runtime_migration_backfills_and_enforces_group_workspace(self):
+        engine = create_test_engine()
+        sessions = async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+        try:
+            await init_test_db(engine)
+            async with sessions() as session:
+                owner = User(username="rule-migration-owner", is_approved=True)
+                session.add(owner)
+                await session.flush()
+                first_workspace = Workspace(
+                    name="First workspace",
+                    slug="rule-migration-first",
+                    owner_user_id=owner.id,
+                )
+                second_workspace = Workspace(
+                    name="Second workspace",
+                    slug="rule-migration-second",
+                    owner_user_id=owner.id,
+                )
+                session.add_all([first_workspace, second_workspace])
+                await session.flush()
+                session.add_all(
+                    [
+                        WorkspaceMember(
+                            workspace_id=first_workspace.id,
+                            user_id=owner.id,
+                            role="owner",
+                        ),
+                        WorkspaceMember(
+                            workspace_id=second_workspace.id,
+                            user_id=owner.id,
+                            role="owner",
+                        ),
+                    ]
+                )
+                owner.active_workspace_id = first_workspace.id
+                safe_preset = RulePreset(
+                    workspace_id=None,
+                    owner_user_id=owner.id,
+                    name="Legacy safe",
+                    action="turn_off",
+                    conditions=[],
+                )
+                cross_preset = RulePreset(
+                    workspace_id=second_workspace.id,
+                    owner_user_id=owner.id,
+                    name="Cross workspace",
+                    action="turn_off",
+                    conditions=[],
+                )
+                group = RuleGroup(
+                    workspace_id=first_workspace.id,
+                    owner_user_id=owner.id,
+                    name="First group",
+                    position=9,
+                )
+                session.add_all([safe_preset, cross_preset, group])
+                await session.flush()
+                session.add(
+                    RuleGroupItem(
+                        group_id=group.id,
+                        preset_id=cross_preset.id,
+                        position=0,
+                    )
+                )
+                session.add(
+                    Account(
+                        account_id="act_rule_migration",
+                        name="Migration account",
+                        workspace_id=first_workspace.id,
+                        owner_user_id=owner.id,
+                        currency="USD",
+                        rules_enabled=True,
+                        active_rules=json.dumps(
+                            [
+                                {"preset_id": safe_preset.id, "name": "safe"},
+                                {"preset_id": cross_preset.id, "name": "cross"},
+                            ]
+                        ),
+                    )
+                )
+                await session.commit()
+                safe_preset_id = safe_preset.id
+                cross_preset_id = cross_preset.id
+                group_id = group.id
+                workspace_id = first_workspace.id
+
+            async with engine.begin() as conn:
+                first = await migrate_rule_workspace_contract(conn)
+                second = await migrate_rule_workspace_contract(conn)
+                stored_workspace = (
+                    await conn.execute(
+                        text("SELECT workspace_id FROM rule_presets WHERE id = :id"),
+                        {"id": safe_preset_id},
+                    )
+                ).scalar_one()
+                stored_rules = json.loads(
+                    (
+                        await conn.execute(
+                            text(
+                                "SELECT active_rules FROM accounts "
+                                "WHERE account_id = 'act_rule_migration'"
+                            )
+                        )
+                    ).scalar_one()
+                )
+                link_count = (
+                    await conn.execute(
+                        text(
+                            "SELECT COUNT(*) FROM rule_group_items "
+                            "WHERE group_id = :group_id"
+                        ),
+                        {"group_id": group_id},
+                    )
+                ).scalar_one()
+
+            self.assertEqual(stored_workspace, workspace_id)
+            self.assertEqual(first["presets_backfilled"], 1)
+            self.assertEqual(first["group_links_removed"], 1)
+            self.assertEqual(first["snapshots_changed"], 1)
+            self.assertEqual(first["snapshots_disabled"], 1)
+            self.assertFalse(any(second.values()))
+            self.assertEqual(stored_rules[0]["workspace_id"], workspace_id)
+            self.assertTrue(stored_rules[1]["needs_review"])
+            self.assertEqual(link_count, 0)
+
+            with self.assertRaises(Exception):
+                async with engine.begin() as conn:
+                    await conn.execute(
+                        text(
+                            "INSERT INTO rule_group_items "
+                            "(group_id, preset_id, position, created_at) "
+                            "VALUES (:group_id, :preset_id, 0, NOW())"
+                        ),
+                        {"group_id": group_id, "preset_id": cross_preset_id},
+                    )
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
+
 class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
     async def test_alembic_upgrade_head_applies_successfully(self):
         from alembic.config import Config
@@ -731,7 +914,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-            self.assertEqual(version, "0007_native_jsonb")
+            self.assertEqual(version, "0008_rule_workspace_scope")
 
             command.downgrade(alembic_cfg, "base")
         finally:

@@ -140,13 +140,14 @@ def _runtime_payload(definition: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def ensure_rule_examples(session, user: User) -> bool:
+async def ensure_rule_examples(session, user: User, *, workspace_id: int) -> bool:
     """Create safe, unassigned examples once; deletion remains permanent."""
 
     existing = (
         await session.execute(
             select(RuleExamplesBootstrap).where(
-                RuleExamplesBootstrap.owner_user_id == user.id
+                RuleExamplesBootstrap.owner_user_id == user.id,
+                RuleExamplesBootstrap.workspace_id == workspace_id,
             )
         )
     ).scalar_one_or_none()
@@ -154,6 +155,7 @@ async def ensure_rule_examples(session, user: User) -> bool:
         return False
 
     marker = RuleExamplesBootstrap(
+        workspace_id=workspace_id,
         owner_user_id=user.id,
         version=RULE_EXAMPLES_VERSION,
     )
@@ -168,7 +170,7 @@ async def ensure_rule_examples(session, user: User) -> bool:
     for definition in EXAMPLE_PRESETS:
         validate_runtime_rule(_runtime_payload(definition))
         preset = RulePreset(
-            workspace_id=user.active_workspace_id,
+            workspace_id=workspace_id,
             owner_user_id=user.id,
             name=definition["name"],
             action=definition["action"],
@@ -186,7 +188,7 @@ async def ensure_rule_examples(session, user: User) -> bool:
 
     for group_definition in EXAMPLE_GROUPS:
         group = RuleGroup(
-            workspace_id=user.active_workspace_id,
+            workspace_id=workspace_id,
             owner_user_id=user.id,
             name=group_definition["name"],
             description=group_definition["description"],

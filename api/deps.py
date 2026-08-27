@@ -613,6 +613,7 @@ def _preset_snapshot(preset: RulePreset) -> Dict[str, Any]:
     normalized_conditions, _, has_legacy_cpa = normalize_rule_conditions(conditions)
     snapshot = {
         "preset_id": preset.id,
+        "workspace_id": preset.workspace_id,
         "name": preset.name,
         "action": preset.action,
         "conditions": normalized_conditions,
@@ -718,24 +719,16 @@ def _clean_rule_group_name(value: str) -> str:
     return name
 
 
-async def _get_owned_presets(
+async def _get_workspace_presets(
     session,
-    user: User,
     preset_ids: List[int],
     *,
-    owner_user_id: Optional[int] = None,
-    owner_id: str = "",
+    workspace_id: int,
 ) -> List[RulePreset]:
     ordered_ids = _unique_preset_ids(preset_ids)
-    target_user_id = owner_user_id if owner_user_id is not None else getattr(user, "id", None)
-    owner_clause = (
-        RulePreset.owner_user_id == target_user_id
-        if target_user_id is not None
-        else owned_by(RulePreset, user)
-    )
     result = await session.execute(
         select(RulePreset).where(
-            owner_clause,
+            RulePreset.workspace_id == workspace_id,
             RulePreset.id.in_(ordered_ids),
         )
     )
@@ -761,7 +754,12 @@ def _rule_group_response(group: RuleGroup, presets: List[RulePreset]) -> RuleGro
     )
 
 
-async def _load_group_presets(session, group_ids: List[int]) -> Dict[int, List[RulePreset]]:
+async def _load_group_presets(
+    session,
+    group_ids: List[int],
+    *,
+    workspace_id: int,
+) -> Dict[int, List[RulePreset]]:
     if not group_ids:
         return {}
     item_rows = (
@@ -773,7 +771,12 @@ async def _load_group_presets(session, group_ids: List[int]) -> Dict[int, List[R
     ).scalars().all()
     preset_ids = list(dict.fromkeys(item.preset_id for item in item_rows))
     presets = (
-        await session.execute(select(RulePreset).where(RulePreset.id.in_(preset_ids)))
+        await session.execute(
+            select(RulePreset).where(
+                RulePreset.id.in_(preset_ids),
+                RulePreset.workspace_id == workspace_id,
+            )
+        )
     ).scalars().all() if preset_ids else []
     by_id = {preset.id: preset for preset in presets}
     grouped: Dict[int, List[RulePreset]] = {group_id: [] for group_id in group_ids}
