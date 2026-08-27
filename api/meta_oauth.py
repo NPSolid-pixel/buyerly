@@ -32,6 +32,7 @@ from core.timezones import canonical_timezone_name, resolve_account_clock
 from database.db import async_session_maker
 from database.models import (
     Account,
+    AuditEvent,
     MetaConnection,
     MetaConnectionAsset,
     MetaOAuthState,
@@ -110,18 +111,28 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-async def _owned_connection(session, connection_id: int, user: User) -> MetaConnection:
+async def _workspace_connection(
+    session,
+    connection_id: int,
+    user: User,
+    *,
+    require_write: bool = False,
+) -> tuple[MetaConnection, object, object]:
+    ws, member = await get_user_workspace_member(session, user)
+    if require_write:
+        ensure_workspace_write_access(user, member, "изменения подключения Meta")
     connection = (
         await session.execute(
             select(MetaConnection).where(
                 MetaConnection.id == connection_id,
-                owned_by(MetaConnection, user),
+                MetaConnection.workspace_id == ws.id,
+                MetaConnection.owner_user_id == user.id,
             )
         )
     ).scalar_one_or_none()
     if not connection:
         raise HTTPException(status_code=404, detail="Подключение Meta не найдено")
-    return connection
+    return connection, ws, member
 
 
 def _serialize_asset(asset: MetaConnectionAsset, imported_ids: set[str]) -> dict:
@@ -300,10 +311,14 @@ async def oauth_callback(
 @router.get("/connections")
 async def list_connections(user: User = Depends(get_current_user)):
     async with async_session_maker() as session:
+        ws = await get_user_workspace(session, user)
         rows = (
             await session.execute(
                 select(MetaConnection)
-                .where(owned_by(MetaConnection, user))
+                .where(
+                    MetaConnection.workspace_id == ws.id,
+                    MetaConnection.owner_user_id == user.id,
+                )
                 .order_by(MetaConnection.updated_at.desc())
             )
         ).scalars().all()
@@ -323,6 +338,76 @@ async def list_connections(user: User = Depends(get_current_user)):
     ]
 
 
+@router.delete("/connections/{connection_id}")
+async def delete_connection(
+    connection_id: int,
+    user: User = Depends(get_current_user),
+):
+    """Delete encrypted Meta credentials and safely disable linked accounts."""
+
+    async with async_session_maker() as session:
+        connection, ws, _ = await _workspace_connection(
+            session,
+            connection_id,
+            user,
+            require_write=True,
+        )
+        linked_accounts = (
+            await session.execute(
+                select(Account).where(
+                    Account.workspace_id == ws.id,
+                    Account.meta_connection_id == connection.id,
+                )
+            )
+        ).scalars().all()
+        account_ids = [account.account_id for account in linked_accounts]
+        for account in linked_accounts:
+            account.meta_connection_id = None
+            account.rules_enabled = False
+            account.is_active = False
+            account.status_label = "Требуется подключение Meta"
+
+        session.add(
+            AuditEvent(
+                workspace_id=ws.id,
+                owner_user_id=connection.owner_user_id,
+                actor_type="user",
+                actor_id=str(user.telegram_id or user.id),
+                category="MANUAL_ACTION",
+                event_type="META_CONNECTION_DISCONNECTED",
+                status="SUCCESS",
+                action="DELETE_CONNECTION",
+                message=(
+                    "Подключение Meta удалено; связанные кабинеты безопасно отключены."
+                ),
+                before_state={
+                    "connection_id": connection.id,
+                    "status": connection.status,
+                    "linked_account_count": len(linked_accounts),
+                },
+                after_state={
+                    "connection_deleted": True,
+                    "accounts_disabled": True,
+                },
+                details={
+                    "provider_user_id": connection.provider_user_id,
+                    "account_ids": account_ids,
+                },
+                correlation_id=secrets.token_hex(16),
+            )
+        )
+        await session.delete(connection)
+        await session.commit()
+
+    return {
+        "success": True,
+        "connection_id": connection_id,
+        "detached_account_count": len(account_ids),
+        "detached_account_ids": account_ids,
+        "message": "Подключение Meta удалено. Связанные кабинеты отключены до переподключения.",
+    }
+
+
 @router.post("/connections/{connection_id}/discover")
 async def discover_accounts(
     connection_id: int,
@@ -330,7 +415,12 @@ async def discover_accounts(
 ):
     now = datetime.now(timezone.utc)
     async with async_session_maker() as session:
-        connection = await _owned_connection(session, connection_id, user)
+        connection, _, _ = await _workspace_connection(
+            session,
+            connection_id,
+            user,
+            require_write=True,
+        )
         try:
             access_token = decrypt_meta_token(connection.access_token_encrypted)
             client = _oauth_client()
@@ -405,8 +495,11 @@ async def list_connection_assets(
     user: User = Depends(get_current_user),
 ):
     async with async_session_maker() as session:
-        connection = await _owned_connection(session, connection_id, user)
-        ws = await get_user_workspace(session, user)
+        connection, ws, _ = await _workspace_connection(
+            session,
+            connection_id,
+            user,
+        )
         assets = (
             await session.execute(
                 select(MetaConnectionAsset)
@@ -464,9 +557,12 @@ async def import_accounts(
     added: list[dict] = []
     errors: list[dict] = []
     async with async_session_maker() as session:
-        connection = await _owned_connection(session, connection_id, user)
-        ws, member = await get_user_workspace_member(session, user)
-        ensure_workspace_write_access(user, member, "импорта рекламных кабинетов")
+        connection, ws, member = await _workspace_connection(
+            session,
+            connection_id,
+            user,
+            require_write=True,
+        )
         caller_role = member.role if member else "buyer"
 
         if connection.status != "active":

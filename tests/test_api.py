@@ -112,6 +112,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             )
             session.add_all([ws_admin, ws_buyer])
             await session.flush()
+            self.ws_buyer_id = ws_buyer.id
 
             session.add(WorkspaceMember(workspace_id=ws_admin.id, user_id=admin_user.id, role="owner"))
             session.add(WorkspaceMember(workspace_id=ws_buyer.id, user_id=buyer_user.id, role="owner"))
@@ -787,6 +788,24 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(d_resp.status_code, 200)
             self.assertEqual(d_resp.json()["active_rules"], [])
             self.assertFalse(d_resp.json()["rules_enabled"])
+
+            delete_response = await client.delete(
+                f"/api/presets/{p_data['id']}",
+                headers=headers,
+            )
+            self.assertEqual(delete_response.status_code, 200)
+
+        async with self.test_session_maker() as session:
+            delete_audit = (
+                await session.execute(
+                    select(AuditEvent).where(
+                        AuditEvent.event_type == "DELETE_RULE_PRESET",
+                        AuditEvent.rule_id == p_data["id"],
+                    )
+                )
+            ).scalar_one()
+        self.assertEqual(delete_audit.workspace_id, self.ws_buyer_id)
+        self.assertEqual(delete_audit.action, "DELETE")
 
     async def test_account_rejects_rules_with_opposite_actions_and_same_trigger(self):
         init_data = generate_valid_telegram_init_data(

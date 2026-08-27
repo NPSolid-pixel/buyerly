@@ -4459,15 +4459,26 @@
     const idsToDelete = [...state.selectedRuleIds];
     showGlobalLoading(`Удаление правил (${count})...`);
     try {
-      for (const id of idsToDelete) {
-        await apiFetch(`/api/rules/presets/${id}`, { method: 'DELETE' });
-      }
-      state.selectedRuleIds.clear();
+      const results = await Promise.allSettled(
+        idsToDelete.map(id => apiRequest(`/api/presets/${id}`, { method: 'DELETE' }))
+      );
+      const deletedIds = idsToDelete.filter((_, index) => results[index].status === 'fulfilled');
+      const failedResults = results.filter(result => result.status === 'rejected');
+      deletedIds.forEach(id => state.selectedRuleIds.delete(id));
       updateRulesBulkActionsBar();
-      await loadRulePresets();
-      await loadRuleGroups();
+      await Promise.all([loadRulePresets(), loadRuleGroups(), loadAccounts()]);
       renderRulesTab();
-      showToast(`Успешно удалено правил: ${count}`, 'success');
+      if (failedResults.length === 0) {
+        showToast(`Успешно удалено правил: ${deletedIds.length}`, 'success');
+      } else if (deletedIds.length > 0) {
+        showToast(
+          `Удалено: ${deletedIds.length}. Не удалось удалить: ${failedResults.length}. Ошибочные правила остались выбранными.`,
+          'warning'
+        );
+      } else {
+        const firstError = failedResults[0]?.reason?.message || 'Не удалось удалить выбранные правила';
+        showToast(`Ошибка удаления: ${firstError}`, 'error');
+      }
     } catch (err) {
       showToast(`Ошибка удаления: ${err.message}`, 'error');
     } finally {
@@ -6538,21 +6549,6 @@
         input.classList.add('hidden');
         display.classList.remove('hidden');
       }
-    }
-  };
-
-  window.runRuleCheckNow = async function () {
-    haptic('impact', 'medium');
-    showToast('Запущена ручная проверка правила...', 'info');
-    try {
-      await apiRequest('/api/worker/run-now', { method: 'POST' });
-      showToast('Проверка успешно выполнена!', 'success');
-      if (state.currentRecordPresetId) {
-        const preset = state.presets.find(p => p.id === state.currentRecordPresetId);
-        if (preset) await window.loadRuleRecordActivity(preset.id, preset.name);
-      }
-    } catch (e) {
-      showToast(`Результат проверки: ${e.message}`, 'info');
     }
   };
 
