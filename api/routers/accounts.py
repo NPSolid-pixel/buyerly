@@ -332,14 +332,6 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
         raise HTTPException(status_code=400, detail="Укажите Access Token Meta.")
 
     token = payload.access_token.strip()
-    try:
-        _ = encrypt_meta_token(token)
-    except MetaTokenError as exc:
-        logger.error("Manual Meta token encryption is unavailable: %s", exc)
-        raise HTTPException(
-            status_code=503,
-            detail="Безопасное сохранение Meta Access Token временно недоступно.",
-        ) from exc
     batch_name = (payload.batch_name or "-").strip()
 
     added_list = []
@@ -349,6 +341,14 @@ async def batch_add_accounts(payload: BatchAddRequest, user: User = Depends(get_
         ws, member = await get_user_workspace_member(session, user)
         ensure_workspace_write_access(user, member, "добавления рекламных кабинетов")
         caller_role = member.role if member else "buyer"
+        try:
+            _ = encrypt_meta_token(token)
+        except MetaTokenError as exc:
+            logger.error("Manual Meta token encryption is unavailable: %s", exc)
+            raise HTTPException(
+                status_code=503,
+                detail="Безопасное сохранение Meta Access Token временно недоступно.",
+            ) from exc
 
         for idx, item in enumerate(payload.accounts, start=1):
             acc_id = item.account_id if item.account_id.startswith("act_") else f"act_{item.account_id}"

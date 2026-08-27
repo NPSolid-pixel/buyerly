@@ -5,6 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 import httpx
+from cryptography.fernet import Fernet
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -52,6 +53,8 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         )
 
     async def asyncSetUp(self):
+        self.original_meta_token_key = settings.META_TOKEN_ENCRYPTION_KEY
+        settings.META_TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode("ascii")
         await limiter.reset()
         api_routes_module._summary_cache.clear()
         self.test_engine = create_test_engine()
@@ -114,6 +117,7 @@ class TestWorkspaces(unittest.IsolatedAsyncioTestCase):
         self.app = create_app()
 
     async def asyncTearDown(self):
+        settings.META_TOKEN_ENCRYPTION_KEY = self.original_meta_token_key
         await self.test_engine.dispose()
 
     async def test_workspace_lifecycle_and_data_isolation(self):
