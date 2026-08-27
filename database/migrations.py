@@ -6,8 +6,11 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
-from database.db import Base, engine
+from core.config import settings
+from database.db import Base
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -52,16 +55,30 @@ def _contract_errors(snapshot: dict[str, set[str]]) -> list[str]:
 async def _read_schema_snapshot() -> dict[str, set[str]]:
     import database.models  # noqa: F401
 
-    async with engine.connect() as connection:
-        return await connection.run_sync(_schema_snapshot)
+    migration_engine = create_async_engine(
+        settings.DATABASE_URL,
+        poolclass=NullPool,
+    )
+    try:
+        async with migration_engine.connect() as connection:
+            return await connection.run_sync(_schema_snapshot)
+    finally:
+        await migration_engine.dispose()
 
 
 async def _has_alembic_version_table() -> bool:
-    async with engine.connect() as connection:
-        return await connection.run_sync(
-            lambda sync_connection: "alembic_version"
-            in inspect(sync_connection).get_table_names()
-        )
+    migration_engine = create_async_engine(
+        settings.DATABASE_URL,
+        poolclass=NullPool,
+    )
+    try:
+        async with migration_engine.connect() as connection:
+            return await connection.run_sync(
+                lambda sync_connection: "alembic_version"
+                in inspect(sync_connection).get_table_names()
+            )
+    finally:
+        await migration_engine.dispose()
 
 
 async def _adopt_legacy_schema_if_needed(config: Config) -> None:
@@ -89,14 +106,21 @@ async def _adopt_legacy_schema_if_needed(config: Config) -> None:
 async def _assert_database_at_head(config: Config) -> None:
     expected_heads = set(ScriptDirectory.from_config(config).get_heads())
 
-    async with engine.connect() as connection:
-        current_heads = set(
-            await connection.run_sync(
-                lambda sync_connection: MigrationContext.configure(
-                    sync_connection
-                ).get_current_heads()
+    migration_engine = create_async_engine(
+        settings.DATABASE_URL,
+        poolclass=NullPool,
+    )
+    try:
+        async with migration_engine.connect() as connection:
+            current_heads = set(
+                await connection.run_sync(
+                    lambda sync_connection: MigrationContext.configure(
+                        sync_connection
+                    ).get_current_heads()
+                )
             )
-        )
+    finally:
+        await migration_engine.dispose()
     if current_heads != expected_heads:
         raise RuntimeError(
             "Alembic revision mismatch after upgrade: "
