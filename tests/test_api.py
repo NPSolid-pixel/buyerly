@@ -2076,15 +2076,19 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
 
     async def test_otp_request_delivery_failure_raises_502(self):
         transport = httpx.ASGITransport(app=self.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            with patch("api.routers.auth.send_otp_verification_email", new=AsyncMock(return_value=False)), \
-                 patch("api.routers.auth.settings.RESEND_API_KEY", "re_test_dummy_key"):
-                resp = await client.post(
-                    "/api/auth/request-temporary-password",
-                    json={"email": "deliveryfail@example.com"},
-                )
-                self.assertEqual(resp.status_code, 502)
-                self.assertIn("Не удалось доставить письмо", resp.json()["detail"])
+        orig_key = settings.RESEND_API_KEY
+        settings.RESEND_API_KEY = "re_test_dummy_key"
+        try:
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                with patch("api.routers.auth.send_otp_verification_email", new=AsyncMock(return_value=False)):
+                    resp = await client.post(
+                        "/api/auth/request-temporary-password",
+                        json={"email": "deliveryfail@example.com"},
+                    )
+                    self.assertEqual(resp.status_code, 502)
+                    self.assertIn("Не удалось доставить письмо", resp.json()["detail"])
+        finally:
+            settings.RESEND_API_KEY = orig_key
 
     async def test_otp_brute_force_lockout(self):
         transport = httpx.ASGITransport(app=self.app)

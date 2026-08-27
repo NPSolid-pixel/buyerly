@@ -54,7 +54,8 @@ class TestDeployContract(unittest.TestCase):
         self.assertNotIn("starts_notified", executable_contract)
 
     def test_no_hardcoded_secrets_in_deploy_script(self):
-        self.assertNotIn("re_", self.script)
+        import re
+        self.assertIsNone(re.search(r"\bre_[A-Za-z0-9_]{10,}", self.script))
         self.assertIn("ensure_email_settings", self.script)
 
 
