@@ -26,6 +26,9 @@ POST_BASELINE_COLUMNS = {
         "scope",
         "delivered_at",
     },
+    "meta_oauth_states": {
+        "reconnect_connection_id",
+    },
 }
 
 
