@@ -102,6 +102,8 @@ class TestFrontendRuleContract(unittest.TestCase):
         for contract in (
             'window.startMetaOAuthFlow',
             'window.openManualTokenModal',
+            'window.migrateAccountFromDetails',
+            'Миграция на OAuth',
         ):
             self.assertIn(contract, self.script)
         for endpoint in (
@@ -113,6 +115,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             self.assertIn(endpoint, self.script)
         self.assertIn("meta_connection", self.script)
         self.assertIn("meta-asset-row", self.styles)
+        self.assertIn("badge-migration", self.styles)
+        self.assertIn("account-detail-migration-callout", self.styles)
 
     def test_telegram_mini_app_sends_signed_init_data(self):
         sdk_position = self.index.index("telegram-web-app.js")
