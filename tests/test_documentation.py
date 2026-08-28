@@ -38,6 +38,32 @@ class TestDocumentationContract(unittest.TestCase):
         ):
             self.assertIn(path, readme)
 
+    def test_ux_baseline_covers_routes_states_and_pilots(self):
+        baseline = (
+            PROJECT_ROOT / "docs" / "UX_BASELINE_2026-08-29.md"
+        ).read_text(encoding="utf-8")
+
+        for contract in (
+            "/sign-in",
+            "/facebook-accounts",
+            "/accounts",
+            "/rules",
+            "/summary",
+            "/logs",
+            "/settings",
+            "Loading",
+            "Empty",
+            "Populated",
+            "Error",
+            "Partial",
+            "Long content",
+            "Permission denied",
+            "### Today",
+            "### Automations",
+            "### Connections",
+        ):
+            self.assertIn(contract, baseline)
+
 
 if __name__ == "__main__":
     unittest.main()

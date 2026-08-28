@@ -63,6 +63,10 @@
   - Устранена ошибка базы данных при импорте найденных Meta OAuth аккаунтов.
 
 ### Documentation & Integrations
+- **UX baseline и карта интерфейса (`86eyr6074`)**:
+  - Зафиксированы public, onboarding и authenticated routes, их desktop/mobile states и воспроизводимый source snapshot contract.
+  - Проведена инвентаризация навигации, таблиц, карточек, фильтров, модальных паттернов, терминологии, локализации, плотности и визуальных токенов.
+  - Выбраны три пилотных экрана для foundation-миграции: Today, Automations и Connections.
 - **Подготовка пакета модерации Meta App Review и фиксация настроек пилота Meta OAuth (`[86eyr6078]`)**:
   - Создан полный пакет подачи заявки на модерацию в `docs/META_APP_REVIEW_SUBMISSION.md`: обоснования на английском языке для прав `ads_read`, `ads_management`, `business_management`, пошаговый сценарий скринкаста и инструкции для проверяющих инженеров Meta.
   - Актуализирован план и чек-лист интеграции в `docs/FACEBOOK_AUTHORIZATION_PLAN.md`: зафиксированы `App ID` (`1363654095968021`), `Login Configuration ID` (`1796379231385440`), настройки редиректов `https://buyerly.app/api/meta/oauth/callback`, привязка домена и публичных политик.
