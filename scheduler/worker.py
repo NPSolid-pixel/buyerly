@@ -6,7 +6,7 @@ import hashlib
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Callable, Awaitable, Any
+from typing import Optional, Callable, Awaitable, Any, List, Dict
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
