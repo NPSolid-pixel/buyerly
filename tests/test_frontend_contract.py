@@ -255,6 +255,47 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("onclick=\"window.switchTab('rules')\"", self.index)
         self.assertIn("onclick=\"window.switchTab('logs')\"", self.index)
 
+    def test_connections_page_uses_responsive_workspace_layout(self):
+        for markup_contract in (
+            'class="connections-page-inner"',
+            'class="connections-page-header"',
+            'class="connections-summary-grid"',
+            'id="fbConnectionsSummaryCount"',
+            'id="fbConnectionsActiveCount"',
+            'id="fbConnectionsAccountsCount"',
+            'class="connections-panel"',
+            'class="connections-toolbar"',
+            'id="fbConnectionsMobileList"',
+        ):
+            self.assertIn(markup_contract, self.index)
+
+        for style_contract in (
+            '.connections-page-header',
+            '.connections-summary-grid',
+            '.connections-panel',
+            '.connections-table-viewport',
+            '.connections-mobile-card',
+            '@media (max-width: 1180px)',
+        ):
+            self.assertIn(style_contract, self.styles)
+
+        for script_contract in (
+            "document.getElementById('fbConnectionsMobileList')",
+            "document.getElementById('fbConnectionsSummaryCount')",
+            "document.getElementById('fbConnectionsActiveCount')",
+            "document.getElementById('fbConnectionsAccountsCount')",
+        ):
+            self.assertIn(script_contract, self.script)
+
+        for automation_contract in (
+            'class="automations-summary-grid"',
+            'id="rulesActiveCount"',
+            'id="rulesGroupsCount"',
+            'id="rulesLinkedAccsCount"',
+            '[data-ui-pilot="automations"] .rules-board-wrapper',
+        ):
+            self.assertIn(automation_contract, self.index + self.styles)
+
     def test_logs_are_a_first_class_section_not_a_summary_table(self):
         self.assertIn('data-tab="logs"', self.index)
         self.assertIn('id="tab-logs"', self.index)

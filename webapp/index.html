@@ -11,10 +11,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   
   <!-- App Stylesheet & Favicon -->
-  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=10.0.0">
+  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=10.1.0">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
-  <link rel="stylesheet" href="/static/css/styles.css?v=10.0.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=10.1.0">
 </head>
 
 <body>
@@ -516,44 +516,69 @@
       <!-- ============================================== -->
       <!-- TAB: FACEBOOK АККАУНТЫ (FB ACCOUNTS / PROFILES) -->
       <!-- ============================================== -->
-      <section id="tab-fb_accounts" class="tab-content ui-page" data-ui-pilot="connections">
-        <!-- Attio View Header -->
-        <div class="attio-view-header ui-page-header">
-          <div class="attio-view-header-left">
-            <div class="attio-view-selector">
-              <div class="attio-view-icon-badge" style="background: #EBF3FF; color: #1877F2;">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-              </div>
-              <div><span class="attio-view-title">Подключения Meta</span><p class="ui-page-description">Facebook-профили, Business Manager и состояние доступа в одном месте.</p></div>
+      <section id="tab-fb_accounts" class="tab-content connections-page" data-ui-pilot="connections">
+        <div class="connections-page-inner">
+          <header class="connections-page-header">
+            <div class="connections-title-block">
+              <span class="connections-eyebrow">Интеграции Meta</span>
+              <h1>Подключения Meta</h1>
+              <p>Управляйте Facebook-профилями, доступом к Business Manager и состоянием токенов в одном месте.</p>
             </div>
-            <label class="connections-search" for="fbConnectionsSearch">
-              <span class="sr-only">Поиск подключений</span>
-              <input type="search" id="fbConnectionsSearch" class="attio-input" placeholder="Найти подключение…" autocomplete="off" oninput="window.filterFacebookConnections(this.value)">
-              <span id="fbConnectionsResultCount" class="connections-search-count" aria-live="polite"></span>
-            </label>
-          </div>
-          <div class="attio-view-header-right">
-            <button class="attio-header-btn ui-button" type="button" onclick="window.switchTab('accounts')">
-              <span>Рекламные кабинеты</span>
-            </button>
-            <button class="attio-header-btn ui-button" type="button" onclick="window.openManualTokenModal()">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-              <span>По токену</span>
-            </button>
-            <button class="attio-header-btn ui-button" type="button" onclick="window.openMetaInviteModal()" title="Отправить одноразовую ссылку байеру для подключения Facebook-профиля">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-              <span>Пригласить</span>
-            </button>
-            <button class="btn btn-primary btn-sm ui-button ui-button-primary" onclick="window.startMetaOAuthFlow()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Подключить Facebook</span>
-            </button>
-          </div>
-        </div>
+            <div class="connections-hero-actions">
+              <button class="ui-button" type="button" onclick="window.openMetaInviteModal()" title="Отправить одноразовую ссылку байеру для подключения Facebook-профиля">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                <span>Пригласить байера</span>
+              </button>
+              <button class="ui-button ui-button-primary" type="button" onclick="window.startMetaOAuthFlow()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Подключить Facebook</span>
+              </button>
+            </div>
+          </header>
 
-        <!-- FB Accounts Table Container -->
-        <div id="fbAccountsListContainer">
-          <div class="attio-table-viewport">
+          <section class="connections-summary-grid" aria-label="Состояние подключений">
+            <article class="connections-summary-card">
+              <span class="connections-summary-label">Профили</span>
+              <strong id="fbConnectionsSummaryCount">0</strong>
+              <span class="connections-summary-note">Подключено к рабочему пространству</span>
+            </article>
+            <article class="connections-summary-card">
+              <span class="connections-summary-label">Активный доступ</span>
+              <strong id="fbConnectionsActiveCount">0</strong>
+              <span class="connections-summary-note">Токены работают без ошибок</span>
+            </article>
+            <article class="connections-summary-card">
+              <span class="connections-summary-label">Рекламные кабинеты</span>
+              <strong id="fbConnectionsAccountsCount">0</strong>
+              <span class="connections-summary-note">Доступны для автоматизаций</span>
+            </article>
+          </section>
+
+          <section class="connections-panel" aria-labelledby="connectionsPanelTitle">
+            <div class="connections-toolbar">
+              <div class="connections-toolbar-title">
+                <h2 id="connectionsPanelTitle">Профили и доступ</h2>
+                <span id="fbConnectionsResultCount" class="connections-search-count" aria-live="polite">0</span>
+              </div>
+              <div class="connections-toolbar-actions">
+                <label class="connections-search" for="fbConnectionsSearch">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                  <span class="sr-only">Поиск подключений</span>
+                  <input type="search" id="fbConnectionsSearch" class="attio-input" placeholder="Найти профиль или ID…" autocomplete="off" oninput="window.filterFacebookConnections(this.value)">
+                </label>
+                <button class="ui-button" type="button" onclick="window.switchTab('accounts')">
+                  <span>Все кабинеты</span>
+                </button>
+                <button class="ui-button" type="button" onclick="window.openManualTokenModal()">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                  <span>Добавить по токену</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- FB Accounts Table Container -->
+            <div id="fbAccountsListContainer" class="connections-list-container">
+              <div class="attio-table-viewport connections-table-viewport connections-desktop-list">
             <table class="attio-table ui-table" id="fbAccountsTable">
               <thead>
                 <tr>
@@ -619,8 +644,9 @@
                 <!-- Dynamically populated by renderFacebookAccounts() -->
               </tbody>
             </table>
-          </div>
-          <div id="fbAccountsEmptyState" class="empty-state ui-empty-state hidden">
+              </div>
+              <div id="fbConnectionsMobileList" class="connections-mobile-list" aria-live="polite"></div>
+              <div id="fbAccountsEmptyState" class="empty-state ui-empty-state hidden">
             <div class="empty-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
@@ -635,7 +661,9 @@
                 По токену
               </button>
             </div>
-          </div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -794,6 +822,24 @@
               </button>
             </div>
           </div>
+
+          <section class="automations-summary-grid" aria-label="Состояние автоматизаций">
+            <article class="automations-summary-card">
+              <span>Правила</span>
+              <strong id="rulesActiveCount">0</strong>
+              <small>Доступно в рабочем пространстве</small>
+            </article>
+            <article class="automations-summary-card">
+              <span>Группы</span>
+              <strong id="rulesGroupsCount">0</strong>
+              <small>Сценарии организованы по задачам</small>
+            </article>
+            <article class="automations-summary-card">
+              <span>Кабинеты под контролем</span>
+              <strong id="rulesLinkedAccsCount">0</strong>
+              <small>Есть активные назначения правил</small>
+            </article>
+          </section>
 
           <!-- Kanban Board: Groups as Columns & Rules as Cards -->
           <div class="rules-board-wrapper">
@@ -3154,10 +3200,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.0.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.0.0"></script>
-  <script src="/static/js/security.js?v=10.0.0"></script>
-  <script src="/static/js/i18n.js?v=10.0.0"></script>
-  <script src="/static/js/app.js?v=10.0.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.1.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.1.0"></script>
+  <script src="/static/js/security.js?v=10.1.0"></script>
+  <script src="/static/js/i18n.js?v=10.1.0"></script>
+  <script src="/static/js/app.js?v=10.1.0"></script>
 </body>
 </html>

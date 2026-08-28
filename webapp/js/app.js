@@ -4014,6 +4014,10 @@
     const emptyText = document.getElementById('fbAccountsEmptyText');
     const emptyActions = document.getElementById('fbAccountsEmptyActions');
     const resultCount = document.getElementById('fbConnectionsResultCount');
+    const mobileList = document.getElementById('fbConnectionsMobileList');
+    const summaryCount = document.getElementById('fbConnectionsSummaryCount');
+    const activeCount = document.getElementById('fbConnectionsActiveCount');
+    const accountsCount = document.getElementById('fbConnectionsAccountsCount');
     if (!tableBody) return;
 
     const allConnections = state.fbConnections || [];
@@ -4031,9 +4035,13 @@
     const elSidebarCount = document.getElementById('sidebarFbAccountsCount');
     if (elSidebarCount) elSidebarCount.textContent = totalCount;
     if (resultCount) resultCount.textContent = query ? `${connections.length} из ${totalCount}` : `${totalCount}`;
+    if (summaryCount) summaryCount.textContent = totalCount;
+    if (activeCount) activeCount.textContent = allConnections.filter((connection) => connection.status === 'active').length;
+    if (accountsCount) accountsCount.textContent = (state.accounts || []).length;
 
     if (connections.length === 0) {
       tableBody.innerHTML = '';
+      if (mobileList) mobileList.innerHTML = '';
       if (emptyEl) emptyEl.classList.remove('hidden');
       if (emptyTitle) emptyTitle.textContent = query ? 'Подключения не найдены' : 'Нет подключений Meta';
       if (emptyText) emptyText.textContent = query
@@ -4141,6 +4149,64 @@
     }).join('');
 
     tableBody.innerHTML = html;
+    if (mobileList) {
+      const linkedAccounts = state.accounts || [];
+      let totalSpend = 0;
+      linkedAccounts.forEach((account) => {
+        const spend = account.today_spend || account.insights?.spend || 0;
+        totalSpend += typeof spend === 'number' ? spend : 0;
+      });
+      const spendFormatted = totalSpend > 0 ? `$${totalSpend.toFixed(2)}` : '$0.00';
+
+      mobileList.innerHTML = connections.map((connection) => {
+        const name = connection.provider_user_name || 'Facebook User';
+        const uid = connection.provider_user_id || '—';
+        const initial = name.charAt(0).toUpperCase();
+        const rkCount = linkedAccounts.length;
+        let tokenClass = 'green';
+        let tokenText = 'Активен';
+        if (connection.status === 'active' && typeof connection.days_until_expiration === 'number') {
+          tokenText = `Активен (${connection.days_until_expiration} дн.)`;
+        } else if (connection.status === 'expiring') {
+          tokenClass = 'amber';
+          tokenText = `Истекает (${connection.days_until_expiration || 0} дн.)`;
+        } else if (connection.status === 'expired') {
+          tokenClass = 'red';
+          tokenText = 'Срок истёк';
+        } else if (connection.status === 'missing_scopes') {
+          tokenClass = 'red';
+          tokenText = 'Отозваны права';
+        } else if (connection.status !== 'active') {
+          tokenClass = 'red';
+          tokenText = 'Требует внимания';
+        }
+
+        return `
+          <article class="connections-mobile-card">
+            <div class="connections-mobile-card-head">
+              <div class="connections-mobile-identity">
+                <div class="connections-mobile-avatar" aria-hidden="true">${escapeHtml(initial)}</div>
+                <div style="min-width: 0;">
+                  <div class="connections-mobile-name">${escapeHtml(name)}</div>
+                  <div class="connections-mobile-id">UID: ${escapeHtml(uid)}</div>
+                </div>
+              </div>
+              <span class="status-pill ${tokenClass}"><span class="status-dot"></span>${escapeHtml(tokenText)}</span>
+            </div>
+            <div class="connections-mobile-details">
+              <div class="connections-mobile-detail"><span>Кабинеты</span><strong>${rkCount}</strong></div>
+              <div class="connections-mobile-detail"><span>Расход сегодня</span><strong>${escapeHtml(spendFormatted)}</strong></div>
+            </div>
+            <div class="connections-mobile-actions">
+              <button class="ui-button" type="button" onclick="window.validateMetaConnection(${connection.id})">Проверить токен</button>
+              <button class="ui-button" type="button" onclick="window.discoverMetaConnectionAssets(${connection.id})">Синхронизировать</button>
+              <button class="ui-button" type="button" onclick="window.reconnectMetaConnection(${connection.id})">Переподключить</button>
+              <button class="ui-button ui-button-danger" type="button" onclick="window.deleteMetaConnectionPrompt(${connection.id})">Удалить</button>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
   }
 
   window.filterFacebookConnections = function (value) {
