@@ -973,6 +973,164 @@ class MetaClient:
 
         return unified_adsets
 
+    async def get_hierarchical_insights(
+        self,
+        account_id: str,
+        access_token: str,
+        date_preset: str = "today",
+        currency: str = "UNKNOWN",
+        account_name: str = "",
+        priority: str = "normal",
+    ) -> List[Dict[str, Any]]:
+        """Fetch normalized hierarchical metric facts across Account, Campaign, AdSet and Ad levels."""
+        acc_id = account_id if account_id.startswith("act_") else f"act_{account_id}"
+        normalized_currency = normalize_currency(currency)
+        facts: List[Dict[str, Any]] = []
+
+        # 1. Account Level Fact
+        acc_summary = await self.get_account_insights_summary(
+            account_id=acc_id,
+            access_token=access_token,
+            date_preset=date_preset,
+        )
+        acc_spend = acc_summary.get("spend", 0.0)
+        acc_clicks = acc_summary.get("clicks", 0)
+        acc_impressions = acc_summary.get("impressions", 0)
+        acc_link_clicks = acc_summary.get("link_clicks", 0)
+        acc_outbound_clicks = acc_summary.get("outbound_clicks", 0)
+        acc_landing_page_views = acc_summary.get("landing_page_views", 0)
+        acc_leads = acc_summary.get("leads", 0)
+        acc_regs = acc_summary.get("registrations", 0)
+        acc_purchases = acc_summary.get("purchases", 0)
+
+        facts.append({
+            "account_id": acc_id,
+            "entity_level": "account",
+            "entity_id": acc_id,
+            "entity_name": account_name or acc_id,
+            "parent_entity_id": "",
+            "currency": normalized_currency,
+            "spend": acc_spend,
+            "impressions": acc_impressions,
+            "reach": acc_summary.get("reach", 0),
+            "frequency": acc_summary.get("frequency", 0.0),
+            "cpm": acc_summary.get("cpm", 0.0),
+            "clicks": acc_clicks,
+            "unique_clicks": acc_summary.get("unique_clicks", 0),
+            "link_clicks": acc_link_clicks,
+            "outbound_clicks": acc_outbound_clicks,
+            "landing_page_views": acc_landing_page_views,
+            "cpc": (acc_spend / acc_clicks) if acc_clicks > 0 else 0.0,
+            "cpc_link": (acc_spend / acc_link_clicks) if acc_link_clicks > 0 else None,
+            "ctr": ((acc_clicks / acc_impressions) * 100) if acc_impressions > 0 else 0.0,
+            "ctr_link": ((acc_link_clicks / acc_impressions) * 100) if acc_impressions > 0 else None,
+            "ctr_outbound": ((acc_outbound_clicks / acc_impressions) * 100) if acc_impressions > 0 else None,
+            "leads": acc_leads,
+            "registrations": acc_regs,
+            "purchases": acc_purchases,
+            "cost_per_lead": (acc_spend / acc_leads) if acc_leads > 0 else None,
+            "cost_per_registration": (acc_spend / acc_regs) if acc_regs > 0 else None,
+            "cost_per_purchase": (acc_spend / acc_purchases) if acc_purchases > 0 else None,
+            "cost_per_landing_page_view": (acc_spend / acc_landing_page_views) if acc_landing_page_views > 0 else None,
+            "raw_actions": [],
+            "status": "ACTIVE",
+            "effective_status": "ACTIVE",
+            "daily_budget": 0.0,
+        })
+
+        # 2. Level breakdown queries (Campaign, AdSet, Ad)
+        insights_url = f"{self.base_url}/{acc_id}/insights"
+        fields = (
+            "campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,"
+            "spend,impressions,reach,frequency,cpm,clicks,unique_clicks,"
+            "inline_link_clicks,outbound_clicks,actions"
+        )
+
+        for level in ("campaign", "adset", "ad"):
+            try:
+                level_rows = await self._fetch_paginated_data(
+                    insights_url,
+                    {
+                        "level": level,
+                        "fields": fields,
+                        "date_preset": date_preset,
+                        "limit": 100,
+                        "access_token": access_token,
+                    },
+                    account_id=acc_id,
+                    priority=priority,
+                )
+                for r in level_rows:
+                    normalized = self._normalize_basic_insight(r)
+                    spend = normalized["spend"]
+                    clicks = normalized["clicks"]
+                    impressions = normalized["impressions"]
+                    link_clicks = normalized["link_clicks"]
+                    outbound_clicks = normalized["outbound_clicks"]
+                    lp_views = normalized["landing_page_views"]
+                    leads = normalized["leads"]
+                    regs = normalized["registrations"]
+                    purchases = normalized["purchases"]
+
+                    if level == "campaign":
+                        entity_id = str(r.get("campaign_id") or "")
+                        entity_name = str(r.get("campaign_name") or "")
+                        parent_id = acc_id
+                    elif level == "adset":
+                        entity_id = str(r.get("adset_id") or "")
+                        entity_name = str(r.get("adset_name") or "")
+                        parent_id = str(r.get("campaign_id") or acc_id)
+                    else:  # ad
+                        entity_id = str(r.get("ad_id") or "")
+                        entity_name = str(r.get("ad_name") or "")
+                        parent_id = str(r.get("adset_id") or "")
+
+                    if not entity_id:
+                        continue
+
+                    # Skip empty rows with 0 spend, 0 impressions and 0 clicks
+                    if spend == 0 and impressions == 0 and clicks == 0:
+                        continue
+
+                    facts.append({
+                        "account_id": acc_id,
+                        "entity_level": level,
+                        "entity_id": entity_id,
+                        "entity_name": entity_name,
+                        "parent_entity_id": parent_id,
+                        "currency": normalized_currency,
+                        "spend": spend,
+                        "impressions": impressions,
+                        "reach": normalized["reach"],
+                        "frequency": normalized["frequency"],
+                        "cpm": normalized["cpm"],
+                        "clicks": clicks,
+                        "unique_clicks": normalized["unique_clicks"],
+                        "link_clicks": link_clicks,
+                        "outbound_clicks": outbound_clicks,
+                        "landing_page_views": lp_views,
+                        "cpc": (spend / clicks) if clicks > 0 else 0.0,
+                        "cpc_link": (spend / link_clicks) if link_clicks > 0 else None,
+                        "ctr": ((clicks / impressions) * 100) if impressions > 0 else 0.0,
+                        "ctr_link": ((link_clicks / impressions) * 100) if impressions > 0 else None,
+                        "ctr_outbound": ((outbound_clicks / impressions) * 100) if impressions > 0 else None,
+                        "leads": leads,
+                        "registrations": regs,
+                        "purchases": purchases,
+                        "cost_per_lead": (spend / leads) if leads > 0 else None,
+                        "cost_per_registration": (spend / regs) if regs > 0 else None,
+                        "cost_per_purchase": (spend / purchases) if purchases > 0 else None,
+                        "cost_per_landing_page_view": (spend / lp_views) if lp_views > 0 else None,
+                        "raw_actions": r.get("actions") if isinstance(r.get("actions"), list) else [],
+                        "status": "ACTIVE",
+                        "effective_status": "ACTIVE",
+                        "daily_budget": 0.0,
+                    })
+            except Exception as e:
+                logger.warning("Failed to fetch %s level insights for %s: %s", level, acc_id, e)
+
+        return facts
+
     async def set_adset_status(
         self, 
         adset_id: str, 

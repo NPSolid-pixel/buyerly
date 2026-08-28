@@ -36,6 +36,7 @@ from database.db import async_session_maker
 from database.models import AnalyticsViewPreference, User
 from meta_api.client import MetaClient
 from services.inventory_cache import PostgreSQLInventoryCache
+from services.analytics_store import AnalyticsFactService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Analytics & Summary"])
@@ -172,6 +173,34 @@ async def get_summary_report(
                 }
                 _summary_cache[cache_key] = (now_ts, cached_payload)
                 return persisted
+
+            # Check Analytics Fact Store before live polling
+            if ws_id and accounts:
+                group_ids_by_account = await _account_group_ids_by_account(session, user, workspace_id=ws_id)
+                fact_summary = await AnalyticsFactService.get_workspace_summary_report(
+                    session,
+                    workspace_id=ws_id,
+                    period=period,
+                    user_accounts=accounts,
+                    group_ids_by_account=group_ids_by_account,
+                )
+                if fact_summary.get("data_quality", {}).get("accounts_synced", 0) > 0:
+                    fact_summary = await _enrich_summary_account_metadata(
+                        session, fact_summary, user, workspace_id=ws_id
+                    )
+                    cached_payload = {
+                        key: value
+                        for key, value in fact_summary.items()
+                        if key != "cache"
+                    }
+                    _summary_cache[cache_key] = (now_ts, cached_payload)
+                    return _summary_with_cache_metadata(
+                        fact_summary,
+                        is_cached=True,
+                        origin="fact_store",
+                        persisted_at=fact_summary.get("generated_at", ""),
+                        workspace_id=ws_id,
+                    )
 
         group_ids_by_account = await _account_group_ids_by_account(session, user, workspace_id=ws_id)
         if not accounts:
@@ -336,6 +365,55 @@ async def get_summary_report(
                 bucket["leads"] += acc_leads
                 bucket["registrations"] += acc_regs
                 bucket["purchases"] += acc_purchases
+
+                if ws_id:
+                    try:
+                        acc_fact = {
+                            "account_id": acc.account_id,
+                            "entity_level": "account",
+                            "entity_id": acc.account_id,
+                            "entity_name": acc.name or acc.account_id,
+                            "parent_entity_id": "",
+                            "currency": account_currency,
+                            "spend": acc_spend,
+                            "impressions": acc_impressions,
+                            "reach": acc_reach,
+                            "frequency": round(acc_frequency, 2),
+                            "cpm": round(acc_cpm, 2),
+                            "clicks": acc_clicks,
+                            "unique_clicks": acc_unique_clicks,
+                            "link_clicks": acc_link_clicks,
+                            "outbound_clicks": acc_outbound_clicks,
+                            "landing_page_views": acc_landing_page_views,
+                            "cpc": round(acc_cpc, 2),
+                            "cpc_link": _cost_or_none(acc_spend, acc_link_clicks),
+                            "ctr": round(acc_ctr, 2),
+                            "ctr_link": round(acc_ctr_link, 2),
+                            "ctr_outbound": round(acc_ctr_outbound, 2),
+                            "leads": acc_leads,
+                            "registrations": acc_regs,
+                            "purchases": acc_purchases,
+                            "cost_per_lead": _cost_or_none(acc_spend, acc_leads),
+                            "cost_per_registration": _cost_or_none(acc_spend, acc_regs),
+                            "cost_per_purchase": _cost_or_none(acc_spend, acc_purchases),
+                            "cost_per_landing_page_view": _cost_or_none(acc_spend, acc_landing_page_views),
+                            "raw_actions": [],
+                            "status": acc.status_label,
+                            "effective_status": acc.status_label,
+                            "daily_budget": 0.0,
+                        }
+                        await AnalyticsFactService.upsert_entity_facts(
+                            session,
+                            workspace_id=ws_id,
+                            account_id=acc.account_id,
+                            facts=[acc_fact],
+                        )
+                    except Exception as fact_err:
+                        logger.warning(
+                            "Failed to upsert account fact for %s: %s",
+                            acc.account_id,
+                            fact_err,
+                        )
 
                 account_results.append({
                     "account_id": acc.account_id,

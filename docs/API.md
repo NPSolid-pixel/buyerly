@@ -257,6 +257,7 @@ Meta возвращает браузер на служебный callback `/api/
 | Метод и путь | Параметры/тело | Назначение |
 |---|---|---|
 | `GET /api/summary` | `period=today|yesterday|last_3d|last_7d`, `force=false|true` | возвращает сохранённую или свежую account-level сводку Meta |
+| `GET /api/analytics/hierarchy` | `parent_id`, `level=campaign|adset|ad`, `period=today|yesterday|last_3d|last_7d` | возвращает нормализованные метрики дочерних сущностей иерархии из Analytics Fact Store |
 | `GET /api/analytics-view` | — | сохранённое представление таблицы пользователя |
 | `PUT /api/analytics-view` | view payload | сохраняет вид, колонки, порядок, ширины, сортировку, фильтры и период |
 
