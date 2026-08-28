@@ -30,6 +30,9 @@ class TestDeployContract(unittest.TestCase):
         cls.internal_smoke = (
             project_root / "services" / "smoke_checks.py"
         ).read_text()
+        cls.reliability_metrics = (
+            project_root / "services" / "reliability_metrics.py"
+        ).read_text()
         cls.incident_runbooks = (
             project_root / "docs" / "INCIDENT_RUNBOOKS.md"
         ).read_text()
@@ -123,6 +126,7 @@ class TestDeployContract(unittest.TestCase):
             "runtime_versions",
             "worker_heartbeat",
             "database_meta_isolation_summary",
+            "reliability_metrics",
         ):
             self.assertIn(contract, self.smoke_script)
         self.assertIn("_assert_database_at_head", self.internal_smoke)
@@ -131,6 +135,9 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("account_group_workspace_mismatch", self.internal_smoke)
         self.assertIn("summary_workspace_scope", self.internal_smoke)
         self.assertIn("meta_configuration", self.internal_smoke)
+        self.assertIn("normalize_synthetic_metrics", self.reliability_metrics)
+        self.assertIn('runtime["synthetic"]', self.reliability_metrics)
+        self.assertNotIn("access_token", self.reliability_metrics)
 
     def test_incident_runbooks_cover_required_failures(self):
         for heading in (

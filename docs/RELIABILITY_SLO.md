@@ -15,7 +15,7 @@ This document is the operating contract for Buyerly production. All windows use 
 | Account data freshness | successful Meta read within 20 min | 20 min | 45 min | Account owner | `account_health.last_success_at` |
 | Verified backup age | newer than 26 hours | 26 h | 48 h | Platform owner | deploy/backup verifier runtime signal |
 
-The API availability and latency fields returned by `/api/health/overview` are targets. Their measured values come from the external production synthetic monitor; they must not be fabricated from in-process requests. The verified backup script publishes `last_backup_at`; the API derives `backup_age_hours` from that timestamp. A missing timestamp is treated as unknown rather than healthy.
+The API availability and latency target fields returned by `/api/health/overview` are objectives. The measured `api_synthetic_*` values come from the read-only post-deploy `/health/live` and `/health/ready` probes for the exact release SHA; they are never fabricated from application traffic. Long-window availability remains the responsibility of the external uptime monitor. The verified backup script publishes `last_backup_at`; the API derives `backup_age_hours` from that timestamp. A missing measurement is treated as unknown rather than healthy.
 
 ## Account health states
 

@@ -154,6 +154,33 @@ def _internal_contracts() -> dict:
     return payload
 
 
+def _publish_reliability_metrics(checks: list[dict]) -> dict:
+    endpoint_checks = [
+        item for item in checks if item.get("name") in {"health_live", "health_ready"}
+    ]
+    durations = sorted(int(item.get("duration_ms", 0) or 0) for item in endpoint_checks)
+    passed = sum(1 for item in endpoint_checks if item.get("ok"))
+    payload = {
+        "release_sha": EXPECTED_SHA,
+        "availability_percent": round(passed / len(endpoint_checks) * 100, 3) if endpoint_checks else 0,
+        "latency_p95_ms": durations[-1] if durations else 0,
+        "checks_total": len(endpoint_checks),
+        "checks_passed": passed,
+    }
+    completed = subprocess.run(
+        ["docker", "exec", "-i", "buyerly-api", "python", "-m", "services.reliability_metrics"],
+        cwd=APP_DIR,
+        input=json.dumps(payload, separators=(",", ":")),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError("failed to persist secret-free synthetic metrics")
+    return payload
+
+
 def _write_result(payload: dict) -> Path:
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     destination = RESULT_DIR / f"post-deploy-{EXPECTED_SHA}.json"
@@ -189,6 +216,7 @@ def main() -> int:
     _record(checks, "runtime_versions", _runtime_versions)
     _record(checks, "worker_heartbeat", _worker_heartbeat)
     _record(checks, "database_meta_isolation_summary", _internal_contracts)
+    _record(checks, "reliability_metrics", lambda: _publish_reliability_metrics(checks))
 
     payload = {
         "schema_version": 1,

@@ -10456,6 +10456,8 @@
       if (signals) {
         const s = data.signals || {};
         signals.innerHTML = `
+          <div><span>API synthetic</span><b>${s.api_synthetic_availability_percent == null ? '—' : `${Number(s.api_synthetic_availability_percent).toFixed(1)}%`}</b></div>
+          <div><span>API latency p95</span><b>${s.api_synthetic_latency_p95_ms == null ? '—' : `${Number(s.api_synthetic_latency_p95_ms)} мс`}</b></div>
           <div><span>Лаг worker</span><b>${s.worker_cycle_lag_seconds == null ? '—' : `${Math.round(s.worker_cycle_lag_seconds / 60)} мин`}</b></div>
           <div><span>Ошибки действий · 24ч</span><b>${Number(s.action_error_rate_24h_percent || 0).toFixed(1)}%</b></div>
           <div><span>Квота Meta</span><b>${Number(s.meta_quota_percent || 0).toFixed(0)}%</b></div>

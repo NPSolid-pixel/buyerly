@@ -64,6 +64,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             "function loadHealthOverview()",
             "account.health ||",
             "Последний успех",
+            "api_synthetic_availability_percent",
+            "api_synthetic_latency_p95_ms",
         ):
             self.assertIn(contract, self.index + self.script)
         self.assertIn(".account-health-row", self.styles)

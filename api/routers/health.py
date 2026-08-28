@@ -120,6 +120,7 @@ async def health_overview(user: User = Depends(get_current_user)):
             })
         overall = "unknown" if not accounts else "critical" if counts["critical"] else "degraded" if counts["degraded"] else "unknown" if counts["unknown"] else "healthy"
         usage_percent = int(((runtime.get("usage") or {}).get("max_percent") or 0))
+        synthetic = dict(runtime.get("synthetic") or {})
         return {
             "overall_status": overall,
             "counts": counts,
@@ -127,6 +128,10 @@ async def health_overview(user: User = Depends(get_current_user)):
             "signals": {
                 "api_availability_target_percent": 99.9,
                 "api_latency_p95_target_ms": 500,
+                "api_synthetic_availability_percent": synthetic.get("availability_percent"),
+                "api_synthetic_latency_p95_ms": synthetic.get("latency_p95_ms"),
+                "api_synthetic_measured_at": synthetic.get("measured_at"),
+                "api_synthetic_release_sha": synthetic.get("release_sha"),
                 "worker_cycle_lag_seconds": worker_lag_seconds,
                 "worker_cycle_lag_warning_seconds": 180,
                 "worker_cycle_lag_critical_seconds": 360,

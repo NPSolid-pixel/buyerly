@@ -228,6 +228,8 @@ class MonitoringWorker:
                 existing_payload = dict(row.payload or {})
                 if existing_payload.get("last_backup_at"):
                     payload["last_backup_at"] = existing_payload["last_backup_at"]
+                if existing_payload.get("synthetic"):
+                    payload["synthetic"] = existing_payload["synthetic"]
                 row.payload = payload
                 await session.commit()
         except Exception as error:

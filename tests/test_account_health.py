@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from database.models import Account, User, Workspace, WorkspaceMember
 from services.account_health import classify_health_error, health_payload, record_account_health, safe_health_message
+from services.reliability_metrics import normalize_synthetic_metrics
 from tests.test_db_helper import create_test_engine, init_test_db
 
 
@@ -17,6 +18,20 @@ class TestAccountHealthClassification(unittest.TestCase):
         message = safe_health_message("access_token=EAAB-super-secret " + "x" * 500)
         self.assertNotIn("EAAB-super-secret", message)
         self.assertLessEqual(len(message), 240)
+
+    def test_synthetic_metrics_accept_only_bounded_secret_free_fields(self):
+        normalized = normalize_synthetic_metrics({
+            "release_sha": "a" * 40,
+            "availability_percent": 100,
+            "latency_p95_ms": 123,
+            "checks_total": 2,
+            "checks_passed": 2,
+            "access_token": "must-not-be-copied",
+        })
+        self.assertEqual(normalized["release_sha"], "a" * 40)
+        self.assertNotIn("access_token", normalized)
+        with self.assertRaises(ValueError):
+            normalize_synthetic_metrics({"release_sha": "bad"})
 
 
 class TestAccountHealthPersistence(unittest.IsolatedAsyncioTestCase):
