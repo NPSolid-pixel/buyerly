@@ -4257,6 +4257,7 @@
       : '<div class="account-detail-rules-empty">Правила не назначены. Автоматика не может быть включена.</div>';
     const ownerHtml = state.user?.role === 'admin'
       ? `<div class="account-detail-field"><span>Владелец (User ID)</span><b class="mono">${escapeHtml(account.owner_user_id ? `User #${account.owner_user_id}` : (account.owner_id || '—'))}</b></div>`
+      : '';
     const isManualToken = account?.connection_type === 'system_user';
     const hasFbConnections = Array.isArray(state.fbConnections) && state.fbConnections.length > 0;
     const migrationCallout = isManualToken
