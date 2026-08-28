@@ -27,6 +27,11 @@ Production: `https://buyerly.app`.
 | `GET /health/live` | нет | процесс API запущен; возвращает `status` и commit в `version` |
 | `GET /health/ready` | нет | API может обратиться к PostgreSQL; при проблеме возвращает `503` |
 
+Авторизованный обзор надёжности рабочего пространства доступен через
+`GET /api/health/overview`: он возвращает SLI, состояние кабинетов, свежесть
+данных, worker lag, Meta quota, synthetic availability/latency и возраст
+последнего backup без секретов и межворкспейсных данных.
+
 ## Пользователь и сессия
 
 | Метод и путь | Тело | Результат |
@@ -111,6 +116,7 @@ Slug нормализуется в ASCII и ограничивается 60 си
 | Метод и путь | Тело | Назначение |
 |---|---|---|
 | `GET /api/accounts` | — | список кабинетов, тип подключения, внутренние пометки, Meta/rules state и последние сохранённые метрики `today` |
+| `GET /api/accounts/{account_id}/health` | — | workspace-isolated health конкретного кабинета: статус, причина, безопасная последняя ошибка, сигналы и даты проверок |
 | `POST /api/accounts/parse-raw` | `raw_text` | разбирает текстовый экспорт в `account_id` и `parsed_name`, ничего не сохраняет |
 | `POST /api/accounts/batch-add` | `accounts[]`, `batch_name?`, `access_token` | проверяет кабинеты через Meta и добавляет/обновляет их |
 | `PATCH /api/accounts/{account_id}/profile` | `custom_name`, `note` | сохраняет внутреннее название до 120 символов и заметку до 500 символов, не меняя имя в Meta |

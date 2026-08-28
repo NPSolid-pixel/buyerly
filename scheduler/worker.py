@@ -242,6 +242,7 @@ class MonitoringWorker:
         *,
         success: bool,
         notification_target: str = "",
+        notify_transition: bool = True,
         error: Any = None,
         cause: str | None = None,
         signals: dict[str, Any] | None = None,
@@ -277,7 +278,7 @@ class MonitoringWorker:
                 "consecutive_failures": health_failures,
             },
         )
-        if self.telegram_notifier:
+        if notify_transition and self.telegram_notifier:
             await self.telegram_notifier(
                 event_type="ACCOUNT_HEALTH_RECOVERED" if success else "ACCOUNT_HEALTH_ALERT",
                 account_name=account.name,
@@ -1222,6 +1223,7 @@ class MonitoringWorker:
                             acc,
                             success=False,
                             notification_target=notification_target,
+                            notify_transition=False,
                             error=snapshot,
                             cause="user",
                             signals={"token_healthy": False},
@@ -1271,6 +1273,7 @@ class MonitoringWorker:
                                 acc,
                                 success=False,
                                 notification_target=notification_target,
+                                notify_transition=False,
                                 error=f"Account status: {status_label}",
                                 cause="user",
                                 signals={"token_healthy": True, "account_active": False},
