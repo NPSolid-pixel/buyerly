@@ -242,7 +242,7 @@ class MonitoringWorker:
         *,
         success: bool,
         notification_target: str = "",
-        notify_transition: bool = True,
+        emit_transition_event: bool = True,
         error: Any = None,
         cause: str | None = None,
         signals: dict[str, Any] | None = None,
@@ -264,21 +264,22 @@ class MonitoringWorker:
         health_message = row.last_error_message
         health_error_code = row.last_error_code
         health_failures = row.consecutive_failures
-        await self._persist_audit_event(
-            session,
-            account,
-            event_type="ACCOUNT_HEALTH_RECOVERED" if success else "ACCOUNT_HEALTH_ALERT",
-            status="SUCCESS" if success else health_status.upper(),
-            category="ACCOUNT_HEALTH",
-            action="MONITOR" if success else "INVESTIGATE",
-            message="Account health recovered" if success else health_message,
-            after_state={"status": health_status, "cause": health_cause},
-            details={
-                "error_code": health_error_code,
-                "consecutive_failures": health_failures,
-            },
-        )
-        if notify_transition and self.telegram_notifier:
+        if emit_transition_event:
+            await self._persist_audit_event(
+                session,
+                account,
+                event_type="ACCOUNT_HEALTH_RECOVERED" if success else "ACCOUNT_HEALTH_ALERT",
+                status="SUCCESS" if success else health_status.upper(),
+                category="ACCOUNT_HEALTH",
+                action="MONITOR" if success else "INVESTIGATE",
+                message="Account health recovered" if success else health_message,
+                after_state={"status": health_status, "cause": health_cause},
+                details={
+                    "error_code": health_error_code,
+                    "consecutive_failures": health_failures,
+                },
+            )
+        if emit_transition_event and self.telegram_notifier:
             await self.telegram_notifier(
                 event_type="ACCOUNT_HEALTH_RECOVERED" if success else "ACCOUNT_HEALTH_ALERT",
                 account_name=account.name,
@@ -1223,7 +1224,7 @@ class MonitoringWorker:
                             acc,
                             success=False,
                             notification_target=notification_target,
-                            notify_transition=False,
+                            emit_transition_event=False,
                             error=snapshot,
                             cause="user",
                             signals={"token_healthy": False},
@@ -1273,7 +1274,7 @@ class MonitoringWorker:
                                 acc,
                                 success=False,
                                 notification_target=notification_target,
-                                notify_transition=False,
+                                emit_transition_event=False,
                                 error=f"Account status: {status_label}",
                                 cause="user",
                                 signals={"token_healthy": True, "account_active": False},
