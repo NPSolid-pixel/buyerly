@@ -1153,6 +1153,77 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
             await init_test_db(engine)
             await engine.dispose()
 
+    async def test_runtime_payload_text_is_converted_to_native_jsonb(self):
+        from alembic.config import Config
+        from alembic import command
+        import os
+
+        engine = create_test_engine()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP SCHEMA public CASCADE"))
+                await conn.execute(text("CREATE SCHEMA public"))
+
+            ini_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+            alembic_cfg = Config(ini_path)
+            alembic_cfg.set_main_option(
+                "script_location",
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic"),
+            )
+            command.upgrade(alembic_cfg, "0018_account_health")
+
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "ALTER TABLE automation_runtime_states "
+                        "ALTER COLUMN payload TYPE TEXT USING payload::text"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO automation_runtime_states "
+                        "(state_key, payload, updated_at) VALUES "
+                        "('valid', :valid, NOW()), "
+                        "('double', :double, NOW()), "
+                        "('malformed', :malformed, NOW())"
+                    ),
+                    {
+                        "valid": json.dumps({"cycle_id": "legacy"}),
+                        "double": json.dumps(json.dumps({"cycle_id": "double"})),
+                        "malformed": "not-json",
+                    },
+                )
+
+            command.upgrade(alembic_cfg, "head")
+
+            async with engine.connect() as conn:
+                column_type = (
+                    await conn.execute(
+                        text(
+                            "SELECT data_type FROM information_schema.columns "
+                            "WHERE table_name = 'automation_runtime_states' "
+                            "AND column_name = 'payload'"
+                        )
+                    )
+                ).scalar_one()
+                rows = dict(
+                    (
+                        await conn.execute(
+                            text(
+                                "SELECT state_key, payload "
+                                "FROM automation_runtime_states"
+                            )
+                        )
+                    ).all()
+                )
+            self.assertEqual(column_type, "jsonb")
+            self.assertEqual(rows["valid"], {"cycle_id": "legacy"})
+            self.assertEqual(rows["double"], {"cycle_id": "double"})
+            self.assertEqual(rows["malformed"], {})
+        finally:
+            await init_test_db(engine)
+            await engine.dispose()
+
     async def test_alembic_upgrade_head_applies_successfully(self):
         from alembic.config import Config
         from alembic import command
@@ -1174,7 +1245,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-                self.assertEqual(version, "0018_account_health")
+                self.assertEqual(version, "0019_runtime_payload_jsonb")
 
             command.downgrade(alembic_cfg, "base")
         finally:
@@ -1197,7 +1268,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0018_account_health")
+                self.assertEqual(version, "0019_runtime_payload_jsonb")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -1231,7 +1302,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0018_account_health")
+                self.assertEqual(version, "0019_runtime_payload_jsonb")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -1265,7 +1336,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0018_account_health")
+                self.assertEqual(version, "0019_runtime_payload_jsonb")
         finally:
             await init_test_db(engine)
             await engine.dispose()
