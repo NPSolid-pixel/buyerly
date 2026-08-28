@@ -157,7 +157,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             'type="text" id="onboardingSignInEmail"',
             self.index,
         )
-        self.assertIn('placeholder="Email or username"', self.index)
+        self.assertIn('placeholder="Email или username"', self.index)
         self.assertIn('autocomplete="username"', self.index)
         self.assertNotIn(
             'type="email" id="onboardingSignInEmail"',
