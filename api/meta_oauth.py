@@ -36,6 +36,7 @@ from database.models import (
     AuditEvent,
     MetaConnection,
     MetaConnectionAsset,
+    MetaConnectionInvite,
     MetaOAuthState,
     User,
 )
@@ -52,6 +53,7 @@ from meta_api.oauth import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/meta", tags=["Meta OAuth"])
 OAUTH_STATE_TTL_MINUTES = 10
+INVITE_DEFAULT_TTL_HOURS = 24
 meta_client = MetaClient()
 
 
@@ -59,6 +61,34 @@ class MetaAccountImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     account_ids: list[str] = Field(min_length=1, max_length=500)
+
+
+class CreateMetaInviteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(default="", max_length=100, description="Human label for this invite, e.g. 'Buyer Ivan — Profile #3'")
+    expires_in_hours: int = Field(default=INVITE_DEFAULT_TTL_HOURS, ge=1, le=168, description="TTL in hours (1–168)")
+
+
+class MetaInviteItem(BaseModel):
+    id: int
+    label: str
+    status: str
+    token_prefix: str
+    invite_url: str
+    created_at: str
+    expires_at: str
+    used_at: str | None
+    created_by_user_name: str | None
+
+
+class PublicMetaInviteInfoResponse(BaseModel):
+    valid: bool
+    status: str
+    workspace_name: str
+    workspace_logo_url: str | None
+    label: str
+    inviter_name: str | None
 
 
 def _json_list(value) -> list:
@@ -222,6 +252,262 @@ def _serialize_asset(
     }
 
 
+
+# ---------------------------------------------------------------------------
+# Invite endpoints
+# ---------------------------------------------------------------------------
+
+def _invite_url(token: str) -> str:
+    """Build public invite URL from raw token."""
+    base = settings.WEBAPP_URL.rstrip("/")
+    return f"{base}/connect/meta/{token}"
+
+
+def _serialize_invite(invite: MetaConnectionInvite, invite_url: str, creator_name: str | None = None) -> dict:
+    return {
+        "id": invite.id,
+        "label": invite.label or "",
+        "status": invite.status,
+        "token_prefix": invite.token_prefix,
+        "invite_url": invite_url,
+        "created_at": invite.created_at.isoformat(),
+        "expires_at": invite.expires_at.isoformat(),
+        "used_at": invite.used_at.isoformat() if invite.used_at else None,
+        "created_by_user_name": creator_name,
+    }
+
+
+@router.post(
+    "/invites",
+    dependencies=[Depends(rate_limit_dep(limit=20, window_seconds=60, scope="meta_invite_create"))],
+)
+async def create_meta_invite(
+    payload: CreateMetaInviteRequest,
+    user: User = Depends(get_current_user),
+):
+    """Create a one-time invite link for connecting a Facebook profile without sharing passwords."""
+    now = datetime.now(timezone.utc)
+    raw_token = "inv_fb_" + secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    token_prefix = raw_token[:16] + "..."
+
+    async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        if not ws:
+            raise HTTPException(status_code=404, detail="Рабочее пространство не найдено")
+        ensure_workspace_write_access(user, member, "создания инвайт-ссылки Meta")
+
+        expires_at = now + timedelta(hours=payload.expires_in_hours)
+        invite = MetaConnectionInvite(
+            workspace_id=ws.id,
+            created_by_user_id=user.id,
+            token_hash=token_hash,
+            token_prefix=token_prefix,
+            label=payload.label.strip(),
+            status="pending",
+            expires_at=expires_at,
+        )
+        session.add(invite)
+        session.add(
+            AuditEvent(
+                workspace_id=ws.id,
+                owner_user_id=user.id,
+                actor_type="user",
+                actor_id=str(user.telegram_id or user.id),
+                category="MANUAL_ACTION",
+                event_type="META_INVITE_CREATED",
+                status="SUCCESS",
+                action="CREATE_INVITE",
+                message=f"Создана инвайт-ссылка для подключения Facebook-профиля. Метка: «{payload.label}».",
+                details={"label": payload.label, "expires_in_hours": payload.expires_in_hours},
+                correlation_id=secrets.token_hex(16),
+            )
+        )
+        await session.commit()
+        await session.refresh(invite)
+
+    url = _invite_url(raw_token)
+    return {
+        **_serialize_invite(invite, url, user.full_name or user.username),
+        "invite_url": url,
+        "raw_token": raw_token,  # Only returned on creation; never stored or re-exposed
+    }
+
+
+@router.get("/invites")
+async def list_meta_invites(user: User = Depends(get_current_user)):
+    """List all invite links for the current workspace (admin/owner/buyer)."""
+    async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        if not ws:
+            return []
+        caller_role = member.role if member else "buyer"
+        stmt = select(MetaConnectionInvite, User).outerjoin(
+            User, MetaConnectionInvite.created_by_user_id == User.id
+        ).where(MetaConnectionInvite.workspace_id == ws.id)
+        if caller_role not in ("owner", "admin"):
+            stmt = stmt.where(MetaConnectionInvite.created_by_user_id == user.id)
+        stmt = stmt.order_by(MetaConnectionInvite.created_at.desc())
+        rows = (await session.execute(stmt)).all()
+
+    now = datetime.now(timezone.utc)
+    result = []
+    for invite, creator in rows:
+        # Mark expired invites without writing to DB (lazy expiry display)
+        displayed_status = invite.status
+        if invite.status == "pending" and invite.expires_at.replace(tzinfo=timezone.utc) <= now:
+            displayed_status = "expired"
+        url = _invite_url("[hidden]")  # Don't re-expose raw token
+        result.append({
+            "id": invite.id,
+            "label": invite.label or "",
+            "status": displayed_status,
+            "token_prefix": invite.token_prefix,
+            "invite_url": None,  # Raw token not stored — only shown on creation
+            "created_at": invite.created_at.isoformat(),
+            "expires_at": invite.expires_at.isoformat(),
+            "used_at": invite.used_at.isoformat() if invite.used_at else None,
+            "created_by_user_name": (creator.full_name or creator.username) if creator else None,
+        })
+    return result
+
+
+@router.delete("/invites/{invite_id}")
+async def revoke_meta_invite(
+    invite_id: int,
+    user: User = Depends(get_current_user),
+):
+    """Revoke (cancel) an invite link before it is used."""
+    async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        if not ws:
+            raise HTTPException(status_code=404, detail="Рабочее пространство не найдено")
+
+        stmt = select(MetaConnectionInvite).where(
+            MetaConnectionInvite.id == invite_id,
+            MetaConnectionInvite.workspace_id == ws.id,
+        )
+        caller_role = member.role if member else "buyer"
+        if caller_role not in ("owner", "admin"):
+            stmt = stmt.where(MetaConnectionInvite.created_by_user_id == user.id)
+
+        invite = (await session.execute(stmt)).scalar_one_or_none()
+        if not invite:
+            raise HTTPException(status_code=404, detail="Инвайт-ссылка не найдена")
+        if invite.status != "pending":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Нельзя отозвать инвайт со статусом «{invite.status}»",
+            )
+
+        invite.status = "revoked"
+        session.add(
+            AuditEvent(
+                workspace_id=ws.id,
+                owner_user_id=user.id,
+                actor_type="user",
+                actor_id=str(user.telegram_id or user.id),
+                category="MANUAL_ACTION",
+                event_type="META_INVITE_REVOKED",
+                status="SUCCESS",
+                action="REVOKE_INVITE",
+                message=f"Инвайт-ссылка «{invite.label}» отозвана.",
+                details={"invite_id": invite.id, "label": invite.label},
+                correlation_id=secrets.token_hex(16),
+            )
+        )
+        await session.commit()
+    return {"success": True, "invite_id": invite_id, "status": "revoked"}
+
+
+@router.get(
+    "/invites/public/{token}",
+    dependencies=[Depends(rate_limit_dep(limit=30, window_seconds=60, scope="meta_invite_public"))],
+)
+async def public_invite_info(token: str):
+    """Public endpoint (no auth): validate invite token and return safe workspace info for the landing page."""
+    from database.models import Workspace  # local import to avoid circular
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    async with async_session_maker() as session:
+        invite = (
+            await session.execute(
+                select(MetaConnectionInvite).where(MetaConnectionInvite.token_hash == token_hash)
+            )
+        ).scalar_one_or_none()
+
+        if not invite:
+            raise HTTPException(status_code=404, detail="Инвайт-ссылка не найдена или уже использована")
+
+        # Determine effective status
+        if invite.status == "pending" and _as_utc(invite.expires_at) <= now:
+            effective_status = "expired"
+        else:
+            effective_status = invite.status
+
+        ws = await session.get(Workspace, invite.workspace_id)
+        creator = await session.get(User, invite.created_by_user_id) if invite.created_by_user_id else None
+
+    return PublicMetaInviteInfoResponse(
+        valid=(effective_status == "pending"),
+        status=effective_status,
+        workspace_name=ws.name if ws else "Buyerly",
+        workspace_logo_url=ws.logo_url if ws else None,
+        label=invite.label or "",
+        inviter_name=(creator.full_name or creator.username) if creator else None,
+    )
+
+
+@router.get(
+    "/oauth/invite/{token}",
+    include_in_schema=False,
+    dependencies=[Depends(rate_limit_dep(limit=10, window_seconds=60, scope="meta_invite_oauth"))],
+)
+async def start_oauth_via_invite(token: str):
+    """Public endpoint (no auth): start Meta OAuth flow triggered by an invite link."""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    async with async_session_maker() as session:
+        invite = (
+            await session.execute(
+                select(MetaConnectionInvite).where(MetaConnectionInvite.token_hash == token_hash)
+            )
+        ).scalar_one_or_none()
+
+        if not invite or invite.status != "pending" or _as_utc(invite.expires_at) <= now:
+            base = settings.WEBAPP_URL.rstrip("/")
+            return RedirectResponse(
+                f"{base}/connect/meta/{token}?meta_status=invite_invalid",
+                status_code=303,
+            )
+
+        client = _oauth_client()
+        raw_state = secrets.token_urlsafe(32)
+        state_hash = hashlib.sha256(raw_state.encode("utf-8")).hexdigest()
+
+        return_path = f"/connect/meta/success"
+        session.add(
+            MetaOAuthState(
+                state_hash=state_hash,
+                workspace_id=invite.workspace_id,
+                owner_user_id=invite.created_by_user_id,
+                return_path=return_path,
+                reconnect_connection_id=None,
+                invite_id=invite.id,
+                expires_at=now + timedelta(minutes=OAUTH_STATE_TTL_MINUTES),
+            )
+        )
+        await session.commit()
+
+    return RedirectResponse(client.build_authorization_url(raw_state), status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# OAuth config and standard flow
+# ---------------------------------------------------------------------------
+
 @router.get("/oauth/config")
 async def oauth_config(user: User = Depends(get_current_user)):
     required = {
@@ -336,6 +622,7 @@ async def oauth_callback(
         target_workspace_id = oauth_state.workspace_id
         return_path = _safe_return_path(oauth_state.return_path)
         reconnect_id = oauth_state.reconnect_connection_id
+        invite_id = oauth_state.invite_id  # Track invite if present
 
     try:
         client = _oauth_client()
@@ -469,6 +756,23 @@ async def oauth_callback(
 
             await session.refresh(connection)
             connection_id = connection.id
+
+            # Atomically mark the invite as used (if the OAuth flow was invite-triggered)
+            if invite_id:
+                await session.execute(
+                    update(MetaConnectionInvite)
+                    .where(
+                        MetaConnectionInvite.id == invite_id,
+                        MetaConnectionInvite.status == "pending",
+                    )
+                    .values(
+                        status="used",
+                        used_at=now,
+                        connected_meta_id=connection_id,
+                    )
+                )
+                await session.commit()
+
     except HTTPException:
         return RedirectResponse(
             _app_redirect(return_path, meta_status="not_configured"),

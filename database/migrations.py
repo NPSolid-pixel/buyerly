@@ -29,7 +29,13 @@ POST_BASELINE_COLUMNS = {
     "meta_oauth_states": {
         "reconnect_connection_id",
         "workspace_id",
+        "invite_id",
     },
+}
+
+# Tables that were added after the legacy baseline and may be absent on pre-migration databases.
+POST_BASELINE_TABLES: set[str] = {
+    "meta_connection_invites",
 }
 
 
@@ -59,6 +65,8 @@ def _contract_errors(
     errors = []
     expected_tables = Base.metadata.tables
     for table_name, table in sorted(expected_tables.items()):
+        if baseline and table_name in POST_BASELINE_TABLES:
+            continue
         actual_columns = snapshot.get(table_name)
         if actual_columns is None:
             errors.append(f"missing table {table_name}")

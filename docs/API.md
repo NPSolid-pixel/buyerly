@@ -161,6 +161,10 @@ Slug нормализуется в ASCII и ограничивается 60 си
 |---|---|---|
 | `GET /api/meta/oauth/config` | — | показывает готовность серверной OAuth-конфигурации без возврата секретов |
 | `POST /api/meta/oauth/start` | `return_path?` | создаёт одноразовый state на 10 минут и возвращает URL входа Facebook |
+| `POST /api/meta/invites` | `label?`, `expires_in_hours?` | создаёт защищённую одноразовую ссылку для привязки Facebook-профиля байера |
+| `GET /api/meta/invites` | — | возвращает список инвайт-ссылок рабочего пространства со статусами |
+| `DELETE /api/meta/invites/{invite_id}` | — | отзывает активную инвайт-ссылку до её использования |
+| `GET /api/meta/invites/public/{token}` | — | публичная проверка статуса инвайт-ссылки без авторизации для лендинга подключения |
 | `GET /api/meta/connections` | — | список Meta-профилей текущего владельца без access token |
 | `DELETE /api/meta/connections/{connection_id}` | — | удаляет собственное подключение в активном workspace, отключает связанные кабинеты и их автоматику до переподключения |
 | `POST /api/meta/connections/{connection_id}/validate` | — | проверяет статус токена в Meta, выявляет отозванные права и обновляет оставшийся срок действия |

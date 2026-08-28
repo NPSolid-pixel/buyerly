@@ -167,6 +167,8 @@ def create_app() -> FastAPI:
         @app.get("/logs")
         @app.get("/add-accounts")
         @app.get("/settings")
+        @app.get("/connect/meta/{token}")
+        @app.get("/connect/meta/success")
         @app.get("/{workspace_slug}/home")
         @app.get("/{workspace_slug}/facebook-accounts")
         @app.get("/{workspace_slug}/facebook-groups/{group_id}")
