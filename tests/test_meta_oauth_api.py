@@ -857,7 +857,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
             session.add(other_ws)
             await session.flush()
             foreign_acc = Account(
-                account_id="act_foreign_888",
+                account_id="act_888000",
                 name="Foreign Acc",
                 workspace_id=other_ws.id,
                 owner_user_id=self.user_id,
@@ -875,7 +875,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
         }
         fake_oauth.discover_ad_accounts.return_value = [
             {
-                "id": "act_foreign_888",
+                "id": "act_888000",
                 "name": "Foreign Acc",
                 "account_status": 1,
                 "currency": "USD",
@@ -884,7 +884,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
             }
         ]
         account_info = {
-            "id": "act_foreign_888",
+            "id": "act_888000",
             "name": "Foreign Acc",
             "account_status": 1,
             "currency": "USD",
@@ -909,7 +909,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
                 import_resp = await client.post(
                     f"/api/meta/connections/{self.connection_id}/import",
                     headers=self.headers,
-                    json={"account_ids": ["act_foreign_888"]},
+                    json={"account_ids": ["act_888000"]},
                 )
 
         self.assertEqual(import_resp.status_code, 200)
