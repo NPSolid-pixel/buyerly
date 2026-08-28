@@ -142,6 +142,7 @@ webapp/              Фронтенд SPA в стиле Attio CRM, стили, �
 
 ## Документация
 
+- [Buyerly Design System](docs/DESIGN_SYSTEM.md)
 - [Воркспейсы, авторизация, инвайты и Resend](docs/WORKSPACES_AUTH_AND_INVITES.md)
 - [Архитектура системы](docs/ARCHITECTURE.md)
 - [Справочник HTTP API](docs/API.md)

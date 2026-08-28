@@ -28,6 +28,7 @@ class TestDocumentationContract(unittest.TestCase):
     def test_readme_links_the_supported_document_set(self):
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
         for path in (
+            "docs/DESIGN_SYSTEM.md",
             "docs/ARCHITECTURE.md",
             "docs/API.md",
             "docs/DEPLOYMENT.md",
@@ -63,6 +64,25 @@ class TestDocumentationContract(unittest.TestCase):
             "### Connections",
         ):
             self.assertIn(contract, baseline)
+
+    def test_design_system_documents_tokens_components_and_migration(self):
+        design_system = (PROJECT_ROOT / "docs" / "DESIGN_SYSTEM.md").read_text(
+            encoding="utf-8"
+        )
+        for contract in (
+            "## Tokens",
+            "## Components",
+            "## Pilot screens",
+            "## Migration map",
+            "Button",
+            "IconButton",
+            "EmptyState",
+            "Skeleton",
+            "### Today",
+            "### Automations",
+            "### Connections",
+        ):
+            self.assertIn(contract, design_system)
 
 
 if __name__ == "__main__":

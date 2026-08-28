@@ -213,6 +213,46 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertNotIn("TOKYO NIGHT COLOR PALETTE", self.styles)
         self.assertNotIn("appEl.style.display = 'block'", self.script)
 
+    def test_design_system_foundation_and_three_pilots(self):
+        for token in (
+            "--font-size-sm: 14px",
+            "--action-primary:",
+            "--warning-bg:",
+            "--focus-ring:",
+            "--layer-popover:",
+            "--motion-standard:",
+        ):
+            self.assertIn(token, self.styles)
+
+        for component in (
+            ".ui-button",
+            ".ui-icon-button",
+            ".ui-input",
+            ".ui-select",
+            ".ui-tabs",
+            ".ui-badge",
+            ".ui-tooltip",
+            ".ui-popover",
+            ".ui-modal",
+            ".ui-drawer",
+            ".ui-table",
+            ".ui-kpi-value",
+            ".ui-chart",
+            ".ui-empty-state",
+            ".ui-alert",
+            ".ui-skeleton",
+        ):
+            self.assertIn(component, self.styles)
+
+        for pilot in ("today", "automations", "connections"):
+            self.assertIn(f'data-ui-pilot="{pilot}"', self.index)
+
+        self.assertNotIn('placeholder="Ask anything..."', self.index)
+        self.assertNotIn('class="ai-prompt-card"', self.index)
+        self.assertIn("onclick=\"window.switchTab('fb_accounts')\"", self.index)
+        self.assertIn("onclick=\"window.switchTab('rules')\"", self.index)
+        self.assertIn("onclick=\"window.switchTab('logs')\"", self.index)
+
     def test_logs_are_a_first_class_section_not_a_summary_table(self):
         self.assertIn('data-tab="logs"', self.index)
         self.assertIn('id="tab-logs"', self.index)

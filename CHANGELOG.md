@@ -10,6 +10,10 @@
 ## [Unreleased]
 
 ### Added & Improved
+- **Buyerly Design System foundation (`86eyr6073`)**:
+  - Добавлены semantic tokens для цвета, типографики, spacing, размеров, radius, elevation, layers и motion; доступный primary action отделён от warning semantics.
+  - Задокументированы и реализованы foundation contracts для Button, IconButton, Input, Select, Tabs, Badge, Tooltip, Popover, Modal, Drawer, Table, KPI, Chart, EmptyState, Alert и Skeleton.
+  - Три пилотных экрана — Today, Automations и Connections — используют общую систему; декоративный AI prompt заменён реальными переходами к рабочим сценариям.
 - **Белый список Email (Whitelist) и закрытие свободной регистрации**:
   - Вход на сайт по одноразовому паролю (OTP) закрыт от несанкционированного доступа «с улицы»: `POST /api/auth/request-temporary-password` проверяет наличие адреса в белом списке `AllowedEmail` или активного инвайта в воркспейс.
   - Создана таблица `allowed_emails` (Alembic-миграция `0020_allowed_emails`) с автоматическим переносом всех существующих подтвержденных пользователей.
