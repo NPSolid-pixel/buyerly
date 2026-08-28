@@ -29,7 +29,10 @@ from tests.test_db_helper import create_test_engine, init_test_db
 
 class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        limiter._records.clear()
+        self.limiter_patcher = patch.object(limiter, "is_allowed", new_callable=AsyncMock)
+        self.mock_limiter = self.limiter_patcher.start()
+        self.mock_limiter.return_value = (True, 0)
+
         self.original_auth_session_maker = auth_router_module.async_session_maker
         self.original_bot_session_maker = bot_handlers.async_session_maker
         self.original_api_session_maker = api_auth_module.async_session_maker
@@ -84,7 +87,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
             self.buyer_id = buyer.id
 
     async def asyncTearDown(self):
-        limiter._records.clear()
+        self.limiter_patcher.stop()
         auth_router_module.async_session_maker = self.original_auth_session_maker
         bot_handlers.async_session_maker = self.original_bot_session_maker
         api_auth_module.async_session_maker = self.original_api_session_maker
@@ -95,9 +98,8 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
         await self.engine.dispose()
 
     async def test_unlisted_email_rejected_on_request_temporary_password(self):
-        limiter._records.clear()
         transport = httpx.ASGITransport(app=self.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
             resp = await client.post(
                 "/api/auth/request-temporary-password",
                 json={"email": "stranger@random.com"},
@@ -106,7 +108,6 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
             self.assertIn("не найден в списке разрешенных", resp.json()["detail"])
 
     async def test_whitelisted_email_allowed_on_request_temporary_password(self):
-        limiter._records.clear()
         async with self.sessions() as session:
             session.add(AllowedEmail(email="allowed.buyer@agency.com", added_by="admin"))
             await session.commit()
@@ -114,7 +115,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
         with patch("api.routers.auth.send_otp_verification_email", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = True
             transport = httpx.ASGITransport(app=self.app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
                 resp = await client.post(
                     "/api/auth/request-temporary-password",
                     json={"email": "ALLOWED.BUYER@agency.com"},
@@ -124,7 +125,6 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(mock_send.call_count, 1)
 
     async def test_invited_email_allowed_on_request_temporary_password(self):
-        limiter._records.clear()
         from datetime import datetime, timedelta, timezone
         async with self.sessions() as session:
             ws = Workspace(name="Test WS", slug="test-ws", owner_user_id=self.admin_id)
@@ -146,7 +146,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
         with patch("api.routers.auth.send_otp_verification_email", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = True
             transport = httpx.ASGITransport(app=self.app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
                 resp = await client.post(
                     "/api/auth/request-temporary-password",
                     json={"email": "invited.partner@agency.com"},
@@ -155,9 +155,8 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(resp.json()["ok"])
 
     async def test_admin_whitelist_api_crud(self):
-        limiter._records.clear()
         transport = httpx.ASGITransport(app=self.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
             # Login as admin
             login_resp = await client.post(
                 "/api/auth/login",
@@ -197,9 +196,8 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(any(e["id"] == email_id for e in emails2))
 
     async def test_buyer_forbidden_from_admin_whitelist_api(self):
-        limiter._records.clear()
         transport = httpx.ASGITransport(app=self.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
             # Login as buyer
             login_resp = await client.post(
                 "/api/auth/login",
@@ -220,9 +218,8 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(add_resp.status_code, 403)
 
     async def test_revocation_cascades_to_user_approval_and_sessions(self):
-        limiter._records.clear()
         transport = httpx.ASGITransport(app=self.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
             # Admin adds email for new user
             async with self.sessions() as session:
                 entry = AllowedEmail(email="revokeme@team.com", added_by="admin")
