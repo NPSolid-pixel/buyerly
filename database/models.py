@@ -461,19 +461,24 @@ class RuleExamplesBootstrap(Base):
 
 
 class MetaConnection(Base):
-    """One encrypted Meta user authorization owned by one Buyerly user."""
+    """One encrypted Meta user authorization owned by one Buyerly user in a specific workspace."""
 
     __tablename__ = "meta_connections"
     __table_args__ = (
         UniqueConstraint(
-            "owner_user_id",
+            "workspace_id",
             "provider_user_id",
-            name="uq_meta_connection_owner_provider_user",
+            name="uq_meta_connections_workspace_provider_user",
         ),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workspace_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     owner_user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -505,6 +510,12 @@ class MetaOAuthState(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     state_hash = Column(String, unique=True, nullable=False, index=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     owner_user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),

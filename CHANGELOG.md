@@ -38,6 +38,12 @@
   - Актуализирован план и чек-лист интеграции в `docs/FACEBOOK_AUTHORIZATION_PLAN.md`: зафиксированы `App ID` (`1363654095968021`), `Login Configuration ID` (`1796379231385440`), настройки редиректов `https://buyerly.app/api/meta/oauth/callback`, привязка домена и публичных политик.
 
 ### Security
+- **Строгая workspace-изоляция подключений Meta и OAuth states (`86eyr5z4q`)**:
+  - `MetaConnection` и `MetaOAuthState` строго привязаны к `workspace_id` (ForeignKey `workspaces.id` с `ondelete="CASCADE"`, `nullable=False`).
+  - Ограничение уникальности в БД обновлено с `(owner_user_id, provider_user_id)` на `(workspace_id, provider_user_id)`, что позволяет независимо подключать один и тот же FB-профиль в разных воркспейсах (командах/проектах) без коллизий.
+  - В `MetaOAuthState` сохраняется `workspace_id`, устраняя риск Scope Drift и состояния гонки при смене активного воркспейса во время OAuth-авторизации.
+  - В `resolve_account_access_token` и фоновом воркере внедрена проверка соответствия воркспейса рекламного кабинета и подключения (`account.workspace_id == connection.workspace_id`).
+  - Добавлена Alembic-миграция `0016_meta_connections_workspace_scope` с идемпотентным бэкфиллом и дедупликацией.
 - **Шифрование ручных Meta System User токенов (`86eyr5qbd`)**:
   - Ручной импорт через Web API и Telegram теперь сохраняет только Fernet-шифротекст, а deprecated plaintext-поле очищается.
   - Alembic-миграция атомарно шифрует существующие токены и блокирует deploy при отсутствующем или неверном ключе, если требуется перенос данных.

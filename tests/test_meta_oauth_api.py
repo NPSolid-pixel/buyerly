@@ -450,7 +450,230 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cb_resp.status_code, 303)
         self.assertIn("meta_status=identity_mismatch", cb_resp.headers["location"])
 
+    async def test_multi_workspace_same_fb_profile_independent_connections(self):
+        async with self.sessions() as session:
+            ws2 = Workspace(
+                name="Second Team",
+                slug="second-team",
+                owner_user_id=self.user_id,
+            )
+            session.add(ws2)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=ws2.id,
+                    user_id=self.user_id,
+                    role="owner",
+                )
+            )
+            user = await session.get(User, self.user_id)
+            user.active_workspace_id = ws2.id
+            await session.commit()
+            ws2_id = ws2.id
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # Start OAuth in workspace 2
+            start_resp = await client.post(
+                "/api/meta/oauth/start?return_path=/facebook-accounts",
+                headers=self.headers,
+            )
+            self.assertEqual(start_resp.status_code, 200)
+
+            fake_oauth = AsyncMock()
+            fake_oauth.exchange_code.return_value = {
+                "access_token": "EAAB-ws2-token",
+                "identity": {"id": "meta-user-1", "name": "Meta Test User"},
+                "debug": {
+                    "is_valid": True,
+                    "app_id": settings.META_APP_ID,
+                    "scopes": ["ads_read", "ads_management", "business_management"],
+                    "expires_at": 1893456000,
+                },
+            }
+
+            from urllib.parse import parse_qs, urlparse
+            auth_url = start_resp.json()["authorization_url"]
+            state = parse_qs(urlparse(auth_url).query)["state"][0]
+
+            with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+                cb_resp = await client.get(
+                    f"/api/meta/oauth/callback?state={state}&code=test-code-ws2",
+                    follow_redirects=False,
+                )
+
+        self.assertEqual(cb_resp.status_code, 303)
+        self.assertIn("meta_status=connected", cb_resp.headers["location"])
+
+        async with self.sessions() as session:
+            conn_ws1 = (
+                await session.execute(
+                    select(MetaConnection).where(
+                        MetaConnection.workspace_id == self.workspace_id,
+                        MetaConnection.provider_user_id == "meta-user-1",
+                    )
+                )
+            ).scalar_one()
+            conn_ws2 = (
+                await session.execute(
+                    select(MetaConnection).where(
+                        MetaConnection.workspace_id == ws2_id,
+                        MetaConnection.provider_user_id == "meta-user-1",
+                    )
+                )
+            ).scalar_one()
+
+            self.assertNotEqual(conn_ws1.id, conn_ws2.id)
+            self.assertEqual(conn_ws1.workspace_id, self.workspace_id)
+            self.assertEqual(conn_ws2.workspace_id, ws2_id)
+
+    async def test_oauth_callback_preserves_initial_workspace_even_if_active_workspace_switched(self):
+        async with self.sessions() as session:
+            ws_other = Workspace(
+                name="Other WS",
+                slug="other-ws",
+                owner_user_id=self.user_id,
+            )
+            session.add(ws_other)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=ws_other.id,
+                    user_id=self.user_id,
+                    role="owner",
+                )
+            )
+            await session.commit()
+            other_ws_id = ws_other.id
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # Start OAuth while self.workspace_id is active
+            start_resp = await client.post(
+                "/api/meta/oauth/start?return_path=/facebook-accounts",
+                headers=self.headers,
+            )
+            self.assertEqual(start_resp.status_code, 200)
+
+            # User switches active workspace to other_ws_id in another tab
+            async with self.sessions() as session:
+                user = await session.get(User, self.user_id)
+                user.active_workspace_id = other_ws_id
+                await session.commit()
+
+            fake_oauth = AsyncMock()
+            fake_oauth.exchange_code.return_value = {
+                "access_token": "EAAB-preserved-token",
+                "identity": {"id": "meta-user-new-profile", "name": "New Profile"},
+                "debug": {
+                    "is_valid": True,
+                    "app_id": settings.META_APP_ID,
+                    "scopes": ["ads_read", "ads_management", "business_management"],
+                    "expires_at": 1893456000,
+                },
+            }
+
+            from urllib.parse import parse_qs, urlparse
+            auth_url = start_resp.json()["authorization_url"]
+            state = parse_qs(urlparse(auth_url).query)["state"][0]
+
+            with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+                cb_resp = await client.get(
+                    f"/api/meta/oauth/callback?state={state}&code=test-code-switch",
+                    follow_redirects=False,
+                )
+
+        self.assertEqual(cb_resp.status_code, 303)
+        self.assertIn("meta_status=connected", cb_resp.headers["location"])
+
+        async with self.sessions() as session:
+            # Connection MUST belong to self.workspace_id (the initial workspace where start was invoked)
+            conn = (
+                await session.execute(
+                    select(MetaConnection).where(
+                        MetaConnection.provider_user_id == "meta-user-new-profile"
+                    )
+                )
+            ).scalar_one()
+            self.assertEqual(conn.workspace_id, self.workspace_id)
+            self.assertNotEqual(conn.workspace_id, other_ws_id)
+
+    async def test_oauth_start_blocks_viewer_role(self):
+        async with self.sessions() as session:
+            viewer = User(
+                username="pure-viewer",
+                auth_token="pure-viewer-token",
+                role="buyer",
+                is_approved=True,
+                active_workspace_id=self.workspace_id,
+            )
+            session.add(viewer)
+            await session.flush()
+            session.add(
+                WorkspaceMember(
+                    workspace_id=self.workspace_id,
+                    user_id=viewer.id,
+                    role="viewer",
+                )
+            )
+            await session.commit()
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/meta/oauth/start",
+                headers={"Authorization": "Bearer pure-viewer-token"},
+            )
+            self.assertEqual(resp.status_code, 403)
+
+    async def test_oauth_callback_blocks_revoked_or_viewer_membership(self):
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            start_resp = await client.post(
+                "/api/meta/oauth/start?return_path=/facebook-accounts",
+                headers=self.headers,
+            )
+            self.assertEqual(start_resp.status_code, 200)
+
+            # Demote member to viewer before callback arrives
+            async with self.sessions() as session:
+                member = (
+                    await session.execute(
+                        select(WorkspaceMember).where(
+                            WorkspaceMember.workspace_id == self.workspace_id,
+                            WorkspaceMember.user_id == self.user_id,
+                        )
+                    )
+                ).scalar_one()
+                member.role = "viewer"
+                await session.commit()
+
+            fake_oauth = AsyncMock()
+            fake_oauth.exchange_code.return_value = {
+                "access_token": "EAAB-demoted-token",
+                "identity": {"id": "meta-user-demoted", "name": "Demoted"},
+                "debug": {
+                    "is_valid": True,
+                    "app_id": settings.META_APP_ID,
+                    "scopes": ["ads_read", "ads_management", "business_management"],
+                },
+            }
+
+            from urllib.parse import parse_qs, urlparse
+            auth_url = start_resp.json()["authorization_url"]
+            state = parse_qs(urlparse(auth_url).query)["state"][0]
+
+            with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+                cb_resp = await client.get(
+                    f"/api/meta/oauth/callback?state={state}&code=test-code-demote",
+                    follow_redirects=False,
+                )
+
+        self.assertEqual(cb_resp.status_code, 303)
+        self.assertIn("meta_status=permission_denied", cb_resp.headers["location"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

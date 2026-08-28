@@ -13,7 +13,7 @@ from core.meta_tokens import (
     rotate_stored_meta_tokens,
     resolve_account_access_token,
 )
-from database.models import Account, MetaConnection, User
+from database.models import Account, MetaConnection, User, Workspace, WorkspaceMember
 from tests.test_db_helper import create_test_engine, init_test_db
 
 
@@ -104,7 +104,15 @@ class TestStoredMetaTokens(unittest.IsolatedAsyncioTestCase):
             user = User(username="token-rotation-user")
             session.add(user)
             await session.flush()
+            ws = Workspace(
+                name="Rotation WS",
+                slug="rotation-ws",
+                owner_user_id=user.id,
+            )
+            session.add(ws)
+            await session.flush()
             connection = MetaConnection(
+                workspace_id=ws.id,
                 owner_user_id=user.id,
                 provider_user_id="rotation-provider-user",
                 access_token_encrypted=encrypt_meta_token("oauth-secret"),
@@ -113,6 +121,7 @@ class TestStoredMetaTokens(unittest.IsolatedAsyncioTestCase):
             account = Account(
                 account_id="act_rotation_manual",
                 name="Rotation manual",
+                workspace_id=ws.id,
                 owner_user_id=user.id,
                 access_token="",
                 access_token_encrypted=encrypt_meta_token("manual-secret"),
@@ -143,6 +152,77 @@ class TestStoredMetaTokens(unittest.IsolatedAsyncioTestCase):
                 primary.decrypt(account.access_token_encrypted.encode("ascii")),
                 b"manual-secret",
             )
+
+    async def test_resolve_account_token_workspace_mismatch_fails(self):
+        async with self.session_maker() as session:
+            user = User(username="ws-user-1")
+            session.add(user)
+            await session.flush()
+            ws1 = Workspace(name="WS 1", slug="ws-1", owner_user_id=user.id)
+            ws2 = Workspace(name="WS 2", slug="ws-2", owner_user_id=user.id)
+            session.add_all([ws1, ws2])
+            await session.flush()
+
+            conn = MetaConnection(
+                workspace_id=ws1.id,
+                owner_user_id=user.id,
+                provider_user_id="prov-ws-1",
+                access_token_encrypted=encrypt_meta_token("token-ws-1"),
+                status="active",
+            )
+            session.add(conn)
+            await session.flush()
+
+            account_mismatch = Account(
+                account_id="act_ws_mismatch",
+                name="Mismatch Account",
+                workspace_id=ws2.id,
+                owner_user_id=user.id,
+                meta_connection_id=conn.id,
+                access_token="",
+            )
+            session.add(account_mismatch)
+            await session.commit()
+
+            with self.assertRaises(MetaTokenError) as ctx:
+                await resolve_account_access_token(session, account_mismatch)
+            self.assertIn("workspace mismatch", str(ctx.exception))
+
+    async def test_resolve_account_token_same_workspace_shared_connection_succeeds(self):
+        async with self.session_maker() as session:
+            buyer1 = User(username="buyer-1")
+            buyer2 = User(username="buyer-2")
+            session.add_all([buyer1, buyer2])
+            await session.flush()
+
+            team_ws = Workspace(name="Team WS", slug="team-ws", owner_user_id=buyer1.id)
+            session.add(team_ws)
+            await session.flush()
+
+            conn = MetaConnection(
+                workspace_id=team_ws.id,
+                owner_user_id=buyer1.id,
+                provider_user_id="prov-team-1",
+                access_token_encrypted=encrypt_meta_token("shared-team-token"),
+                status="active",
+            )
+            session.add(conn)
+            await session.flush()
+
+            # Account owned by buyer2 in the same workspace using buyer1's connection
+            account_shared = Account(
+                account_id="act_shared_team",
+                name="Team Account",
+                workspace_id=team_ws.id,
+                owner_user_id=buyer2.id,
+                meta_connection_id=conn.id,
+                access_token="",
+            )
+            session.add(account_shared)
+            await session.commit()
+
+            token = await resolve_account_access_token(session, account_shared)
+            self.assertEqual(token, "shared-team-token")
 
 
 if __name__ == "__main__":
