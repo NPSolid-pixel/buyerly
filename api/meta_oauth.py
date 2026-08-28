@@ -147,7 +147,63 @@ async def _workspace_connection(
     return connection, ws, member
 
 
-def _serialize_asset(asset: MetaConnectionAsset, imported_ids: set[str]) -> dict:
+def _serialize_asset(
+    asset: MetaConnectionAsset,
+    existing_accounts: dict[str, Account] | set[str],
+    current_connection_id: int | None = None,
+) -> dict:
+    if isinstance(existing_accounts, set):
+        is_in_set = asset.meta_account_id in existing_accounts
+        return {
+            "account_id": asset.meta_account_id,
+            "name": asset.name,
+            "business_id": asset.business_id,
+            "business_name": asset.business_name,
+            "account_status": asset.account_status,
+            "currency": asset.currency,
+            "timezone_name": asset.timezone_name,
+            "imported": is_in_set,
+            "import_status": "this_connection" if is_in_set else "not_imported",
+            "can_migrate": False,
+            "rules_count": 0,
+            "rules_enabled": False,
+            "custom_name": "",
+            "discovered_at": asset.discovered_at.isoformat(),
+        }
+
+    existing = existing_accounts.get(asset.meta_account_id)
+    if existing is None:
+        import_status = "not_imported"
+        can_migrate = False
+        rules_count = 0
+        rules_enabled = False
+        custom_name = ""
+        imported = False
+    elif current_connection_id is not None and existing.meta_connection_id == current_connection_id:
+        import_status = "this_connection"
+        can_migrate = False
+        rules_list = _json_list(existing.active_rules)
+        rules_count = len(rules_list)
+        rules_enabled = bool(existing.rules_enabled)
+        custom_name = existing.custom_name or ""
+        imported = True
+    elif existing.meta_connection_id is None:
+        import_status = "manual_token"
+        can_migrate = True
+        rules_list = _json_list(existing.active_rules)
+        rules_count = len(rules_list)
+        rules_enabled = bool(existing.rules_enabled)
+        custom_name = existing.custom_name or ""
+        imported = False
+    else:
+        import_status = "other_connection"
+        can_migrate = True
+        rules_list = _json_list(existing.active_rules)
+        rules_count = len(rules_list)
+        rules_enabled = bool(existing.rules_enabled)
+        custom_name = existing.custom_name or ""
+        imported = False
+
     return {
         "account_id": asset.meta_account_id,
         "name": asset.name,
@@ -156,7 +212,12 @@ def _serialize_asset(asset: MetaConnectionAsset, imported_ids: set[str]) -> dict
         "account_status": asset.account_status,
         "currency": asset.currency,
         "timezone_name": asset.timezone_name,
-        "imported": asset.meta_account_id in imported_ids,
+        "imported": imported,
+        "import_status": import_status,
+        "can_migrate": can_migrate,
+        "rules_count": rules_count,
+        "rules_enabled": rules_enabled,
+        "custom_name": custom_name,
         "discovered_at": asset.discovered_at.isoformat(),
     }
 
@@ -713,24 +774,30 @@ async def list_connection_assets(
             if ws
             else owned_by(Account, user)
         )
-        imported_ids = set(
-            (
+        existing_accounts = {
+            acc.account_id: acc
+            for acc in (
                 await session.execute(
-                    select(Account.account_id).where(scope_clause)
+                    select(Account).where(scope_clause)
                 )
             ).scalars().all()
-        )
+        }
+        serialized = [
+            _serialize_asset(asset, existing_accounts, connection.id)
+            for asset in assets
+        ]
+        imported_count = sum(1 for item in serialized if item["import_status"] == "this_connection")
+        migratable_count = sum(1 for item in serialized if item["can_migrate"])
         return {
             "connection": {
                 "id": connection.id,
                 "provider_user_name": connection.provider_user_name,
                 "status": connection.status,
             },
-            "accounts": [_serialize_asset(asset, imported_ids) for asset in assets],
+            "accounts": serialized,
             "count": len(assets),
-            "imported_count": sum(
-                1 for asset in assets if asset.meta_account_id in imported_ids
-            ),
+            "imported_count": imported_count,
+            "migratable_count": migratable_count,
         }
 
 
@@ -818,6 +885,20 @@ async def import_accounts(
 
                     status_code = int(account_info.get("account_status") or 0)
                     status_label = str(account_info.get("status_label") or f"Статус #{status_code}")
+                    was_migrated = False
+                    rules_count = 0
+                    prev_connection_type = "none"
+                    prev_connection_id = None
+                    if existing:
+                        rules_list = _json_list(existing.active_rules)
+                        rules_count = len(rules_list)
+                        if existing.meta_connection_id != connection.id:
+                            was_migrated = True
+                            prev_connection_type = (
+                                "system_user" if existing.meta_connection_id is None else "other_oauth"
+                            )
+                            prev_connection_id = existing.meta_connection_id
+
                     account = existing or Account(
                         account_id=account_id,
                         name=str(account_info.get("name") or asset.name or account_id),
@@ -844,6 +925,44 @@ async def import_accounts(
                     account.is_active = True
                     if not existing:
                         session.add(account)
+
+                    if was_migrated:
+                        session.add(
+                            AuditEvent(
+                                workspace_id=ws.id if ws else None,
+                                owner_user_id=user.id,
+                                actor_type="user",
+                                actor_id=str(user.telegram_id or user.id),
+                                category="MANUAL_ACTION",
+                                event_type="ACCOUNT_MIGRATED_TO_OAUTH",
+                                status="SUCCESS",
+                                account_id=account_id,
+                                account_name=account.name,
+                                action="MIGRATE_TO_OAUTH",
+                                message=(
+                                    f"Кабинет {account_id} успешно переведён на OAuth-подключение "
+                                    f"({connection.provider_user_name or connection.provider_user_id}). "
+                                    f"Назначенные правила сохранены ({rules_count} шт.)."
+                                ),
+                                before_state={
+                                    "connection_type": prev_connection_type,
+                                    "previous_connection_id": prev_connection_id,
+                                    "rules_enabled": account.rules_enabled,
+                                    "rules_count": rules_count,
+                                },
+                                after_state={
+                                    "connection_type": "facebook_login",
+                                    "meta_connection_id": connection.id,
+                                    "rules_enabled": account.rules_enabled,
+                                    "rules_count": rules_count,
+                                },
+                                details={
+                                    "provider_user_id": connection.provider_user_id,
+                                    "provider_user_name": connection.provider_user_name,
+                                },
+                                correlation_id=secrets.token_hex(16),
+                            )
+                        )
                     await session.flush()
                 added.append(
                     {
@@ -852,6 +971,9 @@ async def import_accounts(
                         "business_name": asset.business_name,
                         "timezone_name": timezone_name,
                         "currency": currency,
+                        "migrated": was_migrated,
+                        "rules_count": rules_count,
+                        "rules_enabled": account.rules_enabled,
                     }
                 )
             except Exception as exc:

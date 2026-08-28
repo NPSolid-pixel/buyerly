@@ -4258,10 +4258,21 @@
     const ownerHtml = state.user?.role === 'admin'
       ? `<div class="account-detail-field"><span>Владелец (User ID)</span><b class="mono">${escapeHtml(account.owner_user_id ? `User #${account.owner_user_id}` : (account.owner_id || '—'))}</b></div>`
       : '';
-    const connectionState = getAccountConnectionState(account);
-    const displayName = accountDisplayName(account);
-    const hasCustomName = String(account.custom_name || '').trim();
-    const note = String(account.note || '').trim();
+    const isManualToken = account?.connection_type === 'system_user';
+    const hasFbConnections = Array.isArray(state.fbConnections) && state.fbConnections.length > 0;
+    const migrationCallout = isManualToken
+      ? `
+      <div class="account-detail-migration-callout">
+        <div class="migration-callout-icon">🔒</div>
+        <div class="migration-callout-body">
+          <b>Рекомендуется перевести на Facebook Login (OAuth)</b>
+          <p>Безопасное хранение и автоматическое продление токена. Все назначенные правила (${activeRules.length} шт.) и статистика сохраняются.</p>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.migrateAccountFromDetails(${escapeJsArg(account.account_id)})">
+          ${hasFbConnections ? 'Перевести на OAuth' : 'Подключить Facebook'}
+        </button>
+      </div>`
+      : '';
 
     content.innerHTML = `
       <div class="account-detail-hero">
@@ -4273,6 +4284,8 @@
         </div>
         <span class="account-meta-state ${metaState.key}"><span class="status-dot dot-${metaState.dot}"></span>${metaState.label}</span>
       </div>
+
+      ${migrationCallout}
 
       <div class="account-detail-grid">
         <div class="account-detail-field"><span>Статус Meta</span><b>${escapeHtml(account.status_label || metaState.label)}</b></div>
@@ -4311,6 +4324,17 @@
         <button class="btn btn-danger" type="button" onclick="window.deleteAccountFromDetails(${escapeJsArg(account.account_id)})">Удалить</button>
       </div>`;
     window.openModal('modalAccountDetails');
+  };
+
+  window.migrateAccountFromDetails = async function (accountId) {
+    window.closeModal('modalAccountDetails');
+    const hasFbConnections = Array.isArray(state.fbConnections) && state.fbConnections.length > 0;
+    if (hasFbConnections) {
+      const activeConn = state.fbConnections.find(c => c.status === 'active') || state.fbConnections[0];
+      await discoverMetaAssets(activeConn.id);
+    } else {
+      window.startMetaOAuthFlow();
+    }
   };
 
   window.manageRulesFromAccountDetails = function (accountId) {
@@ -9718,7 +9742,9 @@
       const titleEl = document.getElementById('metaAssetsTitle');
       const subEl = document.getElementById('metaAssetsSubtitle');
       if (titleEl) titleEl.textContent = result.connection?.provider_user_name || 'Доступные кабинеты Facebook';
-      if (subEl) subEl.textContent = `Найдено кабинетов: ${result.count || 0} · уже подключено: ${result.imported_count || 0}`;
+      const migratable = result.migratable_count || 0;
+      const migratableLabel = migratable > 0 ? ` · готово к миграции с ручного токена: ${migratable}` : '';
+      if (subEl) subEl.textContent = `Найдено кабинетов: ${result.count || 0} · уже подключено: ${result.imported_count || 0}${migratableLabel}`;
       renderMetaAssets();
     } catch (err) {
       if (groups) groups.innerHTML = '';
@@ -9754,13 +9780,37 @@
           <small>${accounts.length} кабинетов</small>
         </div>
         <div class="meta-asset-list">
-          ${accounts.map(asset => `
-            <label class="meta-asset-row ${asset.imported ? 'is-imported' : ''}">
-              <input class="meta-asset-checkbox" type="checkbox" value="${escapeHtml(asset.account_id)}" ${asset.imported ? 'checked disabled' : ''}>
-              <span class="meta-asset-main"><b>${escapeHtml(asset.name)}</b><code>${escapeHtml(asset.account_id)}</code></span>
+          ${accounts.map(asset => {
+            const isMigratable = Boolean(asset.can_migrate);
+            const isImported = Boolean(asset.imported);
+            let badgeClass = 'badge-neutral';
+            let badgeLabel = 'Доступен';
+            let ruleHint = '';
+            if (isImported) {
+              badgeClass = 'badge-success';
+              badgeLabel = 'Подключён';
+            } else if (asset.import_status === 'manual_token') {
+              badgeClass = 'badge-migration';
+              badgeLabel = 'Миграция на OAuth';
+              const rules = asset.rules_count || 0;
+              ruleHint = `<small style="color: var(--accent-primary); font-size: 11px; display: block; margin-top: 1px;">Ручной токен · сохранит ${rules} ${pluralize(rules, 'правило', 'правила', 'правил')}</small>`;
+            } else if (asset.import_status === 'other_connection') {
+              badgeClass = 'badge-migration';
+              badgeLabel = 'Сменить профиль';
+              ruleHint = '<small style="color: var(--text-muted); font-size: 11px; display: block; margin-top: 1px;">Привязан к другому профилю</small>';
+            }
+            return `
+            <label class="meta-asset-row ${isImported ? 'is-imported' : ''} ${isMigratable ? 'is-migratable' : ''}">
+              <input class="meta-asset-checkbox" type="checkbox" value="${escapeHtml(asset.account_id)}" ${isImported ? 'checked disabled' : ''}>
+              <span class="meta-asset-main">
+                <b>${escapeHtml(asset.name)}</b>
+                <code>${escapeHtml(asset.account_id)}</code>
+                ${ruleHint}
+              </span>
               <span class="meta-asset-meta"><b>${escapeHtml(asset.currency)}</b><small>${escapeHtml(asset.timezone_name)}</small></span>
-              <span class="badge ${asset.imported ? 'badge-success' : 'badge-neutral'}">${asset.imported ? 'Подключён' : 'Доступен'}</span>
-            </label>`).join('')}
+              <span class="badge ${badgeClass}">${escapeHtml(badgeLabel)}</span>
+            </label>`;
+          }).join('')}
         </div>
       </section>`).join('');
     document.querySelectorAll('.meta-asset-checkbox:not(:disabled)').forEach(input => {
@@ -9780,7 +9830,15 @@
     document.getElementById('metaSelectionCount').textContent = `Выбрано: ${selected}`;
     const importButton = document.getElementById('btnImportMetaAssets');
     importButton.disabled = selected === 0;
-    importButton.querySelector('span').textContent = selected ? `Добавить выбранные (${selected})` : 'Добавить выбранные кабинеты';
+    const selectedAssets = state.metaOAuth.assets.filter(asset => state.metaOAuth.selectedAccountIds.has(asset.account_id));
+    const hasMigratable = selectedAssets.some(asset => asset.can_migrate);
+    if (selected > 0) {
+      importButton.querySelector('span').textContent = hasMigratable
+        ? `Подключить и перенести (${selected})`
+        : `Добавить выбранные (${selected})`;
+    } else {
+      importButton.querySelector('span').textContent = 'Добавить выбранные кабинеты';
+    }
     selectAll.checked = available.length > 0 && selected === available.length;
     selectAll.indeterminate = selected > 0 && selected < available.length;
   }
@@ -9817,7 +9875,16 @@
       document.getElementById('batchProgressBar').style.width = '100%';
       document.getElementById('batchProgressText').textContent = `Подключено: ${result.success_count} из ${accountIds.length}`;
       const rows = [];
-      (result.added || []).forEach(item => rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${escapeHtml(item.account_id)})</span><span class="badge badge-success">OK</span></div>`));
+      (result.added || []).forEach(item => {
+        if (item.migrated) {
+          const rulesNote = typeof item.rules_count === 'number' && item.rules_count > 0
+            ? ` · сохранено правил: ${item.rules_count}`
+            : '';
+          rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${escapeHtml(item.account_id)}) <small style="color:var(--accent-primary); font-weight:600;">Мигрирован на OAuth${rulesNote}</small></span><span class="badge badge-success">OK</span></div>`);
+        } else {
+          rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${escapeHtml(item.account_id)})</span><span class="badge badge-success">OK</span></div>`);
+        }
+      });
       (result.errors || []).forEach(item => rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-danger"></span><b>${escapeHtml(item.account_id)}</b>: ${escapeHtml(item.error)}</span><span class="badge badge-danger">Ошибка</span></div>`));
       document.getElementById('batchResultsList').innerHTML = rows.join('');
       document.getElementById('btnBatchDone').classList.remove('hidden');
