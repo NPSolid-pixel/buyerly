@@ -14,7 +14,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=10.0.0">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.24.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=10.0.0">
 </head>
 
 <body>
@@ -482,37 +482,32 @@
       <!-- TAB: ГЛАВНАЯ (HOME / AI PROMPT) -->
       <!-- ============================================== -->
       <section id="tab-home" class="tab-content active">
-        <div class="home-canvas">
-          <div class="home-content-box">
-            <h1 class="greeting-title" id="homeGreetingTitle">Доброе утро, Buyerly.</h1>
-            <div class="ai-prompt-card">
-              <textarea class="prompt-textarea" placeholder="Ask anything..."></textarea>
-              <div class="prompt-toolbar">
-                <div class="model-selector-pill">
-                  <span>Auto</span>
-                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                  </svg>
-                </div>
-                <div class="prompt-actions-right">
-                  <div class="icon-action-btn" title="Прикрепить файл">
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
-                    </svg>
-                  </div>
-                  <div class="icon-action-btn" title="Голосовой ввод">
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
-                    </svg>
-                  </div>
-                  <button class="send-btn" title="Отправить" type="button">
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
+        <div class="ui-page today-page" data-ui-pilot="today">
+          <div class="ui-card today-hero">
+            <div class="today-eyebrow">Сегодня</div>
+            <h1 id="homeGreetingTitle">Доброе утро, Buyerly.</h1>
+            <p>Проверьте состояние подключений, автоматизаций и последних действий — без декоративных контролов и скрытых сценариев.</p>
+          </div>
+          <div class="ui-alert ui-alert-info" role="status">
+            <div><strong>Рабочий обзор</strong><br>Каждая карточка ведёт к реальному разделу и следующему действию.</div>
+            <button class="ui-button" type="button" onclick="window.switchTab('summary')">Открыть эффективность</button>
+          </div>
+          <div class="today-action-grid" aria-label="Быстрые действия">
+            <button class="today-action-card" type="button" onclick="window.switchTab('fb_accounts')">
+              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></span>
+              <strong>Подключения</strong>
+              <span>Подключите Facebook-профиль, проверьте токен и доступные Business Manager.</span>
+            </button>
+            <button class="today-action-card" type="button" onclick="window.switchTab('rules')">
+              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 109 9"/></svg></span>
+              <strong>Автоматизации</strong>
+              <span>Просмотрите активные правила, условия и привязанные рекламные кабинеты.</span>
+            </button>
+            <button class="today-action-card" type="button" onclick="window.switchTab('logs')">
+              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+              <strong>История действий</strong>
+              <span>Узнайте, что произошло, почему сработало правило и можно ли отменить действие.</span>
+            </button>
           </div>
         </div>
       </section>
@@ -520,27 +515,27 @@
       <!-- ============================================== -->
       <!-- TAB: FACEBOOK АККАУНТЫ (FB ACCOUNTS / PROFILES) -->
       <!-- ============================================== -->
-      <section id="tab-fb_accounts" class="tab-content">
+      <section id="tab-fb_accounts" class="tab-content ui-page" data-ui-pilot="connections">
         <!-- Attio View Header -->
-        <div class="attio-view-header">
+        <div class="attio-view-header ui-page-header">
           <div class="attio-view-header-left">
             <div class="attio-view-selector">
               <div class="attio-view-icon-badge" style="background: #EBF3FF; color: #1877F2;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
               </div>
-              <span class="attio-view-title">Facebook Профили и BM</span>
+              <div><span class="attio-view-title">Подключения Meta</span><p class="ui-page-description">Facebook-профили, Business Manager и состояние доступа в одном месте.</p></div>
             </div>
           </div>
           <div class="attio-view-header-right">
-            <button class="attio-header-btn" type="button" onclick="window.openManualTokenModal()">
+            <button class="attio-header-btn ui-button" type="button" onclick="window.openManualTokenModal()">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
               <span>По токену</span>
             </button>
-            <button class="attio-header-btn" type="button" onclick="window.openMetaInviteModal()" title="Отправить одноразовую ссылку байеру для подключения Facebook-профиля">
+            <button class="attio-header-btn ui-button" type="button" onclick="window.openMetaInviteModal()" title="Отправить одноразовую ссылку байеру для подключения Facebook-профиля">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
               <span>Пригласить</span>
             </button>
-            <button class="btn btn-primary btn-sm" onclick="window.startMetaOAuthFlow()">
+            <button class="btn btn-primary btn-sm ui-button ui-button-primary" onclick="window.startMetaOAuthFlow()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>Подключить Facebook</span>
             </button>
@@ -550,7 +545,7 @@
         <!-- FB Accounts Table Container -->
         <div id="fbAccountsListContainer">
           <div class="attio-table-viewport">
-            <table class="attio-table" id="fbAccountsTable">
+            <table class="attio-table ui-table" id="fbAccountsTable">
               <thead>
                 <tr>
                   <th class="attio-th sticky-col" style="width: 280px;">
@@ -616,18 +611,18 @@
               </tbody>
             </table>
           </div>
-          <div id="fbAccountsEmptyState" class="empty-state hidden">
+          <div id="fbAccountsEmptyState" class="empty-state ui-empty-state hidden">
             <div class="empty-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
             <h3>Нет подключенных Facebook аккаунтов</h3>
             <p>Подключите профиль через официальный Facebook Login в 1 клик или вручную по токену.</p>
             <div style="display: flex; gap: 8px; justify-content: center; margin-top: 16px;">
-              <button class="btn btn-primary" onclick="window.startMetaOAuthFlow()">
+              <button class="btn btn-primary ui-button ui-button-primary" onclick="window.startMetaOAuthFlow()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Подключить Facebook
               </button>
-              <button class="btn btn-secondary" onclick="window.openManualTokenModal()">
+              <button class="btn btn-secondary ui-button" onclick="window.openManualTokenModal()">
                 По токену
               </button>
             </div>
@@ -773,17 +768,18 @@
       <!-- ============================================== -->
       <!-- TAB: ПРАВИЛА (RULES & PRESETS - ATTIO WORKSPACE) -->
       <!-- ============================================== -->
-      <section id="tab-rules" class="tab-content rules-tab-content">
+      <section id="tab-rules" class="tab-content rules-tab-content ui-page" data-ui-pilot="automations">
         
         <!-- VIEW 1: Rules Kanban Board -->
         <div id="rulesKanbanView" class="rules-subview">
           <!-- Rules Header & Actions -->
-          <div class="rules-tab-header">
+          <div class="rules-tab-header ui-page-header">
             <div class="rules-header-info">
-              <h2>Правила мониторинга кампаний</h2>
+              <h2>Автоматизации</h2>
+              <p class="ui-page-description">Правила, которые отслеживают рекламу и выполняют контролируемые действия.</p>
             </div>
             <div class="rules-header-actions">
-              <button class="btn btn-primary btn-add-rule-main" type="button" onclick="window.openCreateRuleFromTab()">
+              <button class="btn btn-primary btn-add-rule-main ui-button ui-button-primary" type="button" onclick="window.openCreateRuleFromTab()">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 <span>Новое правило</span>
               </button>
@@ -825,13 +821,13 @@
           <section id="ruleGroupsSection" class="rule-groups-section hidden"></section>
 
           <!-- Rules Empty State (when 0 rules created) -->
-          <div id="rulesEmptyState" class="rules-empty-card hidden">
+          <div id="rulesEmptyState" class="rules-empty-card ui-empty-state hidden">
             <div class="bell-empty-icon">
               <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             </div>
             <h3>Правил пока нет</h3>
             <p>Создайте первое правило для автоматического управления рекламой</p>
-            <button class="btn btn-primary" type="button" onclick="window.openCreateRuleFromTab()">Создать правило</button>
+            <button class="btn btn-primary ui-button ui-button-primary" type="button" onclick="window.openCreateRuleFromTab()">Создать правило</button>
           </div>
         </div>
 
@@ -3145,9 +3141,9 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=9.24.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=9.24.0"></script>
-  <script src="/static/js/security.js?v=9.24.0"></script>
-  <script src="/static/js/app.js?v=9.24.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.0.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.0.0"></script>
+  <script src="/static/js/security.js?v=10.0.0"></script>
+  <script src="/static/js/app.js?v=10.0.0"></script>
 </body>
 </html>
