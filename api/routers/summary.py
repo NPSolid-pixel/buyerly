@@ -368,23 +368,49 @@ async def get_summary_report(
 
                 if ws_id:
                     try:
-                        hierarchical_facts = await meta_client.get_hierarchical_insights(
+                        acc_fact = {
+                            "account_id": acc.account_id,
+                            "entity_level": "account",
+                            "entity_id": acc.account_id,
+                            "entity_name": acc.name or acc.account_id,
+                            "parent_entity_id": "",
+                            "currency": account_currency,
+                            "spend": acc_spend,
+                            "impressions": acc_impressions,
+                            "reach": acc_reach,
+                            "frequency": round(acc_frequency, 2),
+                            "cpm": round(acc_cpm, 2),
+                            "clicks": acc_clicks,
+                            "unique_clicks": acc_unique_clicks,
+                            "link_clicks": acc_link_clicks,
+                            "outbound_clicks": acc_outbound_clicks,
+                            "landing_page_views": acc_landing_page_views,
+                            "cpc": round(acc_cpc, 2),
+                            "cpc_link": _cost_or_none(acc_spend, acc_link_clicks),
+                            "ctr": round(acc_ctr, 2),
+                            "ctr_link": round(acc_ctr_link, 2),
+                            "ctr_outbound": round(acc_ctr_outbound, 2),
+                            "leads": acc_leads,
+                            "registrations": acc_regs,
+                            "purchases": acc_purchases,
+                            "cost_per_lead": _cost_or_none(acc_spend, acc_leads),
+                            "cost_per_registration": _cost_or_none(acc_spend, acc_regs),
+                            "cost_per_purchase": _cost_or_none(acc_spend, acc_purchases),
+                            "cost_per_landing_page_view": _cost_or_none(acc_spend, acc_landing_page_views),
+                            "raw_actions": [],
+                            "status": acc.status_label,
+                            "effective_status": acc.status_label,
+                            "daily_budget": 0.0,
+                        }
+                        await AnalyticsFactService.upsert_entity_facts(
+                            session,
+                            workspace_id=ws_id,
                             account_id=acc.account_id,
-                            access_token=access_token,
-                            date_preset=period,
-                            currency=account_currency,
-                            account_name=acc.name,
+                            facts=[acc_fact],
                         )
-                        if hierarchical_facts:
-                            await AnalyticsFactService.upsert_entity_facts(
-                                session,
-                                workspace_id=ws_id,
-                                account_id=acc.account_id,
-                                facts=hierarchical_facts,
-                            )
                     except Exception as fact_err:
                         logger.warning(
-                            "Failed to upsert hierarchical facts for %s: %s",
+                            "Failed to upsert account fact for %s: %s",
                             acc.account_id,
                             fact_err,
                         )

@@ -477,7 +477,10 @@ class TestAnalyticsFactStore(unittest.IsolatedAsyncioTestCase):
 
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
-            init_data_w1 = generate_valid_telegram_init_data("11111111", "buyer1")
+            init_data_w1 = generate_valid_telegram_init_data(
+                settings.BOT_TOKEN,
+                {"id": 11111111, "first_name": "Buyer One", "username": "buyer1"},
+            )
             headers_w1 = {"Authorization": f"tma {init_data_w1}"}
 
             # Authorized query for own account's campaigns
