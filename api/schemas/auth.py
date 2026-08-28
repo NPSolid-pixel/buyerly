@@ -102,3 +102,18 @@ class UpdateProfileRequest(BaseModel):
         if cleaned.startswith("http://") or cleaned.startswith("https://"):
             return cleaned
         raise ValueError("avatar_url должен начинаться с https://, http:// или /uploads/avatars/")
+
+
+class AllowedEmailItem(BaseModel):
+    id: int
+    email: str
+    added_by: Optional[str] = None
+    comment: Optional[str] = None
+    created_at: datetime
+
+
+class AddAllowedEmailRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(..., min_length=3, max_length=255)
+    comment: Optional[str] = Field(None, max_length=255)
+

@@ -134,3 +134,61 @@ def get_account_manage_keyboard(account_id: str, rules_enabled: bool) -> InlineK
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
+
+def get_admin_panel_keyboard() -> InlineKeyboardMarkup:
+    """Кнопки в админ-панели управления"""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📧 Разрешенные Email", callback_data="admin_whitelist:1")
+            ]
+        ]
+    )
+
+
+def get_admin_whitelist_keyboard(
+    emails: list,
+    page: int = 1,
+    total_pages: int = 1,
+) -> InlineKeyboardMarkup:
+    """Клавиатура управления белым списком Email с пагинацией и безопасным callback_data"""
+    kb = []
+
+    # Individual delete buttons for emails on current page
+    for item in emails:
+        comment_str = f" ({item.comment[:15]})" if item.comment else ""
+        btn_text = f"🗑 {item.email[:25]}{comment_str}"
+        kb.append([
+            InlineKeyboardButton(
+                text=btn_text,
+                callback_data=f"del_em:{item.id}",
+            )
+        ])
+
+    # Pagination row
+    nav_row = []
+    if page > 1:
+        nav_row.append(
+            InlineKeyboardButton(text="◀️ Назад", callback_data=f"admin_whitelist:{page - 1}")
+        )
+    nav_row.append(
+        InlineKeyboardButton(text=f"Стр. {page}/{total_pages}", callback_data="noop")
+    )
+    if page < total_pages:
+        nav_row.append(
+            InlineKeyboardButton(text="Вперед ▶️", callback_data=f"admin_whitelist:{page + 1}")
+        )
+    if len(nav_row) > 1 or total_pages > 1:
+        kb.append(nav_row)
+
+    # Action buttons
+    kb.append([
+        InlineKeyboardButton(text="➕ Добавить Email", callback_data="admin_add_email")
+    ])
+    kb.append([
+        InlineKeyboardButton(text="🔙 Назад в Админ-панель", callback_data="admin_back_to_panel")
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+

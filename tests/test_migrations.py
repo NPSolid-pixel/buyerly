@@ -1245,7 +1245,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
 
             async with engine.begin() as conn:
                 version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-                self.assertEqual(version, "0019_runtime_payload_jsonb")
+                self.assertEqual(version, "0020_allowed_emails")
 
             command.downgrade(alembic_cfg, "base")
         finally:
@@ -1268,7 +1268,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0019_runtime_payload_jsonb")
+                self.assertEqual(version, "0020_allowed_emails")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -1302,7 +1302,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0019_runtime_payload_jsonb")
+                self.assertEqual(version, "0020_allowed_emails")
         finally:
             await init_test_db(engine)
             await engine.dispose()
@@ -1336,7 +1336,7 @@ class TestAlembicMigrations(unittest.IsolatedAsyncioTestCase):
                 version = (
                     await conn.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalar_one()
-                self.assertEqual(version, "0019_runtime_payload_jsonb")
+                self.assertEqual(version, "0020_allowed_emails")
         finally:
             await init_test_db(engine)
             await engine.dispose()

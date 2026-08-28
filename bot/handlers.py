@@ -10,7 +10,7 @@ from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 
 from core.config import settings
 from core.audit import build_audit_event
@@ -26,10 +26,12 @@ from core.timezones import resolve_account_clock
 from database.db import async_session_maker
 from database.models import (
     Account,
+    AllowedEmail,
     AppSettings,
     AuditEvent,
     StoppedAdSet,
     User,
+    WebSession,
     WorkspaceMember,
     WorkspaceSupportGrant,
 )
@@ -41,6 +43,8 @@ from bot.keyboards import (
     get_interval_keyboard,
     get_account_manage_keyboard,
     get_admin_approval_keyboard,
+    get_admin_panel_keyboard,
+    get_admin_whitelist_keyboard,
     get_undo_action_keyboard,
 )
 
@@ -55,6 +59,10 @@ class BatchAccountAddStates(StatesGroup):
     waiting_for_ids = State()
     waiting_for_name = State()
     waiting_for_token = State()
+
+
+class AdminWhitelistStates(StatesGroup):
+    waiting_for_email = State()
 
 
 # ----------------------------------------------------
@@ -911,6 +919,9 @@ async def cmd_admin_panel(message: Message, bot: Bot, state: FSMContext):
         a_res = await session.execute(select(Account))
         all_accounts = a_res.scalars().all()
 
+        # Количество разрешенных email в Whitelist
+        wl_count = (await session.execute(select(func.count(AllowedEmail.id)))).scalar() or 0
+
         active_count = sum(1 for a in all_accounts if a.is_active)
         approved_users = [u for u in users if u.is_approved]
 
@@ -922,10 +933,356 @@ async def cmd_admin_panel(message: Message, bot: Bot, state: FSMContext):
         text = (
             "👑 <b>Админ-панель управления Buyerly:</b>\n\n"
             f"👥 <b>Пользователей в команде:</b> {len(approved_users)}\n"
-            f"🏢 <b>Всего кабинетов на мониторинге:</b> {len(all_accounts)} (Активных: {active_count})\n\n"
+            f"🏢 <b>Всего кабинетов на мониторинге:</b> {len(all_accounts)} (Активных: {active_count})\n"
+            f"📧 <b>Разрешенных Email (Whitelist):</b> {wl_count}\n\n"
             f"<b>Состав команды:</b>\n" + ("\n".join(user_lines) if user_lines else "<i>Пока только вы</i>")
         )
-        await message.answer(text, parse_mode="HTML")
+        await message.answer(text, reply_markup=get_admin_panel_keyboard(), parse_mode="HTML")
+
+
+@router.callback_query(F.data == "noop")
+async def cb_noop(callback: CallbackQuery):
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_back_to_panel")
+async def cb_admin_back_to_panel(callback: CallbackQuery):
+    actor_id = str(callback.from_user.id)
+    async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            await callback.answer("⛔️ Недостаточно прав.", show_alert=True)
+            return
+
+        u_res = await session.execute(select(User))
+        users = u_res.scalars().all()
+        a_res = await session.execute(select(Account))
+        all_accounts = a_res.scalars().all()
+        wl_count = (await session.execute(select(func.count(AllowedEmail.id)))).scalar() or 0
+
+        active_count = sum(1 for a in all_accounts if a.is_active)
+        approved_users = [u for u in users if u.is_approved]
+
+        user_lines = []
+        for u in approved_users:
+            u_accs = sum(1 for a in all_accounts if entity_is_owned_by(a, u))
+            user_lines.append(f"• <b>{u.full_name}</b> (@{u.username}) | Кабинетов: {u_accs}")
+
+        text = (
+            "👑 <b>Админ-панель управления Buyerly:</b>\n\n"
+            f"👥 <b>Пользователей в команде:</b> {len(approved_users)}\n"
+            f"🏢 <b>Всего кабинетов на мониторинге:</b> {len(all_accounts)} (Активных: {active_count})\n"
+            f"📧 <b>Разрешенных Email (Whitelist):</b> {wl_count}\n\n"
+            f"<b>Состав команды:</b>\n" + ("\n".join(user_lines) if user_lines else "<i>Пока только вы</i>")
+        )
+        await callback.message.edit_text(text, reply_markup=get_admin_panel_keyboard(), parse_mode="HTML")
+        await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_whitelist:"))
+async def cb_admin_whitelist(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    actor_id = str(callback.from_user.id)
+    page_str = callback.data.split(":")[1]
+    page = int(page_str) if page_str.isdigit() else 1
+
+    async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            await callback.answer("⛔️ Недостаточно прав.", show_alert=True)
+            return
+
+        stmt = select(AllowedEmail).order_by(AllowedEmail.created_at.desc())
+        all_emails = (await session.execute(stmt)).scalars().all()
+
+        per_page = 8
+        total_pages = max(1, (len(all_emails) + per_page - 1) // per_page)
+        page = max(1, min(page, total_pages))
+
+        start_idx = (page - 1) * per_page
+        page_emails = all_emails[start_idx : start_idx + per_page]
+
+        lines = []
+        for i, e in enumerate(page_emails, start=start_idx + 1):
+            comment = f" — <i>{e.comment}</i>" if e.comment else ""
+            lines.append(f"{i}. <code>{e.email}</code>{comment}")
+
+        content_str = "\n".join(lines) if lines else "<i>Список пуст. Добавьте первый email.</i>"
+
+        text = (
+            "📧 <b>Разрешенные Email (Белый список):</b>\n\n"
+            f"Всего адресов: <b>{len(all_emails)}</b> (Стр. {page}/{total_pages})\n\n"
+            f"{content_str}\n\n"
+            "<i>💡 Только пользователи из этого списка могут запросить временный пароль на сайте. Чтобы удалить адрес, нажмите кнопку с его именем ниже.</i>"
+        )
+
+        kb = get_admin_whitelist_keyboard(page_emails, page=page, total_pages=total_pages)
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        await callback.answer()
+
+
+@router.callback_query(F.data == "admin_add_email")
+async def cb_admin_add_email(callback: CallbackQuery, state: FSMContext):
+    actor_id = str(callback.from_user.id)
+    async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            await callback.answer("⛔️ Недостаточно прав.", show_alert=True)
+            return
+
+    await state.set_state(AdminWhitelistStates.waiting_for_email)
+    text = (
+        "➕ <b>Добавление Email в белый список:</b>\n\n"
+        "Отправьте email (или несколько адресов через пробел, запятую или с новой строки).\n"
+        "Также можно указать комментарий после адреса, например:\n"
+        "<code>buyer@agency.com Иван</code>\n\n"
+        "<i>Для отмены нажмите кнопку ниже или отправьте /cancel</i>"
+    )
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_whitelist:1")]
+    ])
+    await callback.message.edit_text(text, reply_markup=cancel_kb, parse_mode="HTML")
+    await callback.answer()
+
+
+@router.message(AdminWhitelistStates.waiting_for_email)
+async def process_admin_add_email(message: Message, state: FSMContext):
+    actor_id = str(message.from_user.id)
+    async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            await state.clear()
+            await message.answer("⛔️ Недостаточно прав.")
+            return
+
+        raw_text = message.text or ""
+        if raw_text.strip().lower() in ("/cancel", "отмена", "❌ отмена"):
+            await state.clear()
+            await message.answer("❌ Добавление отменено.")
+            return
+
+        # Parse emails and optional comment
+        email_pattern = re.compile(r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)")
+        found_emails = email_pattern.findall(raw_text)
+
+        if not found_emails:
+            await message.answer("⚠️ Не удалось распознать email. Пожалуйста, отправьте корректный email-адрес (например: <code>buyer@team.com</code>):", parse_mode="HTML")
+            return
+
+        # Extract comment if single email was sent with text following it
+        comment = None
+        if len(found_emails) == 1:
+            parts = raw_text.split(found_emails[0], 1)
+            after_text = parts[1].strip() if len(parts) > 1 else ""
+            if after_text:
+                comment = after_text[:255]
+
+        added = []
+        already = []
+        for em in found_emails:
+            clean = em.strip().lower()
+            existing = (await session.execute(
+                select(AllowedEmail).where(func.lower(AllowedEmail.email) == clean)
+            )).scalar_one_or_none()
+
+            if existing:
+                already.append(clean)
+            else:
+                session.add(AllowedEmail(
+                    email=clean,
+                    added_by=f"tg_{actor_id}",
+                    comment=comment,
+                ))
+                added.append(clean)
+
+        await session.commit()
+        await state.clear()
+
+        lines = []
+        if added:
+            lines.append("✅ <b>Добавлены в белый список:</b>\n" + "\n".join(f"• <code>{e}</code>" for e in added))
+        if already:
+            lines.append("ℹ️ <b>Уже были в списке:</b>\n" + "\n".join(f"• <code>{e}</code>" for e in already))
+
+        lines.append("\nТеперь эти пользователи могут запрашивать временный пароль на сайте.")
+
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        go_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📧 Открыть белый список", callback_data="admin_whitelist:1")],
+            [InlineKeyboardButton(text="👑 В админ-панель", callback_data="admin_back_to_panel")]
+        ])
+        await message.answer("\n\n".join(lines), reply_markup=go_kb, parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("del_em:"))
+async def cb_delete_allowed_email(callback: CallbackQuery):
+    actor_id = str(callback.from_user.id)
+    email_id_str = callback.data.split(":")[1]
+    if not email_id_str.isdigit():
+        await callback.answer("Ошибка ID", show_alert=True)
+        return
+
+    email_id = int(email_id_str)
+    async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            await callback.answer("⛔️ Недостаточно прав.", show_alert=True)
+            return
+
+        entry = (await session.execute(
+            select(AllowedEmail).where(AllowedEmail.id == email_id)
+        )).scalar_one_or_none()
+
+        if not entry:
+            await callback.answer("Email уже удален или не найден.", show_alert=True)
+            return
+
+        target_email = entry.email.lower()
+
+        # Cascade revoke matching non-admin users and delete active web sessions
+        matched_users = (await session.execute(
+            select(User).where(func.lower(User.email) == target_email)
+        )).scalars().all()
+
+        for u in matched_users:
+            if u.role != "admin":
+                u.is_approved = False
+                await session.execute(
+                    delete(WebSession).where(WebSession.user_id == u.id)
+                )
+
+        await session.delete(entry)
+        await session.commit()
+
+        await callback.answer(f"❌ {target_email} удален из белого списка!", show_alert=True)
+
+        # Refresh current whitelist page
+        stmt = select(AllowedEmail).order_by(AllowedEmail.created_at.desc())
+        all_emails = (await session.execute(stmt)).scalars().all()
+        per_page = 8
+        total_pages = max(1, (len(all_emails) + per_page - 1) // per_page)
+        page_emails = all_emails[:per_page]
+
+        lines = []
+        for i, e in enumerate(page_emails, start=1):
+            comment = f" — <i>{e.comment}</i>" if e.comment else ""
+            lines.append(f"{i}. <code>{e.email}</code>{comment}")
+
+        content_str = "\n".join(lines) if lines else "<i>Список пуст. Добавьте первый email.</i>"
+        text = (
+            "📧 <b>Разрешенные Email (Белый список):</b>\n\n"
+            f"Всего адресов: <b>{len(all_emails)}</b> (Стр. 1/{total_pages})\n\n"
+            f"{content_str}\n\n"
+            "<i>💡 Только пользователи из этого списка могут запросить временный пароль на сайте. Чтобы удалить адрес, нажмите кнопку с его именем ниже.</i>"
+        )
+        kb = get_admin_whitelist_keyboard(page_emails, page=1, total_pages=total_pages)
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+
+
+@router.message(StateFilter("*"), Command("allow_email"))
+async def cmd_allow_email(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
+    actor_id = str(message.from_user.id)
+    async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            return
+
+        parts = (message.text or "").split(maxsplit=2)
+        if len(parts) < 2:
+            await message.answer("ℹ️ Использование: <code>/allow_email buyer@agency.com [комментарий]</code>", parse_mode="HTML")
+            return
+
+        raw_email = parts[1].strip().lower()
+        comment = parts[2].strip() if len(parts) > 2 else None
+
+        if "@" not in raw_email or "." not in raw_email or len(raw_email) < 5:
+            await message.answer("⚠️ Некорректный email адрес.")
+            return
+
+        existing = (await session.execute(
+            select(AllowedEmail).where(func.lower(AllowedEmail.email) == raw_email)
+        )).scalar_one_or_none()
+
+        if existing:
+            if comment and comment != existing.comment:
+                existing.comment = comment
+                await session.commit()
+            await message.answer(f"ℹ️ Email <code>{raw_email}</code> уже находится в белом списке.", parse_mode="HTML")
+            return
+
+        session.add(AllowedEmail(
+            email=raw_email,
+            added_by=f"tg_{actor_id}",
+            comment=comment,
+        ))
+        await session.commit()
+        await message.answer(f"✅ Email <code>{raw_email}</code> успешно добавлен в белый список!", parse_mode="HTML")
+
+
+@router.message(StateFilter("*"), Command("revoke_email"))
+async def cmd_revoke_email(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
+    actor_id = str(message.from_user.id)
+    async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            return
+
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) < 2:
+            await message.answer("ℹ️ Использование: <code>/revoke_email buyer@agency.com</code>", parse_mode="HTML")
+            return
+
+        raw_email = parts[1].strip().lower()
+        entry = (await session.execute(
+            select(AllowedEmail).where(func.lower(AllowedEmail.email) == raw_email)
+        )).scalar_one_or_none()
+
+        if not entry:
+            await message.answer(f"⚠️ Email <code>{raw_email}</code> не найден в белом списке.", parse_mode="HTML")
+            return
+
+        # Cascade revoke matching non-admin users
+        matched_users = (await session.execute(
+            select(User).where(func.lower(User.email) == raw_email)
+        )).scalars().all()
+
+        for u in matched_users:
+            if u.role != "admin":
+                u.is_approved = False
+                await session.execute(
+                    delete(WebSession).where(WebSession.user_id == u.id)
+                )
+
+        await session.delete(entry)
+        await session.commit()
+        await message.answer(f"❌ Email <code>{raw_email}</code> удален из белого списка. Доступ отозван.", parse_mode="HTML")
+
+
+@router.message(StateFilter("*"), Command("allowed_emails"))
+async def cmd_allowed_emails(message: Message, bot: Bot, state: FSMContext):
+    await state.clear()
+    actor_id = str(message.from_user.id)
+    async with async_session_maker() as session:
+        if not await _is_admin_user(session, actor_id):
+            return
+
+        stmt = select(AllowedEmail).order_by(AllowedEmail.created_at.desc())
+        all_emails = (await session.execute(stmt)).scalars().all()
+        per_page = 8
+        total_pages = max(1, (len(all_emails) + per_page - 1) // per_page)
+        page_emails = all_emails[:per_page]
+
+        lines = []
+        for i, e in enumerate(page_emails, start=1):
+            comment = f" — <i>{e.comment}</i>" if e.comment else ""
+            lines.append(f"{i}. <code>{e.email}</code>{comment}")
+
+        content_str = "\n".join(lines) if lines else "<i>Список пуст. Добавьте первый email.</i>"
+        text = (
+            "📧 <b>Разрешенные Email (Белый список):</b>\n\n"
+            f"Всего адресов: <b>{len(all_emails)}</b> (Стр. 1/{total_pages})\n\n"
+            f"{content_str}\n\n"
+            "<i>💡 Только пользователи из этого списка могут запросить временный пароль на сайте.</i>"
+        )
+        kb = get_admin_whitelist_keyboard(page_emails, page=1, total_pages=total_pages)
+        await message.answer(text, reply_markup=kb, parse_mode="HTML")
+
 
 
 @router.message(StateFilter("*"), Command("events"))
