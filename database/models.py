@@ -503,6 +503,81 @@ class MetaConnection(Base):
     )
 
 
+class MetaConnectionInvite(Base):
+    """One-time secure invite link allowing a Facebook profile owner to connect their account
+    to a Buyerly workspace without sharing passwords, cookies, or plaintext tokens."""
+
+    __tablename__ = "meta_connection_invites"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="Workspace the connected profile will be linked to",
+    )
+    created_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Buyerly user who generated this invite link",
+    )
+    token_hash = Column(
+        String(64),
+        unique=True,
+        nullable=False,
+        index=True,
+        doc="SHA-256 hash of the raw invite token (never store plaintext)",
+    )
+    token_prefix = Column(
+        String(20),
+        nullable=False,
+        doc="Safe human-readable prefix for UI display, e.g. inv_fb_a1b2c3...",
+    )
+    label = Column(
+        String(255),
+        nullable=False,
+        default="",
+        doc="Admin-assigned human label, e.g. 'Buyer Ivan — Profile #3'",
+    )
+    status = Column(
+        String(32),
+        nullable=False,
+        default="pending",
+        index=True,
+        doc="Lifecycle: pending | used | revoked | expired",
+    )
+    expires_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+        doc="Hard expiry after which the invite cannot be used",
+    )
+    used_at = Column(DateTime(timezone=True), nullable=True, doc="Timestamp of successful OAuth completion")
+    connected_meta_id = Column(
+        Integer,
+        ForeignKey("meta_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="MetaConnection created as result of this invite",
+    )
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    def __repr__(self):
+        return (
+            f"<MetaConnectionInvite(id={self.id}, workspace_id={self.workspace_id}, "
+            f"status='{self.status}', label='{self.label}')>"
+        )
+
+
 class MetaOAuthState(Base):
     """Short-lived, single-use OAuth state; the browser secret itself is never stored."""
 
@@ -528,6 +603,13 @@ class MetaOAuthState(Base):
         ForeignKey("meta_connections.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    invite_id = Column(
+        Integer,
+        ForeignKey("meta_connection_invites.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Invite that triggered this OAuth flow; null for direct connections",
     )
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     used_at = Column(DateTime(timezone=True), nullable=True)

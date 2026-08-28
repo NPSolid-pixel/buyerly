@@ -4199,6 +4199,207 @@
     window.openModal('modalManualToken');
   };
 
+  // ---------------------------------------------------------------------------
+  // Meta Invite Links
+  // ---------------------------------------------------------------------------
+
+  window.openMetaInviteModal = async function () {
+    const modal = document.getElementById('modalMetaInvite');
+    if (!modal) return;
+    // Reset form state
+    document.getElementById('metaInviteResultSection').style.display = 'none';
+    document.getElementById('metaInviteCreateSection').style.display = '';
+    document.getElementById('metaInviteLabelInput').value = '';
+    document.getElementById('metaInviteTtlSelect').value = '24';
+    document.getElementById('metaInviteGenerateBtn').disabled = false;
+    modal.style.display = 'flex';
+    await window.refreshMetaInviteList();
+  };
+
+  window.closeMetaInviteModal = function () {
+    const modal = document.getElementById('modalMetaInvite');
+    if (modal) modal.style.display = 'none';
+  };
+
+  window.generateMetaInvite = async function () {
+    const label = (document.getElementById('metaInviteLabelInput').value || '').trim();
+    const expiresInHours = parseInt(document.getElementById('metaInviteTtlSelect').value, 10) || 24;
+    const btn = document.getElementById('metaInviteGenerateBtn');
+    btn.disabled = true;
+    btn.textContent = 'Создание…';
+    try {
+      const data = await apiRequest('/api/meta/invites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, expires_in_hours: expiresInHours }),
+      });
+      document.getElementById('metaInviteLinkInput').value = data.invite_url || data.raw_token || '';
+      document.getElementById('metaInviteResultSection').style.display = '';
+      await window.refreshMetaInviteList();
+    } catch (err) {
+      showToast(err.message || 'Ошибка создания инвайт-ссылки', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Создать ссылку';
+    }
+  };
+
+  window.copyMetaInviteLink = function () {
+    const input = document.getElementById('metaInviteLinkInput');
+    if (!input) return;
+    navigator.clipboard.writeText(input.value).then(() => {
+      showToast('Ссылка скопирована!', 'success');
+    }).catch(() => {
+      input.select();
+      document.execCommand('copy');
+      showToast('Ссылка скопирована', 'success');
+    });
+  };
+
+  window.refreshMetaInviteList = async function () {
+    const container = document.getElementById('metaInviteList');
+    if (!container) return;
+    try {
+      const invites = await apiRequest('/api/meta/invites');
+      if (!invites || !invites.length) {
+        container.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px 0;">Нет активных инвайтов</p>';
+        return;
+      }
+      const statusLabel = { pending: 'Активна', used: 'Использована', revoked: 'Отозвана', expired: 'Истекла' };
+      const statusColor = { pending: 'var(--color-success, #22c55e)', used: 'var(--text-tertiary)', revoked: 'var(--color-danger, #ef4444)', expired: 'var(--text-tertiary)' };
+      container.innerHTML = invites.map(inv => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(inv.label || inv.token_prefix)}</div>
+            <div style="font-size:11px;color:var(--text-tertiary);">Истекает: ${new Date(inv.expires_at).toLocaleString('ru')}</div>
+          </div>
+          <span style="font-size:11px;font-weight:600;color:${statusColor[inv.status] || 'var(--text-tertiary)'};">${statusLabel[inv.status] || inv.status}</span>
+          ${inv.status === 'pending' ? `<button class="attio-header-btn" onclick="window.revokeMetaInvite(${inv.id})" title="Отозвать" style="color:var(--color-danger,#ef4444);">
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>` : ''}
+        </div>
+      `).join('');
+    } catch (err) {
+      container.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px 0;">Ошибка загрузки инвайтов</p>';
+    }
+  };
+
+  window.revokeMetaInvite = async function (inviteId) {
+    if (!confirm('Отозвать инвайт-ссылку? Байер больше не сможет по ней подключиться.')) return;
+    try {
+      await apiRequest(`/api/meta/invites/${inviteId}`, { method: 'DELETE' });
+      showToast('Инвайт-ссылка отозвана', 'success');
+      await window.refreshMetaInviteList();
+    } catch (err) {
+      showToast(err.message || 'Ошибка отзыва инвайта', 'error');
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Public Connect/Meta Landing (no auth required)
+  // ---------------------------------------------------------------------------
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function _connectMetaShowState(stateId) {
+    ['connectMetaStateLoading','connectMetaStateValid','connectMetaStateInvalid','connectMetaStateSuccess'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = (id === stateId) ? '' : 'none';
+    });
+  }
+
+  async function initConnectMetaLanding() {
+    const path = window.location.pathname;
+    const isSuccess = path === '/connect/meta/success' || path.endsWith('/connect/meta/success');
+    const connectMatch = path.match(/\/connect\/meta\/([^/]+)$/);
+    const token = connectMatch ? connectMatch[1] : null;
+
+    if (!isSuccess && !token) return; // not a connect/meta page
+
+    const landing = document.getElementById('connectMetaLanding');
+    if (landing) landing.style.display = 'block';
+    // Hide main app shell
+    const shell = document.getElementById('app') || document.getElementById('appContainer');
+    if (shell) shell.style.display = 'none';
+
+    if (isSuccess) {
+      // Check URL param from Meta OAuth redirect
+      const params = new URLSearchParams(window.location.search);
+      const metaStatus = params.get('meta_status');
+      if (metaStatus && metaStatus !== 'success') {
+        _connectMetaShowState('connectMetaStateInvalid');
+        const titleEl = document.getElementById('connectMetaInvalidTitle');
+        const msgEl = document.getElementById('connectMetaInvalidMsg');
+        if (metaStatus === 'invite_invalid') {
+          if (titleEl) titleEl.textContent = 'Ссылка недействительна';
+          if (msgEl) msgEl.textContent = 'Эта ссылка уже была использована, отозвана или истёк срок её действия.';
+        } else if (metaStatus === 'cancelled') {
+          if (titleEl) titleEl.textContent = 'Авторизация отменена';
+          if (msgEl) msgEl.textContent = 'Вы отменили авторизацию Facebook. Попросите тимлида прислать новую ссылку.';
+        } else {
+          if (titleEl) titleEl.textContent = 'Ошибка подключения';
+          if (msgEl) msgEl.textContent = `Не удалось подключить профиль (${metaStatus}). Попросите тимлида создать новую ссылку.`;
+        }
+      } else {
+        _connectMetaShowState('connectMetaStateSuccess');
+      }
+      return;
+    }
+
+    if (!token || token === 'success') return;
+
+    // Load invite info from public API
+    try {
+      const info = await fetch(`/api/meta/invites/public/${encodeURIComponent(token)}`).then(r => r.json());
+      const wsName = document.getElementById('connectMetaWorkspaceName');
+      if (wsName) wsName.textContent = info.workspace_name || 'Buyerly';
+      const inviterEl = document.getElementById('connectMetaInviterName');
+      if (inviterEl && info.inviter_name) inviterEl.textContent = `Приглашение от: ${info.inviter_name}`;
+
+      if (info.valid) {
+        const labelEl = document.getElementById('connectMetaLabel');
+        if (labelEl && info.label) labelEl.textContent = `Метка: ${info.label}`;
+        // Store token for the connect button
+        window._connectMetaToken = token;
+        _connectMetaShowState('connectMetaStateValid');
+      } else {
+        _connectMetaShowState('connectMetaStateInvalid');
+        const titleEl = document.getElementById('connectMetaInvalidTitle');
+        const msgEl = document.getElementById('connectMetaInvalidMsg');
+        const statusMessages = {
+          used: ['Ссылка уже использована', 'Этот инвайт был использован и закрыт. Попросите тимлида создать новую ссылку.'],
+          revoked: ['Ссылка отозвана', 'Тимлид отозвал эту ссылку. Попросите создать новую.'],
+          expired: ['Срок действия истёк', 'Ссылка устарела. Попросите тимлида создать новую инвайт-ссылку.'],
+        };
+        const [title, msg] = statusMessages[info.status] || ['Ссылка недействительна', 'Попросите тимлида создать новую ссылку.'];
+        if (titleEl) titleEl.textContent = title;
+        if (msgEl) msgEl.textContent = msg;
+      }
+    } catch (_err) {
+      _connectMetaShowState('connectMetaStateInvalid');
+    }
+  }
+
+  window.startConnectMetaOAuth = function (e) {
+    e.preventDefault();
+    const token = window._connectMetaToken;
+    if (!token) return;
+    window.location.assign(`/api/meta/oauth/invite/${encodeURIComponent(token)}`);
+  };
+
+  // Trigger landing init on page load
+  (function () {
+    const path = window.location.pathname;
+    if (path.includes('/connect/meta/')) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initConnectMetaLanding);
+      } else {
+        initConnectMetaLanding();
+      }
+    }
+  })();
+
   function getAccountMetaState(account) {
     if (!account.is_active) return { key: 'inactive', label: 'Выключен в Buyerly', dot: 'muted' };
     if ([2, 101].includes(account.account_status)) return { key: 'blocked', label: 'Заблокирован', dot: 'danger' };
