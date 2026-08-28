@@ -17,6 +17,7 @@
   } = window.BuyerlyBrowserPreferences;
   const { slugifyText } = window.BuyerlyWorkspaceSlugs;
   const { escapeHtml, sanitizeUrl, escapeJsArg } = window.BuyerlySecurity;
+  const { t } = window.BuyerlyI18n;
 
   const SUMMARY_AUTO_REFRESH_MS = 3 * 60 * 1000;
   const SUMMARY_COLUMNS = [
@@ -24,7 +25,7 @@
     { key: 'custom_name', label: 'Моё название', group: 'base' },
     { key: 'note', label: 'Заметка', group: 'base' },
     { key: 'data', label: 'Статус данных', group: 'base', required: true },
-    { key: 'spend', label: 'Spend', group: 'base' },
+    { key: 'spend', label: 'Расход', group: 'base' },
     { key: 'impressions', label: 'Показы', group: 'delivery' },
     { key: 'reach', label: 'Охват', group: 'delivery' },
     { key: 'frequency', label: 'Частота', group: 'delivery' },
@@ -73,31 +74,36 @@
   ];
 
   const TAB_ROUTES = Object.freeze({
-    home: '/home',
-    fb_accounts: '/facebook-accounts',
+    home: '/today',
+    fb_accounts: '/connections',
     accounts: '/accounts',
-    rules: '/rules',
-    summary: '/summary',
-    logs: '/logs',
+    rules: '/automations',
+    summary: '/efficiency',
+    logs: '/action-history',
     settings: '/settings'
   });
   const ROUTE_TABS = Object.freeze({
     ...Object.fromEntries(Object.entries(TAB_ROUTES).map(([tab, route]) => [route, tab])),
+    '/home': 'home',
+    '/facebook-accounts': 'fb_accounts',
     '/fb-accounts': 'fb_accounts',
     '/fb_accounts': 'fb_accounts',
     '/add-accounts': 'fb_accounts',
     '/add': 'fb_accounts',
     '/main': 'home',
-    '/dashboard': 'home'
+    '/dashboard': 'home',
+    '/rules': 'rules',
+    '/summary': 'summary',
+    '/logs': 'logs'
   });
-  const LEGACY_ROUTE_TABS = Object.freeze({ '/': 'home', '/dashboard': 'home' });
+  const LEGACY_ROUTE_TABS = Object.freeze({ '/': 'home', '/dashboard': 'home', '/main': 'home' });
   const TAB_PAGE_TITLES = Object.freeze({
-    home: 'Главная — Buyerly',
-    fb_accounts: 'FB Аккаунты — Buyerly',
+    home: `${t('nav.today')} — Buyerly`,
+    fb_accounts: `${t('nav.connections')} — Buyerly`,
     accounts: 'Все кабинеты — Buyerly',
-    rules: 'Правила — Buyerly',
-    summary: 'Сводка — Buyerly',
-    logs: 'Логи — Buyerly',
+    rules: `${t('nav.automations')} — Buyerly`,
+    summary: `${t('nav.efficiency')} — Buyerly`,
+    logs: `${t('nav.actionHistory')} — Buyerly`,
     add: 'Добавить кабинеты — Buyerly',
     settings: 'Настройки — Buyerly'
   });
@@ -143,6 +149,7 @@
       validate: isWidthRecord
     }),
     fbConnections: [],
+    fbConnectionsSearch: '',
     accounts: [],
     accountGroups: [],
     accountGroupFilter: 'all',
@@ -642,12 +649,12 @@
         document.title = `${group ? group.name : 'Группа'} — Buyerly`;
       } else {
         const titles = {
-          home: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Главная</span>',
-          fb_accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>FB Аккаунты</span>',
+          home: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Сегодня</span>',
+          fb_accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Подключения</span>',
           accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Все кабинеты</span>',
-          rules: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span>',
-          summary: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Сводка</span>',
-          logs: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Логи</span>',
+          rules: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Автоматизации</span>',
+          summary: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Эффективность</span>',
+          logs: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>История действий</span>',
           add: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v16m8-8H4"/></svg><span>Добавить кабинеты</span>',
           settings: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Настройки</span>'
         };
@@ -3915,7 +3922,7 @@
                   aria-haspopup="dialog" 
                   aria-expanded="false" 
                   title="Добавить вычисление">
-            <span>Calculate</span>
+            <span>Рассчитать</span>
           </button>
         </td>
       `;
@@ -3940,7 +3947,7 @@
                 <th class="attio-th attio-th-add-col" style="width: 120px; max-width: 120px; min-width: 120px;">
                   <button type="button" class="attio-add-col-btn" onclick="window.toggleAddColumnPopover(event)" title="Добавить колонку в таблицу">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    <span>Add column</span>
+                    <span>Добавить колонку</span>
                   </button>
                 </th>
                 <th class="attio-th attio-th-spacer"></th>
@@ -4003,22 +4010,41 @@
   function renderFacebookAccounts() {
     const tableBody = document.getElementById('fbAccountsTableBody');
     const emptyEl = document.getElementById('fbAccountsEmptyState');
+    const emptyTitle = document.getElementById('fbAccountsEmptyTitle');
+    const emptyText = document.getElementById('fbAccountsEmptyText');
+    const emptyActions = document.getElementById('fbAccountsEmptyActions');
+    const resultCount = document.getElementById('fbConnectionsResultCount');
     if (!tableBody) return;
 
-    const connections = state.fbConnections || [];
+    const allConnections = state.fbConnections || [];
+    const query = String(state.fbConnectionsSearch || '').trim().toLowerCase();
+    const connections = query
+      ? allConnections.filter((connection) => [
+          connection.provider_user_name,
+          connection.provider_user_id,
+          connection.status
+        ].some((value) => String(value || '').toLowerCase().includes(query)))
+      : allConnections;
 
     // Update sidebar counter
-    const totalCount = connections.length;
+    const totalCount = allConnections.length;
     const elSidebarCount = document.getElementById('sidebarFbAccountsCount');
     if (elSidebarCount) elSidebarCount.textContent = totalCount;
+    if (resultCount) resultCount.textContent = query ? `${connections.length} из ${totalCount}` : `${totalCount}`;
 
     if (connections.length === 0) {
       tableBody.innerHTML = '';
       if (emptyEl) emptyEl.classList.remove('hidden');
+      if (emptyTitle) emptyTitle.textContent = query ? 'Подключения не найдены' : 'Нет подключений Meta';
+      if (emptyText) emptyText.textContent = query
+        ? 'Измените запрос или очистите поиск.'
+        : 'Подключите Facebook-профиль через официальный Facebook Login или вручную по токену.';
+      if (emptyActions) emptyActions.classList.toggle('hidden', Boolean(query));
       return;
     }
 
     if (emptyEl) emptyEl.classList.add('hidden');
+    if (emptyActions) emptyActions.classList.remove('hidden');
 
     const html = connections.map(conn => {
       const name = conn.provider_user_name || 'Facebook User';
@@ -4116,6 +4142,11 @@
 
     tableBody.innerHTML = html;
   }
+
+  window.filterFacebookConnections = function (value) {
+    state.fbConnectionsSearch = String(value || '');
+    renderFacebookAccounts();
+  };
 
   window.discoverMetaConnectionAssets = async function (connectionId) {
     try {
@@ -10917,8 +10948,8 @@
     const navItems = [
       {
         id: 'nav_home',
-        title: 'Главная',
-        subtitle: 'Главная панель и сводка показателей',
+        title: 'Сегодня',
+        subtitle: 'Состояние кабинетов и задачи на сегодня',
         badge: 'Раздел',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>',
         keywords: ['главная', 'home', 'дашборд', 'dashboard', 'сводка', 'метрики'],
@@ -10935,8 +10966,8 @@
       },
       {
         id: 'nav_fb_accounts',
-        title: 'Facebook Аккаунты',
-        subtitle: 'Подключенные профили Facebook и Business Managers',
+        title: 'Подключения',
+        subtitle: 'Facebook-профили, Business Manager и рекламные кабинеты',
         badge: 'Раздел',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
         keywords: ['facebook', 'fb', 'профили', 'бм', 'bm', 'соцсети'],
@@ -10944,7 +10975,7 @@
       },
       {
         id: 'nav_rules',
-        title: 'Правила автостопа и лимитов',
+        title: 'Автоматизации',
         subtitle: 'Настройка автоматических правил и контроль рисков',
         badge: 'Правила',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
@@ -10953,7 +10984,7 @@
       },
       {
         id: 'nav_summary',
-        title: 'Сводная таблица аналитики',
+        title: 'Эффективность',
         subtitle: 'Показатели расхода, лидов, кликов и конверсий',
         badge: 'Раздел',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>',
@@ -10962,7 +10993,7 @@
       },
       {
         id: 'nav_logs',
-        title: 'Логи и журнал событий',
+        title: 'История действий',
         subtitle: 'История аудита, остановки адсетов и системные события',
         badge: 'Раздел',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>',
@@ -11083,7 +11114,7 @@
 
       if (matchedFb.length > 0) {
         sections.push({
-          title: 'Facebook Профили',
+          title: 'Facebook-профили',
           items: matchedFb.slice(0, 5)
         });
       }
@@ -11590,7 +11621,7 @@
     if (!email) {
       const errorEl = document.getElementById('onboardingSignInError');
       if (errorEl) {
-        errorEl.textContent = 'Please enter your work email address';
+        errorEl.textContent = 'Введите email или username';
         errorEl.classList.remove('hidden');
       }
       emailInput?.focus();
@@ -11602,7 +11633,7 @@
     const resendBtn = document.getElementById('btnResendTemporaryPassword');
     if (resendBtn && isResend) {
       resendBtn.disabled = true;
-      resendBtn.textContent = 'Sending...';
+      resendBtn.textContent = 'Отправляем…';
     }
 
     try {
@@ -11614,17 +11645,17 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.detail || 'Failed to send temporary password');
+        throw new Error(data.detail || 'Не удалось отправить временный пароль');
       }
 
-      showToast(`Verification code sent to ${email}`, 'success');
+      showToast(`Временный пароль отправлен на ${email}`, 'success');
       window.showOnboardingStep('verify');
     } catch (err) {
-      showToast(err.message || 'Error sending temporary password', 'error');
+      showToast(err.message || 'Ошибка отправки временного пароля', 'error');
     } finally {
       if (resendBtn && isResend) {
         resendBtn.disabled = false;
-        resendBtn.textContent = 'Resend code';
+        resendBtn.textContent = 'Отправить снова';
       }
     }
   };
@@ -11640,7 +11671,7 @@
 
     if (!email) {
       if (errorEl) {
-        errorEl.textContent = 'Please enter your work email address';
+        errorEl.textContent = 'Введите email или username';
         errorEl.classList.remove('hidden');
       }
       emailInput?.focus();
@@ -11671,21 +11702,21 @@
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.detail || 'Invalid email address or password');
+        throw new Error(data.detail || 'Неверный email, username или пароль');
       }
 
       setWebAuthToken('');
-      showToast(`Welcome back, ${data.full_name || data.username}!`, 'success');
+      showToast(`С возвращением, ${data.full_name || data.username}!`, 'success');
       await initApp();
     } catch (err) {
       if (errorEl) {
-        errorEl.textContent = err.message || 'Sign in error';
+        errorEl.textContent = err.message || 'Ошибка входа';
         errorEl.classList.remove('hidden');
       }
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Continue</span>';
+        submitBtn.innerHTML = '<span>Продолжить</span>';
       }
     }
   };
@@ -11700,7 +11731,7 @@
 
     if (!code) {
       if (errorEl) {
-        errorEl.textContent = 'Please enter a valid temporary password';
+        errorEl.textContent = 'Введите корректный временный пароль';
         errorEl.classList.remove('hidden');
       }
       codeInput?.focus();
@@ -11723,21 +11754,21 @@
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.detail || 'Please enter a valid temporary password');
+        throw new Error(data.detail || 'Введите корректный временный пароль');
       }
 
       setWebAuthToken('');
-      showToast(`Welcome, ${data.full_name || data.username}!`, 'success');
+      showToast(`Добро пожаловать, ${data.full_name || data.username}!`, 'success');
       await initApp();
     } catch (err) {
       if (errorEl) {
-        errorEl.textContent = err.message || 'Please enter a valid temporary password';
+        errorEl.textContent = err.message || 'Введите корректный временный пароль';
         errorEl.classList.remove('hidden');
       }
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Continue</span>';
+        submitBtn.innerHTML = '<span>Продолжить</span>';
       }
     }
   };
@@ -11869,7 +11900,7 @@
 
     if (!firstName) {
       if (errorEl) {
-        errorEl.textContent = 'First name is required';
+        errorEl.textContent = 'Введите имя';
         errorEl.classList.remove('hidden');
       }
       fnInput?.focus();
@@ -11919,7 +11950,7 @@
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Continue</span>';
+        submitBtn.innerHTML = '<span>Продолжить</span>';
       }
     }
   };

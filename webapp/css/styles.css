@@ -6868,6 +6868,27 @@ input[type="text"].attio-popover-name-input:focus,
 .toast.warning { background: #92400E; }
 @keyframes slideUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.connections-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 240px;
+  margin-left: 12px;
+}
+.connections-search .attio-input { min-width: 200px; }
+.connections-search-count { color: var(--text-muted); font-size: 12px; }
+
 /* ==========================================================
    MOBILE BOTTOM NAVIGATION & RESPONSIVENESS
    ========================================================== */
@@ -6879,7 +6900,8 @@ input[type="text"].attio-popover-name-input:focus,
   background: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
   align-items: center;
-  justify-content: space-around;
+  justify-content: stretch;
+  overflow-x: auto;
   z-index: 50;
 }
 .mobile-nav-item {
@@ -6893,7 +6915,10 @@ input[type="text"].attio-popover-name-input:focus,
   font-size: 10px;
   font-weight: 500;
   cursor: pointer;
-  padding: 6px 12px;
+  flex: 1 0 74px;
+  min-width: 68px;
+  padding: 6px 8px;
+  white-space: nowrap;
 }
 .mobile-nav-item svg { width: 18px; height: 18px; }
 .mobile-nav-item.active { color: var(--brand-accent-hover); font-weight: 600; }

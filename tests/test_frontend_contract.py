@@ -23,6 +23,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             "/static/js/browser-preferences.js",
             "/static/js/workspace-slugs.js",
             "/static/js/security.js",
+            "/static/js/i18n.js",
             "/static/js/app.js",
         )
         positions = [self.index.index(path) for path in script_paths]
@@ -37,6 +38,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             ("browser-preferences.js", "BuyerlyBrowserPreferences"),
             ("workspace-slugs.js", "BuyerlyWorkspaceSlugs"),
             ("security.js", "BuyerlySecurity"),
+            ("i18n.js", "BuyerlyI18n"),
         ):
             self.assertIn(namespace, self.scripts[filename])
             self.assertIn(f"window.{namespace}", self.app_script)
@@ -215,11 +217,11 @@ class TestFrontendRuleContract(unittest.TestCase):
         for obsolete in ('Ждут решения', 'Нужна проверка', 'Подтвердить остановку'):
             self.assertNotIn(obsolete, self.index)
 
-    def test_mobile_settings_remain_reachable_from_profile_badge(self):
+    def test_mobile_settings_are_first_class_navigation(self):
         self.assertIn('id="userBadge"', self.index)
         self.assertIn('role="button" tabindex="0"', self.index)
         self.assertIn("window.switchTab('settings')", self.script)
-        self.assertNotIn('class="mobile-nav-item" data-tab="settings"', self.index)
+        self.assertIn('class="mobile-nav-item" data-tab="settings"', self.index)
 
     def test_automation_settings_are_separate_and_password_protected(self):
         for contract in (
@@ -250,10 +252,11 @@ class TestFrontendRuleContract(unittest.TestCase):
     def test_sections_have_stable_urls_and_restore_after_reload(self):
         for contract in (
             "accounts: '/accounts'",
-            "rules: '/rules'",
-            "summary: '/summary'",
-            "logs: '/logs'",
-            "fb_accounts: '/facebook-accounts'",
+            "home: '/today'",
+            "rules: '/automations'",
+            "summary: '/efficiency'",
+            "logs: '/action-history'",
+            "fb_accounts: '/connections'",
             "settings: '/settings'",
             'TAB_ROUTES',
             'ROUTE_TABS',
@@ -270,8 +273,11 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         self.assertNotIn("window.history[method]", self.script)
 
-        for route in ('accounts', 'rules', 'summary', 'logs', 'add-accounts', 'settings'):
+        for route in ('today', 'efficiency', 'automations', 'action-history', 'connections', 'accounts', 'settings'):
             self.assertIn(f'@app.get("/{route}")', self.server)
+
+        for legacy_route in ('home', 'facebook-accounts', 'rules', 'summary', 'logs', 'add-accounts'):
+            self.assertIn(f'@app.get("/{legacy_route}")', self.server)
 
     def test_rule_groups_can_be_managed_and_assigned_from_the_ui(self):
         for contract in (
@@ -673,8 +679,8 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertIn(contract, self.index)
 
-        self.assertIn("home: 'Главная — Buyerly'", self.script)
-        self.assertIn('<span>Главная</span>', self.script)
+        self.assertIn("home: `${t('nav.today')} — Buyerly`", self.script)
+        self.assertIn('<span>Сегодня</span>', self.script)
         self.assertIn("let greeting = 'Доброе утро';", self.script)
         self.assertIn("greeting = 'Добрый день';", self.script)
         self.assertIn("greeting = 'Добрый вечер';", self.script)
@@ -739,13 +745,15 @@ class TestFrontendRuleContract(unittest.TestCase):
         rules_pos = self.index.index('id="navRules"')
         summary_pos = self.index.index('id="navSummary"')
         logs_pos = self.index.index('id="navLogs"')
-        self.assertLess(home_pos, fb_pos)
-        self.assertLess(fb_pos, rules_pos)
-        self.assertLess(rules_pos, summary_pos)
-        self.assertLess(summary_pos, logs_pos)
+        settings_pos = self.index.index('id="navSettings"')
+        self.assertLess(home_pos, summary_pos)
+        self.assertLess(summary_pos, rules_pos)
+        self.assertLess(rules_pos, logs_pos)
+        self.assertLess(logs_pos, fb_pos)
+        self.assertLess(fb_pos, settings_pos)
 
         for script_contract in (
-            "fb_accounts: '/facebook-accounts'",
+            "fb_accounts: '/connections'",
             'loadFacebookAccounts',
             'renderFacebookAccounts',
             'renderSidebarAccountGroups',
@@ -763,12 +771,15 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.assignSelectedAccountsToGroup',
             'window.reconnectMetaConnection',
             'window.validateMetaConnection',
+            'window.filterFacebookConnections',
             'window.toggleSidebarSection',
             'applySidebarSectionsCollapsedState',
         ):
             self.assertIn(script_contract, self.script)
 
         self.assertIn('id="btnGroupShare"', self.index)
+        self.assertIn('id="fbConnectionsSearch"', self.index)
+        self.assertIn('id="fbConnectionsResultCount"', self.index)
         for sort_label in ('По релевантности', 'Недавние', 'По алфавиту', 'Кастомные', 'Сортировка'):
             self.assertIn(sort_label, self.index)
 

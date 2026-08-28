@@ -144,6 +144,7 @@ webapp/              Фронтенд SPA в стиле Attio CRM, стили, �
 
 - [Воркспейсы, авторизация, инвайты и Resend](docs/WORKSPACES_AUTH_AND_INVITES.md)
 - [Архитектура системы](docs/ARCHITECTURE.md)
+- [Информационная архитектура, роли и терминология](docs/INFORMATION_ARCHITECTURE.md)
 - [Справочник HTTP API](docs/API.md)
 - [Развертывание и деплой](docs/DEPLOYMENT.md)
 - [Архитектурные решения (ADR)](docs/DECISIONS.md)
