@@ -21,4 +21,3 @@ ClickUp: `86eyrx9bz`
 - Контракт новых и legacy URL.
 - Контракт порядка desktop/mobile навигации.
 - Полный GitHub Actions CI перед merge.
-

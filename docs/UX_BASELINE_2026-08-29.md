@@ -1,7 +1,7 @@
 # Buyerly UX baseline
 
-Дата baseline: 29 августа 2026 года  
-Задача: BL-100 / ClickUp `86eyr6074`  
+Дата baseline: 29 августа 2026 года
+Задача: BL-100 / ClickUp `86eyr6074`
 Следующие этапы: BL-101 `86eyr6073`, BL-102 `86eyrx9bz`
 
 ## 1. Резюме

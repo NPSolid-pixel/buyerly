@@ -1,7 +1,7 @@
 # Buyerly Design System
 
-Version: Foundation 1.0  
-Owner: Product / Frontend  
+Version: Foundation 1.0
+Owner: Product / Frontend
 ClickUp: BL-101 `86eyr6073`
 
 ## Principles
@@ -94,4 +94,3 @@ ClickUp: BL-101 `86eyr6073`
 - state не передаётся только цветом;
 - новые styles используют semantic tokens;
 - desktop/mobile сохраняют один information model.
-

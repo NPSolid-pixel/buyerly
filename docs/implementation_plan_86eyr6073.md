@@ -22,4 +22,3 @@ ClickUp: `86eyr6073`
 - URL, API calls, ids и onclick contracts не меняются.
 - Удаляется только неиспользуемый CSS декоративного AI composer.
 - Остальные экраны мигрируют после production-подтверждения пилотов.
-
