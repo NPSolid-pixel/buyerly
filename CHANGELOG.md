@@ -10,6 +10,16 @@
 ## [Unreleased]
 
 ### Added & Improved
+- **Buyerly Design System foundation (`86eyr6073`)**:
+  - Добавлены semantic tokens для цвета, типографики, spacing, размеров, radius, elevation, layers и motion; доступный primary action отделён от warning semantics.
+  - Задокументированы и реализованы foundation contracts для Button, IconButton, Input, Select, Tabs, Badge, Tooltip, Popover, Modal, Drawer, Table, KPI, Chart, EmptyState, Alert и Skeleton.
+  - Три пилотных экрана — Today, Automations и Connections — используют общую систему; декоративный AI prompt заменён реальными переходами к рабочим сценариям.
+- **Единая информационная архитектура и русский translation layer (`86eyrx9bz`)**:
+  - Desktop и mobile навигация приведены к шести задачным разделам: Сегодня, Эффективность, Автоматизации, История действий, Подключения, Настройки.
+  - Новые канонические URL сохраняют все старые ссылки как совместимые aliases, включая workspace-prefixed маршруты.
+  - Зафиксированы термины Facebook-профиля, Business Manager, рекламного кабинета, группы кабинетов, кампании, группы объявлений и объявления.
+  - На экране подключений добавлен локальный поиск, счётчик результата и отдельное состояние «ничего не найдено».
+  - Вход локализован; браузерная email-валидация не блокирует поддерживаемый API вход по username.
 - **Белый список Email (Whitelist) и закрытие свободной регистрации**:
   - Вход на сайт по одноразовому паролю (OTP) закрыт от несанкционированного доступа «с улицы»: `POST /api/auth/request-temporary-password` проверяет наличие адреса в белом списке `AllowedEmail` или активного инвайта в воркспейс.
   - Создана таблица `allowed_emails` (Alembic-миграция `0020_allowed_emails`) с автоматическим переносом всех существующих подтвержденных пользователей.
@@ -58,11 +68,18 @@
   - Устаревший адрес `/add-accounts` перенаправляет в `/facebook-accounts`.
 
 ### Fixed
+- **Вход по username без браузерной email-валидации**:
+  - Поле авторизации больше не требует формат email и принимает как email, так и username, которые уже поддерживаются API входа.
+  - Одноразовый пароль по-прежнему отправляется только на корректный email; парольный вход и OTP-флоу остаются разделёнными.
 - **Снятие устаревших NOT NULL ограничений с legacy-полей PostgreSQL (`owner_id`, `access_token`)**:
   - Добавлена миграция `0014_legacy_columns_nullable`, делающая устаревшие колонки `owner_id` и `access_token` nullable со значением по умолчанию `''`.
   - Устранена ошибка базы данных при импорте найденных Meta OAuth аккаунтов.
 
 ### Documentation & Integrations
+- **UX baseline и карта интерфейса (`86eyr6074`)**:
+  - Зафиксированы public, onboarding и authenticated routes, их desktop/mobile states и воспроизводимый source snapshot contract.
+  - Проведена инвентаризация навигации, таблиц, карточек, фильтров, модальных паттернов, терминологии, локализации, плотности и визуальных токенов.
+  - Выбраны три пилотных экрана для foundation-миграции: Today, Automations и Connections.
 - **Подготовка пакета модерации Meta App Review и фиксация настроек пилота Meta OAuth (`[86eyr6078]`)**:
   - Создан полный пакет подачи заявки на модерацию в `docs/META_APP_REVIEW_SUBMISSION.md`: обоснования на английском языке для прав `ads_read`, `ads_management`, `business_management`, пошаговый сценарий скринкаста и инструкции для проверяющих инженеров Meta.
   - Актуализирован план и чек-лист интеграции в `docs/FACEBOOK_AUTHORIZATION_PLAN.md`: зафиксированы `App ID` (`1363654095968021`), `Login Configuration ID` (`1796379231385440`), настройки редиректов `https://buyerly.app/api/meta/oauth/callback`, привязка домена и публичных политик.

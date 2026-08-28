@@ -28,7 +28,9 @@ class TestDocumentationContract(unittest.TestCase):
     def test_readme_links_the_supported_document_set(self):
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
         for path in (
+            "docs/DESIGN_SYSTEM.md",
             "docs/ARCHITECTURE.md",
+            "docs/INFORMATION_ARCHITECTURE.md",
             "docs/API.md",
             "docs/DEPLOYMENT.md",
             "docs/DECISIONS.md",
@@ -37,6 +39,72 @@ class TestDocumentationContract(unittest.TestCase):
             "docs/REMAINING_PRODUCT_WORK.md",
         ):
             self.assertIn(path, readme)
+
+    def test_ux_baseline_covers_routes_states_and_pilots(self):
+        baseline = (
+            PROJECT_ROOT / "docs" / "UX_BASELINE_2026-08-29.md"
+        ).read_text(encoding="utf-8")
+
+        for contract in (
+            "/sign-in",
+            "/facebook-accounts",
+            "/accounts",
+            "/rules",
+            "/summary",
+            "/logs",
+            "/settings",
+            "Loading",
+            "Empty",
+            "Populated",
+            "Error",
+            "Partial",
+            "Long content",
+            "Permission denied",
+            "### Today",
+            "### Automations",
+            "### Connections",
+        ):
+            self.assertIn(contract, baseline)
+
+    def test_design_system_documents_tokens_components_and_migration(self):
+        design_system = (PROJECT_ROOT / "docs" / "DESIGN_SYSTEM.md").read_text(
+            encoding="utf-8"
+        )
+        for contract in (
+            "## Tokens",
+            "## Components",
+            "## Pilot screens",
+            "## Migration map",
+            "Button",
+            "IconButton",
+            "EmptyState",
+            "Skeleton",
+            "### Today",
+            "### Automations",
+            "### Connections",
+        ):
+            self.assertIn(contract, design_system)
+    def test_information_architecture_contract(self):
+        ia = (PROJECT_ROOT / "docs" / "INFORMATION_ARCHITECTURE.md").read_text(encoding="utf-8")
+        for contract in (
+            "## Jobs-to-be-done",
+            "## Канонические и совместимые URL",
+            "## Терминология",
+            "## Роли и видимость",
+            "## Локализация",
+            "## Длинные списки",
+            "## Definition of Done",
+            "/today",
+            "/efficiency",
+            "/automations",
+            "/action-history",
+            "/connections",
+            "Admin",
+            "Buyer",
+            "Viewer",
+        ):
+            self.assertIn(contract, ia)
+
 
 
 if __name__ == "__main__":

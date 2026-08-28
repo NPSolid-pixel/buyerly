@@ -14,7 +14,7 @@
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=10.0.0">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
-  <link rel="stylesheet" href="/static/css/styles.css?v=9.24.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=10.0.0">
 </head>
 
 <body>
@@ -29,14 +29,14 @@
 
     <!-- STEP 1: SIGN IN -->
     <div id="onboardingSignInStep" class="attio-auth-card">
-      <h1 class="attio-auth-title">Sign in</h1>
+      <h1 class="attio-auth-title">Вход</h1>
       <form id="onboardingSignInForm" onsubmit="event.preventDefault(); window.submitOnboardingSignIn(); return false;">
         <div class="attio-field">
           <div class="attio-input-wrapper">
             <span class="attio-input-prefix">
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 5l6 4 6-4"/></svg>
             </span>
-            <input type="email" id="onboardingSignInEmail" class="attio-input has-prefix" placeholder="Enter your work email address" required autocomplete="email" autofocus onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingSignIn();}">
+            <input type="text" id="onboardingSignInEmail" class="attio-input has-prefix" placeholder="Email или username" required autocomplete="username" autofocus onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingSignIn();}">
           </div>
         </div>
 
@@ -45,7 +45,7 @@
             <span class="attio-input-prefix">
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/></svg>
             </span>
-            <input type="password" id="onboardingSignInPassword" class="attio-input has-prefix has-suffix" placeholder="Enter your password" required autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingSignIn();}">
+            <input type="password" id="onboardingSignInPassword" class="attio-input has-prefix has-suffix" placeholder="Пароль" required autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingSignIn();}">
             <button type="button" id="btnOnboardingSignInPasswordToggle" class="attio-input-suffix-btn" title="Показать/скрыть пароль" onclick="window.toggleOnboardingSignInPassword()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
@@ -54,25 +54,25 @@
         </div>
 
         <button type="submit" id="btnOnboardingSignInSubmit" class="attio-btn-primary">
-          <span>Continue</span>
+          <span>Продолжить</span>
         </button>
 
         <div style="margin-top: 12px; text-align: center;">
-          <button type="button" style="background:none; border:none; color:#266DF0; font-size:12.5px; cursor:pointer; font-family:inherit;" onclick="window.requestTemporaryPassword()">Use temporary password</button>
+          <button type="button" style="background:none; border:none; color:#266DF0; font-size:12.5px; cursor:pointer; font-family:inherit;" onclick="window.requestTemporaryPassword()">Войти по временному паролю</button>
         </div>
       </form>
     </div>
 
     <!-- STEP 2: TEMPORARY PASSWORD / VERIFICATION -->
     <div id="onboardingVerifyStep" class="attio-auth-card hidden">
-      <h1 class="attio-auth-title">Check your inbox!</h1>
+      <h1 class="attio-auth-title">Проверьте почту</h1>
       <div class="attio-field">
         <div class="attio-input-wrapper">
           <span class="attio-input-prefix">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 5l6 4 6-4"/></svg>
           </span>
           <input type="text" id="onboardingVerifyEmailDisplay" class="attio-input has-prefix has-suffix" disabled value="">
-          <button type="button" class="attio-input-suffix-btn" title="Change email" onclick="window.showOnboardingStep('signin')">
+          <button type="button" class="attio-input-suffix-btn" title="Изменить email" onclick="window.showOnboardingStep('signin')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
         </div>
@@ -84,56 +84,56 @@
             <span class="attio-input-prefix">
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/></svg>
             </span>
-            <input type="password" id="onboardingVerifyCodeInput" class="attio-input has-prefix" placeholder="Enter temporary password..." required onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingVerify();}">
+            <input type="password" id="onboardingVerifyCodeInput" class="attio-input has-prefix" placeholder="Введите временный пароль" required onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingVerify();}">
           </div>
-          <div id="onboardingVerifyError" class="attio-error-text hidden">Please enter a valid temporary password</div>
+          <div id="onboardingVerifyError" class="attio-error-text hidden">Введите корректный временный пароль</div>
         </div>
 
         <button type="submit" id="btnOnboardingVerifySubmit" class="attio-btn-primary">
-          <span>Continue</span>
+          <span>Продолжить</span>
         </button>
 
         <div style="margin-top: 14px; display:flex; justify-content:space-between; align-items:center;">
-          <button type="button" style="background:none; border:none; color:#898A8D; font-size:12px; cursor:pointer; font-family:inherit;" onclick="window.showOnboardingStep('signin')">&larr; Back</button>
-          <button type="button" id="btnResendTemporaryPassword" style="background:none; border:none; color:#266DF0; font-size:12px; font-weight:500; cursor:pointer; font-family:inherit;" onclick="window.requestTemporaryPassword(true)">Resend code</button>
+          <button type="button" style="background:none; border:none; color:#898A8D; font-size:12px; cursor:pointer; font-family:inherit;" onclick="window.showOnboardingStep('signin')">&larr; Назад</button>
+          <button type="button" id="btnResendTemporaryPassword" style="background:none; border:none; color:#266DF0; font-size:12px; font-weight:500; cursor:pointer; font-family:inherit;" onclick="window.requestTemporaryPassword(true)">Отправить снова</button>
         </div>
       </form>
     </div>
 
     <!-- STEP 3: PERSONAL DETAILS -->
     <div id="onboardingPersonalStep" class="attio-auth-card card-wide hidden">
-      <h1 class="attio-auth-title-personal">Let's get to know you</h1>
+      <h1 class="attio-auth-title-personal">Расскажите о себе</h1>
 
       <!-- Profile picture section -->
       <div class="attio-avatar-section">
         <input type="file" id="onboardingAvatarFileInput" accept=".png,.jpg,.jpeg,.webp" style="display:none;" onchange="window.handleOnboardingAvatarUpload(event)">
-        <div class="attio-avatar-circle" id="onboardingAvatarBadge" title="Upload image" onclick="document.getElementById('onboardingAvatarFileInput').click()">
+        <div class="attio-avatar-circle" id="onboardingAvatarBadge" title="Загрузить изображение" onclick="document.getElementById('onboardingAvatarFileInput').click()">
           <span id="onboardingAvatarLetter">B</span>
           <img id="onboardingAvatarImg" class="attio-avatar-img hidden" alt="Avatar">
         </div>
         <div class="attio-avatar-meta">
-          <div class="attio-avatar-title">Profile picture</div>
+          <div class="attio-avatar-title">Фото профиля</div>
           <div class="attio-avatar-btn-row">
             <button type="button" class="attio-btn-secondary" onclick="document.getElementById('onboardingAvatarFileInput').click()">
-              Upload image
+              Загрузить
             </button>
             <button type="button" id="btnOnboardingAvatarRemove" class="attio-btn-secondary" disabled onclick="window.removeOnboardingAvatar()">
-              Remove
+              Удалить
             </button>
           </div>
-          <div class="attio-avatar-hint">PNG, JPEG or WEBP up to 5MB. Recommended size: 400×400px.</div>
+          <div class="attio-avatar-hint">PNG, JPEG или WEBP до 5 МБ. Рекомендуемый размер: 400×400 px.</div>
         </div>
       </div>
 
       <form id="onboardingPersonalForm" onsubmit="event.preventDefault(); window.submitOnboardingPersonalDetails(); return false;">
         <div class="attio-field">
-          <label class="attio-label" for="onboardingFirstName">First name</label>
-          <input type="text" id="onboardingFirstName" class="attio-input" placeholder="Enter your first name..." required maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingPersonalDetails();}">
+          <label class="attio-label" for="onboardingFirstName">Имя</label>
+          <input type="text" id="onboardingFirstName" class="attio-input" placeholder="Введите имя" required maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingPersonalDetails();}">
         </div>
 
         <div class="attio-field">
-          <label class="attio-label" for="onboardingLastName">Last name</label>
-          <input type="text" id="onboardingLastName" class="attio-input" placeholder="Enter your last name..." maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingPersonalDetails();}">
+          <label class="attio-label" for="onboardingLastName">Фамилия</label>
+          <input type="text" id="onboardingLastName" class="attio-input" placeholder="Введите фамилию" maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitOnboardingPersonalDetails();}">
         </div>
 
         <div class="attio-field">
@@ -143,8 +143,8 @@
 
         <div class="attio-subscribe-row">
           <div class="attio-subscribe-text">
-            <div class="attio-subscribe-title">Subscribe to product update emails</div>
-            <div class="attio-subscribe-desc">Get the latest updates about features and product updates.</div>
+            <div class="attio-subscribe-title">Получать новости продукта</div>
+            <div class="attio-subscribe-desc">Письма о новых возможностях и обновлениях Buyerly.</div>
           </div>
           <button type="button" id="onboardingSubscribeSwitch" class="attio-switch checked" role="switch" aria-checked="true" onclick="window.toggleOnboardingSubscribe()">
             <span class="attio-switch-knob"></span>
@@ -154,7 +154,7 @@
         <div id="onboardingPersonalError" class="attio-error-text hidden" style="margin-bottom: 8px;"></div>
 
         <button type="submit" id="btnOnboardingPersonalSubmit" class="attio-btn-primary" style="margin-top: 10px;">
-          <span>Continue</span>
+          <span>Продолжить</span>
         </button>
       </form>
     </div>
@@ -163,15 +163,15 @@
     <footer class="attio-auth-footer">
       <span>&copy; 2026 Buyerly</span>
       <span class="attio-footer-dot">&middot;</span>
-      <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>
+      <a href="/privacy" target="_blank" rel="noopener">Политика конфиденциальности</a>
       <span class="attio-footer-dot">&middot;</span>
-      <a href="/terms" target="_blank" rel="noopener">Terms</a>
+      <a href="/terms" target="_blank" rel="noopener">Условия</a>
       <span class="attio-footer-dot">&middot;</span>
-      <a href="/data-deletion" target="_blank" rel="noopener">Data deletion</a>
+      <a href="/data-deletion" target="_blank" rel="noopener">Удаление данных</a>
       <span class="attio-footer-dot">&middot;</span>
-      <a href="mailto:contact@buyerly.app">Contact</a>
+      <a href="mailto:contact@buyerly.app">Контакты</a>
       <span class="attio-footer-dot" id="onboardingSignOutDot" style="display:none;">&middot;</span>
-      <button type="button" id="btnOnboardingSignOut" style="display:none;" onclick="if(window.logoutUser) window.logoutUser();">Sign out</button>
+      <button type="button" id="btnOnboardingSignOut" style="display:none;" onclick="if(window.logoutUser) window.logoutUser();">Выйти</button>
     </footer>
     <div style="margin-top: 10px; text-align: center; font-size: 10px; color: #898A8D; line-height: 1.45;">
       <div>Individual Entrepreneur Artem Petruchenko · Tax ID: 305879234</div>
@@ -396,11 +396,12 @@
       </div>
 
       <ul class="nav-list">
-        <li><div class="nav-item active nav-tab" data-tab="home" id="navDashboard" onclick="window.switchTab('home');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Главная</span></div></li>
-        <li><div class="nav-item nav-tab" data-tab="fb_accounts" id="navFbAccounts" onclick="window.switchTab('fb_accounts');"><svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>FB Аккаунты</span></div></li>
-        <li><div class="nav-item nav-tab" data-tab="rules" id="navRules" onclick="window.switchTab('rules');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span></div></li>
-        <li><div class="nav-item nav-tab" data-tab="summary" id="navSummary" onclick="window.switchTab('summary');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Сводка</span></div></li>
-        <li><div class="nav-item nav-tab" data-tab="logs" id="navLogs" onclick="window.switchTab('logs');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Логи</span></div></li>
+        <li><div class="nav-item active nav-tab" data-tab="home" id="navDashboard" onclick="window.switchTab('home');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Сегодня</span></div></li>
+        <li><div class="nav-item nav-tab" data-tab="summary" id="navSummary" onclick="window.switchTab('summary');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Эффективность</span></div></li>
+        <li><div class="nav-item nav-tab" data-tab="rules" id="navRules" onclick="window.switchTab('rules');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Автоматизации</span></div></li>
+        <li><div class="nav-item nav-tab" data-tab="logs" id="navLogs" onclick="window.switchTab('logs');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>История действий</span></div></li>
+        <li><div class="nav-item nav-tab" data-tab="fb_accounts" id="navFbAccounts" onclick="window.switchTab('fb_accounts');"><svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Подключения</span></div></li>
+        <li><div class="nav-item nav-tab" data-tab="settings" id="navSettings" onclick="window.switchTab('settings');"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1-2.9 2.9-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5v.1h-4v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1-2.9-2.9.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3v-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1 2.9-2.9.1.1a1.7 1.7 0 001.8.3 1.7 1.7 0 001-1.5V3h4v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1 2.9 2.9-.1.1a1.7 1.7 0 00-.3 1.8 1.7 1.7 0 001.5 1h.1v4h-.1a1.7 1.7 0 00-1.5 1z"/></svg><span>Настройки</span></div></li>
       </ul>
 
       <!-- Section: Рекламные аккаунты -->
@@ -482,37 +483,32 @@
       <!-- TAB: ГЛАВНАЯ (HOME / AI PROMPT) -->
       <!-- ============================================== -->
       <section id="tab-home" class="tab-content active">
-        <div class="home-canvas">
-          <div class="home-content-box">
-            <h1 class="greeting-title" id="homeGreetingTitle">Доброе утро, Buyerly.</h1>
-            <div class="ai-prompt-card">
-              <textarea class="prompt-textarea" placeholder="Ask anything..."></textarea>
-              <div class="prompt-toolbar">
-                <div class="model-selector-pill">
-                  <span>Auto</span>
-                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                  </svg>
-                </div>
-                <div class="prompt-actions-right">
-                  <div class="icon-action-btn" title="Прикрепить файл">
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
-                    </svg>
-                  </div>
-                  <div class="icon-action-btn" title="Голосовой ввод">
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
-                    </svg>
-                  </div>
-                  <button class="send-btn" title="Отправить" type="button">
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
+        <div class="ui-page today-page" data-ui-pilot="today">
+          <div class="ui-card today-hero">
+            <div class="today-eyebrow">Сегодня</div>
+            <h1 id="homeGreetingTitle">Доброе утро, Buyerly.</h1>
+            <p>Проверьте состояние подключений, автоматизаций и последних действий — без декоративных контролов и скрытых сценариев.</p>
+          </div>
+          <div class="ui-alert ui-alert-info" role="status">
+            <div><strong>Рабочий обзор</strong><br>Каждая карточка ведёт к реальному разделу и следующему действию.</div>
+            <button class="ui-button" type="button" onclick="window.switchTab('summary')">Открыть эффективность</button>
+          </div>
+          <div class="today-action-grid" aria-label="Быстрые действия">
+            <button class="today-action-card" type="button" onclick="window.switchTab('fb_accounts')">
+              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></span>
+              <strong>Подключения</strong>
+              <span>Подключите Facebook-профиль, проверьте токен и доступные Business Manager.</span>
+            </button>
+            <button class="today-action-card" type="button" onclick="window.switchTab('rules')">
+              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 109 9"/></svg></span>
+              <strong>Автоматизации</strong>
+              <span>Просмотрите активные правила, условия и привязанные рекламные кабинеты.</span>
+            </button>
+            <button class="today-action-card" type="button" onclick="window.switchTab('logs')">
+              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+              <strong>История действий</strong>
+              <span>Узнайте, что произошло, почему сработало правило и можно ли отменить действие.</span>
+            </button>
           </div>
         </div>
       </section>
@@ -520,27 +516,35 @@
       <!-- ============================================== -->
       <!-- TAB: FACEBOOK АККАУНТЫ (FB ACCOUNTS / PROFILES) -->
       <!-- ============================================== -->
-      <section id="tab-fb_accounts" class="tab-content">
+      <section id="tab-fb_accounts" class="tab-content ui-page" data-ui-pilot="connections">
         <!-- Attio View Header -->
-        <div class="attio-view-header">
+        <div class="attio-view-header ui-page-header">
           <div class="attio-view-header-left">
             <div class="attio-view-selector">
               <div class="attio-view-icon-badge" style="background: #EBF3FF; color: #1877F2;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
               </div>
-              <span class="attio-view-title">Facebook Профили и BM</span>
+              <div><span class="attio-view-title">Подключения Meta</span><p class="ui-page-description">Facebook-профили, Business Manager и состояние доступа в одном месте.</p></div>
             </div>
+            <label class="connections-search" for="fbConnectionsSearch">
+              <span class="sr-only">Поиск подключений</span>
+              <input type="search" id="fbConnectionsSearch" class="attio-input" placeholder="Найти подключение…" autocomplete="off" oninput="window.filterFacebookConnections(this.value)">
+              <span id="fbConnectionsResultCount" class="connections-search-count" aria-live="polite"></span>
+            </label>
           </div>
           <div class="attio-view-header-right">
-            <button class="attio-header-btn" type="button" onclick="window.openManualTokenModal()">
+            <button class="attio-header-btn ui-button" type="button" onclick="window.switchTab('accounts')">
+              <span>Рекламные кабинеты</span>
+            </button>
+            <button class="attio-header-btn ui-button" type="button" onclick="window.openManualTokenModal()">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
               <span>По токену</span>
             </button>
-            <button class="attio-header-btn" type="button" onclick="window.openMetaInviteModal()" title="Отправить одноразовую ссылку байеру для подключения Facebook-профиля">
+            <button class="attio-header-btn ui-button" type="button" onclick="window.openMetaInviteModal()" title="Отправить одноразовую ссылку байеру для подключения Facebook-профиля">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
               <span>Пригласить</span>
             </button>
-            <button class="btn btn-primary btn-sm" onclick="window.startMetaOAuthFlow()">
+            <button class="btn btn-primary btn-sm ui-button ui-button-primary" onclick="window.startMetaOAuthFlow()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>Подключить Facebook</span>
             </button>
@@ -550,7 +554,7 @@
         <!-- FB Accounts Table Container -->
         <div id="fbAccountsListContainer">
           <div class="attio-table-viewport">
-            <table class="attio-table" id="fbAccountsTable">
+            <table class="attio-table ui-table" id="fbAccountsTable">
               <thead>
                 <tr>
                   <th class="attio-th sticky-col" style="width: 280px;">
@@ -616,18 +620,18 @@
               </tbody>
             </table>
           </div>
-          <div id="fbAccountsEmptyState" class="empty-state hidden">
+          <div id="fbAccountsEmptyState" class="empty-state ui-empty-state hidden">
             <div class="empty-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </div>
-            <h3>Нет подключенных Facebook аккаунтов</h3>
-            <p>Подключите профиль через официальный Facebook Login в 1 клик или вручную по токену.</p>
-            <div style="display: flex; gap: 8px; justify-content: center; margin-top: 16px;">
-              <button class="btn btn-primary" onclick="window.startMetaOAuthFlow()">
+            <h3 id="fbAccountsEmptyTitle">Нет подключений Meta</h3>
+            <p id="fbAccountsEmptyText">Подключите Facebook-профиль через официальный Facebook Login или вручную по токену.</p>
+            <div id="fbAccountsEmptyActions" style="display: flex; gap: 8px; justify-content: center; margin-top: 16px;">
+              <button class="btn btn-primary ui-button ui-button-primary" onclick="window.startMetaOAuthFlow()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Подключить Facebook
               </button>
-              <button class="btn btn-secondary" onclick="window.openManualTokenModal()">
+              <button class="btn btn-secondary ui-button" onclick="window.openManualTokenModal()">
                 По токену
               </button>
             </div>
@@ -646,12 +650,12 @@
             <div class="attio-popover-container">
               <button type="button" class="attio-filter-pill-btn" id="btnAccountsSort" onclick="window.toggleAccountsSortDropdown(event)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="16" y2="6"/><line x1="4" y1="12" x2="11" y2="12"/><line x1="4" y1="18" x2="8" y2="18"/><polyline points="15 15 18 18 21 15"/><line x1="18" y1="9" x2="18" y2="18"/></svg>
-                <span id="accountsSortLabel">Sort</span>
+                <span id="accountsSortLabel">Сортировка</span>
               </button>
               <div id="accountsSortDropdown" class="attio-dropdown-menu hidden" onclick="event.stopPropagation()">
-                <div class="attio-dropdown-section-title">Sort by</div>
+                <div class="attio-dropdown-section-title">Сортировать по</div>
                 <div class="attio-dropdown-item active" data-sort-key="name" onclick="window.setAccountsSort('name')">Кабинет / Имя</div>
-                <div class="attio-dropdown-item" data-sort-key="spend" onclick="window.setAccountsSort('spend')">Spend (Расход)</div>
+                <div class="attio-dropdown-item" data-sort-key="spend" onclick="window.setAccountsSort('spend')">Расход</div>
                 <div class="attio-dropdown-item" data-sort-key="leads" onclick="window.setAccountsSort('leads')">Лиды</div>
                 <div class="attio-dropdown-item" data-sort-key="cpl" onclick="window.setAccountsSort('cpl')">CPL</div>
                 <div class="attio-dropdown-item" data-sort-key="status" onclick="window.setAccountsSort('status')">Статус Meta</div>
@@ -663,11 +667,11 @@
           <div class="attio-view-header-right">
             <button id="btnGroupShare" class="attio-header-btn hidden" type="button" onclick="window.copyCurrentGroupLink()" title="Скопировать ссылку на группу">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-              <span>Share</span>
+              <span>Поделиться</span>
             </button>
             <button class="attio-primary-btn" onclick="window.switchTab('add')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Add Account</span>
+              <span>Добавить кабинет</span>
             </button>
           </div>
         </div>
@@ -676,7 +680,7 @@
         <div id="accountBulkActionBar" class="floating-action-bar hidden">
           <button type="button" class="attio-selected-pill" onclick="window.clearAccountSelection()" title="Снять выбор">
             <span id="bulkSelectedCount" class="attio-selected-count">1</span>
-            <span>Selected</span>
+            <span>Выбрано</span>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
           
@@ -710,7 +714,7 @@
           <!-- More Dropdown -->
           <div class="relative-dropdown-container">
             <button class="attio-bulk-btn" type="button" onclick="window.toggleBulkMoreDropdown(event)">
-              <span>More</span>
+              <span>Ещё</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
             </button>
             <div id="bulkMoreDropdown" class="attio-dropdown-menu hidden" style="right: 0; left: auto;">
@@ -736,7 +740,7 @@
           <div class="attio-picker-header">
             <div class="attio-picker-search-box">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="columnPickerSearchInput" placeholder="Search attributes..." oninput="window.handleColumnPickerSearch(this.value)" autocomplete="off">
+              <input type="text" id="columnPickerSearchInput" placeholder="Найти колонку…" oninput="window.handleColumnPickerSearch(this.value)" autocomplete="off">
             </div>
           </div>
           <div class="attio-picker-scroll-viewport" id="columnPickerList"></div>
@@ -744,7 +748,7 @@
 
         <!-- Attio Calculation Popover -->
         <div id="accountsCalcPopover" class="attio-dropdown-menu hidden" onclick="event.stopPropagation()" style="position: absolute; z-index: 1050; min-width: 170px;">
-          <div class="attio-dropdown-section-title">Calculate</div>
+          <div class="attio-dropdown-section-title">Вычисление</div>
           <div id="accountsCalcMenuList"></div>
         </div>
 
@@ -773,17 +777,18 @@
       <!-- ============================================== -->
       <!-- TAB: ПРАВИЛА (RULES & PRESETS - ATTIO WORKSPACE) -->
       <!-- ============================================== -->
-      <section id="tab-rules" class="tab-content rules-tab-content">
+      <section id="tab-rules" class="tab-content rules-tab-content ui-page" data-ui-pilot="automations">
         
         <!-- VIEW 1: Rules Kanban Board -->
         <div id="rulesKanbanView" class="rules-subview">
           <!-- Rules Header & Actions -->
-          <div class="rules-tab-header">
+          <div class="rules-tab-header ui-page-header">
             <div class="rules-header-info">
-              <h2>Правила мониторинга кампаний</h2>
+              <h2>Автоматизации</h2>
+              <p class="ui-page-description">Правила, которые отслеживают рекламу и выполняют контролируемые действия.</p>
             </div>
             <div class="rules-header-actions">
-              <button class="btn btn-primary btn-add-rule-main" type="button" onclick="window.openCreateRuleFromTab()">
+              <button class="btn btn-primary btn-add-rule-main ui-button ui-button-primary" type="button" onclick="window.openCreateRuleFromTab()">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 <span>Новое правило</span>
               </button>
@@ -825,13 +830,13 @@
           <section id="ruleGroupsSection" class="rule-groups-section hidden"></section>
 
           <!-- Rules Empty State (when 0 rules created) -->
-          <div id="rulesEmptyState" class="rules-empty-card hidden">
+          <div id="rulesEmptyState" class="rules-empty-card ui-empty-state hidden">
             <div class="bell-empty-icon">
               <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             </div>
             <h3>Правил пока нет</h3>
             <p>Создайте первое правило для автоматического управления рекламой</p>
-            <button class="btn btn-primary" type="button" onclick="window.openCreateRuleFromTab()">Создать правило</button>
+            <button class="btn btn-primary ui-button ui-button-primary" type="button" onclick="window.openCreateRuleFromTab()">Создать правило</button>
           </div>
         </div>
 
@@ -2967,25 +2972,29 @@
 
     <!-- Mobile Bottom Navigation Bar -->
     <nav class="mobile-nav" aria-label="Мобильная навигация">
-      <button class="mobile-nav-item active" data-tab="accounts" onclick="window.switchTab('accounts');">
+      <button class="mobile-nav-item active" data-tab="home" onclick="window.switchTab('home');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        <span>Кабинеты</span>
-      </button>
-      <button class="mobile-nav-item" data-tab="fb_accounts" onclick="window.switchTab('fb_accounts');">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>Профили FB</span>
-      </button>
-      <button class="mobile-nav-item" data-tab="rules" onclick="window.switchTab('rules');">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Правила</span>
+        <span>Сегодня</span>
       </button>
       <button class="mobile-nav-item" data-tab="summary" onclick="window.switchTab('summary');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        <span>Сводка</span>
+        <span>Эффективность</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="rules" onclick="window.switchTab('rules');">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Автоматизации</span>
       </button>
       <button class="mobile-nav-item" data-tab="logs" onclick="window.switchTab('logs');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-        <span>Логи</span>
+        <span>История</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="fb_accounts" onclick="window.switchTab('fb_accounts');">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Подключения</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="settings" onclick="window.switchTab('settings');">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1-2.9 2.9-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5v.1h-4v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1-2.9-2.9.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3v-4h.1a1.7 1.7 0 001.5-1"/></svg>
+        <span>Настройки</span>
       </button>
     </nav>
 
@@ -3145,9 +3154,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=9.24.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=9.24.0"></script>
-  <script src="/static/js/security.js?v=9.24.0"></script>
-  <script src="/static/js/app.js?v=9.24.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.0.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.0.0"></script>
+  <script src="/static/js/security.js?v=10.0.0"></script>
+  <script src="/static/js/i18n.js?v=10.0.0"></script>
+  <script src="/static/js/app.js?v=10.0.0"></script>
 </body>
 </html>
