@@ -1,3 +1,10 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+    compress: "true"
+
 x-app: &app
   build: .
   image: buyerly-app:${APP_VERSION:-local}
@@ -13,12 +20,14 @@ x-app: &app
   volumes:
     - ./logs:/app/logs
   restart: unless-stopped
+  logging: *default-logging
 
 services:
   db:
     image: postgres:16-alpine
     container_name: buyerly-db
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: buyerly
       POSTGRES_USER: buyerly
@@ -37,6 +46,7 @@ services:
     image: redis:7-alpine
     container_name: buyerly-redis
     restart: unless-stopped
+    logging: *default-logging
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - buyerly-redis:/data
@@ -85,6 +95,7 @@ services:
     image: buyerly-web:${APP_VERSION:-local}
     container_name: buyerly-web
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8080:80"
     volumes:

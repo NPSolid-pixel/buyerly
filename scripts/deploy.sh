@@ -241,12 +241,15 @@ if [[ -n "${EXPECTED_SHA}" ]]; then
           && "${WORKER_HEALTH}" == "healthy" \
           && "${DB_HEALTH}" == "healthy" \
           && "${REDIS_HEALTH}" == "healthy" ]]; then
-        echo "[SUCCESS] Buyerly ${EXPECTED_SHA} is already deployed and healthy."
-        exit 0
+        if bash "${SCRIPT_DIR}/verify_docker_log_rotation.sh"; then
+            echo "[SUCCESS] Buyerly ${EXPECTED_SHA} is already deployed and healthy."
+            exit 0
+        fi
+        echo "[INFO] Existing containers need the current operational configuration; continuing deploy."
     fi
 fi
 
-echo "[1/6] Creating a mandatory database backup..."
+echo "[1/8] Creating a mandatory database backup..."
 bash "${SCRIPT_DIR}/backup_db.sh"
 
 PREVIOUS_APP_IMAGE=$(docker inspect --format '{{.Image}}' buyerly-api 2>/dev/null || true)
@@ -261,7 +264,7 @@ if [[ "${PREVIOUS_APP_TAG}" =~ ^buyerly-app:([0-9a-f]{40})$ ]]; then
     fi
 fi
 
-echo "[2/6] Synchronizing ${BRANCH}..."
+echo "[2/8] Synchronizing ${BRANCH}..."
 git fetch origin "${BRANCH}"
 TARGET_SHA=$(git rev-parse "origin/${BRANCH}")
 if [[ -n "${EXPECTED_SHA}" && "${TARGET_SHA}" != "${EXPECTED_SHA}" ]]; then
@@ -283,11 +286,18 @@ ensure_postgres_password
 ensure_email_settings
 ensure_meta_token_encryption_key
 
-echo "[3/6] Building versioned API and web images..."
+echo "[3/8] Applying safe Docker retention and checking disk capacity..."
+bash "${SCRIPT_DIR}/cleanup_docker_artifacts.sh"
+if ! CHECK_PATH="${APP_DIR}" bash "${SCRIPT_DIR}/check_disk_usage.sh"; then
+    echo "[ERROR] Disk usage remains critical after safe artifact cleanup."
+    exit 1
+fi
+
+echo "[4/8] Building versioned API and web images..."
 docker compose build --pull api web
 preserve_legacy_uploads
 
-echo "[4/6] Preparing PostgreSQL database..."
+echo "[5/8] Preparing PostgreSQL database..."
 docker compose up -d db redis
 if ! wait_for_container buyerly-db; then
     docker compose logs --tail=120 db
@@ -307,7 +317,7 @@ if ! docker compose run --rm migrate; then
     exit 1
 fi
 
-echo "[5/6] Switching traffic to the separated services..."
+echo "[6/8] Switching traffic to the separated services..."
 docker compose up -d --no-deps api bot worker
 if ! wait_for_container buyerly-api; then
     docker compose logs --tail=120 api migrate db
@@ -333,13 +343,23 @@ if docker compose logs --since=5m worker 2>&1 \
 fi
 docker compose up -d --no-deps web
 
-echo "[6/6] Verifying the public service boundary..."
+echo "[7/8] Verifying the public service boundary and log rotation..."
 if ! wait_for_container buyerly-web; then
     docker compose logs --tail=120 web api
     rollback
     exit 1
 fi
 curl -fsS http://127.0.0.1:8080/health/ready >/dev/null
+if ! bash "${SCRIPT_DIR}/verify_docker_log_rotation.sh"; then
+    rollback
+    exit 1
+fi
+
+echo "[8/8] Removing aged artifacts after successful cutover..."
+if ! bash "${SCRIPT_DIR}/cleanup_docker_artifacts.sh"; then
+    echo "[WARNING] Post-deploy artifact cleanup failed; release remains healthy."
+fi
+CHECK_PATH="${APP_DIR}" bash "${SCRIPT_DIR}/check_disk_usage.sh"
 
 echo "[SUCCESS] Buyerly ${TARGET_SHA} deployed as web/api/bot/worker/db."
 docker compose ps

@@ -15,6 +15,15 @@ class TestDeployContract(unittest.TestCase):
         cls.workflow = (project_root / ".github" / "workflows" / "deploy.yml").read_text()
         cls.codeowners = (project_root / ".github" / "CODEOWNERS").read_text()
         cls.alembic_env = (project_root / "alembic" / "env.py").read_text()
+        cls.cleanup_script = (
+            project_root / "scripts" / "cleanup_docker_artifacts.sh"
+        ).read_text()
+        cls.disk_script = (
+            project_root / "scripts" / "check_disk_usage.sh"
+        ).read_text()
+        cls.log_verification_script = (
+            project_root / "scripts" / "verify_docker_log_rotation.sh"
+        ).read_text()
 
     def test_deployments_are_serialized(self):
         self.assertIn("DEPLOY_LOCK_FILE", self.script)
@@ -23,6 +32,7 @@ class TestDeployContract(unittest.TestCase):
     def test_same_healthy_commit_is_not_recreated(self):
         self.assertIn("CURRENT_REPO_SHA", self.script)
         self.assertIn("buyerly-app:${EXPECTED_SHA}", self.script)
+        self.assertIn('bash "${SCRIPT_DIR}/verify_docker_log_rotation.sh"', self.script)
         self.assertIn("is already deployed and healthy", self.script)
 
     def test_production_roles_are_separate_services(self):
@@ -40,6 +50,45 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("wait_for_container buyerly-worker", self.script)
         self.assertIn("wait_for_container buyerly-web", self.script)
         self.assertIn("rollback", self.script)
+
+    def test_docker_logs_are_bounded_for_every_service(self):
+        self.assertIn("x-logging: &default-logging", self.compose)
+        self.assertIn('max-size: "20m"', self.compose)
+        self.assertIn('max-file: "5"', self.compose)
+        self.assertIn('compress: "true"', self.compose)
+        self.assertGreaterEqual(self.compose.count("logging: *default-logging"), 4)
+        for container_name in (
+            "buyerly-db",
+            "buyerly-redis",
+            "buyerly-api",
+            "buyerly-web",
+            "buyerly-telegram-bot",
+            "buyerly-worker",
+        ):
+            self.assertIn(container_name, self.log_verification_script)
+        self.assertIn("verify_docker_log_rotation.sh", self.script)
+
+    def test_artifact_retention_preserves_rollbacks_and_volumes(self):
+        self.assertIn('KEEP_RELEASES="${KEEP_RELEASES:-2}"', self.cleanup_script)
+        self.assertIn("greater than or equal to 2", self.cleanup_script)
+        self.assertIn("docker ps -aq", self.cleanup_script)
+        self.assertIn("buyerly-app", self.cleanup_script)
+        self.assertIn("buyerly-web", self.cleanup_script)
+        self.assertIn("docker image prune", self.cleanup_script)
+        self.assertIn("docker builder prune", self.cleanup_script)
+        self.assertNotIn("docker volume prune", self.cleanup_script)
+        self.assertNotIn("docker system prune", self.cleanup_script)
+        self.assertNotIn("docker image prune -a", self.cleanup_script)
+        self.assertIn("cleanup_docker_artifacts.sh", self.script)
+
+    def test_disk_threshold_blocks_deploy_after_safe_cleanup(self):
+        self.assertIn('DISK_WARNING_PERCENT="${DISK_WARNING_PERCENT:-75}"', self.disk_script)
+        self.assertIn('DISK_CRITICAL_PERCENT="${DISK_CRITICAL_PERCENT:-90}"', self.disk_script)
+        cleanup_position = self.script.index("cleanup_docker_artifacts.sh")
+        disk_check_position = self.script.index("check_disk_usage.sh")
+        build_position = self.script.index("docker compose build --pull api web")
+        self.assertLess(cleanup_position, disk_check_position)
+        self.assertLess(disk_check_position, build_position)
 
     def test_migration_lock_does_not_mask_the_primary_database_error(self):
         self.assertIn("pg_try_advisory_xact_lock", self.alembic_env)
