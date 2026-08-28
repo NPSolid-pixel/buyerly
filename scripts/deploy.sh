@@ -241,7 +241,9 @@ if [[ -n "${EXPECTED_SHA}" ]]; then
           && "${WORKER_HEALTH}" == "healthy" \
           && "${DB_HEALTH}" == "healthy" \
           && "${REDIS_HEALTH}" == "healthy" ]]; then
-        if bash "${SCRIPT_DIR}/verify_docker_log_rotation.sh"; then
+        if bash "${SCRIPT_DIR}/verify_docker_log_rotation.sh" \
+            && APP_DIR="${APP_DIR}" EXPECTED_SHA="${EXPECTED_SHA}" \
+                python3 "${SCRIPT_DIR}/post_deploy_smoke.py"; then
             echo "[SUCCESS] Buyerly ${EXPECTED_SHA} is already deployed and healthy."
             exit 0
         fi
@@ -343,7 +345,7 @@ if docker compose logs --since=5m worker 2>&1 \
 fi
 docker compose up -d --no-deps web
 
-echo "[7/8] Verifying the public service boundary and log rotation..."
+echo "[7/8] Running the blocking production smoke and operational checks..."
 if ! wait_for_container buyerly-web; then
     docker compose logs --tail=120 web api
     rollback
@@ -351,6 +353,12 @@ if ! wait_for_container buyerly-web; then
 fi
 curl -fsS http://127.0.0.1:8080/health/ready >/dev/null
 if ! bash "${SCRIPT_DIR}/verify_docker_log_rotation.sh"; then
+    rollback
+    exit 1
+fi
+if ! APP_DIR="${APP_DIR}" EXPECTED_SHA="${TARGET_SHA}" \
+    python3 "${SCRIPT_DIR}/post_deploy_smoke.py"; then
+    echo "[ERROR] Critical post-deploy smoke failed; restoring the previous release."
     rollback
     exit 1
 fi

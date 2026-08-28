@@ -28,6 +28,7 @@ from core.meta_tokens import decrypt_meta_token
 from database.db import Base, hash_password, verify_password
 from database.models import (
     Account,
+    AccountHealth,
     AccountGroup,
     AccountGroupMember,
     ActionUndoState,
@@ -362,7 +363,68 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 select(User).where(User.username == "buyer_nick")
             )
             changed_buyer = result.scalar_one()
-            self.assertTrue(verify_password(new_password, changed_buyer.password_hash))
+        self.assertTrue(verify_password(new_password, changed_buyer.password_hash))
+
+    async def test_health_overview_is_workspace_isolated_and_secret_safe(self):
+        async with self.test_session_maker() as session:
+            buyer = (
+                await session.execute(select(User).where(User.username == "buyer_nick"))
+            ).scalar_one()
+            buyer_account = (
+                await session.execute(select(Account).where(Account.workspace_id == self.ws_buyer_id))
+            ).scalar_one()
+            session.add(
+                AccountHealth(
+                    workspace_id=self.ws_buyer_id,
+                    account_pk=buyer_account.id,
+                    status="degraded",
+                    cause="meta",
+                    signals={"token_healthy": True},
+                    consecutive_failures=1,
+                    last_error_code="meta_graph_unavailable",
+                    last_error_message="Meta Graph unavailable [REDACTED]",
+                    last_checked_at=datetime.now(timezone.utc),
+                )
+            )
+            admin_workspace = (
+                await session.execute(select(Workspace).where(Workspace.slug == "admin-workspace"))
+            ).scalar_one()
+            foreign_account = Account(
+                account_id="act_foreign_health",
+                name="Foreign health",
+                owner_user_id=admin_workspace.owner_user_id,
+                workspace_id=admin_workspace.id,
+            )
+            session.add(foreign_account)
+            await session.flush()
+            session.add(
+                AccountHealth(
+                    workspace_id=admin_workspace.id,
+                    account_pk=foreign_account.id,
+                    status="critical",
+                    cause="user",
+                    signals={},
+                    last_error_message="foreign",
+                    last_checked_at=datetime.now(timezone.utc),
+                )
+            )
+            await session.commit()
+
+        init_data = generate_valid_telegram_init_data(
+            settings.BOT_TOKEN,
+            {"id": 8948797431, "first_name": "Nick", "username": "buyer_nick"},
+        )
+        headers = {"Authorization": f"tma {init_data}"}
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            overview = await client.get("/api/health/overview", headers=headers)
+            foreign = await client.get("/api/accounts/act_foreign_health/health", headers=headers)
+
+        self.assertEqual(overview.status_code, 200)
+        payload = overview.json()
+        self.assertEqual([item["account_id"] for item in payload["accounts"]], [buyer_account.account_id])
+        self.assertNotIn("access_token", str(payload).lower())
+        self.assertEqual(foreign.status_code, 404)
 
     async def test_telegram_id_change_keeps_all_data_owned_by_the_same_user(self):
         old_data = generate_valid_telegram_init_data(

@@ -24,6 +24,18 @@ class TestDeployContract(unittest.TestCase):
         cls.log_verification_script = (
             project_root / "scripts" / "verify_docker_log_rotation.sh"
         ).read_text()
+        cls.smoke_script = (
+            project_root / "scripts" / "post_deploy_smoke.py"
+        ).read_text()
+        cls.internal_smoke = (
+            project_root / "services" / "smoke_checks.py"
+        ).read_text()
+        cls.reliability_metrics = (
+            project_root / "services" / "reliability_metrics.py"
+        ).read_text()
+        cls.incident_runbooks = (
+            project_root / "docs" / "INCIDENT_RUNBOOKS.md"
+        ).read_text()
 
     def test_deployments_are_serialized(self):
         self.assertIn("DEPLOY_LOCK_FILE", self.script)
@@ -33,6 +45,8 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("CURRENT_REPO_SHA", self.script)
         self.assertIn("buyerly-app:${EXPECTED_SHA}", self.script)
         self.assertIn('bash "${SCRIPT_DIR}/verify_docker_log_rotation.sh"', self.script)
+        early_exit = self.script[:self.script.index("Creating a mandatory database backup")]
+        self.assertIn("post_deploy_smoke.py", early_exit)
         self.assertIn("is already deployed and healthy", self.script)
 
     def test_production_roles_are_separate_services(self):
@@ -89,6 +103,52 @@ class TestDeployContract(unittest.TestCase):
         build_position = self.script.index("docker compose build --pull api web")
         self.assertLess(cleanup_position, disk_check_position)
         self.assertLess(disk_check_position, build_position)
+
+    def test_post_deploy_smoke_is_blocking_persisted_and_read_only(self):
+        self.assertIn("post_deploy_smoke.py", self.script)
+        smoke_position = self.script.index("post_deploy_smoke.py")
+        cleanup_position = self.script.rindex("cleanup_docker_artifacts.sh")
+        self.assertLess(smoke_position, cleanup_position)
+        self.assertIn("rollback", self.script[smoke_position:cleanup_position])
+        self.assertIn('"mode": "read-only"', self.smoke_script)
+        self.assertIn('"meta_budget_mutations": 0', self.smoke_script)
+        self.assertIn("post-deploy-{EXPECTED_SHA}.json", self.smoke_script)
+        self.assertIn("os.replace", self.smoke_script)
+        self.assertIn("0o600", self.smoke_script)
+        self.assertNotIn("META_APP_SECRET", self.smoke_script)
+        self.assertNotIn("access_token", self.smoke_script)
+
+    def test_smoke_covers_release_critical_contracts(self):
+        for contract in (
+            "health_live",
+            "health_ready",
+            "authentication_boundary",
+            "runtime_versions",
+            "worker_heartbeat",
+            "database_meta_isolation_summary",
+            "reliability_metrics",
+        ):
+            self.assertIn(contract, self.smoke_script)
+        self.assertIn("_assert_database_at_head", self.internal_smoke)
+        self.assertIn("_assert_schema_contract", self.internal_smoke)
+        self.assertIn("account_connection_workspace_mismatch", self.internal_smoke)
+        self.assertIn("account_group_workspace_mismatch", self.internal_smoke)
+        self.assertIn("summary_workspace_scope", self.internal_smoke)
+        self.assertIn("meta_configuration", self.internal_smoke)
+        self.assertIn("normalize_synthetic_metrics", self.reliability_metrics)
+        self.assertIn('runtime["synthetic"]', self.reliability_metrics)
+        self.assertNotIn("access_token", self.reliability_metrics)
+
+    def test_incident_runbooks_cover_required_failures(self):
+        for heading in (
+            "## Worker heartbeat or scheduler cycle",
+            "## Database or migration",
+            "## Meta API outage or quota",
+            "## Token expiry, revocation, or encryption key",
+            "## Disk capacity",
+            "## Release smoke failure and rollback gate",
+        ):
+            self.assertIn(heading, self.incident_runbooks)
 
     def test_migration_lock_does_not_mask_the_primary_database_error(self):
         self.assertIn("pg_try_advisory_xact_lock", self.alembic_env)

@@ -4441,6 +4441,13 @@
     const content = document.getElementById('accountDetailsContent');
     if (!account || !content) return;
     const metaState = getAccountMetaState(account);
+    const connectionState = getAccountConnectionState(account);
+    const displayName = accountDisplayName(account);
+    const hasCustomName = Boolean(String(account.custom_name || '').trim());
+    const note = String(account.note || '').trim();
+    const health = account.health || { status: 'unknown', cause: 'none' };
+    const healthLabels = { healthy: 'Здоров', degraded: 'Есть отклонения', critical: 'Критическая проблема', unknown: 'Нет данных' };
+    const causeLabels = { none: '—', user: 'Требуется действие пользователя', meta: 'Meta API', system: 'Buyerly / инфраструктура' };
     const activeRules = Array.isArray(account.active_rules) ? account.active_rules : [];
     const actionLabels = {
       turn_off: 'Выключить ad set', notify_only: 'Только уведомить', turn_on: 'Включить ad set',
@@ -4498,6 +4505,17 @@
         ${ownerHtml}
         <div class="account-detail-field"><span>Добавлен</span><b>${escapeHtml(account.created_at || '—')}</b></div>
       </div>
+
+      <section class="account-detail-profile account-health-detail ${escapeHtml(health.status)}">
+        <div class="account-detail-section-head"><h3>Здоровье кабинета</h3><span>${escapeHtml(healthLabels[health.status] || health.status)}</span></div>
+        <div class="account-detail-grid">
+          <div class="account-detail-field"><span>Источник</span><b>${escapeHtml(causeLabels[health.cause] || health.cause)}</b></div>
+          <div class="account-detail-field"><span>Последний успех</span><b>${escapeHtml(health.last_success_at ? formatSummaryTime(health.last_success_at) : '—')}</b></div>
+          <div class="account-detail-field"><span>Последняя проверка</span><b>${escapeHtml(health.last_checked_at ? formatSummaryTime(health.last_checked_at) : '—')}</b></div>
+          <div class="account-detail-field"><span>Ошибок подряд</span><b>${Number(health.consecutive_failures || 0)}</b></div>
+        </div>
+        ${health.last_error_message ? `<p class="account-health-error">${escapeHtml(health.last_error_message)}</p>` : ''}
+      </section>
 
       <section class="account-detail-profile">
         <div class="account-detail-section-head"><h3>Внутренняя заметка</h3><button type="button" onclick="window.openAccountProfileEditor(${escapeJsArg(account.account_id)})">Изменить</button></div>
@@ -10324,6 +10342,7 @@
         saveButton.title = canManageInterval ? '' : 'Изменение доступно только администратору';
       }
       renderAutomationRuntime(data.runtime || {});
+      await loadHealthOverview();
 
       if (state.user) {
         const dName = document.getElementById('settingsDisplayName');
@@ -10419,6 +10438,40 @@
       badge.className = `badge ${unhealthy ? 'badge-warning' : 'badge-success'}`;
       const label = waiting ? 'Ожидает первый цикл' : unhealthy ? 'Нужна проверка' : 'Воркер онлайн';
       badge.innerHTML = `<span class="status-dot ${unhealthy ? 'dot-warning' : 'dot-success'}"></span>${label}`;
+    }
+  }
+
+  async function loadHealthOverview() {
+    const dashboard = document.getElementById('accountHealthDashboard');
+    if (!dashboard) return;
+    try {
+      const data = await apiRequest('/api/health/overview');
+      const overall = document.getElementById('accountHealthOverall');
+      const signals = document.getElementById('accountHealthSignals');
+      const labels = { healthy: 'В норме', degraded: 'Есть отклонения', critical: 'Критично', unknown: 'Нет данных' };
+      if (overall) {
+        overall.className = `badge ${data.overall_status === 'healthy' ? 'badge-success' : 'badge-warning'}`;
+        overall.textContent = labels[data.overall_status] || data.overall_status;
+      }
+      if (signals) {
+        const s = data.signals || {};
+        signals.innerHTML = `
+          <div><span>API synthetic</span><b>${s.api_synthetic_availability_percent == null ? '—' : `${Number(s.api_synthetic_availability_percent).toFixed(1)}%`}</b></div>
+          <div><span>API latency p95</span><b>${s.api_synthetic_latency_p95_ms == null ? '—' : `${Number(s.api_synthetic_latency_p95_ms)} мс`}</b></div>
+          <div><span>Лаг worker</span><b>${s.worker_cycle_lag_seconds == null ? '—' : `${Math.round(s.worker_cycle_lag_seconds / 60)} мин`}</b></div>
+          <div><span>Ошибки действий · 24ч</span><b>${Number(s.action_error_rate_24h_percent || 0).toFixed(1)}%</b></div>
+          <div><span>Квота Meta</span><b>${Number(s.meta_quota_percent || 0).toFixed(0)}%</b></div>
+          <div><span>Проблемы токенов</span><b>${Number(s.token_problem_count || 0)}</b></div>`;
+      }
+      const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+      dashboard.innerHTML = accounts.length ? accounts.map(item => `
+        <button type="button" class="account-health-row ${escapeHtml(item.status)}" onclick="window.openAccountDetails(${escapeJsArg(item.account_id)})">
+          <span><b>${escapeHtml(item.name || item.account_id)}</b><small>${escapeHtml(item.account_id)}</small></span>
+          <span><b>${escapeHtml(labels[item.status] || item.status)}</b><small>${escapeHtml(item.cause === 'none' ? 'Без ошибок' : item.cause)}</small></span>
+          <span><b>${item.last_success_at ? escapeHtml(formatSummaryTime(item.last_success_at)) : '—'}</b><small>Последний успех</small></span>
+        </button>`).join('') : '<span class="text-hint">В этом workspace пока нет кабинетов.</span>';
+    } catch (error) {
+      dashboard.innerHTML = '<span class="text-hint">Health-сигналы временно недоступны.</span>';
     }
   }
 

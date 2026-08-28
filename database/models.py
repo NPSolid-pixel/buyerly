@@ -715,6 +715,45 @@ class Account(Base):
         return f"<Account(account_id='{self.account_id}', name='{self.name}', status={self.account_status})>"
 
 
+class AccountHealth(Base):
+    """Latest secret-safe reliability snapshot for one workspace account."""
+
+    __tablename__ = "account_health"
+    __table_args__ = (
+        UniqueConstraint("account_pk", name="uq_account_health_account_pk"),
+        Index("ix_account_health_workspace_status", "workspace_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    account_pk = Column(
+        Integer,
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(String(16), default="unknown", nullable=False, index=True)
+    cause = Column(String(16), default="none", nullable=False, index=True)
+    signals = Column(JSONB, default=dict, nullable=False)
+    consecutive_failures = Column(Integer, default=0, nullable=False)
+    last_success_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_error_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_error_code = Column(String(64), default="", nullable=False)
+    last_error_message = Column(Text, default="", nullable=False)
+    last_checked_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    last_transition_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<AccountHealth(account_pk={self.account_pk}, status='{self.status}', cause='{self.cause}')>"
+
+
 class AccountGroup(Base):
     """Workspace-scoped, reusable grouping of advertising accounts."""
 

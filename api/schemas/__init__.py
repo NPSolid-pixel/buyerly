@@ -60,6 +60,7 @@ from api.schemas.settings import (
     SetIntervalRequest,
     AutomationSettingsUpdateRequest,
 )
+from api.schemas.health import AccountHealthItem
 
 __all__ = [
     "WorkspaceItem",
@@ -108,4 +109,5 @@ __all__ = [
     "AnalyticsViewPreferenceRequest",
     "SetIntervalRequest",
     "AutomationSettingsUpdateRequest",
+    "AccountHealthItem",
 ]
