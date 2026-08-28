@@ -8389,3 +8389,46 @@ input[type="text"].attio-popover-name-input:focus,
     max-width: none;
   }
 }
+
+/* ==========================================================
+   APP INITIAL PRELOADER (ZERO AUTH FLICKER / FOUC FIX)
+   ========================================================== */
+.app-initial-loading {
+  position: fixed;
+  inset: 0;
+  background-color: var(--bg-surface, #FFFFFF);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.app-initial-loading.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  display: none !important;
+}
+
+.app-initial-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.app-initial-logo-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.96); opacity: 0.85; }
+}
+

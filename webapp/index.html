@@ -18,8 +18,18 @@
 </head>
 
 <body>
+  <!-- Initial App Preloader (Prevents Auth Flicker / FOUC during session validation) -->
+  <div id="appInitialLoading" class="app-initial-loading">
+    <div class="app-initial-loading-content">
+      <div class="app-initial-logo-wrapper">
+        <img src="/static/icons/buyerly_logo_badge.svg" width="36" height="40" alt="Buyerly">
+      </div>
+      <div class="spinner" style="width: 20px; height: 20px; border-width: 2px; margin: 0;"></div>
+    </div>
+  </div>
+
   <!-- Attio Authentication & Onboarding Flow (100% Attio CRM Design) -->
-  <div id="loginScreen" class="attio-auth-wrapper">
+  <div id="loginScreen" class="attio-auth-wrapper" style="display: none;">
     <header class="attio-auth-top-header">
       <a href="/" class="attio-auth-brand-logo" title="Buyerly">
         <img src="/static/icons/buyerly_logo_badge.svg" width="24" height="27" alt="Buyerly">
