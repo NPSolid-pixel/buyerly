@@ -89,10 +89,13 @@ async def is_email_allowed_for_login(session, email: str) -> bool:
     invite_res = await session.execute(
         select(WorkspaceInvite).where(
             func.lower(WorkspaceInvite.email) == clean_email,
-            WorkspaceInvite.expires_at > now,
             or_(
-                WorkspaceInvite.max_uses.is_(None),
-                WorkspaceInvite.uses_count < WorkspaceInvite.max_uses,
+                WorkspaceInvite.expires_at.is_(None),
+                WorkspaceInvite.expires_at > now,
+            ),
+            or_(
+                WorkspaceInvite.max_uses == 0,
+                WorkspaceInvite.used_count < WorkspaceInvite.max_uses,
             ),
         )
     )

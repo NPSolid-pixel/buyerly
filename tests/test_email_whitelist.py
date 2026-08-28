@@ -12,6 +12,7 @@ import api.server as api_server_module
 import bot.handlers as bot_handlers
 from api.server import create_app
 from core.config import settings
+from core.rate_limit import limiter
 from database.db import hash_password
 from database.models import (
     AllowedEmail,
@@ -26,6 +27,7 @@ from tests.test_db_helper import create_test_engine, init_test_db
 
 class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        limiter._records.clear()
         self.original_auth_session_maker = auth_router_module.async_session_maker
         self.original_bot_session_maker = bot_handlers.async_session_maker
         self.original_api_session_maker = api_auth_module.async_session_maker
@@ -74,6 +76,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
             self.buyer_id = buyer.id
 
     async def asyncTearDown(self):
+        limiter._records.clear()
         auth_router_module.async_session_maker = self.original_auth_session_maker
         bot_handlers.async_session_maker = self.original_bot_session_maker
         api_auth_module.async_session_maker = self.original_api_session_maker
@@ -220,6 +223,8 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 session.add(WebSession(
                     id="session-revokeme-123",
                     user_id=target_user_id,
+                    token_hash="hash-token-revokeme-123",
+                    csrf_hash="csrf-hash-revokeme-123",
                     expires_at=datetime.now(timezone.utc) + timedelta(days=1),
                 ))
                 await session.commit()
