@@ -14,7 +14,7 @@ Tests cover:
 import hashlib
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 from cryptography.fernet import Fernet
@@ -119,10 +119,8 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
             self.ws_id = ws.id
 
         self.app = create_app()
-        self.client = httpx.AsyncClient(app=self.app, base_url="http://test")
 
     async def asyncTearDown(self):
-        await self.client.aclose()
         for k, v in self.orig.items():
             setattr(settings, k, v)
         await self.engine.dispose()
@@ -130,16 +128,21 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
     def _auth(self, token: str):
         return {"Authorization": f"Bearer {token}"}
 
+    def _client(self):
+        transport = httpx.ASGITransport(app=self.app)
+        return httpx.AsyncClient(transport=transport, base_url="http://test")
+
     # ------------------------------------------------------------------
     # Create invite
     # ------------------------------------------------------------------
 
     async def test_create_invite_owner_returns_url(self):
-        resp = await self.client.post(
-            "/api/meta/invites",
-            json={"label": "Buyer Ivan", "expires_in_hours": 6},
-            headers=self._auth("token-owner"),
-        )
+        async with self._client() as client:
+            resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "Buyer Ivan", "expires_in_hours": 6},
+                headers=self._auth("token-owner"),
+            )
         self.assertEqual(resp.status_code, 200, resp.text)
         data = resp.json()
         self.assertIn("invite_url", data)
@@ -147,56 +150,60 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(data["invite_url"].startswith("https://buyerly.app/connect/meta/"))
         self.assertEqual(data["label"], "Buyer Ivan")
         self.assertEqual(data["status"], "pending")
-        # raw_token must begin with inv_fb_
         self.assertTrue(data["raw_token"].startswith("inv_fb_"))
 
     async def test_create_invite_buyer_role_allowed(self):
-        resp = await self.client.post(
-            "/api/meta/invites",
-            json={"label": "", "expires_in_hours": 24},
-            headers=self._auth("token-buyer"),
-        )
+        async with self._client() as client:
+            resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "", "expires_in_hours": 24},
+                headers=self._auth("token-buyer"),
+            )
         self.assertEqual(resp.status_code, 200)
 
     async def test_create_invite_viewer_blocked(self):
-        resp = await self.client.post(
-            "/api/meta/invites",
-            json={"label": "X", "expires_in_hours": 24},
-            headers=self._auth("token-viewer"),
-        )
+        async with self._client() as client:
+            resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "X", "expires_in_hours": 24},
+                headers=self._auth("token-viewer"),
+            )
         self.assertEqual(resp.status_code, 403)
 
     async def test_create_invite_unauthenticated_blocked(self):
-        resp = await self.client.post("/api/meta/invites", json={"label": "", "expires_in_hours": 24})
+        async with self._client() as client:
+            resp = await client.post("/api/meta/invites", json={"label": "", "expires_in_hours": 24})
         self.assertIn(resp.status_code, (401, 403))
 
     async def test_create_invite_token_hash_not_in_response(self):
         """raw_token is exposed on creation, but token_hash must never be exposed."""
-        resp = await self.client.post(
-            "/api/meta/invites",
-            json={"label": "Test", "expires_in_hours": 1},
-            headers=self._auth("token-owner"),
-        )
+        async with self._client() as client:
+            resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "Test", "expires_in_hours": 1},
+                headers=self._auth("token-owner"),
+            )
         self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertNotIn("token_hash", data)
+        self.assertNotIn("token_hash", resp.json())
 
     # ------------------------------------------------------------------
     # List invites
     # ------------------------------------------------------------------
 
     async def test_list_invites_empty(self):
-        resp = await self.client.get("/api/meta/invites", headers=self._auth("token-owner"))
+        async with self._client() as client:
+            resp = await client.get("/api/meta/invites", headers=self._auth("token-owner"))
         self.assertEqual(resp.status_code, 200)
         self.assertIsInstance(resp.json(), list)
 
     async def test_list_invites_shows_created_invite(self):
-        await self.client.post(
-            "/api/meta/invites",
-            json={"label": "Listed", "expires_in_hours": 24},
-            headers=self._auth("token-owner"),
-        )
-        resp = await self.client.get("/api/meta/invites", headers=self._auth("token-owner"))
+        async with self._client() as client:
+            await client.post(
+                "/api/meta/invites",
+                json={"label": "Listed", "expires_in_hours": 24},
+                headers=self._auth("token-owner"),
+            )
+            resp = await client.get("/api/meta/invites", headers=self._auth("token-owner"))
         self.assertEqual(resp.status_code, 200)
         invites = resp.json()
         self.assertGreater(len(invites), 0)
@@ -205,12 +212,13 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
 
     async def test_list_invites_does_not_expose_raw_url(self):
         """After creation, list endpoint must NOT re-expose the full invite URL."""
-        await self.client.post(
-            "/api/meta/invites",
-            json={"label": "Secret", "expires_in_hours": 24},
-            headers=self._auth("token-owner"),
-        )
-        resp = await self.client.get("/api/meta/invites", headers=self._auth("token-owner"))
+        async with self._client() as client:
+            await client.post(
+                "/api/meta/invites",
+                json={"label": "Secret", "expires_in_hours": 24},
+                headers=self._auth("token-owner"),
+            )
+            resp = await client.get("/api/meta/invites", headers=self._auth("token-owner"))
         invites = resp.json()
         for inv in invites:
             self.assertIsNone(inv.get("invite_url"))
@@ -220,20 +228,22 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
     # ------------------------------------------------------------------
 
     async def test_revoke_pending_invite(self):
-        create_resp = await self.client.post(
-            "/api/meta/invites",
-            json={"label": "To revoke", "expires_in_hours": 24},
-            headers=self._auth("token-owner"),
-        )
-        invite_id = create_resp.json()["id"]
-        resp = await self.client.delete(
-            f"/api/meta/invites/{invite_id}", headers=self._auth("token-owner")
-        )
+        async with self._client() as client:
+            create_resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "To revoke", "expires_in_hours": 24},
+                headers=self._auth("token-owner"),
+            )
+            invite_id = create_resp.json()["id"]
+            resp = await client.delete(
+                f"/api/meta/invites/{invite_id}", headers=self._auth("token-owner")
+            )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["status"], "revoked")
 
     async def test_revoke_nonexistent_returns_404(self):
-        resp = await self.client.delete("/api/meta/invites/999999", headers=self._auth("token-owner"))
+        async with self._client() as client:
+            resp = await client.delete("/api/meta/invites/999999", headers=self._auth("token-owner"))
         self.assertEqual(resp.status_code, 404)
 
     async def test_revoke_already_used_returns_409(self):
@@ -257,9 +267,10 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
             await session.refresh(invite)
             invite_id = invite.id
 
-        resp = await self.client.delete(
-            f"/api/meta/invites/{invite_id}", headers=self._auth("token-owner")
-        )
+        async with self._client() as client:
+            resp = await client.delete(
+                f"/api/meta/invites/{invite_id}", headers=self._auth("token-owner")
+            )
         self.assertEqual(resp.status_code, 409)
 
     # ------------------------------------------------------------------
@@ -267,13 +278,14 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
     # ------------------------------------------------------------------
 
     async def test_public_invite_info_valid(self):
-        create_resp = await self.client.post(
-            "/api/meta/invites",
-            json={"label": "Public check", "expires_in_hours": 24},
-            headers=self._auth("token-owner"),
-        )
-        raw_token = create_resp.json()["raw_token"]
-        resp = await self.client.get(f"/api/meta/invites/public/{raw_token}")
+        async with self._client() as client:
+            create_resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "Public check", "expires_in_hours": 24},
+                headers=self._auth("token-owner"),
+            )
+            raw_token = create_resp.json()["raw_token"]
+            resp = await client.get(f"/api/meta/invites/public/{raw_token}")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertTrue(data["valid"])
@@ -282,7 +294,8 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["label"], "Public check")
 
     async def test_public_invite_info_invalid_token(self):
-        resp = await self.client.get("/api/meta/invites/public/inv_fb_INVALID_TOKEN_XYZ")
+        async with self._client() as client:
+            resp = await client.get("/api/meta/invites/public/inv_fb_INVALID_TOKEN_XYZ")
         self.assertEqual(resp.status_code, 404)
 
     async def test_public_invite_info_expired(self):
@@ -297,12 +310,13 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
                 token_prefix="inv_fb_expired...",
                 label="Expired",
                 status="pending",
-                expires_at=now - timedelta(hours=1),  # Already expired
+                expires_at=now - timedelta(hours=1),
             )
             session.add(invite)
             await session.commit()
 
-        resp = await self.client.get(f"/api/meta/invites/public/{raw_token}")
+        async with self._client() as client:
+            resp = await client.get(f"/api/meta/invites/public/{raw_token}")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertFalse(data["valid"])
@@ -325,7 +339,8 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
             session.add(invite)
             await session.commit()
 
-        resp = await self.client.get(f"/api/meta/invites/public/{raw_token}")
+        async with self._client() as client:
+            resp = await client.get(f"/api/meta/invites/public/{raw_token}")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertFalse(data["valid"])
@@ -336,30 +351,31 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
     # ------------------------------------------------------------------
 
     async def test_oauth_invite_valid_redirects_to_facebook(self):
-        create_resp = await self.client.post(
-            "/api/meta/invites",
-            json={"label": "OAuth test", "expires_in_hours": 1},
-            headers=self._auth("token-owner"),
-        )
-        raw_token = create_resp.json()["raw_token"]
-
-        mock_client = MagicMock()
-        mock_client.build_authorization_url.return_value = "https://www.facebook.com/dialog/oauth?state=xyz"
-        with patch("api.meta_oauth._oauth_client", return_value=mock_client):
-            resp = await self.client.get(
-                f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
+        async with self._client() as client:
+            create_resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "OAuth test", "expires_in_hours": 1},
+                headers=self._auth("token-owner"),
             )
+            raw_token = create_resp.json()["raw_token"]
+
+            mock_client = MagicMock()
+            mock_client.build_authorization_url.return_value = "https://www.facebook.com/dialog/oauth?state=xyz"
+            with patch("api.meta_oauth._oauth_client", return_value=mock_client):
+                resp = await client.get(
+                    f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
+                )
         self.assertEqual(resp.status_code, 303)
         self.assertIn("facebook.com", resp.headers.get("location", ""))
 
     async def test_oauth_invite_invalid_token_redirects_to_error(self):
-        resp = await self.client.get(
-            "/api/meta/oauth/invite/inv_fb_COMPLETELY_INVALID_TOKEN_99",
-            follow_redirects=False,
-        )
+        async with self._client() as client:
+            resp = await client.get(
+                "/api/meta/oauth/invite/inv_fb_COMPLETELY_INVALID_TOKEN_99",
+                follow_redirects=False,
+            )
         self.assertEqual(resp.status_code, 303)
-        location = resp.headers.get("location", "")
-        self.assertIn("invite_invalid", location)
+        self.assertIn("invite_invalid", resp.headers.get("location", ""))
 
     async def test_oauth_invite_expired_redirects_to_error(self):
         now = _now()
@@ -377,9 +393,10 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
             ))
             await session.commit()
 
-        resp = await self.client.get(
-            f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
-        )
+        async with self._client() as client:
+            resp = await client.get(
+                f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
+            )
         self.assertEqual(resp.status_code, 303)
         self.assertIn("invite_invalid", resp.headers.get("location", ""))
 
@@ -399,28 +416,30 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
             ))
             await session.commit()
 
-        resp = await self.client.get(
-            f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
-        )
+        async with self._client() as client:
+            resp = await client.get(
+                f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
+            )
         self.assertEqual(resp.status_code, 303)
         self.assertIn("invite_invalid", resp.headers.get("location", ""))
 
     async def test_oauth_invite_creates_oauth_state_with_invite_id(self):
         """Starting OAuth via invite must create an OAuthState record with invite_id set."""
-        create_resp = await self.client.post(
-            "/api/meta/invites",
-            json={"label": "State check", "expires_in_hours": 24},
-            headers=self._auth("token-owner"),
-        )
-        raw_token = create_resp.json()["raw_token"]
-        invite_id = create_resp.json()["id"]
-
-        mock_client = MagicMock()
-        mock_client.build_authorization_url.return_value = "https://www.facebook.com/dialog/oauth?state=xyz"
-        with patch("api.meta_oauth._oauth_client", return_value=mock_client):
-            await self.client.get(
-                f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
+        async with self._client() as client:
+            create_resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "State check", "expires_in_hours": 24},
+                headers=self._auth("token-owner"),
             )
+            raw_token = create_resp.json()["raw_token"]
+            invite_id = create_resp.json()["id"]
+
+            mock_client = MagicMock()
+            mock_client.build_authorization_url.return_value = "https://www.facebook.com/dialog/oauth?state=xyz"
+            with patch("api.meta_oauth._oauth_client", return_value=mock_client):
+                await client.get(
+                    f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
+                )
 
         async with self.sessions() as session:
             state = (await session.execute(
@@ -448,36 +467,36 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
             ))
             await session.commit()
 
-        resp = await self.client.get(
-            f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
-        )
+        async with self._client() as client:
+            resp = await client.get(
+                f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
+            )
         self.assertEqual(resp.status_code, 303)
         self.assertIn("invite_invalid", resp.headers.get("location", ""))
 
     # ------------------------------------------------------------------
-    # Workspace isolation — invite from another workspace is invisible
+    # Workspace isolation
     # ------------------------------------------------------------------
 
     async def test_invite_workspace_isolation(self):
-        """Invites from workspace A must not be accessible via workspace B member."""
+        """Invites from workspace A must not be revocable via workspace B member."""
         async with self.sessions() as session:
             other_user = User(
                 telegram_id="90099",
-                username="other-user",
+                username="other-user-inv",
                 full_name="Other",
-                auth_token="token-other",
+                auth_token="token-other-inv",
                 role="buyer",
                 is_approved=True,
             )
             session.add(other_user)
             await session.flush()
-            other_ws = Workspace(name="Other WS", slug="other-ws", owner_user_id=other_user.id)
+            other_ws = Workspace(name="Other WS Inv", slug="other-ws-inv", owner_user_id=other_user.id)
             session.add(other_ws)
             await session.flush()
             session.add(WorkspaceMember(workspace_id=other_ws.id, user_id=other_user.id, role="owner"))
             other_user.active_workspace_id = other_ws.id
 
-            # Invite in other workspace
             raw_token = "inv_fb_other_ws_isolation_test"
             token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
             other_invite = MetaConnectionInvite(
@@ -494,10 +513,10 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
             await session.refresh(other_invite)
             other_invite_id = other_invite.id
 
-        # Our owner in invite-ws should not be able to revoke other_ws invite
-        resp = await self.client.delete(
-            f"/api/meta/invites/{other_invite_id}", headers=self._auth("token-owner")
-        )
+        async with self._client() as client:
+            resp = await client.delete(
+                f"/api/meta/invites/{other_invite_id}", headers=self._auth("token-owner")
+            )
         self.assertEqual(resp.status_code, 404)
 
 
