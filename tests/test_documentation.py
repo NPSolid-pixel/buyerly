@@ -30,6 +30,7 @@ class TestDocumentationContract(unittest.TestCase):
         for path in (
             "docs/DESIGN_SYSTEM.md",
             "docs/ARCHITECTURE.md",
+            "docs/INFORMATION_ARCHITECTURE.md",
             "docs/API.md",
             "docs/DEPLOYMENT.md",
             "docs/DECISIONS.md",
@@ -83,6 +84,27 @@ class TestDocumentationContract(unittest.TestCase):
             "### Connections",
         ):
             self.assertIn(contract, design_system)
+    def test_information_architecture_contract(self):
+        ia = (PROJECT_ROOT / "docs" / "INFORMATION_ARCHITECTURE.md").read_text(encoding="utf-8")
+        for contract in (
+            "## Jobs-to-be-done",
+            "## Канонические и совместимые URL",
+            "## Терминология",
+            "## Роли и видимость",
+            "## Локализация",
+            "## Длинные списки",
+            "## Definition of Done",
+            "/today",
+            "/efficiency",
+            "/automations",
+            "/action-history",
+            "/connections",
+            "Admin",
+            "Buyer",
+            "Viewer",
+        ):
+            self.assertIn(contract, ia)
+
 
 
 if __name__ == "__main__":
