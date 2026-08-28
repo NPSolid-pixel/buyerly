@@ -7,9 +7,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import api.auth as api_auth_module
+import api.routes as api_routes_module
 import api.routers.auth as auth_router_module
 import api.server as api_server_module
 import bot.handlers as bot_handlers
+import database.db as database_db_module
 from api.server import create_app
 from core.config import settings
 from core.rate_limit import limiter
@@ -31,6 +33,9 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
         self.original_auth_session_maker = auth_router_module.async_session_maker
         self.original_bot_session_maker = bot_handlers.async_session_maker
         self.original_api_session_maker = api_auth_module.async_session_maker
+        self.original_routes_session_maker = api_routes_module.async_session_maker
+        self.original_server_session_maker = api_server_module.async_session_maker
+        self.original_db_session_maker = database_db_module.async_session_maker
         self.original_admin_chat_id = settings.ADMIN_CHAT_ID
         settings.ADMIN_CHAT_ID = "123456789"
 
@@ -45,6 +50,9 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
         auth_router_module.async_session_maker = self.sessions
         bot_handlers.async_session_maker = self.sessions
         api_auth_module.async_session_maker = self.sessions
+        api_routes_module.async_session_maker = self.sessions
+        api_server_module.async_session_maker = self.sessions
+        database_db_module.async_session_maker = self.sessions
 
         self.app = create_app()
 
@@ -80,10 +88,14 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
         auth_router_module.async_session_maker = self.original_auth_session_maker
         bot_handlers.async_session_maker = self.original_bot_session_maker
         api_auth_module.async_session_maker = self.original_api_session_maker
+        api_routes_module.async_session_maker = self.original_routes_session_maker
+        api_server_module.async_session_maker = self.original_server_session_maker
+        database_db_module.async_session_maker = self.original_db_session_maker
         settings.ADMIN_CHAT_ID = self.original_admin_chat_id
         await self.engine.dispose()
 
     async def test_unlisted_email_rejected_on_request_temporary_password(self):
+        limiter._records.clear()
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
@@ -94,6 +106,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
             self.assertIn("не найден в списке разрешенных", resp.json()["detail"])
 
     async def test_whitelisted_email_allowed_on_request_temporary_password(self):
+        limiter._records.clear()
         async with self.sessions() as session:
             session.add(AllowedEmail(email="allowed.buyer@agency.com", added_by="admin"))
             await session.commit()
@@ -111,6 +124,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(mock_send.call_count, 1)
 
     async def test_invited_email_allowed_on_request_temporary_password(self):
+        limiter._records.clear()
         from datetime import datetime, timedelta, timezone
         async with self.sessions() as session:
             ws = Workspace(name="Test WS", slug="test-ws", owner_user_id=self.admin_id)
@@ -122,6 +136,8 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 email="invited.partner@agency.com",
                 role="buyer",
                 token="invite-token-123",
+                used_count=0,
+                max_uses=1,
                 expires_at=datetime.now(timezone.utc) + timedelta(days=7),
             )
             session.add(invite)
@@ -139,6 +155,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(resp.json()["ok"])
 
     async def test_admin_whitelist_api_crud(self):
+        limiter._records.clear()
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Login as admin
@@ -147,10 +164,12 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 json={"username": "admin_user", "password": "adminpassword123"},
             )
             self.assertEqual(login_resp.status_code, 200)
+            csrf_token = client.cookies.get("buyerly_csrf")
 
             # 1. Add email
             add_resp = await client.post(
                 "/api/auth/admin/allowed-emails",
+                headers={"X-CSRF-Token": csrf_token} if csrf_token else {},
                 json={"email": "NewBuyer@traffic.com", "comment": "Lead Buyer"},
             )
             self.assertEqual(add_resp.status_code, 200)
@@ -166,7 +185,10 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(e["id"] == email_id for e in emails))
 
             # 3. Delete email
-            del_resp = await client.delete(f"/api/auth/admin/allowed-emails/{email_id}")
+            del_resp = await client.delete(
+                f"/api/auth/admin/allowed-emails/{email_id}",
+                headers={"X-CSRF-Token": csrf_token} if csrf_token else {},
+            )
             self.assertEqual(del_resp.status_code, 200)
 
             # 4. Verify deleted
@@ -175,6 +197,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(any(e["id"] == email_id for e in emails2))
 
     async def test_buyer_forbidden_from_admin_whitelist_api(self):
+        limiter._records.clear()
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Login as buyer
@@ -183,6 +206,7 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 json={"username": "buyer_user", "password": "buyerpassword123"},
             )
             self.assertEqual(login_resp.status_code, 200)
+            csrf_token = client.cookies.get("buyerly_csrf")
 
             # Attempt to call admin endpoints
             get_resp = await client.get("/api/auth/admin/allowed-emails")
@@ -190,11 +214,13 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
 
             add_resp = await client.post(
                 "/api/auth/admin/allowed-emails",
+                headers={"X-CSRF-Token": csrf_token} if csrf_token else {},
                 json={"email": "hacker@test.com"},
             )
             self.assertEqual(add_resp.status_code, 403)
 
     async def test_revocation_cascades_to_user_approval_and_sessions(self):
+        limiter._records.clear()
         transport = httpx.ASGITransport(app=self.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Admin adds email for new user
@@ -235,8 +261,12 @@ class TestEmailWhitelistAccess(unittest.IsolatedAsyncioTestCase):
                 json={"username": "admin_user", "password": "adminpassword123"},
             )
             self.assertEqual(admin_login.status_code, 200)
+            csrf_token = client.cookies.get("buyerly_csrf")
 
-            del_resp = await client.delete(f"/api/auth/admin/allowed-emails/{entry_id}")
+            del_resp = await client.delete(
+                f"/api/auth/admin/allowed-emails/{entry_id}",
+                headers={"X-CSRF-Token": csrf_token} if csrf_token else {},
+            )
             self.assertEqual(del_resp.status_code, 200)
 
             # Check that user is no longer approved and web session was dropped
