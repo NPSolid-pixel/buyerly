@@ -75,7 +75,8 @@ cross-origin клиентов; `ENABLE_DEV_AUTH` в production всегда до
 3. получает точный commit из `main` и собирает версионные образы;
 4. проверяет готовность PostgreSQL и Redis, затем запускает миграцию схемы;
 5. запускает API, бота и worker, затем переключает публичный web;
-6. проверяет `/health/ready`; при ошибке возвращает предыдущие образы.
+6. проверяет `/health/ready` и параметры ротации журналов; при ошибке возвращает предыдущие образы;
+7. удаляет только устаревшие Buyerly image tags, dangling images и build cache, сохраняя активные контейнеры и два последних полных релиза.
 
 Перед сборкой deploy очищает только untracked и неигнорируемые файлы исходного
 дерева. Поэтому удалённый ранее Python-модуль или Alembic revision не может
@@ -101,6 +102,37 @@ docker compose logs --tail=100 redis
 ```
 
 Файлы журналов разделены по процессам: `api.log`, `bot.log`, `worker.log`, `database-migration.log`.
+
+Docker stdout/stderr каждого сервиса использует `json-file` с пятью сжатыми
+файлами не более 20 MB каждый (до 100 MB на контейнер). Проверка фактически
+применённых параметров выполняется после каждого deploy:
+
+```bash
+bash scripts/verify_docker_log_rotation.sh
+```
+
+## Диск и безопасная очистка Docker
+
+Deploy предупреждает при заполнении диска на 75% и останавливается при 90%.
+Перед сборкой и после успешного переключения запускается безопасная очистка:
+
+```bash
+DRY_RUN=true bash scripts/cleanup_docker_artifacts.sh
+bash scripts/cleanup_docker_artifacts.sh
+CHECK_PATH=/opt/buyerly bash scripts/check_disk_usage.sh
+```
+
+Очистка сохраняет минимум два последних полных релиза `buyerly-app` и
+`buyerly-web`, а также любой image, используемый существующим контейнером.
+Удаляются только более старые version tags, dangling images старше семи дней и
+build cache старше семи дней. Скрипт никогда не вызывает `docker system prune`,
+`docker image prune -a` или `docker volume prune`, поэтому production volumes и
+единственный rollback image не могут быть удалены.
+
+При предупреждении сначала выполните dry-run, проверьте список кандидатов,
+запустите обычную очистку и повторите проверку диска. Если после этого занято
+90% или больше, остановите deploy и найдите источник роста через `docker system
+df` и `du` без удаления volumes вручную.
 
 ## Резервные копии
 
