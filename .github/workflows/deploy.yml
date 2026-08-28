@@ -113,7 +113,7 @@ jobs:
                 deploy_status=$?
                 echo "BUYERLY_DEPLOY_RESULT=failure"
                 echo "BUYERLY_DEPLOY_EXIT=${deploy_status}"
-                grep -E '^\[([1-6]/6|ERROR|ROLLBACK)\]' "${deploy_log}" \
+                grep -E '^(\[[0-9]+/[0-9]+\]|\[(ERROR|ROLLBACK|WARNING)\]|ERROR:|DETAIL:)' "${deploy_log}" \
                   | tail -n 20 \
                   | sed -E 's/(re_)[A-Za-z0-9_]{6,}/\1[REDACTED]/g' \
                   || true
@@ -146,7 +146,7 @@ jobs:
             exit 0
           fi
           diagnostic=$(printf '%s\n' "${DEPLOY_OUTPUT}" \
-            | grep -E '(^(BUYERLY_DEPLOY_EXIT=|\[([1-6]/6|ERROR|ROLLBACK)\])|File "/app/|Running (upgrade|stamp)|MetaTokenError|RuntimeError|alembic\.util\.exc\.|sqlalchemy\.exc\.|ProgrammingError|OperationalError|IntegrityError|InvalidToken|ValueError|KeyError|FAILED:)' \
+            | grep -E '(^(BUYERLY_DEPLOY_EXIT=|\[[0-9]+/[0-9]+\]|\[(ERROR|ROLLBACK|WARNING)\]|ERROR:|DETAIL:)|File "/app/|Running (upgrade|stamp)|MetaTokenError|RuntimeError|alembic\.util\.exc\.|sqlalchemy\.exc\.|ProgrammingError|OperationalError|IntegrityError|InvalidToken|ValueError|KeyError|FAILED:)' \
             | tail -n 56 \
             | tr '\n' ' ')
           diagnostic=${diagnostic//%/%25}

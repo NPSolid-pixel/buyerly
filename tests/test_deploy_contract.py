@@ -21,6 +21,9 @@ class TestDeployContract(unittest.TestCase):
         cls.disk_script = (
             project_root / "scripts" / "check_disk_usage.sh"
         ).read_text()
+        cls.backup_script = (
+            project_root / "scripts" / "backup_db.sh"
+        ).read_text()
         cls.log_verification_script = (
             project_root / "scripts" / "verify_docker_log_rotation.sh"
         ).read_text()
@@ -103,6 +106,13 @@ class TestDeployContract(unittest.TestCase):
         build_position = self.script.index("docker compose build --pull api web")
         self.assertLess(cleanup_position, disk_check_position)
         self.assertLess(disk_check_position, build_position)
+
+    def test_verified_backup_survives_optional_runtime_metric_failure(self):
+        self.assertIn('if docker exec "${POSTGRES_CONTAINER}" psql', self.backup_script)
+        self.assertIn(
+            "Backup is valid, but runtime timestamp publication failed.",
+            self.backup_script,
+        )
 
     def test_post_deploy_smoke_is_blocking_persisted_and_read_only(self):
         self.assertIn("post_deploy_smoke.py", self.script)
@@ -214,6 +224,7 @@ class TestDeployContract(unittest.TestCase):
         self.assertIn("[REDACTED_META_TOKEN]", self.workflow)
         self.assertIn('File "/app/', self.workflow)
         self.assertIn("Running (upgrade|stamp)", self.workflow)
+        self.assertIn("ERROR:|DETAIL:", self.workflow)
         self.assertIn("grep -Ev '(parameters:|UPDATE accounts|INSERT INTO)'", self.workflow)
         self.assertNotIn('cat "${deploy_log}"', self.workflow)
 
