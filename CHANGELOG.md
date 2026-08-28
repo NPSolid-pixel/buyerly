@@ -10,6 +10,13 @@
 ## [Unreleased]
 
 ### Added & Improved
+- **Workspace-isolated Analytics Fact Store (`86eyr60pk`)**:
+  - Создана реляционная таблица `analytics_entity_daily_facts` (Alembic-миграция `0021_analytics_entity_facts`) для сохранения нормализованных снимков метрик (spend, impressions, clicks, leads, registrations, purchases, CPC, CTR, CPM) по всей иерархии Account → Campaign → AdSet → Ad.
+  - Реализован deadlock-safe сервис `AnalyticsFactService` с детерминированной сортировкой PK перед bulk UPSERT в PostgreSQL.
+  - Добавлена поддержка точного разрешения границ локальных календарных суток кабинетов с учетом таймзон (today, yesterday, last_3d, last_7d).
+  - Сводка `GET /api/summary` оптимизирована для быстрого чтения из Analytics Fact Store с автоматическим фоновым наполнением и сохранением разделения мультивалютных корзин (BL-015) и защитой от деления на 0 (BL-002).
+  - Добавлен защищённый эндпоинт детализации иерархии `GET /api/analytics/hierarchy` со строгой изоляцией данных между воркспейсами (anti-IDOR).
+  - В фоновом воркере `MonitoringWorker` и Meta Marketing API клиенте реализован сбор и периодическая синхронизация иерархических инсайтов `get_hierarchical_insights`.
 - **Buyerly Design System foundation (`86eyr6073`)**:
   - Добавлены semantic tokens для цвета, типографики, spacing, размеров, radius, elevation, layers и motion; доступный primary action отделён от warning semantics.
   - Задокументированы и реализованы foundation contracts для Button, IconButton, Input, Select, Tabs, Badge, Tooltip, Popover, Modal, Drawer, Table, KPI, Chart, EmptyState, Alert и Skeleton.

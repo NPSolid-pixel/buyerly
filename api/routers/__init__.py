@@ -10,11 +10,13 @@ from api.routers.settings import router as settings_router
 from api.routers.summary import router as summary_router
 from api.routers.workspaces import router as workspaces_router
 from api.routers.health import router as health_router
+from api.routers.analytics import router as analytics_router
 
 __all__ = [
     "accounts_router",
     "admin_support_router",
     "adsets_router",
+    "analytics_router",
     "audit_router",
     "auth_router",
     "members_router",

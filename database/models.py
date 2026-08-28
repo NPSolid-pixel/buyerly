@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     Integer,
+    BigInteger,
     String,
     Float,
     Boolean,
@@ -1002,3 +1003,84 @@ class ActionUndoState(Base):
     last_error = Column(Text, default="", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class AnalyticsEntityFact(Base):
+    """Normalized, workspace-isolated hierarchical metric fact store (Account -> Campaign -> AdSet -> Ad)."""
+
+    __tablename__ = "analytics_entity_daily_facts"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "account_id",
+            "entity_level",
+            "entity_id",
+            "date",
+            name="uq_analytics_facts_ws_acc_level_entity_date",
+        ),
+        Index("ix_analytics_facts_ws_date_level", "workspace_id", "date", "entity_level"),
+        Index("ix_analytics_facts_ws_parent_date", "workspace_id", "parent_entity_id", "date"),
+        Index("ix_analytics_facts_acc_date", "account_id", "date"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    workspace_id = Column(
+        Integer,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    account_id = Column(String, nullable=False, index=True, doc="Meta Ad Account ID (act_...)")
+    entity_level = Column(String(16), nullable=False, index=True, doc="'account', 'campaign', 'adset', 'ad'")
+    entity_id = Column(String(64), nullable=False, index=True, doc="Meta ID сущности")
+    entity_name = Column(String(255), default="", nullable=False)
+    parent_entity_id = Column(String(64), default="", nullable=False, index=True)
+    date = Column(String(10), nullable=False, index=True, doc="Локальная дата кабинета (YYYY-MM-DD)")
+    currency = Column(String(10), default="UNKNOWN", nullable=False)
+
+    # Метрики расхода и доставки
+    spend = Column(Float, default=0.0, nullable=False)
+    impressions = Column(Integer, default=0, nullable=False)
+    reach = Column(Integer, default=0, nullable=False)
+    frequency = Column(Float, default=0.0, nullable=False)
+    cpm = Column(Float, default=0.0, nullable=False)
+
+    # Метрики кликов и вовлеченности
+    clicks = Column(Integer, default=0, nullable=False)
+    unique_clicks = Column(Integer, default=0, nullable=False)
+    link_clicks = Column(Integer, default=0, nullable=False)
+    outbound_clicks = Column(Integer, default=0, nullable=False)
+    landing_page_views = Column(Integer, default=0, nullable=False)
+    cpc = Column(Float, default=0.0, nullable=False)
+    cpc_link = Column(Float, nullable=True)
+    ctr = Column(Float, default=0.0, nullable=False)
+    ctr_link = Column(Float, nullable=True)
+    ctr_outbound = Column(Float, nullable=True)
+
+    # Воронка конверсий
+    leads = Column(Integer, default=0, nullable=False)
+    registrations = Column(Integer, default=0, nullable=False)
+    purchases = Column(Integer, default=0, nullable=False)
+    cost_per_lead = Column(Float, nullable=True)
+    cost_per_registration = Column(Float, nullable=True)
+    cost_per_purchase = Column(Float, nullable=True)
+    cost_per_landing_page_view = Column(Float, nullable=True)
+
+    # Расширенные события Meta
+    raw_actions = Column(JSONB, default=list, nullable=False)
+
+    # Статусы и бюджеты
+    status = Column(String(32), default="UNKNOWN", nullable=False)
+    effective_status = Column(String(32), default="UNKNOWN", nullable=False)
+    daily_budget = Column(Float, default=0.0, nullable=False)
+
+    # Метаданные
+    fetched_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    def __repr__(self):
+        return (
+            f"<AnalyticsEntityFact(ws={self.workspace_id}, acc='{self.account_id}', "
+            f"level='{self.entity_level}', id='{self.entity_id}', date='{self.date}', spend={self.spend})>"
+        )
+

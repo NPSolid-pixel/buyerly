@@ -72,6 +72,7 @@ from api.routers import (
     summary_router,
     workspaces_router,
     health_router,
+    analytics_router,
 )
 from api.schemas import (
     AccountGroupItem,
@@ -141,6 +142,7 @@ router.include_router(settings_router)
 router.include_router(audit_router)
 router.include_router(adsets_router)
 router.include_router(health_router)
+router.include_router(analytics_router)
 
 # Sync meta_client reference to routers using it
 import api.routers.accounts
@@ -163,6 +165,7 @@ class _RoutesModule(sys.modules[__name__].__class__):
             import api.deps
             import api.routers.accounts
             import api.routers.adsets
+            import api.routers.analytics
             import api.routers.audit
             import api.routers.auth
             import api.routers.members
@@ -178,6 +181,7 @@ class _RoutesModule(sys.modules[__name__].__class__):
             api.deps.async_session_maker = value
             api.routers.accounts.async_session_maker = value
             api.routers.adsets.async_session_maker = value
+            api.routers.analytics.async_session_maker = value
             api.routers.audit.async_session_maker = value
             api.routers.auth.async_session_maker = value
             api.routers.members.async_session_maker = value

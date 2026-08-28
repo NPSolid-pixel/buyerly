@@ -35,6 +35,7 @@ from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 from services.inventory_cache import AdsetInventoryService, PostgreSQLInventoryCache
 from services.account_health import record_account_health
+from services.analytics_store import AnalyticsFactService
 
 logger = logging.getLogger(__name__)
 
@@ -168,12 +169,26 @@ class MonitoringWorker:
                     window, rows = result
                     insights_by_window[window] = rows
 
+            hierarchical_facts = []
+            try:
+                hierarchical_facts = await self.meta_client.get_hierarchical_insights(
+                    account_id=account.account_id,
+                    access_token=access_token,
+                    date_preset="today",
+                    currency=currency,
+                    account_name=account.name,
+                    priority=priority,
+                )
+            except Exception as h_err:
+                logger.warning("Failed to collect hierarchical facts for %s: %s", account.account_id, h_err)
+
             return {
                 "account_info": account_info,
                 "currency": currency,
                 "adsets": today,
                 "insights_by_window": insights_by_window,
                 "window_errors": window_errors,
+                "hierarchical_facts": hierarchical_facts,
             }
 
     async def _persist_runtime_state(
@@ -913,6 +928,55 @@ class MonitoringWorker:
 
         return stats
 
+    async def sync_account_facts(
+        self,
+        session,
+        account: Account,
+        date_preset: str = "today",
+    ) -> int:
+        """Explicitly fetch and persist hierarchical facts for one account."""
+        if not account.workspace_id:
+            return 0
+        access_token = await resolve_account_access_token(session, account)
+        currency = normalize_currency(account.currency)
+        if currency == "UNKNOWN":
+            info = await self.meta_client.get_account_info(account.account_id, access_token)
+            currency = normalize_currency(info.get("currency"))
+            account.currency = currency
+            await session.commit()
+        facts = await self.meta_client.get_hierarchical_insights(
+            account_id=account.account_id,
+            access_token=access_token,
+            date_preset=date_preset,
+            currency=currency,
+            account_name=account.name,
+        )
+        if facts:
+            return await AnalyticsFactService.upsert_entity_facts(
+                session,
+                workspace_id=account.workspace_id,
+                account_id=account.account_id,
+                facts=facts,
+            )
+        return 0
+
+    async def sync_workspace_facts(
+        self,
+        session,
+        workspace_id: int,
+        user_accounts: List[Account],
+        date_preset: str = "today",
+    ) -> int:
+        """Sync hierarchical facts across all accounts in a workspace."""
+        total_facts = 0
+        for acc in user_accounts:
+            try:
+                count = await self.sync_account_facts(session, acc, date_preset=date_preset)
+                total_facts += count
+            except Exception as err:
+                logger.error("Failed to sync facts for account %s in workspace %s: %s", acc.account_id, workspace_id, err)
+        return total_facts
+
     async def run_cycle(self) -> dict:
         cycle_started = time.perf_counter()
         started_at = datetime.now(timezone.utc).isoformat()
@@ -1299,6 +1363,19 @@ class MonitoringWorker:
                     insights_by_window = snapshot["insights_by_window"]
                     adsets = snapshot["adsets"]
                     stats["adsets_checked"] += len(adsets)
+
+                    # Upsert hierarchical facts into Analytics Fact Store
+                    hierarchical_facts = snapshot.get("hierarchical_facts")
+                    if hierarchical_facts and acc.workspace_id:
+                        try:
+                            await AnalyticsFactService.upsert_entity_facts(
+                                session,
+                                workspace_id=acc.workspace_id,
+                                account_id=acc.account_id,
+                                facts=hierarchical_facts,
+                            )
+                        except Exception as store_err:
+                            logger.error("Failed to upsert facts for %s: %s", acc.account_id, store_err)
 
                     await self._set_account_health(
                         session,
