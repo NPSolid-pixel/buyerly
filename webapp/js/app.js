@@ -11590,7 +11590,7 @@
     if (!email) {
       const errorEl = document.getElementById('onboardingSignInError');
       if (errorEl) {
-        errorEl.textContent = 'Please enter your work email address';
+        errorEl.textContent = 'Please enter your email or username';
         errorEl.classList.remove('hidden');
       }
       emailInput?.focus();
@@ -11640,7 +11640,7 @@
 
     if (!email) {
       if (errorEl) {
-        errorEl.textContent = 'Please enter your work email address';
+        errorEl.textContent = 'Please enter your email or username';
         errorEl.classList.remove('hidden');
       }
       emailInput?.focus();

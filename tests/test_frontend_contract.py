@@ -150,6 +150,19 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertNotIn("localStorage.setItem('buyerly_auth_token'", self.script)
         self.assertNotIn("sessionStorage.setItem('buyerly_auth_token'", self.script)
 
+    def test_password_login_accepts_username_without_browser_email_validation(self):
+        self.assertIn(
+            'type="text" id="onboardingSignInEmail"',
+            self.index,
+        )
+        self.assertIn('placeholder="Email or username"', self.index)
+        self.assertIn('autocomplete="username"', self.index)
+        self.assertNotIn(
+            'type="email" id="onboardingSignInEmail"',
+            self.index,
+        )
+        self.assertIn("username: email, password", self.script)
+
     def test_corrupted_browser_preferences_recover_to_valid_defaults(self):
         for contract in (
             "function readBrowserPreference(key, fallback, options = {})",
