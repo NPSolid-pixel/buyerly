@@ -1,13 +1,16 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, or_, select, update
 
 from api.auth import clear_session_cookies, create_web_session, get_current_user
 from api.deps import _utc_iso, get_user_workspaces_list
 from api.schemas import (
+    AddAllowedEmailRequest,
+    AllowedEmailItem,
     ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
@@ -31,6 +34,7 @@ from database.db import (
 from database.models import (
     Account,
     ActionUndoState,
+    AllowedEmail,
     AnalyticsViewPreference,
     AuditEvent,
     AutomationScheduleState,
@@ -62,6 +66,45 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth & Profile"])
 
 
+async def is_email_allowed_for_login(session, email: str) -> bool:
+    """Check if the normalized email is authorized to request an OTP and log in/register.
+
+    Allowed when:
+    1. Present in AllowedEmail (the whitelist).
+    2. Has a valid active WorkspaceInvite addressed specifically to this email.
+    """
+    clean_email = email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        return False
+
+    # 1. Check AllowedEmail whitelist
+    allowed_res = await session.execute(
+        select(AllowedEmail).where(func.lower(AllowedEmail.email) == clean_email)
+    )
+    if allowed_res.scalar_one_or_none() is not None:
+        return True
+
+    # 2. Check active WorkspaceInvite
+    now = datetime.now(timezone.utc)
+    invite_res = await session.execute(
+        select(WorkspaceInvite).where(
+            func.lower(WorkspaceInvite.email) == clean_email,
+            or_(
+                WorkspaceInvite.expires_at.is_(None),
+                WorkspaceInvite.expires_at > now,
+            ),
+            or_(
+                WorkspaceInvite.max_uses == 0,
+                WorkspaceInvite.used_count < WorkspaceInvite.max_uses,
+            ),
+        )
+    )
+    if invite_res.scalar_one_or_none() is not None:
+        return True
+
+    return False
+
+
 @router.post(
     "/auth/request-temporary-password",
     dependencies=[Depends(rate_limit_dep(
@@ -78,6 +121,12 @@ async def request_temporary_password(req: RequestTemporaryPasswordRequest):
         raise HTTPException(status_code=400, detail="Некорректный адрес электронной почты")
 
     async with async_session_maker() as session:
+        if not await is_email_allowed_for_login(session, email_clean):
+            raise HTTPException(
+                status_code=403,
+                detail="Доступ ограничен. Данный email не найден в списке разрешенных. Обратитесь к администратору.",
+            )
+
         scope = login_scope(email_clean)
         if await has_recent_active_otp(session, scope=scope):
             raise HTTPException(
@@ -208,6 +257,11 @@ async def verify_temporary_password(
                 )
             raise HTTPException(status_code=401, detail="Неверный или просроченный временный пароль")
 
+        is_allowed = await is_email_allowed_for_login(session, email_clean)
+        if not is_allowed:
+            await session.commit()
+            raise HTTPException(status_code=403, detail="Доступ ограничен. Данный email не найден в списке разрешенных.")
+
         user = (
             await session.execute(
                 select(User).where(
@@ -228,8 +282,11 @@ async def verify_temporary_password(
             )
             session.add(user)
             await session.flush()
-        elif not user.email_verified_at:
-            user.email_verified_at = datetime.now(timezone.utc)
+        else:
+            if not user.email_verified_at:
+                user.email_verified_at = datetime.now(timezone.utc)
+            if not user.is_approved and is_allowed:
+                user.is_approved = True
 
         if not user.is_approved:
             await session.commit()
@@ -730,3 +787,108 @@ async def get_admin_overview(user: User = Depends(get_current_user)):
                 for inv in invites
             ],
         }
+
+
+@router.get("/auth/admin/allowed-emails", response_model=List[AllowedEmailItem])
+async def list_allowed_emails(user: User = Depends(get_current_user)):
+    """List all allowed email addresses in the whitelist (admin only)."""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ только для администраторов")
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(AllowedEmail).order_by(AllowedEmail.created_at.desc())
+        )
+        emails = result.scalars().all()
+        return [
+            AllowedEmailItem(
+                id=e.id,
+                email=e.email,
+                added_by=e.added_by,
+                comment=e.comment,
+                created_at=e.created_at,
+            )
+            for e in emails
+        ]
+
+
+@router.post("/auth/admin/allowed-emails", response_model=AllowedEmailItem)
+async def add_allowed_email(req: AddAllowedEmailRequest, user: User = Depends(get_current_user)):
+    """Add an email address to the whitelist (admin only)."""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ только для администраторов")
+    clean_email = req.email.strip().lower()
+    if "@" not in clean_email or "." not in clean_email or len(clean_email) < 5:
+        raise HTTPException(status_code=400, detail="Некорректный адрес электронной почты")
+
+    async with async_session_maker() as session:
+        existing = (
+            await session.execute(
+                select(AllowedEmail).where(func.lower(AllowedEmail.email) == clean_email)
+            )
+        ).scalar_one_or_none()
+        if existing:
+            if req.comment and req.comment != existing.comment:
+                existing.comment = req.comment.strip()
+                await session.commit()
+            return AllowedEmailItem(
+                id=existing.id,
+                email=existing.email,
+                added_by=existing.added_by,
+                comment=existing.comment,
+                created_at=existing.created_at,
+            )
+
+        new_entry = AllowedEmail(
+            email=clean_email,
+            added_by=user.username or str(user.id),
+            comment=req.comment.strip() if req.comment else None,
+        )
+        session.add(new_entry)
+        await session.commit()
+        await session.refresh(new_entry)
+
+        return AllowedEmailItem(
+            id=new_entry.id,
+            email=new_entry.email,
+            added_by=new_entry.added_by,
+            comment=new_entry.comment,
+            created_at=new_entry.created_at,
+        )
+
+
+@router.delete("/auth/admin/allowed-emails/{email_id}")
+async def delete_allowed_email(email_id: int, user: User = Depends(get_current_user)):
+    """Delete an email address from the whitelist and revoke active sessions (admin only)."""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ только для администраторов")
+
+    async with async_session_maker() as session:
+        entry = (
+            await session.execute(
+                select(AllowedEmail).where(AllowedEmail.id == email_id)
+            )
+        ).scalar_one_or_none()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Email не найден в списке разрешенных")
+
+        target_email = entry.email.lower()
+
+        # Find matching users and revoke access / sessions
+        matched_users = (
+            await session.execute(
+                select(User).where(func.lower(User.email) == target_email)
+            )
+        ).scalars().all()
+
+        for u in matched_users:
+            if u.role != "admin":
+                u.is_approved = False
+                await session.execute(
+                    delete(WebSession).where(WebSession.user_id == u.id)
+                )
+
+        await session.delete(entry)
+        await session.commit()
+
+        return {"ok": True, "message": f"Email {target_email} удален из списка разрешенных"}
+

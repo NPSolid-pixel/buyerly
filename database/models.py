@@ -291,6 +291,19 @@ class EmailVerificationCode(Base):
         return f"<EmailVerificationCode(email='{self.email}', used={self.is_used})>"
 
 
+class AllowedEmail(Base):
+    __tablename__ = "allowed_emails"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(320), nullable=False, unique=True, index=True, doc="Разрешенный адрес электронной почты (lowercase)")
+    added_by = Column(String(128), nullable=True, doc="Telegram ID или username администратора, добавившего адрес")
+    comment = Column(String(255), nullable=True, doc="Опциональный комментарий / имя байера")
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<AllowedEmail(id={self.id}, email='{self.email}')>"
+
+
 class AppSettings(Base):
     __tablename__ = "app_settings"
 

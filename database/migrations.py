@@ -36,6 +36,7 @@ POST_BASELINE_COLUMNS = {
 # Tables that were added after the legacy baseline and may be absent on pre-migration databases.
 POST_BASELINE_TABLES: set[str] = {
     "account_health",
+    "allowed_emails",
     "meta_connection_invites",
 }
 REQUIRED_COLUMN_TYPES = {
