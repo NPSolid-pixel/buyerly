@@ -27,6 +27,12 @@ docker exec "${POSTGRES_CONTAINER}" pg_dump \
 test -s "${backup_file}"
 gzip -f "${backup_file}"
 gzip -t "${backup_file}.gz"
+backup_completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+docker exec "${POSTGRES_CONTAINER}" psql \
+    --username=buyerly \
+    --dbname=buyerly \
+    --set=ON_ERROR_STOP=1 \
+    --command="INSERT INTO automation_runtime_states (state_key, payload, updated_at) VALUES ('monitoring', jsonb_build_object('last_backup_at', '${backup_completed_at}'), NOW()) ON CONFLICT (state_key) DO UPDATE SET payload = COALESCE(automation_runtime_states.payload, '{}'::jsonb) || EXCLUDED.payload, updated_at = NOW();"
 pattern="buyerly_postgres_*.sql.gz"
 
 ls -tp "${BACKUP_DIR}"/${pattern} 2>/dev/null \

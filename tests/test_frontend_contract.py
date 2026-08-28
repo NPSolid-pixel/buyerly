@@ -56,6 +56,18 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("/assign-rule", self.script)
         self.assertIn("/detach-rule/${presetId}", self.script)
 
+    def test_account_health_dashboard_contract(self):
+        for contract in (
+            'id="accountHealthDashboard"',
+            'id="accountHealthSignals"',
+            "/api/health/overview",
+            "function loadHealthOverview()",
+            "account.health ||",
+            "Последний успех",
+        ):
+            self.assertIn(contract, self.index + self.script)
+        self.assertIn(".account-health-row", self.styles)
+
     def test_visible_mutations_use_supported_routes_and_partial_results(self):
         self.assertIn("/api/meta/connections/${connectionId}", self.script)
         self.assertIn("idsToDelete.map(id => apiRequest(`/api/presets/${id}`", self.script)

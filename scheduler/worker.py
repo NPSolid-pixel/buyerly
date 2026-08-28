@@ -34,6 +34,7 @@ from core.timezones import (
 from meta_api.client import MetaClient
 from rules.engine import RuleEngine, RuleAction, RuleEvaluationResult
 from services.inventory_cache import AdsetInventoryService, PostgreSQLInventoryCache
+from services.account_health import record_account_health
 
 logger = logging.getLogger(__name__)
 
@@ -224,10 +225,66 @@ class MonitoringWorker:
                 if row is None:
                     row = AutomationRuntimeState(state_key="monitoring")
                     session.add(row)
+                existing_payload = dict(row.payload or {})
+                if existing_payload.get("last_backup_at"):
+                    payload["last_backup_at"] = existing_payload["last_backup_at"]
                 row.payload = payload
                 await session.commit()
         except Exception as error:
             logger.error("Failed to persist monitoring runtime state: %s", error)
+
+    async def _set_account_health(
+        self,
+        session,
+        account: Account,
+        *,
+        success: bool,
+        notification_target: str = "",
+        error: Any = None,
+        cause: str | None = None,
+        signals: dict[str, Any] | None = None,
+    ) -> None:
+        """Persist health and alert only when status/cause changes."""
+
+        row, transitioned = await record_account_health(
+            session,
+            account,
+            success=success,
+            error=error,
+            cause=cause,
+            signals=signals,
+        )
+        if row is None or not transitioned:
+            return
+        health_status = row.status
+        health_cause = row.cause
+        health_message = row.last_error_message
+        health_error_code = row.last_error_code
+        health_failures = row.consecutive_failures
+        await self._persist_audit_event(
+            session,
+            account,
+            event_type="ACCOUNT_HEALTH_RECOVERED" if success else "ACCOUNT_HEALTH_ALERT",
+            status="SUCCESS" if success else health_status.upper(),
+            category="ACCOUNT_HEALTH",
+            action="MONITOR" if success else "INVESTIGATE",
+            message="Account health recovered" if success else health_message,
+            after_state={"status": health_status, "cause": health_cause},
+            details={
+                "error_code": health_error_code,
+                "consecutive_failures": health_failures,
+            },
+        )
+        if self.telegram_notifier:
+            await self.telegram_notifier(
+                event_type="ACCOUNT_HEALTH_RECOVERED" if success else "ACCOUNT_HEALTH_ALERT",
+                account_name=account.name,
+                account_id=account.account_id,
+                target_chat_id=notification_target,
+                health_status=health_status,
+                health_cause=health_cause,
+                health_message=health_message,
+            )
 
     @staticmethod
     def _rule_key(account_id: str, index: int, rule: dict[str, Any]) -> str:
@@ -987,6 +1044,8 @@ class MonitoringWorker:
 
             prepared_accounts = []
             for acc in accounts:
+                account_ref = str(acc.account_id)
+                notification_target = owner_chat_ids.get(acc.owner_user_id) or ""
                 if acc.meta_connection_id and acc.meta_connection_id in connection_cache:
                     conn = connection_cache[acc.meta_connection_id]
                     if (
@@ -1001,6 +1060,15 @@ class MonitoringWorker:
                             conn.workspace_id,
                             acc.workspace_id,
                         )
+                        await self._set_account_health(
+                            session,
+                            acc,
+                            success=False,
+                            notification_target=notification_target,
+                            error="Meta connection workspace mismatch",
+                            cause="system",
+                            signals={"token_healthy": False},
+                        )
                         continue
                     if conn.status in ("expired", "needs_reconnect", "missing_scopes", "error"):
                         logger.info(
@@ -1009,10 +1077,17 @@ class MonitoringWorker:
                             conn.id,
                             conn.status,
                         )
+                        await self._set_account_health(
+                            session,
+                            acc,
+                            success=False,
+                            notification_target=notification_target,
+                            error=f"Meta connection requires user action: {conn.status}",
+                            cause="user",
+                            signals={"token_healthy": False, "connection_status": conn.status},
+                        )
                         continue
 
-                account_ref = str(acc.account_id)
-                notification_target = owner_chat_ids.get(acc.owner_user_id) or ""
                 now = self._clock()
                 active_rules = self._load_rules(
                     acc.active_rules,
@@ -1088,6 +1163,14 @@ class MonitoringWorker:
                     )
                 except Exception as error:
                     stats["errors"].append(f"Account {account_ref}: {error}")
+                    await self._set_account_health(
+                        session,
+                        acc,
+                        success=False,
+                        notification_target=notification_target,
+                        error=error,
+                        signals={"token_healthy": False},
+                    )
                     continue
                 prepared_accounts.append(
                     {
@@ -1132,6 +1215,15 @@ class MonitoringWorker:
                             connection_cache,
                             notification_target,
                         )
+                        await self._set_account_health(
+                            session,
+                            acc,
+                            success=False,
+                            notification_target=notification_target,
+                            error=snapshot,
+                            cause="user",
+                            signals={"token_healthy": False},
+                        )
                         continue
                     if isinstance(snapshot, Exception):
                         raise snapshot
@@ -1172,6 +1264,15 @@ class MonitoringWorker:
                                     target_chat_id=notification_target,
                                     local_time=status_label
                                 )
+                            await self._set_account_health(
+                                session,
+                                acc,
+                                success=False,
+                                notification_target=notification_target,
+                                error=f"Account status: {status_label}",
+                                cause="user",
+                                signals={"token_healthy": True, "account_active": False},
+                            )
                             continue
                     acc.currency = snapshot["currency"]
                     window_errors = snapshot.get("window_errors") or []
@@ -1180,10 +1281,31 @@ class MonitoringWorker:
                             f"Account {account_ref} window: {error}"
                             for error in window_errors
                         )
+                        await self._set_account_health(
+                            session,
+                            acc,
+                            success=False,
+                            notification_target=notification_target,
+                            error=window_errors[0],
+                            signals={"token_healthy": True, "account_active": True},
+                        )
                         continue
                     insights_by_window = snapshot["insights_by_window"]
                     adsets = snapshot["adsets"]
                     stats["adsets_checked"] += len(adsets)
+
+                    await self._set_account_health(
+                        session,
+                        acc,
+                        success=True,
+                        notification_target=notification_target,
+                        signals={
+                            "token_healthy": True,
+                            "account_active": True,
+                            "meta_read_ok": True,
+                            "window_errors_count": len(window_errors),
+                        },
+                    )
 
                     if not acc.rules_enabled or not due_rules:
                         continue
@@ -1651,6 +1773,13 @@ class MonitoringWorker:
                 except Exception as e:
                     logger.error(f"Error processing account {account_ref}: {e}")
                     stats["errors"].append(f"Account {account_ref}: {e}")
+                    await self._set_account_health(
+                        session,
+                        acc,
+                        success=False,
+                        notification_target=notification_target,
+                        error=e,
+                    )
 
                 # Межаккаунтный случайный джиттер (0.5–1.5с) для сглаживания нагрузки на Meta API
                 jitter = random.uniform(0.5, 1.5)

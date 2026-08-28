@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
+from api.schemas.health import AccountHealthItem
 
 
 class AccountLatestMetrics(BaseModel):
@@ -52,6 +53,7 @@ class AccountItem(BaseModel):
     active_rules: List[Dict[str, Any]] = Field(default_factory=list)
     group_ids: List[int] = Field(default_factory=list)
     latest_metrics: Optional[AccountLatestMetrics] = None
+    health: AccountHealthItem = Field(default_factory=AccountHealthItem)
     created_at: str
 
 

@@ -230,6 +230,23 @@ class TelegramNotifier:
 
                 text = "\n".join(lines)
 
+            elif event_type in {"ACCOUNT_HEALTH_ALERT", "ACCOUNT_HEALTH_RECOVERED"}:
+                recovered = event_type == "ACCOUNT_HEALTH_RECOVERED"
+                safe_status = html.escape(str(kwargs.get("health_status") or "unknown"))
+                safe_cause = html.escape(str(kwargs.get("health_cause") or "none"))
+                safe_message = html.escape(
+                    redact_secrets(str(kwargs.get("health_message") or ""))[:240]
+                )
+                title = "✅ Здоровье кабинета восстановлено" if recovered else "🚨 Проблема мониторинга кабинета"
+                text = (
+                    f"{title}\n\n"
+                    f"🏢 <b>Кабинет:</b> {safe_account_name} (<code>{safe_account_id}</code>)\n"
+                    f"📊 <b>Статус:</b> {safe_status}\n"
+                    f"🧭 <b>Источник:</b> {safe_cause}"
+                )
+                if safe_message:
+                    text += f"\n⚠️ <b>Детали:</b> {safe_message}"
+
             audit_event_id = kwargs.get("audit_event_id")
             if audit_event_id and event_type in {
                 "STOP",

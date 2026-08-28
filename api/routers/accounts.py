@@ -39,10 +39,12 @@ from core.timezones import resolve_account_clock
 from database.db import async_session_maker
 from database.models import (
     Account,
+    AccountHealth,
     AccountGroup,
     AccountGroupMember,
     User,
 )
+from services.account_health import health_payload
 from meta_api.client import MetaClient
 from services.inventory_cache import PostgreSQLInventoryCache
 
@@ -64,6 +66,18 @@ async def list_accounts(user: User = Depends(get_current_user)):
             period="today",
         )
         latest_metrics = _latest_account_metrics_by_id(latest_summary)
+        account_pks = [account.id for account in accounts]
+        health_rows = []
+        if account_pks and ws is not None:
+            health_rows = (
+                await session.execute(
+                    select(AccountHealth).where(
+                        AccountHealth.account_pk.in_(account_pks),
+                        AccountHealth.workspace_id == ws.id,
+                    )
+                )
+            ).scalars().all()
+        health_by_account = {row.account_pk: row for row in health_rows}
 
         items = []
         for a in accounts:
@@ -92,6 +106,7 @@ async def list_accounts(user: User = Depends(get_current_user)):
                     active_rules=active_rules_list,
                     group_ids=group_ids_by_account.get(a.account_id, []),
                     latest_metrics=latest_metrics.get(a.account_id),
+                    health=health_payload(health_by_account.get(a.id)),
                     created_at=a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else "",
                 )
             )

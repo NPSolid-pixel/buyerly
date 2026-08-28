@@ -5937,6 +5937,31 @@ input[type="text"].attio-popover-name-input:focus,
 .automation-runtime-item span { font-size: 10.5px; color: var(--text-muted); display: block; }
 .automation-runtime-item b { font-size: 13px; color: var(--text-primary); font-family: var(--font-mono); }
 
+.account-health-overview {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-canvas);
+}
+.account-health-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.account-health-head h3 { margin: 2px 0 0; font-size: 14px; }
+.account-health-signals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.account-health-signals > div { padding: 8px; border: 1px solid var(--border-subtle); border-radius: 6px; }
+.account-health-signals span, .account-health-row small { display: block; font-size: 10.5px; color: var(--text-muted); }
+.account-health-signals b { font-family: var(--font-mono); font-size: 12px; }
+.account-health-list { display: grid; gap: 6px; max-height: 280px; overflow: auto; }
+.account-health-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; width: 100%; padding: 9px 10px; text-align: left; color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-left: 3px solid var(--text-muted); border-radius: 6px; cursor: pointer; }
+.account-health-row.healthy, .account-health-detail.healthy { border-left-color: var(--success); }
+.account-health-row.degraded, .account-health-detail.degraded { border-left-color: var(--warning); }
+.account-health-row.critical, .account-health-detail.critical { border-left-color: var(--danger); }
+.account-health-error { margin: 10px 0 0; padding: 8px; color: var(--danger); background: rgba(220, 53, 69, 0.08); border-radius: 6px; }
+@media (max-width: 720px) {
+  .account-health-signals { grid-template-columns: repeat(2, 1fr); }
+  .account-health-row { grid-template-columns: 1fr 1fr; }
+  .account-health-row > span:last-child { display: none; }
+}
+
 .automation-adaptive-toggle {
   display: flex;
   align-items: flex-start;
