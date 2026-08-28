@@ -989,6 +989,19 @@ class MonitoringWorker:
             for acc in accounts:
                 if acc.meta_connection_id and acc.meta_connection_id in connection_cache:
                     conn = connection_cache[acc.meta_connection_id]
+                    if (
+                        acc.workspace_id is not None
+                        and conn.workspace_id is not None
+                        and conn.workspace_id != acc.workspace_id
+                    ):
+                        logger.warning(
+                            "Skipping account %s: Meta connection %s workspace mismatch (%s != %s)",
+                            acc.account_id,
+                            conn.id,
+                            conn.workspace_id,
+                            acc.workspace_id,
+                        )
+                        continue
                     if conn.status in ("expired", "needs_reconnect", "missing_scopes", "error"):
                         logger.info(
                             "Skipping rule checks for account %s: Meta connection %s is in %s state",

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy.exc import IntegrityError
 
 from api.auth import get_current_user
 from api.deps import (
@@ -128,17 +129,19 @@ async def _workspace_connection(
     require_write: bool = False,
 ) -> tuple[MetaConnection, object, object]:
     ws, member = await get_user_workspace_member(session, user)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Рабочее пространство не найдено")
     if require_write:
         ensure_workspace_write_access(user, member, "изменения подключения Meta")
-    connection = (
-        await session.execute(
-            select(MetaConnection).where(
-                MetaConnection.id == connection_id,
-                MetaConnection.workspace_id == ws.id,
-                MetaConnection.owner_user_id == user.id,
-            )
-        )
-    ).scalar_one_or_none()
+    caller_role = member.role if member else "buyer"
+    stmt = select(MetaConnection).where(
+        MetaConnection.id == connection_id,
+        MetaConnection.workspace_id == ws.id,
+    )
+    if caller_role not in ("owner", "admin"):
+        stmt = stmt.where(MetaConnection.owner_user_id == user.id)
+
+    connection = (await session.execute(stmt)).scalar_one_or_none()
     if not connection:
         raise HTTPException(status_code=404, detail="Подключение Meta не найдено")
     return connection, ws, member
@@ -190,6 +193,11 @@ async def start_oauth(
     now = datetime.now(timezone.utc)
 
     async with async_session_maker() as session:
+        ws, member = await get_user_workspace_member(session, user)
+        if not ws:
+            raise HTTPException(status_code=404, detail="Рабочее пространство не найдено")
+        ensure_workspace_write_access(user, member, "подключения Facebook-профиля")
+
         if reconnect_connection_id:
             await _workspace_connection(
                 session,
@@ -201,6 +209,7 @@ async def start_oauth(
         session.add(
             MetaOAuthState(
                 state_hash=state_hash,
+                workspace_id=ws.id,
                 owner_user_id=user.id,
                 return_path=_safe_return_path(return_path),
                 reconnect_connection_id=reconnect_connection_id,
@@ -263,6 +272,7 @@ async def oauth_callback(
             )
         await session.commit()
         owner_user_id = oauth_state.owner_user_id
+        target_workspace_id = oauth_state.workspace_id
         return_path = _safe_return_path(oauth_state.return_path)
         reconnect_id = oauth_state.reconnect_connection_id
 
@@ -281,9 +291,27 @@ async def oauth_callback(
             if not owner:
                 raise MetaOAuthRemoteError("Buyerly user no longer exists")
 
+            ws, member = await get_user_workspace_member(
+                session,
+                owner,
+                workspace_id=target_workspace_id,
+            )
+            if not ws or not member or member.role == "viewer":
+                return RedirectResponse(
+                    _app_redirect(return_path, meta_status="permission_denied"),
+                    status_code=303,
+                )
+
             if reconnect_id:
                 reconnect_target = await session.get(MetaConnection, reconnect_id)
-                if reconnect_target and reconnect_target.owner_user_id == owner_user_id:
+                if (
+                    reconnect_target
+                    and reconnect_target.workspace_id == target_workspace_id
+                    and (
+                        reconnect_target.owner_user_id == owner_user_id
+                        or member.role in ("owner", "admin")
+                    )
+                ):
                     if reconnect_target.provider_user_id != provider_user_id:
                         return RedirectResponse(
                             _app_redirect(
@@ -302,13 +330,13 @@ async def oauth_callback(
                 existing = (
                     await session.execute(
                         select(MetaConnection).where(
-                            MetaConnection.owner_user_id == owner_user_id,
+                            MetaConnection.workspace_id == target_workspace_id,
                             MetaConnection.provider_user_id == provider_user_id,
                         )
                     )
                 ).scalar_one_or_none()
                 connection = existing or MetaConnection(
-                    workspace_id=owner.active_workspace_id,
+                    workspace_id=target_workspace_id,
                     owner_user_id=owner_user_id,
                     provider_user_id=provider_user_id,
                 )
@@ -325,16 +353,19 @@ async def oauth_callback(
             connection.last_validated_at = now
 
             if reconnect_id:
-                # Re-activate accounts linked to this connection
+                # Re-activate accounts linked to this connection in this workspace
                 await session.execute(
                     update(Account)
-                    .where(Account.meta_connection_id == connection.id)
+                    .where(
+                        Account.workspace_id == target_workspace_id,
+                        Account.meta_connection_id == connection.id,
+                    )
                     .values(is_active=True, status_label="Активен")
                 )
 
             session.add(
                 AuditEvent(
-                    workspace_id=owner.active_workspace_id,
+                    workspace_id=target_workspace_id,
                     owner_user_id=owner_user_id,
                     actor_type="user",
                     actor_id=str(owner.telegram_id or owner.id),
@@ -352,7 +383,29 @@ async def oauth_callback(
                 )
             )
 
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                # Handle concurrent OAuth callback creation race
+                existing = (
+                    await session.execute(
+                        select(MetaConnection).where(
+                            MetaConnection.workspace_id == target_workspace_id,
+                            MetaConnection.provider_user_id == provider_user_id,
+                        )
+                    )
+                ).scalar_one()
+                existing.provider_user_name = provider_user_name
+                existing.access_token_encrypted = encrypted_token
+                existing.granted_scopes = health["granted_scopes"]
+                existing.token_expires_at = health["token_expires_at"]
+                existing.status = health["status"]
+                existing.last_error = health["error"]
+                existing.last_validated_at = now
+                await session.commit()
+                connection = existing
+
             await session.refresh(connection)
             connection_id = connection.id
     except HTTPException:
@@ -381,17 +434,15 @@ async def oauth_callback(
 async def list_connections(user: User = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     async with async_session_maker() as session:
-        ws = await get_user_workspace(session, user)
-        rows = (
-            await session.execute(
-                select(MetaConnection)
-                .where(
-                    MetaConnection.workspace_id == ws.id,
-                    MetaConnection.owner_user_id == user.id,
-                )
-                .order_by(MetaConnection.updated_at.desc())
-            )
-        ).scalars().all()
+        ws, member = await get_user_workspace_member(session, user)
+        if not ws:
+            return []
+        caller_role = member.role if member else "buyer"
+        stmt = select(MetaConnection).where(MetaConnection.workspace_id == ws.id)
+        if caller_role not in ("owner", "admin"):
+            stmt = stmt.where(MetaConnection.owner_user_id == user.id)
+        stmt = stmt.order_by(MetaConnection.updated_at.desc())
+        rows = (await session.execute(stmt)).scalars().all()
     output = []
     for item in rows:
         scopes = _json_list(item.granted_scopes)

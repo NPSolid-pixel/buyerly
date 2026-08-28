@@ -110,7 +110,14 @@ async def resolve_account_access_token(
         if connection.status != "active":
             raise MetaTokenError("Meta connection requires reconnection")
         if (
-            account.owner_user_id is not None
+            account.workspace_id is not None
+            and connection.workspace_id is not None
+            and connection.workspace_id != account.workspace_id
+        ):
+            raise MetaTokenError("Meta connection workspace mismatch")
+        if (
+            account.workspace_id is None
+            and account.owner_user_id is not None
             and connection.owner_user_id != account.owner_user_id
         ):
             raise MetaTokenError("Meta connection ownership mismatch")

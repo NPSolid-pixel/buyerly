@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 
 from cryptography.fernet import Fernet
 from database.db import Base
-from database.models import Account, AppSettings, AutomationScheduleState, MetaConnection, User
+from database.models import Account, AppSettings, AutomationScheduleState, MetaConnection, User, Workspace
 from core.config import settings
 from core.meta_tokens import encrypt_meta_token, resolve_account_access_token
 from scheduler.worker import MonitoringWorker
@@ -61,9 +61,13 @@ class TestBatchScheduleLoading(unittest.IsolatedAsyncioTestCase):
             user = User(id=1, telegram_id="123", username="testuser", full_name="Test")
             session.add(user)
             await session.flush()
+            ws = Workspace(name="Test WS", slug="test-ws", owner_user_id=1)
+            session.add(ws)
+            await session.flush()
 
             conn = MetaConnection(
                 id=10,
+                workspace_id=ws.id,
                 owner_user_id=1,
                 provider_user_id="fb_123",
                 access_token_encrypted=encrypt_meta_token("EAAB_test_token_xyz"),
@@ -75,6 +79,7 @@ class TestBatchScheduleLoading(unittest.IsolatedAsyncioTestCase):
             acc = Account(
                 account_id="act_cached_1",
                 name="Cached Acc",
+                workspace_id=ws.id,
                 owner_user_id=1,
                 meta_connection_id=10,
                 is_active=True,

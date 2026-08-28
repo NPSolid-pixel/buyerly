@@ -671,6 +671,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
             ).scalar_one()
             conn_obj = MetaConnection(
+                workspace_id=self.ws_buyer_id,
                 owner_user_id=buyer.id,
                 provider_user_id="provider_nick_1",
                 access_token_encrypted="encrypted_token",
@@ -1245,6 +1246,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 )
             ).scalar_one()
             conn_obj = MetaConnection(
+                workspace_id=self.ws_buyer_id,
                 owner_user_id=buyer.id,
                 provider_user_id="provider_nick_reimport",
                 access_token_encrypted="encrypted_token",
