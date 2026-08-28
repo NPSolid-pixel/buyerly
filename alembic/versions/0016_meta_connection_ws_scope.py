@@ -1,6 +1,6 @@
 """Enforce workspace scope for Meta connections and OAuth states.
 
-Revision ID: 0016_meta_connections_workspace_scope
+Revision ID: 0016_meta_connection_ws_scope
 Revises: 0015_meta_oauth_reconnect_id
 Create Date: 2026-08-28 05:00:00.000000+00:00
 """
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "0016_meta_connections_workspace_scope"
+revision: str = "0016_meta_connection_ws_scope"
 down_revision: Union[str, None] = "0015_meta_oauth_reconnect_id"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

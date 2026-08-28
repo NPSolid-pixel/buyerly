@@ -28,6 +28,7 @@ POST_BASELINE_COLUMNS = {
     },
     "meta_oauth_states": {
         "reconnect_connection_id",
+        "workspace_id",
     },
 }
 
