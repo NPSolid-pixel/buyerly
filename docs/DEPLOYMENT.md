@@ -75,7 +75,7 @@ cross-origin клиентов; `ENABLE_DEV_AUTH` в production всегда до
 3. получает точный commit из `main` и собирает версионные образы;
 4. проверяет готовность PostgreSQL и Redis, затем запускает миграцию схемы;
 5. запускает API, бота и worker, затем переключает публичный web;
-6. проверяет `/health/ready` и параметры ротации журналов; при ошибке возвращает предыдущие образы;
+6. выполняет блокирующий read-only smoke для API/auth/workspace/Meta/summary/worker/DB и проверяет параметры ротации журналов; при ошибке возвращает предыдущие образы;
 7. удаляет только устаревшие Buyerly image tags, dangling images и build cache, сохраняя активные контейнеры и два последних полных релиза.
 
 Перед сборкой deploy очищает только untracked и неигнорируемые файлы исходного
@@ -133,6 +133,24 @@ build cache старше семи дней. Скрипт никогда не в�
 запустите обычную очистку и повторите проверку диска. Если после этого занято
 90% или больше, остановите deploy и найдите источник роста через `docker system
 df` и `du` без удаления volumes вручную.
+
+## Post-deploy smoke и rollback gate
+
+После переключения трафика `scripts/post_deploy_smoke.py` проверяет точный SHA
+live/readiness, отказ защищённых endpoints без сессии, workspace-isolation,
+Meta-конфигурацию без раскрытия значений, summary scope, worker heartbeat и
+Alembic/schema contract. Все операции — GET/SELECT; Meta Marketing API и бюджеты
+не изменяются.
+
+Результат каждой попытки сохраняется атомарно с правами `600`:
+
+```text
+/opt/buyerly/logs/smoke/post-deploy-<full-sha>.json
+```
+
+Любая критическая ошибка завершает smoke ненулевым кодом и запускает rollback
+предыдущих app/web images. Процедуры реакции собраны в
+[`INCIDENT_RUNBOOKS.md`](INCIDENT_RUNBOOKS.md).
 
 ## Резервные копии
 

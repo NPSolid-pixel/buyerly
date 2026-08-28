@@ -10,6 +10,10 @@
 ## [Unreleased]
 
 ### Added & Improved
+- **Блокирующий post-deploy smoke и incident runbooks (`86eyr60pp`)**:
+  - Каждый deploy создаёт атомарный JSON-результат read-only проверок API/auth/workspace/Meta/summary/worker/DB для точного release SHA.
+  - Critical smoke запускает автоматический rollback; проверки не вызывают Meta Marketing API и фиксируют ноль изменений бюджетов.
+  - Добавлены runbooks для worker, DB/migrations, Meta outage/quota, token/reconnect/encryption key, disk capacity и release rollback.
 - **Ограничение Docker-журналов и безопасный retention артефактов (`86eyr5v2f`)**:
   - Для всех Compose-сервисов включена ротация `json-file`: пять сжатых файлов до 20 MB каждый.
   - Deploy сохраняет активные images и минимум два последних app/web релиза, удаляя только старые Buyerly tags, dangling images и build cache старше семи дней без операций над volumes.
