@@ -1314,6 +1314,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             "visual regression",
             "current/baseline/diff",
             "includeQaState: false",
+            "viewport.name === 'mobile'",
+            "#summaryMobileCards .mob-summary-card",
             "maximumApprovedChangeRatio = 0.15",
             "item.baselineSha === visualBaselineSha",
             "https://fonts.googleapis.com/**",

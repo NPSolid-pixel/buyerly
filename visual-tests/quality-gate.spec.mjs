@@ -272,8 +272,8 @@ async function assertQualityContract(page, contract) {
   expect(result.overflow, 'Document-level horizontal overflow is forbidden').toBeLessThanOrEqual(1);
 }
 
-async function waitForPopulatedRoute(page, contract) {
-  const evidence = {
+async function waitForPopulatedRoute(page, contract, viewport) {
+  const desktopEvidence = {
     home: { selector: '#todayWorkspaceStatus[data-state="healthy"]', text: 'под контролем' },
     fb_accounts: { selector: '#fbAccountsTableBody tr', text: 'Meta Operations Profile' },
     accounts: { selector: '#accountsList .attio-row', text: 'Nordic Growth' },
@@ -282,6 +282,14 @@ async function waitForPopulatedRoute(page, contract) {
     logs: { selector: '#logsTableBody tr', text: 'Nordic Growth' },
     settings: { selector: '#settingsDisplayName', text: 'Visual QA' }
   };
+  const mobileEvidence = {
+    ...desktopEvidence,
+    fb_accounts: { selector: '#fbConnectionsMobileList .connections-mobile-card', text: 'Meta Operations Profile' },
+    accounts: { selector: '#accountsList .account-mobile-card', text: 'Nordic Growth' },
+    summary: { selector: '#summaryMobileCards .mob-summary-card', text: 'Nordic Growth' },
+    logs: { selector: '#logsMobileList .log-mobile-card', text: 'Nordic Growth' }
+  };
+  const evidence = viewport.name === 'mobile' ? mobileEvidence : desktopEvidence;
   const target = page.locator(`#tab-${contract.tab} ${evidence[contract.tab].selector}`).first();
   await expect(target).toBeVisible();
   await expect(target).toContainText(evidence[contract.tab].text);
@@ -295,8 +303,8 @@ async function compareScreenshots(currentPage, baselinePage, contract, viewport,
     openRoute(baselinePage, baselineOrigin, contract, 'populated', { includeQaState: false })
   ]);
   await Promise.all([
-    waitForPopulatedRoute(currentPage, contract),
-    waitForPopulatedRoute(baselinePage, contract)
+    waitForPopulatedRoute(currentPage, contract, viewport),
+    waitForPopulatedRoute(baselinePage, contract, viewport)
   ]);
   expect(currentErrors, 'Current route emitted uncaught browser errors').toEqual([]);
   expect(baselineErrors, 'Baseline route emitted uncaught browser errors').toEqual([]);
