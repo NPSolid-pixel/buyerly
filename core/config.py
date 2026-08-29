@@ -87,6 +87,35 @@ class Settings(BaseSettings):
         default="Buyerly <team@buyerly.app>",
         description="Default sender email header for transactional emails",
     )
+    BACKUP_ENCRYPTION_KEY: str = Field(
+        default="",
+        description="Master encryption key for AES-256-CBC database backups",
+    )
+    S3_ENDPOINT_URL: str = Field(
+        default="",
+        description="S3-compatible endpoint URL for off-site backups",
+    )
+    S3_BUCKET: str = Field(
+        default="",
+        description="S3 bucket name for off-site backups",
+    )
+    S3_ACCESS_KEY_ID: str = Field(
+        default="",
+        description="S3 access key ID for off-site backups",
+    )
+    S3_SECRET_ACCESS_KEY: str = Field(
+        default="",
+        description="S3 secret access key for off-site backups",
+    )
+    S3_REGION: str = Field(
+        default="auto",
+        description="S3 region for off-site backups",
+    )
+    OFFSITE_RETENTION_DAYS: int = Field(
+        default=60,
+        ge=1,
+        description="Retention period in days for off-site backups",
+    )
 
     class Config:
         env_file = ".env"
