@@ -1,6 +1,6 @@
 # Buyerly Design System
 
-Version: Unified UI 2.0
+Version: Unified UI 2.1
 Owner: Product / Frontend
 ClickUp: BL-101 `86eyr6073`
 
@@ -13,6 +13,7 @@ ClickUp: BL-101 `86eyr6073`
 5. **Progressive migration.** Новый компонент получает `ui-*` contract; legacy selector может сосуществовать до переноса всех consumers.
 6. **One surface per job.** Карточка не используется как универсальный контейнер. Заголовок страницы живёт на canvas, метрики объединяются в один divided surface, а таблица получает только один внешний data-surface.
 7. **Hierarchy before decoration.** Иерархию создают размер текста, интервалы и разделители. Тень используется только для самостоятельной surface, popover и dialog.
+8. **Character without card salad.** Характер создают ambient background, типографический контраст, semantic accent и одна доминирующая поверхность — не карточки внутри карточек.
 
 ## Production architecture
 
@@ -39,6 +40,15 @@ ClickUp: BL-101 `86eyr6073`
 | Page layout | `--ui-page-max`, `--ui-page-readable`, `--ui-page-gutter`, `--ui-page-top` |
 | Surface | `--ui-canvas`, `--ui-surface`, `--ui-line`, `--ui-radius-surface`, `--ui-shadow-surface` |
 | Dialog | `--ui-dialog-sm/md/lg/xl`, `--ui-radius-dialog`, `--ui-shadow-dialog` |
+
+## Visual polish layer
+
+- Тёмная command-surface разрешена только для Today: это точка входа в продукт, а не новый универсальный тип карточки.
+- Amber обозначает spend, primary action и brand emphasis; blue — traffic/leads и информационный контур; violet — registrations и rule grouping; teal — purchases, healthy connection и безопасное действие.
+- Цвет всегда дублируется подписью, числом, иконкой или геометрией; он не является единственным носителем состояния.
+- Ambient gradients, тонкая texture и shadow живут на внешней surface. Вложенные рабочие элементы остаются плоскими и разделяются линиями или spacing.
+- Visual polish не добавляет fake metrics, фиктивные controls или новые действия без существующего handler/API contract.
+- Hover и lift используются только там, где элемент интерактивен; при `prefers-reduced-motion` переходы отключаются.
 
 Новые компоненты не добавляют direct hex или inline styles. Исключения допустимы только для внешнего brand asset (например, Meta blue) и user-configured color.
 
@@ -69,7 +79,8 @@ ClickUp: BL-101 `86eyr6073`
 
 - selector: `[data-ui-pilot="today"]`;
 - удалён декоративный AI composer;
-- hero остаётся на canvas, рабочий обзор оформлен строкой с разделителями, а быстрые действия собраны в один segmented surface без россыпи вложенных карточек;
+- тёмный command hero показывает живую дату и реальный цикл `Meta → Правила → Действия`, не имитируя данные или состояние API;
+- рабочий обзор оформлен отдельной command bar, а быстрые действия собраны в один segmented surface без россыпи вложенных карточек;
 - Alert, Button и action segments ведут только к существующим product routes;
 - нет fake metrics или controls без обработчика.
 
@@ -78,7 +89,15 @@ ClickUp: BL-101 `86eyr6073`
 - selector: `[data-ui-pilot="automations"]`;
 - shared page header, primary Button и EmptyState;
 - Kanban wrapper и lanes прозрачные: единственная самостоятельная surface в рабочей области — rule card;
+- lane headers используют компактные semantic bands, а rule cards получают left rail по фактическому типу действия: stop, start/increase, decrease или notify;
 - существующие rule groups, detail, modal и API contracts сохранены.
+
+### Efficiency
+
+- selector: `[data-ui-pilot="efficiency"]`;
+- Spend остаётся главным KPI и занимает две колонки; остальные метрики группируются по смыслу, а не превращаются в одинаковые карточки;
+- blue/violet/teal accents помогают сканировать путь `traffic → registration → purchase`, при этом значения и подписи остаются достаточными без цвета;
+- фильтры, freshness status и refresh action используют общую control geometry и существующий data contract.
 
 ### Connections
 
@@ -119,6 +138,7 @@ ClickUp: BL-101 `86eyr6073`
 - state не передаётся только цветом;
 - новые styles используют semantic tokens;
 - desktop/mobile сохраняют один information model.
+- визуальный характер создаётся semantic accent и иерархией, а не дополнительными nested surfaces;
 - KPI, stats и summary groups используют divided surface, а не россыпь вложенных карточек;
 - у каждой таблицы только один внешний surface и собственный horizontal scroll region;
 - все dialog families визуально проходят через `.ui-dialog`.
