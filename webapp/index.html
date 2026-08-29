@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
   <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
-  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.0.0">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.1.0">
 </head>
 
 <body>
@@ -491,7 +491,7 @@
       </header>
 
       <!-- ============================================== -->
-      <!-- TAB: ГЛАВНАЯ (HOME / AI PROMPT) -->
+      <!-- TAB: ГЛАВНАЯ (TODAY DECISION CENTER) -->
       <!-- ============================================== -->
       <section id="tab-home" class="tab-content active">
         <div class="ui-page today-page" data-ui-pilot="today">
@@ -502,40 +502,51 @@
                 <div class="today-date" id="homeTodayDate">Сегодня</div>
               </div>
               <h1 id="homeGreetingTitle">Доброе утро, Buyerly.</h1>
-              <p>Ваш операционный центр: эффективность рекламы, автоматические решения и состояние Meta — в одном рабочем контуре.</p>
+              <p>Сначала — то, что требует внимания. Затем — одно лучшее действие для этого workspace.</p>
             </div>
-            <div class="today-command-loop" aria-hidden="true">
-              <span class="today-loop-caption">Рабочий контур</span>
-              <div class="today-loop-track">
-                <span>Meta</span><i></i><span>Правила</span><i></i><span>Действия</span>
+            <div class="today-workspace-status" id="todayWorkspaceStatus" data-state="loading" aria-live="polite">
+              <div class="today-workspace-status-head">
+                <span class="today-workspace-caption">Состояние workspace</span>
+                <span class="today-workspace-state" id="todayWorkspaceState"><i aria-hidden="true"></i>Проверяем</span>
               </div>
-              <div class="today-loop-signal"><i></i><span>Непрерывный контроль</span></div>
+              <strong class="today-workspace-title" id="todayWorkspaceTitle">Собираем операционные сигналы</strong>
+              <span class="today-workspace-copy" id="todayWorkspaceCopy">Проверяем подключения, кабинеты и автоматизации.</span>
+              <div class="today-workspace-metrics" aria-label="Ключевые сигналы workspace">
+                <div><span>Meta</span><strong id="todayMetaMetric">—</strong><small id="todayMetaNote">Подключения</small></div>
+                <div><span>Здоровье</span><strong id="todayHealthMetric">—</strong><small id="todayHealthNote">Кабинеты</small></div>
+                <div><span>Покрытие</span><strong id="todayCoverageMetric">—</strong><small id="todayCoverageNote">Автоматизации</small></div>
+              </div>
             </div>
           </div>
-          <div class="ui-alert ui-alert-info today-command-bar" role="status">
-            <div class="today-command-copy"><span class="today-command-pulse" aria-hidden="true"></span><div><strong>Рабочий обзор</strong><br>Начните с ключевых цифр или откройте нужный операционный контур.</div></div>
-            <button class="ui-button" type="button" onclick="window.switchTab('summary')">Открыть эффективность</button>
+          <div class="today-command-bar" id="todayPriorityBar" data-state="loading" role="status" aria-live="polite">
+            <div class="today-command-copy"><span class="today-command-pulse" aria-hidden="true"></span><div><strong id="todayPriorityTitle">Определяем приоритет</strong><span id="todayPriorityDescription">Сверяем реальные данные этого workspace.</span></div></div>
+            <button class="ui-button ui-button-primary" id="todayPrimaryAction" type="button" disabled>Подождите</button>
           </div>
-          <div class="today-action-grid" aria-label="Быстрые действия">
-            <button class="today-action-card" type="button" onclick="window.switchTab('fb_accounts')">
-              <span class="today-action-topline"><span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></span><span class="today-action-index">01</span></span>
-              <strong>Подключения</strong>
-              <span>Подключите Facebook-профиль, проверьте токен и доступные Business Manager.</span>
-              <span class="today-action-link">Открыть контур <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
-            </button>
-            <button class="today-action-card" type="button" onclick="window.switchTab('rules')">
-              <span class="today-action-topline"><span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 109 9"/></svg></span><span class="today-action-index">02</span></span>
-              <strong>Автоматизации</strong>
-              <span>Просмотрите активные правила, условия и привязанные рекламные кабинеты.</span>
-              <span class="today-action-link">Открыть контур <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
-            </button>
-            <button class="today-action-card" type="button" onclick="window.switchTab('logs')">
-              <span class="today-action-topline"><span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><span class="today-action-index">03</span></span>
-              <strong>История действий</strong>
-              <span>Узнайте, что произошло, почему сработало правило и можно ли отменить действие.</span>
-              <span class="today-action-link">Открыть контур <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
-            </button>
+          <div class="today-operations" aria-label="Операционная картина на сегодня">
+            <section class="today-operations-panel" aria-labelledby="todaySignalsHeading">
+              <div class="today-section-head">
+                <div><span class="today-section-eyebrow">Контроль</span><h2 id="todaySignalsHeading">Что требует внимания</h2></div>
+                <span class="today-attention-count" id="todayAttentionCount">—</span>
+              </div>
+              <div class="today-signal-list" id="todaySignalsList" aria-live="polite">
+                <div class="today-list-state">Загружаем состояние workspace…</div>
+              </div>
+            </section>
+            <section class="today-operations-panel today-recent-panel" aria-labelledby="todayRecentHeading">
+              <div class="today-section-head">
+                <div><span class="today-section-eyebrow">История</span><h2 id="todayRecentHeading">Последние важные действия</h2></div>
+                <span class="today-section-note">До 5 событий</span>
+              </div>
+              <div class="today-recent-list" id="todayRecentList" aria-live="polite">
+                <div class="today-list-state">Загружаем историю действий…</div>
+              </div>
+            </section>
           </div>
+          <nav class="today-context-links" aria-label="Рабочие разделы">
+            <button type="button" data-today-target="fb_accounts"><span>Подключения</span><small>Профили и токены Meta</small><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            <button type="button" data-today-target="rules"><span>Автоматизации</span><small>Правила и покрытие</small><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            <button type="button" data-today-target="logs"><span>История действий</span><small>Решения и причины</small><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          </nav>
         </div>
       </section>
 
@@ -3233,10 +3244,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.2.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.2.0"></script>
-  <script src="/static/js/security.js?v=10.2.0"></script>
-  <script src="/static/js/i18n.js?v=10.2.0"></script>
-  <script src="/static/js/app.js?v=10.2.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.3.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.3.0"></script>
+  <script src="/static/js/security.js?v=10.3.0"></script>
+  <script src="/static/js/i18n.js?v=10.3.0"></script>
+  <script src="/static/js/app.js?v=10.3.0"></script>
 </body>
 </html>

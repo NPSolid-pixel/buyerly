@@ -201,6 +201,8 @@
       callbackHandled: false
     },
     auditEvents: [],
+    todayAuditEvents: [],
+    todayLoadVersion: 0,
     auditPage: 1,
     auditTotalPages: 1,
     pendingLogsAccountId: '',
@@ -681,6 +683,7 @@
     // Auto-fetch data on tab switch
     if (tabName === 'home') {
       updateHomeGreeting();
+      loadTodayDecisionCenter();
     } else if (tabName === 'fb_accounts') {
       loadFacebookAccounts();
     } else if (tabName === 'accounts') {
@@ -798,6 +801,8 @@
     state.presets = [];
     state.ruleGroups = [];
     state.auditEvents = [];
+    state.todayAuditEvents = [];
+    state.todayLoadVersion = (state.todayLoadVersion || 0) + 1;
     state.auditPage = 1;
     state.auditTotalPages = 1;
     state.parsedAccounts = [];
@@ -857,6 +862,8 @@
         renderAccounts();
       } else if (state.activeTab === 'fb_accounts') {
         renderFacebookAccounts();
+      } else if (state.activeTab === 'home') {
+        loadTodayDecisionCenter();
       }
     } catch (e) {
       showToast(e.message || 'Ошибка переключения воркспейса', 'error');
@@ -1592,6 +1599,376 @@
       }).format(now);
       dateEl.textContent = formatted.charAt(0).toUpperCase() + formatted.slice(1);
     }
+  }
+
+  const TODAY_CONNECTION_PROBLEM_STATUSES = new Set([
+    'expired',
+    'needs_reconnect',
+    'missing_scopes',
+    'error'
+  ]);
+
+  function todayPriority(model) {
+    const {
+      accounts,
+      activeAccounts,
+      connections,
+      connectionProblems,
+      health,
+      healthCounts,
+      uncoveredAccounts,
+      auditEvents,
+      unavailable
+    } = model;
+    const tokenProblems = Number(health?.signals?.token_problem_count || 0);
+    const actionErrorRate = Number(health?.signals?.action_error_rate_24h_percent || 0);
+    const actionWarningRate = Number(health?.signals?.action_error_rate_warning_percent || 2);
+    const recentError = auditEvents?.find(event => String(event.display_status || event.status).toUpperCase() === 'ERROR');
+
+    if (accounts && accounts.length === 0) {
+      return {
+        state: 'warning',
+        title: 'Подключите первый рекламный кабинет',
+        description: 'Без кабинета Buyerly не может контролировать рекламу и выполнять правила.',
+        label: 'Перейти к подключениям',
+        target: 'fb_accounts'
+      };
+    }
+    if (connections && connections.length === 0) {
+      return {
+        state: 'warning',
+        title: 'Восстановите доступ к Meta',
+        description: 'В workspace нет активного Facebook-профиля с рабочим токеном.',
+        label: 'Проверить подключения',
+        target: 'fb_accounts'
+      };
+    }
+    if ((connectionProblems?.length || 0) > 0 || tokenProblems > 0) {
+      const problemCount = Math.max(connectionProblems?.length || 0, tokenProblems);
+      return {
+        state: 'critical',
+        title: 'Проверьте доступ к Meta',
+        description: `Проблемных подключений: ${problemCount}. Требуется обновить токен, права или повторить вход.`,
+        label: 'Исправить подключение',
+        target: 'fb_accounts'
+      };
+    }
+    if (connections && connections.every(item => item.status !== 'active')) {
+      return {
+        state: 'warning',
+        title: 'Восстановите доступ к Meta',
+        description: 'В workspace нет активного Facebook-профиля с рабочим токеном.',
+        label: 'Проверить подключения',
+        target: 'fb_accounts'
+      };
+    }
+    if ((healthCounts.critical || 0) > 0) {
+      const account = health?.accounts?.find(item => item.status === 'critical');
+      return {
+        state: 'critical',
+        title: 'Разберите критичный кабинет',
+        description: `Критичных кабинетов: ${healthCounts.critical}. Они могут не выполнять автоматические действия.`,
+        label: 'Открыть кабинет',
+        target: 'accounts',
+        accountId: accounts ? account?.account_id || '' : ''
+      };
+    }
+    if ((healthCounts.degraded || 0) > 0) {
+      const account = health?.accounts?.find(item => item.status === 'degraded');
+      return {
+        state: 'warning',
+        title: 'Проверьте отклонение кабинета',
+        description: `Кабинетов с отклонениями: ${healthCounts.degraded}. Причина уже зафиксирована в health-сигналах.`,
+        label: 'Посмотреть причину',
+        target: 'accounts',
+        accountId: accounts ? account?.account_id || '' : ''
+      };
+    }
+    if ((uncoveredAccounts?.length || 0) > 0) {
+      return {
+        state: 'warning',
+        title: 'Закройте разрыв в автоматизациях',
+        description: `Без включённых правил: ${uncoveredAccounts.length} активных кабинетов.`,
+        label: 'Настроить правила',
+        target: 'rules'
+      };
+    }
+    if (actionErrorRate >= actionWarningRate || recentError) {
+      return {
+        state: actionErrorRate >= Number(health?.signals?.action_error_rate_critical_percent || 5) ? 'critical' : 'warning',
+        title: 'Проверьте ошибки последних действий',
+        description: actionErrorRate > 0
+          ? `Доля ошибок действий за 24 часа — ${actionErrorRate.toFixed(1)}%.`
+          : 'Среди последних решений есть действие со статусом «Ошибка».',
+        label: 'Открыть историю',
+        target: 'logs'
+      };
+    }
+    if ((healthCounts.unknown || 0) > 0 && activeAccounts?.length) {
+      const account = health?.accounts?.find(item => item.status === 'unknown');
+      return {
+        state: 'warning',
+        title: 'Проверьте свежесть данных',
+        description: `Без подтверждённого health-состояния: ${healthCounts.unknown} кабинетов.`,
+        label: 'Открыть кабинет',
+        target: 'accounts',
+        accountId: accounts ? account?.account_id || '' : ''
+      };
+    }
+    if (unavailable.length > 0) {
+      return {
+        state: 'partial',
+        title: 'Обновите неполную картину',
+        description: `Не удалось получить: ${unavailable.join(', ')}. Доступные сигналы показаны без подмены данных.`,
+        label: 'Повторить проверку',
+        action: 'reload'
+      };
+    }
+    return {
+      state: 'healthy',
+      title: 'Срочных задач нет',
+      description: 'Подключения активны, кабинеты в норме, действующие аккаунты покрыты правилами.',
+      label: 'Открыть эффективность',
+      target: 'summary'
+    };
+  }
+
+  function renderTodayLoading() {
+    const status = document.getElementById('todayWorkspaceStatus');
+    const bar = document.getElementById('todayPriorityBar');
+    const action = document.getElementById('todayPrimaryAction');
+    if (status) status.dataset.state = 'loading';
+    if (bar) bar.dataset.state = 'loading';
+    const text = {
+      todayWorkspaceState: 'Проверяем',
+      todayWorkspaceTitle: 'Собираем операционные сигналы',
+      todayWorkspaceCopy: 'Проверяем подключения, кабинеты и автоматизации.',
+      todayMetaMetric: '—',
+      todayMetaNote: 'Подключения',
+      todayHealthMetric: '—',
+      todayHealthNote: 'Кабинеты',
+      todayCoverageMetric: '—',
+      todayCoverageNote: 'Автоматизации',
+      todayPriorityTitle: 'Определяем приоритет',
+      todayPriorityDescription: 'Сверяем реальные данные этого workspace.',
+      todayAttentionCount: '—'
+    };
+    Object.entries(text).forEach(([id, value]) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    });
+    if (action) {
+      action.disabled = true;
+      action.textContent = 'Подождите';
+      delete action.dataset.todayTarget;
+      delete action.dataset.todayAction;
+      delete action.dataset.accountId;
+    }
+    const signals = document.getElementById('todaySignalsList');
+    const recent = document.getElementById('todayRecentList');
+    if (signals) signals.innerHTML = '<div class="today-list-state">Загружаем состояние workspace…</div>';
+    if (recent) recent.innerHTML = '<div class="today-list-state">Загружаем историю действий…</div>';
+  }
+
+  function todaySignalRow({ state: signalState, title, description, value, target }) {
+    return `
+      <button class="today-signal-row" type="button" data-state="${escapeHtml(signalState)}" data-today-target="${escapeHtml(target)}">
+        <span class="today-signal-marker" aria-hidden="true"></span>
+        <span class="today-signal-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(description)}</span></span>
+        <span class="today-signal-value">${escapeHtml(value)}</span>
+      </button>`;
+  }
+
+  function renderTodayDecisionCenter({ accounts, connections, health, auditEvents, unavailable }) {
+    const safeAccounts = accounts || [];
+    const safeConnections = connections || [];
+    const safeEvents = auditEvents || [];
+    const activeAccounts = accounts ? safeAccounts.filter(account => account.is_active) : [];
+    const coveredAccounts = accounts ? activeAccounts.filter(account => (
+      account.rules_enabled && Array.isArray(account.active_rules) && account.active_rules.length > 0
+    )) : [];
+    const uncoveredAccounts = accounts
+      ? activeAccounts.filter(account => !coveredAccounts.includes(account))
+      : [];
+    const activeConnections = connections ? safeConnections.filter(item => item.status === 'active') : [];
+    const connectionProblems = connections
+      ? safeConnections.filter(item => TODAY_CONNECTION_PROBLEM_STATUSES.has(item.status))
+      : [];
+    const healthCounts = health?.counts || { healthy: 0, degraded: 0, critical: 0, unknown: 0 };
+    const healthTotal = Object.values(healthCounts).reduce((sum, value) => sum + Number(value || 0), 0);
+    const priority = todayPriority({
+      accounts,
+      activeAccounts,
+      connections,
+      connectionProblems,
+      health,
+      healthCounts,
+      uncoveredAccounts,
+      auditEvents: safeEvents,
+      unavailable
+    });
+
+    const metaSignal = !connections ? {
+      state: 'partial', title: 'Подключения Meta', description: 'Состояние токенов временно недоступно.', value: '—', target: 'fb_accounts'
+    } : connectionProblems.length ? {
+      state: 'critical', title: 'Подключения Meta', description: 'Есть токены или права, требующие восстановления.', value: `Проблем: ${connectionProblems.length}`, target: 'fb_accounts'
+    } : activeConnections.length === 0 ? {
+      state: 'warning', title: 'Подключения Meta', description: 'Нет активного Facebook-профиля.', value: `0 из ${safeConnections.length}`, target: 'fb_accounts'
+    } : {
+      state: 'healthy', title: 'Подключения Meta', description: 'Активные профили доступны для работы.', value: `${activeConnections.length} из ${safeConnections.length}`, target: 'fb_accounts'
+    };
+
+    const healthSignal = !health ? {
+      state: 'partial', title: 'Здоровье кабинетов', description: 'Health-снимок временно недоступен.', value: '—', target: 'accounts'
+    } : healthCounts.critical ? {
+      state: 'critical', title: 'Здоровье кабинетов', description: 'Есть кабинеты с критичным состоянием.', value: `${healthCounts.critical} крит.`, target: 'accounts'
+    } : healthCounts.degraded ? {
+      state: 'warning', title: 'Здоровье кабинетов', description: 'Есть кабинеты с зафиксированными отклонениями.', value: `${healthCounts.degraded} откл.`, target: 'accounts'
+    } : healthCounts.unknown ? {
+      state: safeAccounts.length ? 'warning' : 'healthy', title: 'Здоровье кабинетов', description: safeAccounts.length ? 'Для части кабинетов ещё нет свежего состояния.' : 'Кабинеты пока не подключены.', value: `${healthCounts.unknown || 0} без данных`, target: 'accounts'
+    } : {
+      state: 'healthy', title: 'Здоровье кабинетов', description: 'Критичных причин и отклонений не зафиксировано.', value: `${healthCounts.healthy || 0} в норме`, target: 'accounts'
+    };
+
+    const coverageSignal = !accounts ? {
+      state: 'partial', title: 'Покрытие правилами', description: 'Список кабинетов временно недоступен.', value: '—', target: 'rules'
+    } : uncoveredAccounts.length ? {
+      state: 'warning', title: 'Покрытие правилами', description: 'Активные кабинеты без включённых правил.', value: `${uncoveredAccounts.length} без правил`, target: 'rules'
+    } : activeAccounts.length === 0 ? {
+      state: 'healthy', title: 'Покрытие правилами', description: 'Нет активных кабинетов для контроля.', value: '0 из 0', target: 'rules'
+    } : {
+      state: 'healthy', title: 'Покрытие правилами', description: 'Все активные кабинеты защищены автоматизациями.', value: `${coveredAccounts.length} из ${activeAccounts.length}`, target: 'rules'
+    };
+    const signals = [metaSignal, healthSignal, coverageSignal];
+    const attentionSignals = signals.filter(item => ['critical', 'warning'].includes(item.state));
+    const hasCritical = signals.some(item => item.state === 'critical');
+    const partial = unavailable.length > 0;
+
+    const status = document.getElementById('todayWorkspaceStatus');
+    const bar = document.getElementById('todayPriorityBar');
+    if (status) status.dataset.state = partial && priority.state === 'healthy' ? 'partial' : priority.state;
+    if (bar) bar.dataset.state = priority.state;
+
+    const workspaceName = state.activeWorkspace?.name || 'Workspace';
+    const heroState = partial ? 'Данные частично' : priority.state === 'healthy' ? 'В норме' : priority.state === 'critical' ? 'Критично' : 'Нужно внимание';
+    const heroTitle = partial && priority.state === 'healthy'
+      ? 'Картина собрана частично'
+      : priority.state === 'healthy' ? `${workspaceName} под контролем` : priority.state === 'critical' ? 'Нужна реакция сейчас' : 'Есть задачи на сегодня';
+    const heroCopy = partial
+      ? `Недоступно: ${unavailable.join(', ')}. Остальные значения получены из production API.`
+      : priority.description;
+    const values = {
+      todayWorkspaceState: heroState,
+      todayWorkspaceTitle: heroTitle,
+      todayWorkspaceCopy: heroCopy,
+      todayMetaMetric: connections ? `${activeConnections.length}/${safeConnections.length}` : '—',
+      todayMetaNote: !connections ? 'Данные недоступны' : connectionProblems.length ? `${connectionProblems.length} требуют внимания` : 'Активные подключения',
+      todayHealthMetric: health ? `${healthCounts.healthy || 0}/${healthTotal}` : '—',
+      todayHealthNote: !health ? 'Данные недоступны' : healthCounts.critical ? `${healthCounts.critical} критично` : healthCounts.degraded ? `${healthCounts.degraded} с отклонениями` : 'Кабинеты в норме',
+      todayCoverageMetric: accounts ? `${coveredAccounts.length}/${activeAccounts.length}` : '—',
+      todayCoverageNote: !accounts ? 'Данные недоступны' : uncoveredAccounts.length ? `${uncoveredAccounts.length} без правил` : 'Активные кабинеты',
+      todayPriorityTitle: priority.title,
+      todayPriorityDescription: priority.description,
+      todayAttentionCount: attentionSignals.length ? String(attentionSignals.length) : '0'
+    };
+    Object.entries(values).forEach(([id, value]) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    });
+
+    const count = document.getElementById('todayAttentionCount');
+    if (count) count.dataset.state = hasCritical ? 'critical' : attentionSignals.length ? 'warning' : partial ? 'partial' : 'healthy';
+    const action = document.getElementById('todayPrimaryAction');
+    if (action) {
+      action.disabled = false;
+      action.textContent = priority.label;
+      action.dataset.todayTarget = priority.target || '';
+      action.dataset.todayAction = priority.action || '';
+      action.dataset.accountId = priority.accountId || '';
+    }
+    const signalsList = document.getElementById('todaySignalsList');
+    if (signalsList) signalsList.innerHTML = signals.map(todaySignalRow).join('');
+
+    const recentList = document.getElementById('todayRecentList');
+    if (recentList) {
+      if (!auditEvents) {
+        recentList.innerHTML = '<div class="today-list-state">История временно недоступна. Остальные сигналы продолжают работать.</div>';
+      } else if (safeEvents.length === 0) {
+        recentList.innerHTML = '<div class="today-list-state">В этом workspace пока нет зафиксированных действий.</div>';
+      } else {
+        recentList.innerHTML = safeEvents.slice(0, 5).map(event => {
+          const normalized = String(event.display_status || event.status || 'INFO').toUpperCase();
+          const statusState = normalized === 'ERROR' ? 'error' : ['WARNING', 'SKIPPED'].includes(normalized) ? 'warning' : normalized === 'SUCCESS' ? 'success' : 'info';
+          return `
+            <button class="today-recent-row" type="button" data-today-event-id="${escapeHtml(event.id)}">
+              <span class="today-recent-main"><strong>${escapeHtml(auditEventLabel(event))}</strong><span>${escapeHtml(auditTarget(event))} · ${escapeHtml(event.message || 'Без дополнительного сообщения')}</span></span>
+              <span class="today-recent-meta"><span class="today-recent-status" data-state="${statusState}">${escapeHtml(auditStatusLabels[normalized] || normalized)}</span><time>${formatAuditTime(event.created_at, true)}</time></span>
+            </button>`;
+        }).join('');
+      }
+    }
+  }
+
+  async function loadTodayDecisionCenter() {
+    if (!document.getElementById('todayWorkspaceStatus')) return;
+    const epoch = state.workspaceEpoch || 0;
+    const version = (state.todayLoadVersion || 0) + 1;
+    state.todayLoadVersion = version;
+    renderTodayLoading();
+
+    const results = await Promise.allSettled([
+      (async () => {
+        const loaded = await loadAccounts();
+        if (!loaded) throw new Error('accounts unavailable');
+        return loaded.accounts || [];
+      })(),
+      apiRequest('/api/meta/connections'),
+      apiRequest('/api/health/overview'),
+      apiRequest('/api/audit-events?page=1&page_size=5')
+    ]);
+    if (state.workspaceEpoch !== epoch || state.todayLoadVersion !== version) return;
+
+    const sourceLabels = ['кабинеты', 'подключения Meta', 'health-сигналы', 'история действий'];
+    const unavailable = results
+      .map((result, index) => result.status === 'rejected' ? sourceLabels[index] : null)
+      .filter(Boolean);
+    const accounts = results[0].status === 'fulfilled' ? results[0].value : null;
+    const connections = results[1].status === 'fulfilled' ? results[1].value || [] : null;
+    const health = results[2].status === 'fulfilled' ? results[2].value : null;
+    const auditData = results[3].status === 'fulfilled' ? results[3].value : null;
+    const auditEvents = auditData ? auditData.items || [] : null;
+    if (connections) state.fbConnections = connections;
+    if (auditEvents) state.todayAuditEvents = auditEvents;
+    renderTodayDecisionCenter({ accounts, connections, health, auditEvents, unavailable });
+  }
+
+  function setupTodayDecisionCenter() {
+    const root = document.getElementById('tab-home');
+    if (!root || root.dataset.todayBound === 'true') return;
+    root.dataset.todayBound = 'true';
+    root.addEventListener('click', event => {
+      const primary = event.target.closest('#todayPrimaryAction');
+      if (primary) {
+        if (primary.dataset.todayAction === 'reload') {
+          loadTodayDecisionCenter();
+          return;
+        }
+        const target = primary.dataset.todayTarget;
+        const accountId = primary.dataset.accountId;
+        if (target) window.switchTab(target);
+        if (accountId) window.openAccountDetails(accountId);
+        return;
+      }
+      const eventButton = event.target.closest('[data-today-event-id]');
+      if (eventButton) {
+        window.openLogDetails(Number(eventButton.dataset.todayEventId));
+        return;
+      }
+      const targetButton = event.target.closest('[data-today-target]');
+      if (targetButton?.dataset.todayTarget) {
+        window.switchTab(targetButton.dataset.todayTarget);
+      }
+    });
   }
 
   // ==========================================================
@@ -9882,7 +10259,8 @@
   }
 
   window.openLogDetails = function (eventId) {
-    const event = state.auditEvents.find(item => item.id === eventId);
+    const event = state.auditEvents.find(item => item.id === eventId)
+      || state.todayAuditEvents.find(item => item.id === eventId);
     const content = document.getElementById('logDetailsContent');
     if (!event || !content) return;
     const detailsJson = Object.keys(event.details || {}).length ? JSON.stringify(event.details, null, 2) : 'Нет дополнительных данных';
@@ -11485,6 +11863,7 @@
     setupSettingsChips();
     setupLogicToggle();
     setupRuleBuilderPreview();
+    setupTodayDecisionCenter();
     setupModalListeners();
     setupSidebarListeners();
     setupQuickSearchListeners();

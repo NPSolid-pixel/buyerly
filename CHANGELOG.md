@@ -10,6 +10,11 @@
 ## [Unreleased]
 
 ### Added & Improved
+- **Today Decision Center**:
+  - Статический Today превращён в workspace-scoped центр решений на реальных данных подключений Meta, здоровья кабинетов, покрытия автоматизациями и последних audit-событий.
+  - Command bar теперь выбирает одно следующее действие в детерминированном порядке и объясняет причину приоритета без fake metrics, искусственной срочности и декоративных controls.
+  - Hero показывает три проверяемых отношения, а основной контент собран в одну divided operations surface с loading, empty, partial, healthy, warning и critical состояниями.
+  - При недоступности одного API остальные сигналы продолжают работать; responsive-контракт закреплён для 390/768/1024/1440px.
 - **Единая визуальная система Buyerly 2.0**:
   - Добавлен отдельный production UI-kit `webapp/css/ui-system.css` с общей шкалой типографики, spacing, page widths, controls, surfaces и dialog sizes.
   - Today, Automations и Efficiency получили premium operations layer: command hero, semantic accents, выразительную KPI-иерархию, lane bands и action rails без возврата к вложенным карточкам.

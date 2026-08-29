@@ -256,9 +256,10 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         self.assertNotIn('placeholder="Ask anything..."', self.index)
         self.assertNotIn('class="ai-prompt-card"', self.index)
-        self.assertIn("onclick=\"window.switchTab('fb_accounts')\"", self.index)
-        self.assertIn("onclick=\"window.switchTab('rules')\"", self.index)
-        self.assertIn("onclick=\"window.switchTab('logs')\"", self.index)
+        for target in ("fb_accounts", "rules", "logs"):
+            self.assertIn(f'data-today-target="{target}"', self.index)
+        self.assertIn("function setupTodayDecisionCenter()", self.app_script)
+        self.assertIn("window.switchTab(targetButton.dataset.todayTarget)", self.app_script)
 
     def test_connections_page_uses_responsive_workspace_layout(self):
         for markup_contract in (
@@ -395,7 +396,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             ".connect-meta-landing",
             ".cell-ellipsis",
             ".nav-item.active::before",
-            ".today-command-loop",
+            ".today-workspace-status",
+            ".today-operations",
+            ".today-context-links",
             '[data-ui-pilot="efficiency"] .summary-page-header::after',
             '[data-ui-pilot="efficiency"] .kpi-primary-grid .spend-card::after',
             '[data-ui-pilot="automations"] .automations-summary-card:nth-child(2)',
@@ -407,13 +410,23 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         for markup_contract in (
             'id="homeTodayDate"',
-            'class="today-command-loop"',
-            'class="ui-alert ui-alert-info today-command-bar"',
+            'id="todayWorkspaceStatus"',
+            'id="todayPriorityBar"',
+            'id="todayPrimaryAction"',
+            'id="todaySignalsList"',
+            'id="todayRecentList"',
         ):
             self.assertIn(markup_contract, self.index)
 
-        self.assertEqual(self.index.count('class="today-action-link"'), 3)
+        self.assertNotIn('class="today-command-loop"', self.index)
+        self.assertNotIn('class="today-action-card"', self.index)
         self.assertIn("document.getElementById('homeTodayDate')", self.app_script)
+        self.assertIn('function loadTodayDecisionCenter()', self.app_script)
+        self.assertIn('function todayPriority(model)', self.app_script)
+        self.assertIn("apiRequest('/api/meta/connections')", self.app_script)
+        self.assertIn("apiRequest('/api/health/overview')", self.app_script)
+        self.assertIn("apiRequest('/api/audit-events?page=1&page_size=5')", self.app_script)
+        self.assertIn('Доступные сигналы показаны без подмены данных.', self.app_script)
 
         for mobile_label in ("Сводка", "Правила", "Связи"):
             self.assertIn(f"<span>{mobile_label}</span>", self.index)
