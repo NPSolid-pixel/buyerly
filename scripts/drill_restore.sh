@@ -67,7 +67,7 @@ bash "${SCRIPT_DIR}/restore_db.sh" --file "${BACKUP_FILE}" --target-container "$
 echo "[INFO] Running schema and integrity assertions..."
 
 # 1. Check essential tables
-required_tables=("accounts" "rules" "automation_runtime_states" "audit_events" "campaign_facts" "users" "workspaces" "alembic_version")
+required_tables=("accounts" "rule_presets" "rule_groups" "automation_runtime_states" "audit_events" "analytics_entity_daily_facts" "users" "workspaces" "alembic_version")
 for table in "${required_tables[@]}"; do
     exists=$(docker exec "${POSTGRES_CONTAINER}" psql \
         --username="${POSTGRES_USER}" \

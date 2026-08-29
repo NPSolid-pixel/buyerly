@@ -89,7 +89,7 @@ jobs:
             | psql -h localhost -U buyerly -d buyerly_restore_drill -v ON_ERROR_STOP=1 --quiet
 
           echo "[Step 5] Asserting restored schema, Alembic version, and JSONB integrity..."
-          for table in users accounts rules automation_runtime_states audit_events campaign_facts alembic_version; do
+          for table in users accounts rule_presets rule_groups automation_runtime_states audit_events analytics_entity_daily_facts alembic_version; do
             table_exists=$(psql -h localhost -U buyerly -d buyerly_restore_drill -t -A -c "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '${table}';")
             if [ "${table_exists}" != "1" ]; then
               echo "::error::Sanity check failed: table '${table}' missing after restore."
