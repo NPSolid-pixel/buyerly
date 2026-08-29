@@ -479,6 +479,58 @@ class TestFrontendRuleContract(unittest.TestCase):
         for mobile_label in ("Сводка", "Правила", "Связи"):
             self.assertIn(f"<span>{mobile_label}</span>", self.index)
 
+    def test_today_completes_real_data_workspace_contract(self):
+        for markup_contract in (
+            'id="todayDataFrame"',
+            'id="todayDataQuality" role="status" aria-live="polite"',
+            'id="todayCurrencyBadge"',
+            'id="todaySourceBadge"',
+            'id="todayFreshnessBadge"',
+            'id="todayRefreshButton"',
+            'data-today-action="reload"',
+            'id="todayKpiStrip"',
+            'id="todaySpendValue"',
+            'id="todayLeadsValue"',
+            'id="todayRegistrationsValue"',
+            'id="todayPurchasesValue"',
+            'id="todayTrendContent"',
+            'id="todayFunnelContent"',
+            'id="todayAnomaliesContent"',
+            'id="todayAnomalyCount"',
+        ):
+            self.assertIn(markup_contract, self.index)
+
+        for script_contract in (
+            "apiRequest('/api/summary?period=today')",
+            "apiRequest('/api/summary?period=yesterday')",
+            'function renderTodayAnalytics(',
+            'function todaySummaryAnomalies(',
+            'function todayComparableCurrency(',
+            'function todayComparableCoverage(',
+            'todaySummary.mixed_currencies',
+            'Сравнение недоступно: валюты разделены',
+            'Сравнение недоступно: разный охват кабинетов',
+            'Частичные данные: подтверждено',
+            'Операционные сигналы выше продолжают работать.',
+            'data-account-id=',
+            '<progress value=',
+        ):
+            self.assertIn(script_contract, self.app_script)
+
+        for style_contract in (
+            '.today-data-frame',
+            '.today-data-provenance',
+            '.today-kpi-strip',
+            '.today-intelligence',
+            '.today-comparison-row',
+            '.today-funnel-list',
+            '.today-anomaly-row',
+            'grid-template-columns: repeat(2, minmax(0, 1fr))',
+        ):
+            self.assertIn(style_contract, self.ui_system)
+
+        self.assertNotIn("/api/summary?period=today&force=true", self.app_script)
+
     def test_logs_are_a_first_class_section_not_a_summary_table(self):
         self.assertIn('data-tab="logs"', self.index)
         self.assertIn('id="tab-logs"', self.index)

@@ -1609,6 +1609,285 @@
     'error'
   ]);
 
+  function todayAccountLabel(account) {
+    return account?.custom_name || account?.short_name || account?.name || account?.account_id || 'Кабинет';
+  }
+
+  function todaySummaryAnomalies(summary) {
+    if (!summary || !Array.isArray(summary.accounts)) return [];
+    const anomalies = [];
+    summary.accounts.forEach(account => {
+      const label = todayAccountLabel(account);
+      const base = { accountId: account.account_id || '', accountName: label };
+      if (account.data_status && account.data_status !== 'synced') {
+        anomalies.push({
+          ...base,
+          state: account.data_status === 'error' ? 'critical' : 'partial',
+          title: 'Нет подтверждённых метрик',
+          description: account.data_status_label || 'Meta не вернула данные кабинета.',
+          effect: 'Итоги workspace собраны не полностью'
+        });
+        return;
+      }
+
+      const spend = Number(account.spend || 0);
+      const leads = Number(account.leads || 0);
+      const registrations = Number(account.registrations || 0);
+      const purchases = Number(account.purchases || 0);
+      if (spend > 0 && leads === 0) {
+        anomalies.push({
+          ...base,
+          state: 'warning',
+          title: 'Расход без лидов',
+          description: `${label}: расход есть, лиды не зафиксированы.`,
+          effect: 'Проверьте доставку, событие лида и посадочную страницу'
+        });
+      } else if (leads > 0 && registrations === 0) {
+        anomalies.push({
+          ...base,
+          state: 'warning',
+          title: 'Лиды без регистраций',
+          description: `${label}: ${formatNumber(leads)} лидов и 0 регистраций.`,
+          effect: 'Проверьте следующий шаг воронки и передачу события'
+        });
+      } else if (registrations > 0 && purchases === 0) {
+        anomalies.push({
+          ...base,
+          state: 'warning',
+          title: 'Регистрации без покупок',
+          description: `${label}: ${formatNumber(registrations)} регистраций и 0 покупок.`,
+          effect: 'Проверьте финальный шаг воронки и событие покупки'
+        });
+      }
+    });
+    return anomalies.sort((left, right) => {
+      const rank = { critical: 0, warning: 1, partial: 2 };
+      return (rank[left.state] ?? 3) - (rank[right.state] ?? 3);
+    });
+  }
+
+  function todayComparableCurrency(current, previous) {
+    const currentCurrency = normalizeCurrencyCode(current?.display_currency);
+    const previousCurrency = normalizeCurrencyCode(previous?.display_currency);
+    return Boolean(
+      currentCurrency &&
+      previousCurrency &&
+      currentCurrency === previousCurrency &&
+      !current?.mixed_currencies &&
+      !previous?.mixed_currencies &&
+      todayComparableCoverage(current, previous)
+    ) ? currentCurrency : '';
+  }
+
+  function todayComparableCoverage(current, previous) {
+    const syncedIds = summary => (Array.isArray(summary?.accounts) ? summary.accounts : [])
+      .filter(account => !account.data_status || account.data_status === 'synced')
+      .map(account => String(account.account_id || ''))
+      .filter(Boolean)
+      .sort();
+    const currentIds = syncedIds(current);
+    const previousIds = syncedIds(previous);
+    return currentIds.length > 0 &&
+      currentIds.length === previousIds.length &&
+      currentIds.every((id, index) => id === previousIds[index]);
+  }
+
+  function todayComparisonLabel(currentValue, previousValue, options = {}) {
+    if (previousValue === null || previousValue === undefined) return 'Вчерашние данные недоступны';
+    const current = Number(currentValue || 0);
+    const previous = Number(previousValue || 0);
+    const delta = current - previous;
+    const absolute = Math.abs(delta);
+    const formatted = options.currency
+      ? formatMoneyOrDash(absolute, options.currency)
+      : formatNumber(absolute);
+    if (delta === 0) return 'Без изменения ко вчера';
+    return `${delta > 0 ? 'Выше' : 'Ниже'} на ${formatted} ко вчера`;
+  }
+
+  function todayInsightState(container, message, stateName = 'empty') {
+    if (!container) return;
+    container.dataset.state = stateName;
+    container.innerHTML = `<div class="today-list-state" data-state="${escapeHtml(stateName)}">${escapeHtml(message)}</div>`;
+  }
+
+  function todayComparisonRow({ label, current, previous, formatter, comparable = true }) {
+    if (!comparable) {
+      return `<div class="today-comparison-row"><div><strong>${escapeHtml(label)}</strong><span>Сравнение недоступно</span></div><span class="today-comparison-unavailable">—</span></div>`;
+    }
+    const currentValue = Number(current || 0);
+    const previousValue = Number(previous || 0);
+    const max = Math.max(currentValue, previousValue, 1);
+    return `
+      <div class="today-comparison-row">
+        <div><strong>${escapeHtml(label)}</strong><span>Сегодня ${escapeHtml(formatter(currentValue))} · вчера ${escapeHtml(formatter(previousValue))}</span></div>
+        <div class="today-comparison-bars" aria-label="${escapeHtml(label)}: сегодня ${escapeHtml(formatter(currentValue))}, вчера ${escapeHtml(formatter(previousValue))}">
+          <progress value="${currentValue}" max="${max}" aria-label="Сегодня"></progress>
+          <progress value="${previousValue}" max="${max}" aria-label="Вчера"></progress>
+        </div>
+      </div>`;
+  }
+
+  function renderTodayAnalytics({ todaySummary, yesterdaySummary, unavailable = [] }) {
+    const kpiStrip = document.getElementById('todayKpiStrip');
+    const quality = document.getElementById('todayDataQuality');
+    const currencyBadge = document.getElementById('todayCurrencyBadge');
+    const sourceBadge = document.getElementById('todaySourceBadge');
+    const freshnessBadge = document.getElementById('todayFreshnessBadge');
+    const trend = document.getElementById('todayTrendContent');
+    const funnel = document.getElementById('todayFunnelContent');
+    const anomalyContainer = document.getElementById('todayAnomaliesContent');
+    const anomalyCount = document.getElementById('todayAnomalyCount');
+
+    if (!todaySummary) {
+      if (kpiStrip) kpiStrip.dataset.state = 'error';
+      if (quality) quality.textContent = 'Аналитика временно недоступна. Операционные сигналы выше продолжают работать.';
+      if (currencyBadge) currencyBadge.textContent = 'Валюта · недоступна';
+      if (sourceBadge) sourceBadge.textContent = 'Источник · недоступен';
+      if (freshnessBadge) {
+        freshnessBadge.dataset.state = 'error';
+        freshnessBadge.textContent = 'Свежесть · недоступна';
+      }
+      ['todaySpendValue', 'todayLeadsValue', 'todayRegistrationsValue', 'todayPurchasesValue'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = '—';
+      });
+      ['todaySpendComparison', 'todayLeadsComparison', 'todayRegistrationsComparison', 'todayPurchasesComparison'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = 'Нет подтверждённых данных';
+      });
+      todayInsightState(trend, 'Не удалось загрузить динамику. Нажмите «Обновить», чтобы повторить.', 'error');
+      todayInsightState(funnel, 'Воронка недоступна без подтверждённой сводки.', 'error');
+      todayInsightState(anomalyContainer, 'Проверка кабинетов временно недоступна.', 'error');
+      if (anomalyCount) {
+        anomalyCount.textContent = '—';
+        anomalyCount.dataset.state = 'partial';
+      }
+      return [];
+    }
+
+    const qualityData = todaySummary.data_quality || {};
+    const accountsTotal = Number(qualityData.accounts_total ?? todaySummary.accounts_count ?? 0);
+    const accountsSynced = Number(qualityData.accounts_synced ?? 0);
+    const qualityStatus = qualityData.status || (accountsTotal ? 'partial' : 'unavailable');
+    const currency = normalizeCurrencyCode(todaySummary.display_currency);
+    const comparableCoverage = yesterdaySummary ? todayComparableCoverage(todaySummary, yesterdaySummary) : false;
+    const comparableCurrency = yesterdaySummary ? todayComparableCurrency(todaySummary, yesterdaySummary) : '';
+    const ageSeconds = summaryAgeMs(todaySummary) / 1000;
+    const isStale = ageSeconds >= (SUMMARY_AUTO_REFRESH_MS / 1000);
+    const origin = todaySummary.cache?.origin || (todaySummary.cache?.is_cached ? 'memory' : 'live');
+
+    if (kpiStrip) kpiStrip.dataset.state = accountsTotal === 0 ? 'empty' : qualityStatus === 'complete' ? 'ready' : 'partial';
+    if (quality) {
+      quality.textContent = accountsTotal === 0
+        ? 'Подключите рекламный кабинет, чтобы увидеть показатели.'
+        : qualityStatus === 'complete'
+          ? `Подтверждено ${accountsSynced} из ${accountsTotal} кабинетов.`
+          : `Частичные данные: подтверждено ${accountsSynced} из ${accountsTotal} кабинетов${unavailable.length ? ` · недоступно: ${unavailable.join(', ')}` : ''}.`;
+      if (yesterdaySummary && !comparableCoverage && accountsTotal > 0) {
+        quality.textContent += ' Сравнение со вчера скрыто: набор подтверждённых кабинетов отличается.';
+      }
+    }
+    if (currencyBadge) {
+      const currencies = Array.isArray(todaySummary.currency_totals) ? todaySummary.currency_totals.length : 0;
+      currencyBadge.textContent = currency
+        ? `Валюта · ${currency}`
+        : todaySummary.mixed_currencies
+          ? `Валюты · ${currencies || 'несколько'}, отдельно`
+          : 'Валюта · не подтверждена';
+    }
+    if (sourceBadge) sourceBadge.textContent = `Источник · ${todaySummary.source || 'Meta'}`;
+    if (freshnessBadge) {
+      freshnessBadge.dataset.state = isStale ? 'stale' : origin === 'live' ? 'fresh' : 'cached';
+      freshnessBadge.textContent = `${isStale ? 'Сохранено' : 'Обновлено'} · ${formatSummaryAge(ageSeconds)}`;
+    }
+
+    const spendValue = document.getElementById('todaySpendValue');
+    const leadsValue = document.getElementById('todayLeadsValue');
+    const registrationsValue = document.getElementById('todayRegistrationsValue');
+    const purchasesValue = document.getElementById('todayPurchasesValue');
+    const spendComparison = document.getElementById('todaySpendComparison');
+    const leadsComparison = document.getElementById('todayLeadsComparison');
+    const registrationsComparison = document.getElementById('todayRegistrationsComparison');
+    const purchasesComparison = document.getElementById('todayPurchasesComparison');
+    if (spendValue) spendValue.textContent = currency && !todaySummary.mixed_currencies
+      ? formatMoneyOrDash(Number(todaySummary.total_spend || 0), currency)
+      : todaySummary.mixed_currencies ? 'По валютам' : '—';
+    if (leadsValue) leadsValue.textContent = formatNumber(todaySummary.total_leads);
+    if (registrationsValue) registrationsValue.textContent = formatNumber(todaySummary.total_regs);
+    if (purchasesValue) purchasesValue.textContent = formatNumber(todaySummary.total_purchases);
+    if (spendComparison) spendComparison.textContent = comparableCurrency
+      ? todayComparisonLabel(todaySummary.total_spend, yesterdaySummary?.total_spend, { currency: comparableCurrency })
+      : (todaySummary.mixed_currencies || yesterdaySummary?.mixed_currencies)
+        ? 'Сравнение недоступно: валюты разделены'
+        : 'Вчерашний расход недоступен';
+    const coverageComparisonMessage = yesterdaySummary && !comparableCoverage
+      ? 'Сравнение недоступно: разный охват кабинетов'
+      : '';
+    if (leadsComparison) leadsComparison.textContent = coverageComparisonMessage || todayComparisonLabel(todaySummary.total_leads, yesterdaySummary?.total_leads);
+    if (registrationsComparison) registrationsComparison.textContent = coverageComparisonMessage || todayComparisonLabel(todaySummary.total_regs, yesterdaySummary?.total_regs);
+    if (purchasesComparison) purchasesComparison.textContent = coverageComparisonMessage || todayComparisonLabel(todaySummary.total_purchases, yesterdaySummary?.total_purchases);
+
+    const hasCurrencySpend = [todaySummary, yesterdaySummary].some(summary => (
+      Array.isArray(summary?.currency_totals) && summary.currency_totals.some(item => Number(item.spend || 0) > 0)
+    ));
+    const hasTrendData = hasCurrencySpend || [
+      todaySummary.total_spend, todaySummary.total_leads, todaySummary.total_regs, todaySummary.total_purchases,
+      yesterdaySummary?.total_spend, yesterdaySummary?.total_leads, yesterdaySummary?.total_regs, yesterdaySummary?.total_purchases
+    ].some(value => Number(value || 0) > 0);
+    if (!yesterdaySummary) {
+      todayInsightState(trend, 'Сегодняшние значения показаны выше; сравнение со вчера временно недоступно.', 'partial');
+    } else if (!hasTrendData) {
+      todayInsightState(trend, 'За сегодня и вчера расход и события не зафиксированы.', 'empty');
+    } else if (trend) {
+      trend.dataset.state = 'ready';
+      trend.innerHTML = [
+        todayComparisonRow({
+          label: 'Расход', current: todaySummary.total_spend, previous: yesterdaySummary.total_spend,
+          comparable: Boolean(comparableCurrency), formatter: value => formatMoneyOrDash(value, comparableCurrency)
+        }),
+        todayComparisonRow({ label: 'Лиды', current: todaySummary.total_leads, previous: yesterdaySummary.total_leads, comparable: comparableCoverage, formatter: formatNumber }),
+        todayComparisonRow({ label: 'Регистрации', current: todaySummary.total_regs, previous: yesterdaySummary.total_regs, comparable: comparableCoverage, formatter: formatNumber }),
+        todayComparisonRow({ label: 'Покупки', current: todaySummary.total_purchases, previous: yesterdaySummary.total_purchases, comparable: comparableCoverage, formatter: formatNumber })
+      ].join('');
+    }
+
+    const funnelSteps = [
+      ['Клики по ссылке', Number(todaySummary.total_link_clicks || 0)],
+      ['Просмотры страницы', Number(todaySummary.total_landing_page_views || 0)],
+      ['Лиды', Number(todaySummary.total_leads || 0)],
+      ['Регистрации', Number(todaySummary.total_regs || 0)],
+      ['Покупки', Number(todaySummary.total_purchases || 0)]
+    ];
+    if (!funnelSteps.some(([, value]) => value > 0)) {
+      todayInsightState(funnel, accountsTotal ? 'Сегодня события воронки ещё не зафиксированы.' : 'Сначала подключите рекламный кабинет.', 'empty');
+    } else if (funnel) {
+      funnel.dataset.state = 'ready';
+      funnel.innerHTML = `<ol class="today-funnel-list">${funnelSteps.map(([label, value], index) => {
+        const previousValue = index > 0 ? funnelSteps[index - 1][1] : null;
+        const conversion = previousValue > 0 ? `${((value / previousValue) * 100).toFixed(1)}% от прошлого шага` : index ? 'Конверсия недоступна' : 'Вход в воронку';
+        return `<li><span>${escapeHtml(label)}</span><strong>${escapeHtml(formatNumber(value))}</strong><small>${escapeHtml(conversion)}</small></li>`;
+      }).join('')}</ol>`;
+    }
+
+    const anomalies = todaySummaryAnomalies(todaySummary);
+    if (anomalyCount) {
+      anomalyCount.textContent = String(anomalies.length);
+      anomalyCount.dataset.state = anomalies.some(item => item.state === 'critical') ? 'critical' : anomalies.length ? 'warning' : 'healthy';
+    }
+    if (!anomalies.length) {
+      todayInsightState(anomalyContainer, accountsTotal ? 'По подтверждённым данным аномалий не найдено.' : 'Нет кабинетов для проверки.', 'healthy');
+    } else if (anomalyContainer) {
+      anomalyContainer.dataset.state = 'ready';
+      anomalyContainer.innerHTML = anomalies.slice(0, 3).map(item => `
+        <button class="today-anomaly-row" type="button" data-state="${escapeHtml(item.state)}" data-today-target="accounts" data-account-id="${escapeHtml(item.accountId)}">
+          <span class="today-signal-marker" aria-hidden="true"></span>
+          <span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description)}</small><em>${escapeHtml(item.effect)}</em></span>
+        </button>`).join('');
+    }
+    return anomalies;
+  }
+
   function todayPriority(model) {
     const {
       accounts,
@@ -1618,6 +1897,7 @@
       health,
       healthCounts,
       uncoveredAccounts,
+      analyticsAnomalies,
       auditEvents,
       unavailable
     } = model;
@@ -1683,6 +1963,17 @@
         label: 'Посмотреть причину',
         target: 'accounts',
         accountId: accounts ? account?.account_id || '' : ''
+      };
+    }
+    if ((analyticsAnomalies?.length || 0) > 0) {
+      const anomaly = analyticsAnomalies[0];
+      return {
+        state: anomaly.state === 'critical' ? 'critical' : 'warning',
+        title: anomaly.title,
+        description: `${anomaly.accountName}: ${anomaly.effect}.`,
+        label: 'Открыть кабинет',
+        target: 'accounts',
+        accountId: anomaly.accountId
       };
     }
     if ((uncoveredAccounts?.length || 0) > 0) {
@@ -1752,7 +2043,20 @@
       todayCoverageNote: 'Автоматизации',
       todayPriorityTitle: 'Определяем приоритет',
       todayPriorityDescription: 'Сверяем реальные данные этого workspace.',
-      todayAttentionCount: '—'
+      todayAttentionCount: '—',
+      todayCurrencyBadge: 'Валюта · проверяем',
+      todaySourceBadge: 'Источник · проверяем',
+      todayFreshnessBadge: 'Свежесть · проверяем',
+      todayDataQuality: 'Загружаем подтверждённые данные кабинетов…',
+      todaySpendValue: '—',
+      todayLeadsValue: '—',
+      todayRegistrationsValue: '—',
+      todayPurchasesValue: '—',
+      todaySpendComparison: 'Сравниваем со вчера',
+      todayLeadsComparison: 'Сравниваем со вчера',
+      todayRegistrationsComparison: 'Сравниваем со вчера',
+      todayPurchasesComparison: 'Сравниваем со вчера',
+      todayAnomalyCount: '—'
     };
     Object.entries(text).forEach(([id, value]) => {
       const element = document.getElementById(id);
@@ -1767,20 +2071,27 @@
     }
     const signals = document.getElementById('todaySignalsList');
     const recent = document.getElementById('todayRecentList');
+    const kpiStrip = document.getElementById('todayKpiStrip');
+    const freshness = document.getElementById('todayFreshnessBadge');
     if (signals) signals.innerHTML = '<div class="today-list-state">Загружаем состояние workspace…</div>';
     if (recent) recent.innerHTML = '<div class="today-list-state">Загружаем историю действий…</div>';
+    if (kpiStrip) kpiStrip.dataset.state = 'loading';
+    if (freshness) freshness.dataset.state = 'loading';
+    todayInsightState(document.getElementById('todayTrendContent'), 'Сравниваем расходы и события…', 'loading');
+    todayInsightState(document.getElementById('todayFunnelContent'), 'Собираем события воронки…', 'loading');
+    todayInsightState(document.getElementById('todayAnomaliesContent'), 'Проверяем кабинеты…', 'loading');
   }
 
-  function todaySignalRow({ state: signalState, title, description, value, target }) {
+  function todaySignalRow({ state: signalState, title, description, value, target, context, accountId }) {
     return `
-      <button class="today-signal-row" type="button" data-state="${escapeHtml(signalState)}" data-today-target="${escapeHtml(target)}">
+      <button class="today-signal-row" type="button" data-state="${escapeHtml(signalState)}" data-today-target="${escapeHtml(target)}"${accountId ? ` data-account-id="${escapeHtml(accountId)}"` : ''}>
         <span class="today-signal-marker" aria-hidden="true"></span>
-        <span class="today-signal-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(description)}</span></span>
+        <span class="today-signal-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(description)}</span>${context ? `<small>${escapeHtml(context)}</small>` : ''}</span>
         <span class="today-signal-value">${escapeHtml(value)}</span>
       </button>`;
   }
 
-  function renderTodayDecisionCenter({ accounts, connections, health, auditEvents, unavailable }) {
+  function renderTodayDecisionCenter({ accounts, connections, health, auditEvents, unavailable, todaySummary = null }) {
     const safeAccounts = accounts || [];
     const safeConnections = connections || [];
     const safeEvents = auditEvents || [];
@@ -1797,6 +2108,7 @@
       : [];
     const healthCounts = health?.counts || { healthy: 0, degraded: 0, critical: 0, unknown: 0 };
     const healthTotal = Object.values(healthCounts).reduce((sum, value) => sum + Number(value || 0), 0);
+    const analyticsAnomalies = todaySummaryAnomalies(todaySummary);
     const priority = todayPriority({
       accounts,
       activeAccounts,
@@ -1805,6 +2117,7 @@
       health,
       healthCounts,
       uncoveredAccounts,
+      analyticsAnomalies,
       auditEvents: safeEvents,
       unavailable
     });
@@ -1819,14 +2132,18 @@
       state: 'healthy', title: 'Подключения Meta', description: 'Активные профили доступны для работы.', value: `${activeConnections.length} из ${safeConnections.length}`, target: 'fb_accounts'
     };
 
+    const affectedHealthAccount = health?.accounts?.find(item => ['critical', 'degraded', 'unknown'].includes(item.status));
+    const healthContext = affectedHealthAccount
+      ? `Кабинет: ${todayAccountLabel(affectedHealthAccount)}${affectedHealthAccount.last_error_message ? ` · Причина: ${affectedHealthAccount.last_error_message}` : ''}`
+      : '';
     const healthSignal = !health ? {
       state: 'partial', title: 'Здоровье кабинетов', description: 'Health-снимок временно недоступен.', value: '—', target: 'accounts'
     } : healthCounts.critical ? {
-      state: 'critical', title: 'Здоровье кабинетов', description: 'Есть кабинеты с критичным состоянием.', value: `${healthCounts.critical} крит.`, target: 'accounts'
+      state: 'critical', title: 'Здоровье кабинетов', description: 'Есть кабинеты с критичным состоянием.', value: `${healthCounts.critical} крит.`, target: 'accounts', context: healthContext, accountId: affectedHealthAccount?.account_id
     } : healthCounts.degraded ? {
-      state: 'warning', title: 'Здоровье кабинетов', description: 'Есть кабинеты с зафиксированными отклонениями.', value: `${healthCounts.degraded} откл.`, target: 'accounts'
+      state: 'warning', title: 'Здоровье кабинетов', description: 'Есть кабинеты с зафиксированными отклонениями.', value: `${healthCounts.degraded} откл.`, target: 'accounts', context: healthContext, accountId: affectedHealthAccount?.account_id
     } : healthCounts.unknown ? {
-      state: safeAccounts.length ? 'warning' : 'healthy', title: 'Здоровье кабинетов', description: safeAccounts.length ? 'Для части кабинетов ещё нет свежего состояния.' : 'Кабинеты пока не подключены.', value: `${healthCounts.unknown || 0} без данных`, target: 'accounts'
+      state: safeAccounts.length ? 'warning' : 'healthy', title: 'Здоровье кабинетов', description: safeAccounts.length ? 'Для части кабинетов ещё нет свежего состояния.' : 'Кабинеты пока не подключены.', value: `${healthCounts.unknown || 0} без данных`, target: 'accounts', context: healthContext, accountId: affectedHealthAccount?.account_id
     } : {
       state: 'healthy', title: 'Здоровье кабинетов', description: 'Критичных причин и отклонений не зафиксировано.', value: `${healthCounts.healthy || 0} в норме`, target: 'accounts'
     };
@@ -1840,7 +2157,16 @@
     } : {
       state: 'healthy', title: 'Покрытие правилами', description: 'Все активные кабинеты защищены автоматизациями.', value: `${coveredAccounts.length} из ${activeAccounts.length}`, target: 'rules'
     };
-    const signals = [metaSignal, healthSignal, coverageSignal];
+    const analyticsSignal = analyticsAnomalies.length ? {
+      state: analyticsAnomalies[0].state,
+      title: analyticsAnomalies[0].title,
+      description: analyticsAnomalies[0].description,
+      value: 'Проверить',
+      target: 'accounts',
+      accountId: analyticsAnomalies[0].accountId,
+      context: `Эффект: ${analyticsAnomalies[0].effect}`
+    } : null;
+    const signals = [metaSignal, healthSignal, coverageSignal, analyticsSignal].filter(Boolean);
     const attentionSignals = signals.filter(item => ['critical', 'warning'].includes(item.state));
     const hasCritical = signals.some(item => item.state === 'critical');
     const partial = unavailable.length > 0;
@@ -1917,7 +2243,7 @@
     state.todayLoadVersion = version;
     renderTodayLoading();
 
-    const results = await Promise.allSettled([
+    const operationsRequest = Promise.allSettled([
       (async () => {
         const loaded = await loadAccounts();
         if (!loaded) throw new Error('accounts unavailable');
@@ -1927,6 +2253,11 @@
       apiRequest('/api/health/overview'),
       apiRequest('/api/audit-events?page=1&page_size=5')
     ]);
+    const analyticsRequest = Promise.allSettled([
+      apiRequest('/api/summary?period=today'),
+      apiRequest('/api/summary?period=yesterday')
+    ]);
+    const results = await operationsRequest;
     if (state.workspaceEpoch !== epoch || state.todayLoadVersion !== version) return;
 
     const sourceLabels = ['кабинеты', 'подключения Meta', 'health-сигналы', 'история действий'];
@@ -1941,6 +2272,25 @@
     if (connections) state.fbConnections = connections;
     if (auditEvents) state.todayAuditEvents = auditEvents;
     renderTodayDecisionCenter({ accounts, connections, health, auditEvents, unavailable });
+
+    const analyticsResults = await analyticsRequest;
+    if (state.workspaceEpoch !== epoch || state.todayLoadVersion !== version) return;
+    const todaySummary = analyticsResults[0].status === 'fulfilled' ? analyticsResults[0].value : null;
+    const yesterdaySummary = analyticsResults[1].status === 'fulfilled' ? analyticsResults[1].value : null;
+    const analyticsUnavailable = analyticsResults
+      .map((result, index) => result.status === 'rejected' ? ['показатели за сегодня', 'сравнение со вчера'][index] : null)
+      .filter(Boolean);
+    if (todaySummary) state.summaryCache.today = todaySummary;
+    if (yesterdaySummary) state.summaryCache.yesterday = yesterdaySummary;
+    renderTodayAnalytics({ todaySummary, yesterdaySummary, unavailable: analyticsUnavailable });
+    renderTodayDecisionCenter({
+      accounts,
+      connections,
+      health,
+      auditEvents,
+      unavailable: [...unavailable, ...analyticsUnavailable],
+      todaySummary
+    });
   }
 
   function setupTodayDecisionCenter() {
@@ -1948,12 +2298,13 @@
     if (!root || root.dataset.todayBound === 'true') return;
     root.dataset.todayBound = 'true';
     root.addEventListener('click', event => {
+      const reload = event.target.closest('[data-today-action="reload"]');
+      if (reload) {
+        loadTodayDecisionCenter();
+        return;
+      }
       const primary = event.target.closest('#todayPrimaryAction');
       if (primary) {
-        if (primary.dataset.todayAction === 'reload') {
-          loadTodayDecisionCenter();
-          return;
-        }
         const target = primary.dataset.todayTarget;
         const accountId = primary.dataset.accountId;
         if (target) window.switchTab(target);
@@ -1968,6 +2319,7 @@
       const targetButton = event.target.closest('[data-today-target]');
       if (targetButton?.dataset.todayTarget) {
         window.switchTab(targetButton.dataset.todayTarget);
+        if (targetButton.dataset.accountId) window.openAccountDetails(targetButton.dataset.accountId);
       }
     });
   }

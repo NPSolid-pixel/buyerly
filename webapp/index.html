@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
   <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
-  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.3.0">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.4.0">
 </head>
 
 <body>
@@ -518,6 +518,44 @@
               </div>
             </div>
           </div>
+          <section class="today-data-frame" id="todayDataFrame" aria-labelledby="todayKpiHeading">
+            <header class="today-data-provenance">
+              <div class="today-data-heading">
+                <span class="today-section-eyebrow">Результат</span>
+                <h2 id="todayKpiHeading">Ключевые показатели за сегодня</h2>
+                <p id="todayDataQuality" role="status" aria-live="polite">Загружаем подтверждённые данные кабинетов…</p>
+              </div>
+              <div class="today-data-meta" aria-label="Период и источник данных">
+                <span class="today-data-badge">Период · сегодня</span>
+                <span class="today-data-badge" id="todayCurrencyBadge">Валюта · проверяем</span>
+                <span class="today-data-badge" id="todaySourceBadge">Источник · проверяем</span>
+                <span class="today-data-badge" id="todayFreshnessBadge" data-state="loading">Свежесть · проверяем</span>
+                <button class="ui-button ui-button-secondary today-refresh-button" id="todayRefreshButton" type="button" data-today-action="reload" aria-label="Повторно загрузить данные экрана Сегодня">Обновить</button>
+              </div>
+            </header>
+            <div class="today-kpi-strip" id="todayKpiStrip" data-state="loading" aria-live="polite">
+              <article class="today-kpi-cell">
+                <span>Расход</span>
+                <strong class="today-kpi-value" id="todaySpendValue">—</strong>
+                <small id="todaySpendComparison">Сравниваем со вчера</small>
+              </article>
+              <article class="today-kpi-cell">
+                <span>Лиды</span>
+                <strong class="today-kpi-value" id="todayLeadsValue">—</strong>
+                <small id="todayLeadsComparison">Сравниваем со вчера</small>
+              </article>
+              <article class="today-kpi-cell">
+                <span>Регистрации</span>
+                <strong class="today-kpi-value" id="todayRegistrationsValue">—</strong>
+                <small id="todayRegistrationsComparison">Сравниваем со вчера</small>
+              </article>
+              <article class="today-kpi-cell">
+                <span>Покупки</span>
+                <strong class="today-kpi-value" id="todayPurchasesValue">—</strong>
+                <small id="todayPurchasesComparison">Сравниваем со вчера</small>
+              </article>
+            </div>
+          </section>
           <div class="today-command-bar" id="todayPriorityBar" data-state="loading" role="status" aria-live="polite">
             <div class="today-command-copy"><span class="today-command-pulse" aria-hidden="true"></span><div><strong id="todayPriorityTitle">Определяем приоритет</strong><span id="todayPriorityDescription">Сверяем реальные данные этого workspace.</span></div></div>
             <button class="ui-button ui-button-primary" id="todayPrimaryAction" type="button" disabled>Подождите</button>
@@ -539,6 +577,35 @@
               </div>
               <div class="today-recent-list" id="todayRecentList" aria-live="polite">
                 <div class="today-list-state">Загружаем историю действий…</div>
+              </div>
+            </section>
+          </div>
+          <div class="today-intelligence" id="todayIntelligence" aria-label="Динамика, воронка и аномалии">
+            <section class="today-insight-panel" aria-labelledby="todayTrendHeading">
+              <div class="today-section-head">
+                <div><span class="today-section-eyebrow">Динамика</span><h2 id="todayTrendHeading">Сегодня и вчера</h2></div>
+                <span class="today-section-note">Одинаковые периоды</span>
+              </div>
+              <div class="today-insight-content" id="todayTrendContent" data-state="loading" aria-live="polite">
+                <div class="today-list-state">Сравниваем расходы и события…</div>
+              </div>
+            </section>
+            <section class="today-insight-panel" aria-labelledby="todayFunnelHeading">
+              <div class="today-section-head">
+                <div><span class="today-section-eyebrow">Воронка</span><h2 id="todayFunnelHeading">Путь до покупки</h2></div>
+                <span class="today-section-note">Сегодня</span>
+              </div>
+              <div class="today-insight-content" id="todayFunnelContent" data-state="loading" aria-live="polite">
+                <div class="today-list-state">Собираем события воронки…</div>
+              </div>
+            </section>
+            <section class="today-insight-panel" aria-labelledby="todayAnomaliesHeading">
+              <div class="today-section-head">
+                <div><span class="today-section-eyebrow">Кабинеты</span><h2 id="todayAnomaliesHeading">Аномалии данных</h2></div>
+                <span class="today-attention-count" id="todayAnomalyCount">—</span>
+              </div>
+              <div class="today-insight-content" id="todayAnomaliesContent" data-state="loading" aria-live="polite">
+                <div class="today-list-state">Проверяем кабинеты…</div>
               </div>
             </section>
           </div>
@@ -3359,10 +3426,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.5.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.5.0"></script>
-  <script src="/static/js/security.js?v=10.5.0"></script>
-  <script src="/static/js/i18n.js?v=10.5.0"></script>
-  <script src="/static/js/app.js?v=10.5.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.6.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.6.0"></script>
+  <script src="/static/js/security.js?v=10.6.0"></script>
+  <script src="/static/js/i18n.js?v=10.6.0"></script>
+  <script src="/static/js/app.js?v=10.6.0"></script>
 </body>
 </html>
