@@ -10217,10 +10217,13 @@
       return `
         <li class="summary-funnel-stage">
           <div class="summary-funnel-label"><span>${stage.label}</span><strong>${formatNumber(stage.value)}</strong></div>
-          <div class="summary-funnel-track" aria-hidden="true"><span style="width: ${width}%"></span></div>
+          <div class="summary-funnel-track" aria-hidden="true"><span data-summary-funnel-width="${width}"></span></div>
           <small>${conversionLabel}</small>
         </li>`;
     }).join('');
+    chart.querySelectorAll('[data-summary-funnel-width]').forEach(bar => {
+      bar.style.width = `${bar.dataset.summaryFunnelWidth}%`;
+    });
     chart.setAttribute('aria-label', `Воронка эффективности ${periodTextMap[data.period] || 'за выбранный период'}. ${ariaParts.join('. ')}`);
   }
 
