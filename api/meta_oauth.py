@@ -808,9 +808,31 @@ async def list_connections(user: User = Depends(get_current_user)):
             stmt = stmt.where(MetaConnection.owner_user_id == user.id)
         stmt = stmt.order_by(MetaConnection.updated_at.desc())
         rows = (await session.execute(stmt)).scalars().all()
+        connection_ids = [item.id for item in rows]
+        linked_accounts = []
+        if connection_ids:
+            linked_accounts = (
+                await session.execute(
+                    select(Account).where(
+                        Account.workspace_id == ws.id,
+                        Account.meta_connection_id.in_(connection_ids),
+                    )
+                )
+            ).scalars().all()
+        accounts_by_connection: dict[int, list[Account]] = {}
+        for account in linked_accounts:
+            accounts_by_connection.setdefault(account.meta_connection_id, []).append(account)
     output = []
     for item in rows:
         scopes = _json_list(item.granted_scopes)
+        item_accounts = accounts_by_connection.get(item.id, [])
+        business_managers = sorted(
+            {
+                str(account.batch_name).strip()
+                for account in item_accounts
+                if str(account.batch_name or "").strip()
+            }
+        )
         days_left: int | None = None
         if item.token_expires_at:
             diff = (_as_utc(item.token_expires_at) - now).total_seconds()
@@ -823,6 +845,9 @@ async def list_connections(user: User = Depends(get_current_user)):
                 "status": item.status,
                 "granted_scopes": scopes,
                 "missing_scopes": [s for s in REQUIRED_META_SCOPES if s not in scopes],
+                "connected_account_count": len(item_accounts),
+                "business_manager_count": len(business_managers),
+                "business_managers": business_managers,
                 "token_expires_at": item.token_expires_at.isoformat()
                 if item.token_expires_at
                 else None,
@@ -840,9 +865,10 @@ async def list_connections(user: User = Depends(get_current_user)):
 @router.delete("/connections/{connection_id}")
 async def delete_connection(
     connection_id: int,
+    revoke_permissions: bool = Query(default=False),
     user: User = Depends(get_current_user),
 ):
-    """Delete encrypted Meta credentials, revoke Meta permissions best-effort, and safely disable linked accounts."""
+    """Delete Buyerly credentials and optionally revoke Meta permissions after explicit confirmation."""
 
     async with async_session_maker() as session:
         connection, ws, _ = await _workspace_connection(
@@ -852,13 +878,26 @@ async def delete_connection(
             require_write=True,
         )
 
-        # Best-effort revocation of Meta permissions
-        try:
-            raw_token = decrypt_meta_token(connection.access_token_encrypted)
-            client = _oauth_client()
-            await client.revoke_permissions(raw_token)
-        except Exception:
-            logger.info("Meta Graph API permission revocation skipped or failed for connection %s", connection_id)
+        permissions_revoked: bool | None = None
+        if revoke_permissions:
+            permissions_revoked = False
+            try:
+                raw_token = decrypt_meta_token(connection.access_token_encrypted)
+                client = _oauth_client()
+                permissions_revoked = await client.revoke_permissions(raw_token)
+            except Exception:
+                logger.info(
+                    "Meta Graph API permission revocation failed for connection %s",
+                    connection_id,
+                )
+            if not permissions_revoked:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        "Meta не подтвердила отзыв разрешений. Подключение сохранено, "
+                        "чтобы вы могли повторить действие."
+                    ),
+                )
 
         linked_accounts = (
             await session.execute(
@@ -884,7 +923,11 @@ async def delete_connection(
                 category="MANUAL_ACTION",
                 event_type="META_CONNECTION_DISCONNECTED",
                 status="SUCCESS",
-                action="DELETE_CONNECTION",
+                action=(
+                    "REVOKE_AND_DELETE_CONNECTION"
+                    if revoke_permissions
+                    else "DELETE_CONNECTION"
+                ),
                 message=(
                     "Подключение Meta удалено; связанные кабинеты безопасно отключены."
                 ),
@@ -896,6 +939,8 @@ async def delete_connection(
                 after_state={
                     "connection_deleted": True,
                     "accounts_disabled": True,
+                    "permissions_revoke_requested": revoke_permissions,
+                    "permissions_revoked": permissions_revoked,
                 },
                 details={
                     "provider_user_id": connection.provider_user_id,
@@ -912,7 +957,13 @@ async def delete_connection(
         "connection_id": connection_id,
         "detached_account_count": len(account_ids),
         "detached_account_ids": account_ids,
-        "message": "Подключение Meta удалено. Связанные кабинеты отключены до переподключения.",
+        "permissions_revoke_requested": revoke_permissions,
+        "permissions_revoked": permissions_revoked,
+        "message": (
+            "Подключение Buyerly удалено. Разрешения Meta отозваны."
+            if permissions_revoked is True
+            else "Подключение Buyerly удалено. Связанные кабинеты отключены до переподключения."
+        ),
     }
 
 

@@ -320,6 +320,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             'class="connections-panel"',
             'class="connections-toolbar"',
             'id="fbConnectionsMobileList"',
+            'id="fbConnectionsListStatus"',
+            'id="modalMetaDisconnect"',
+            'id="metaDisconnectRevokeConfirm"',
         ):
             self.assertIn(markup_contract, self.index)
 
@@ -338,6 +341,10 @@ class TestFrontendRuleContract(unittest.TestCase):
             "document.getElementById('fbConnectionsSummaryCount')",
             "document.getElementById('fbConnectionsActiveCount')",
             "document.getElementById('fbConnectionsAccountsCount')",
+            "function getConnectionAccounts(connectionId)",
+            "window.openMetaDisconnectPrompt",
+            "window.confirmMetaDisconnect",
+            "?revoke_permissions=true",
         ):
             self.assertIn(script_contract, self.script)
 
@@ -349,6 +356,34 @@ class TestFrontendRuleContract(unittest.TestCase):
             '[data-ui-pilot="automations"] .rules-board-wrapper',
         ):
             self.assertIn(automation_contract, self.index + self.styles)
+
+    def test_meta_connection_lifecycle_has_safe_accessible_states(self):
+        for markup_contract in (
+            'id="metaAssetsEmptyTitle"',
+            'id="btnRetryMetaAssets"',
+            'id="metaInviteFeedback"',
+            'id="metaInviteRefreshBtn"',
+            'id="connectMetaRetryBtn"',
+            'aria-describedby="connectMetaPermissionsNote"',
+            'Пригласить владельца',
+        ):
+            self.assertIn(markup_contract, self.index)
+
+        for script_contract in (
+            "setFacebookConnectionsListState('loading'",
+            "window.retryFacebookConnections",
+            "window.retryMetaAssets",
+            "function announceMetaInviteFeedback",
+            "window.retryConnectMetaInvite",
+            "['success', 'connected'].includes(metaStatus)",
+            "Number(account.meta_connection_id) === Number(connectionId)",
+            "Public Meta invite routes must never be blocked by Buyerly authentication",
+            "await initConnectMetaLanding();",
+        ):
+            self.assertIn(script_contract, self.script)
+
+        self.assertNotIn("window.deleteMetaConnectionPrompt", self.script)
+        self.assertNotIn("confirm('Отключить этот профиль Facebook?", self.script)
 
     def test_all_workspace_pages_have_contained_responsive_layouts(self):
         for pilot in (
@@ -418,7 +453,7 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         modal_count = len(re.findall(r'class="modal-overlay(?:\s|\")', self.index))
         dialog_count = len(re.findall(r'class="[^"]*\bui-dialog\b', self.index))
-        self.assertEqual(modal_count, 23)
+        self.assertEqual(modal_count, 24)
         self.assertEqual(dialog_count, modal_count + 1)
         self.assertEqual(self.index.count('role="dialog" aria-modal="true"'), dialog_count)
         self.assertIn('class="quick-search-dialog ui-dialog"', self.index)

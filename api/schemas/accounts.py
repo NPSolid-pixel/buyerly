@@ -40,6 +40,7 @@ class AccountItem(BaseModel):
     custom_name: str
     note: str
     connection_type: Literal["facebook_login", "system_user"]
+    meta_connection_id: Optional[int] = None
     owner_user_id: Optional[int] = None
     workspace_id: Optional[int] = None
     owner_id: str = ""

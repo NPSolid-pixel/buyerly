@@ -27,6 +27,10 @@
   - Удалены искусственные `30%/35%` при импорте: неизвестная длительность теперь отображается честным indeterminate progress, а итог — только после ответа Meta/API.
   - Refresh, validate, reconnect и import получили единые локальные loading/error/success states и доступный `aria-live` feedback; действия длинных модальных сценариев закреплены sticky footer.
   - Motion ограничен диапазоном 140–200ms и полностью отключается при `prefers-reduced-motion`.
+  - Завершён lifecycle BL-107: connect/import/reconnect/validate/disconnect и revoke получили отдельные, честные состояния и контракты подтверждения.
+  - Обычное отключение теперь удаляет данные только из Buyerly и не отзывает разрешения в Meta; внешний revoke запускается отдельным действием и при неподтверждённом ответе Meta сохраняет подключение для retry.
+  - Таблица профилей считает кабинеты, Business Manager и расход только для соответствующего `meta_connection_id`, а active/expiring/expired/missing scopes/reconnect показываются единообразно на desktop и mobile.
+  - Приглашение переименовано в сценарий для владельца Facebook-профиля; добавлены loading/empty/error/used/expired/revoked/success состояния, retry и доступная обратная связь.
 - **Единая визуальная система Buyerly 2.0**:
   - Добавлен отдельный production UI-kit `webapp/css/ui-system.css` с общей шкалой типографики, spacing, page widths, controls, surfaces и dialog sizes.
   - Today, Automations и Efficiency получили premium operations layer: command hero, semantic accents, выразительную KPI-иерархию, lane bands и action rails без возврата к вложенным карточкам.

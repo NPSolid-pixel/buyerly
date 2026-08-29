@@ -2065,9 +2065,63 @@ textarea {
   background: var(--ui-surface-subtle);
 }
 
+.meta-invite-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.meta-invite-list-heading .meta-invite-section-label {
+  margin-bottom: 0;
+}
+
 .meta-invite-status {
   font-size: var(--ui-meta-size);
   font-weight: 600;
+}
+
+.meta-disconnect-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.meta-disconnect-impact {
+  display: grid;
+  gap: 4px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-surface-subtle);
+}
+
+.meta-disconnect-impact b {
+  color: var(--ui-ink);
+  font-size: var(--ui-label-size);
+}
+
+.meta-disconnect-impact span,
+.meta-revoke-confirm {
+  color: var(--ui-ink-secondary);
+  font-size: var(--ui-meta-size);
+  line-height: 1.5;
+}
+
+.meta-revoke-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid rgba(192, 45, 45, 0.28);
+  border-radius: var(--ui-radius-control);
+  background: var(--color-danger-light, #fff1f1);
+  cursor: pointer;
+}
+
+.meta-revoke-confirm input {
+  flex: 0 0 auto;
+  margin-top: 3px;
 }
 
 /* ----------------------------------------------------------
@@ -4162,6 +4216,13 @@ textarea {
   line-height: 1.55;
 }
 
+.connect-meta-permissions-note {
+  margin: 12px 0 0;
+  color: var(--ui-ink-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .connect-meta-loading-copy,
 .connect-meta-state-copy {
   margin: 0;
@@ -4198,6 +4259,11 @@ textarea {
 
 .connect-meta-action-icon {
   margin-right: 7px;
+}
+
+.connect-meta-action.is-busy {
+  pointer-events: none;
+  opacity: 0.75;
 }
 
 .connect-meta-state-icon {
@@ -4698,6 +4764,50 @@ textarea {
 
   .meta-sticky-actions > * {
     width: 100%;
+  }
+
+  .meta-asset-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+    padding: 12px 8px;
+  }
+
+  .meta-asset-main,
+  .meta-asset-main code,
+  .meta-asset-rule-hint {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .meta-asset-meta {
+    grid-column: 2 / -1;
+  }
+
+  .meta-asset-row > .badge {
+    max-width: 110px;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .meta-invite-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .meta-invite-row-main {
+    flex-basis: calc(100% - 96px);
+  }
+
+  .meta-invite-row-title {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .meta-invite-list-heading {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .attio-auth-footer {

@@ -14,8 +14,8 @@
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=10.2.0">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
-  <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
-  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.3.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=10.2.1">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.3.1">
 </head>
 
 <body>
@@ -562,9 +562,9 @@
               <p>Управляйте Facebook-профилями, доступом к Business Manager и состоянием токенов в одном месте.</p>
             </div>
             <div class="connections-hero-actions">
-              <button class="ui-button" type="button" onclick="window.openMetaInviteModal()" title="Отправить одноразовую ссылку байеру для подключения Facebook-профиля">
+              <button class="ui-button" type="button" onclick="window.openMetaInviteModal()" title="Отправить одноразовую ссылку владельцу Facebook-профиля">
                 <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-                <span>Пригласить байера</span>
+                <span>Пригласить владельца</span>
               </button>
               <button class="ui-button ui-button-primary" type="button" onclick="window.startMetaOAuthFlow()">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -651,7 +651,7 @@
                         <span class="attio-th-type-icon">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h4"/></svg>
                         </span>
-                        <span class="attio-th-title">Личный кабинет</span>
+                        <span class="attio-th-title">Кабинеты</span>
                       </div>
                     </div>
                   </th>
@@ -661,7 +661,7 @@
                         <span class="attio-th-type-icon">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
                         </span>
-                        <span class="attio-th-title">Бизнес-менеджеры</span>
+                        <span class="attio-th-title">Business Manager</span>
                       </div>
                     </div>
                   </th>
@@ -681,7 +681,7 @@
                         <span class="attio-th-type-icon">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                         </span>
-                        <span class="attio-th-title">Токен</span>
+                        <span class="attio-th-title">Доступ Meta</span>
                       </div>
                     </div>
                   </th>
@@ -699,6 +699,7 @@
             </table>
               </div>
               <div id="fbConnectionsMobileList" class="connections-mobile-list" aria-live="polite"></div>
+              <div id="fbConnectionsListStatus" class="connections-list-status hidden" role="status" aria-live="polite" aria-atomic="true"></div>
               <div id="fbAccountsEmptyState" class="empty-state ui-empty-state hidden">
             <div class="empty-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -3039,13 +3040,13 @@
 
     <!-- Meta Discovered Assets Modal -->
     <div id="modalMetaAssets" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalMetaAssets')">
-      <div class="modal-card ui-dialog meta-trust-dialog" role="dialog" aria-modal="true">
+      <div class="modal-card ui-dialog meta-trust-dialog" role="dialog" aria-modal="true" aria-labelledby="metaAssetsTitle" aria-describedby="metaAssetsSubtitle">
         <div class="modal-header">
           <div>
             <h3 id="metaAssetsTitle">Выберите кабинеты</h3>
             <p id="metaAssetsSubtitle" class="modal-subtitle">Отметьте рекламные кабинеты для импорта в Buyerly</p>
           </div>
-          <button class="btn-close" type="button" onclick="window.closeModal('modalMetaAssets')">&times;</button>
+          <button class="btn-close" type="button" aria-label="Закрыть" onclick="window.closeModal('modalMetaAssets')">&times;</button>
         </div>
         <div class="modal-body modal-body-scrollable">
           <ol id="metaAssetsFlowSteps" class="meta-flow-steps" aria-label="Прогресс подключения Meta">
@@ -3064,8 +3065,9 @@
             </div>
           </div>
           <div id="metaAssetsEmpty" class="empty-state hidden">
-            <h3>Доступных кабинетов не найдено</h3>
-            <p>Проверьте права Facebook-профиля или конфигурацию в Meta App Dashboard.</p>
+            <h3 id="metaAssetsEmptyTitle">Доступных кабинетов не найдено</h3>
+            <p id="metaAssetsEmptyText">У этого Facebook-профиля пока нет доступных рекламных кабинетов.</p>
+            <button id="btnRetryMetaAssets" type="button" class="btn btn-secondary hidden" onclick="window.retryMetaAssets(this)">Повторить</button>
           </div>
           <div id="metaAssetGroups" class="meta-asset-groups"></div>
         </div>
@@ -3235,15 +3237,41 @@
     <div id="toastContainer" class="toast-container"></div>
   </div>
 
+    <!-- Meta connection disconnect / revoke confirmation -->
+    <div id="modalMetaDisconnect" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalMetaDisconnect')">
+      <div class="modal-dialog ui-dialog meta-disconnect-dialog" role="dialog" aria-modal="true" aria-labelledby="metaDisconnectTitle" aria-describedby="metaDisconnectDescription">
+        <div class="modal-header">
+          <div>
+            <span class="modal-eyebrow">Управление доступом</span>
+            <h3 id="metaDisconnectTitle">Отключить от Buyerly</h3>
+          </div>
+          <button class="btn-close" type="button" aria-label="Закрыть" onclick="window.closeModal('modalMetaDisconnect')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="metaDisconnectDescription"></p>
+          <div id="metaDisconnectImpact" class="meta-disconnect-impact"></div>
+          <label id="metaDisconnectRevokeConfirmWrap" class="meta-revoke-confirm hidden">
+            <input id="metaDisconnectRevokeConfirm" type="checkbox">
+            <span>Я понимаю, что разрешения Buyerly будут отозваны в Meta для этого Facebook-профиля, в том числе в других workspace.</span>
+          </label>
+          <div id="metaDisconnectError" class="meta-inline-feedback hidden" role="alert"></div>
+        </div>
+        <div class="modal-footer meta-sticky-actions">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalMetaDisconnect')">Отмена</button>
+          <button id="btnConfirmMetaDisconnect" type="button" class="btn btn-danger" onclick="window.confirmMetaDisconnect(this)">Отключить</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ============================================== -->
     <!-- MODAL: Meta Invite Create / Manage             -->
     <!-- ============================================== -->
     <div id="modalMetaInvite" class="modal-overlay hidden" onclick="if(event.target===this)window.closeMetaInviteModal()">
-      <div class="modal-box ui-dialog" role="dialog" aria-modal="true">
+      <div class="modal-box ui-dialog" role="dialog" aria-modal="true" aria-labelledby="metaInviteModalTitle" aria-describedby="metaInviteIntro">
         <div class="modal-header">
-          <span class="modal-title">
+          <span id="metaInviteModalTitle" class="modal-title">
             <svg class="modal-title-icon" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-            Инвайт-ссылка Facebook
+            Пригласить владельца Facebook-профиля
           </span>
           <button class="modal-close btn-close" type="button" aria-label="Закрыть" onclick="window.closeMetaInviteModal()">×</button>
         </div>
@@ -3251,8 +3279,8 @@
 
           <!-- Create form -->
           <div id="metaInviteCreateSection">
-            <p class="meta-invite-intro">
-              Сгенерируйте одноразовую защищённую ссылку. Байер откроет её в антидетект-браузере и авторизует Facebook-профиль без передачи паролей или куки.
+            <p id="metaInviteIntro" class="meta-invite-intro">
+              Сгенерируйте одноразовую защищённую ссылку. Владелец откроет её в браузере, где выполнен вход в нужный Facebook-профиль, и подтвердит доступ без передачи пароля или cookies.
             </p>
             <div class="meta-invite-fields">
               <label class="meta-invite-field">
@@ -3270,7 +3298,7 @@
                 </select>
               </label>
             </div>
-            <button id="metaInviteGenerateBtn" class="btn btn-primary meta-invite-generate" onclick="window.generateMetaInvite()">
+            <button id="metaInviteGenerateBtn" type="button" class="btn btn-primary meta-invite-generate" onclick="window.generateMetaInvite(this)">
               Создать ссылку
             </button>
           </div>
@@ -3281,7 +3309,7 @@
               <p class="meta-invite-section-label">Одноразовая ссылка</p>
               <div class="meta-invite-link-row">
                 <input id="metaInviteLinkInput" type="text" readonly value="">
-                <button class="attio-header-btn" onclick="window.copyMetaInviteLink()" title="Копировать">
+                <button id="metaInviteCopyBtn" type="button" class="attio-header-btn" onclick="window.copyMetaInviteLink(this)" title="Копировать ссылку" aria-label="Копировать одноразовую ссылку">
                   <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                 </button>
               </div>
@@ -3289,10 +3317,15 @@
             </div>
           </div>
 
+          <div id="metaInviteFeedback" class="meta-inline-feedback hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+
           <!-- Invite list -->
           <div>
-            <p class="meta-invite-section-label">Активные инвайты</p>
-            <div id="metaInviteList" class="meta-invite-list">
+            <div class="meta-invite-list-heading">
+              <p class="meta-invite-section-label">История приглашений</p>
+              <button id="metaInviteRefreshBtn" type="button" class="btn btn-secondary btn-xs" onclick="window.refreshMetaInviteList(this)">Обновить</button>
+            </div>
+            <div id="metaInviteList" class="meta-invite-list" aria-live="polite">
               <p class="meta-invite-empty">Загрузка…</p>
             </div>
           </div>
@@ -3321,8 +3354,8 @@
           <div id="connectMetaCard" class="connect-meta-card">
 
             <!-- State: loading -->
-            <div id="connectMetaStateLoading">
-              <p class="connect-meta-loading-copy">Проверяем ссылку…</p>
+            <div id="connectMetaStateLoading" role="status" aria-live="polite">
+              <p class="connect-meta-loading-copy"><span class="spinner" aria-hidden="true"></span> Проверяем ссылку…</p>
             </div>
 
             <!-- State: valid -->
@@ -3330,22 +3363,24 @@
               <p class="connect-meta-title">Подключить Facebook-профиль</p>
               <p id="connectMetaLabel" class="connect-meta-label"></p>
               <p class="connect-meta-help">Нажмите кнопку ниже в браузере, где залогинен нужный Facebook-профиль. Мы не получаем доступ к паролям или cookies.</p>
-              <a id="connectMetaOAuthBtn" href="#" class="btn btn-primary connect-meta-action" onclick="window.startConnectMetaOAuth(event)">
-                <svg class="connect-meta-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                Подключить через Facebook
+              <a id="connectMetaOAuthBtn" href="#" class="btn btn-primary connect-meta-action" onclick="window.startConnectMetaOAuth(event)" aria-describedby="connectMetaPermissionsNote">
+                <svg class="connect-meta-action-icon" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                <span>Подключить через Facebook</span>
               </a>
+              <p id="connectMetaPermissionsNote" class="connect-meta-permissions-note">Buyerly запросит ads_read, ads_management и business_management. Кабинеты и правила не включаются автоматически.</p>
             </div>
 
             <!-- State: invalid / expired / used / revoked -->
-            <div id="connectMetaStateInvalid" class="hidden">
-              <div class="connect-meta-state-icon">⛔</div>
+            <div id="connectMetaStateInvalid" class="hidden" role="alert">
+              <div class="connect-meta-state-icon" aria-hidden="true">⛔</div>
               <p id="connectMetaInvalidTitle" class="connect-meta-title">Ссылка недействительна</p>
               <p id="connectMetaInvalidMsg" class="connect-meta-state-copy">Эта ссылка уже была использована, отозвана или истёк срок её действия. Попросите тимлида создать новую ссылку.</p>
+              <button id="connectMetaRetryBtn" type="button" class="btn btn-secondary connect-meta-action hidden" onclick="window.retryConnectMetaInvite()">Проверить снова</button>
             </div>
 
             <!-- State: success -->
-            <div id="connectMetaStateSuccess" class="hidden">
-              <div class="connect-meta-state-icon">✅</div>
+            <div id="connectMetaStateSuccess" class="hidden" role="status" aria-live="polite">
+              <div class="connect-meta-state-icon" aria-hidden="true">✅</div>
               <p class="connect-meta-title">Профиль подключён!</p>
               <p class="connect-meta-state-copy">Facebook-профиль успешно добавлен в рабочее пространство. Можно закрыть это окно.</p>
             </div>
@@ -3359,10 +3394,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.5.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.5.0"></script>
-  <script src="/static/js/security.js?v=10.5.0"></script>
-  <script src="/static/js/i18n.js?v=10.5.0"></script>
-  <script src="/static/js/app.js?v=10.5.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.5.4"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.5.4"></script>
+  <script src="/static/js/security.js?v=10.5.4"></script>
+  <script src="/static/js/i18n.js?v=10.5.4"></script>
+  <script src="/static/js/app.js?v=10.5.4"></script>
 </body>
 </html>

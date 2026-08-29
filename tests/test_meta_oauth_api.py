@@ -205,15 +205,20 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
             session.add(account)
             await session.commit()
 
+        fake_oauth = AsyncMock()
         transport = httpx.ASGITransport(app=self.app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.delete(
-                f"/api/meta/connections/{self.connection_id}",
-                headers=self.headers,
-            )
+        with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.delete(
+                    f"/api/meta/connections/{self.connection_id}",
+                    headers=self.headers,
+                )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["detached_account_count"], 1)
+        self.assertFalse(response.json()["permissions_revoke_requested"])
+        self.assertIsNone(response.json()["permissions_revoked"])
+        fake_oauth.revoke_permissions.assert_not_awaited()
         async with self.sessions() as session:
             connection = await session.get(MetaConnection, self.connection_id)
             account = (
@@ -235,6 +240,84 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(account.is_active)
         self.assertEqual(audit.workspace_id, self.workspace_id)
         self.assertEqual(audit.details["account_ids"], ["act_987654321"])
+        self.assertFalse(audit.after_state["permissions_revoke_requested"])
+
+    async def test_explicit_revoke_requires_meta_confirmation_before_delete(self):
+        failed_oauth = AsyncMock()
+        failed_oauth.revoke_permissions.return_value = False
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(meta_oauth_module, "_oauth_client", return_value=failed_oauth):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                failed = await client.delete(
+                    f"/api/meta/connections/{self.connection_id}?revoke_permissions=true",
+                    headers=self.headers,
+                )
+
+        self.assertEqual(failed.status_code, 502)
+        self.assertIn("Подключение сохранено", failed.json()["detail"])
+        async with self.sessions() as session:
+            self.assertIsNotNone(await session.get(MetaConnection, self.connection_id))
+
+        successful_oauth = AsyncMock()
+        successful_oauth.revoke_permissions.return_value = True
+        with patch.object(meta_oauth_module, "_oauth_client", return_value=successful_oauth):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                success = await client.delete(
+                    f"/api/meta/connections/{self.connection_id}?revoke_permissions=true",
+                    headers=self.headers,
+                )
+
+        self.assertEqual(success.status_code, 200)
+        self.assertTrue(success.json()["permissions_revoke_requested"])
+        self.assertTrue(success.json()["permissions_revoked"])
+        async with self.sessions() as session:
+            self.assertIsNone(await session.get(MetaConnection, self.connection_id))
+
+    async def test_connection_list_reports_only_its_linked_accounts_and_businesses(self):
+        async with self.sessions() as session:
+            session.add_all(
+                [
+                    Account(
+                        account_id="act_100001",
+                        name="Connection account A",
+                        workspace_id=self.workspace_id,
+                        owner_user_id=self.user_id,
+                        meta_connection_id=self.connection_id,
+                        batch_name="Business Alpha",
+                    ),
+                    Account(
+                        account_id="act_100002",
+                        name="Connection account B",
+                        workspace_id=self.workspace_id,
+                        owner_user_id=self.user_id,
+                        meta_connection_id=self.connection_id,
+                        batch_name="Business Beta",
+                    ),
+                    Account(
+                        account_id="act_100003",
+                        name="Manual account",
+                        workspace_id=self.workspace_id,
+                        owner_user_id=self.user_id,
+                        meta_connection_id=None,
+                        batch_name="Manual Business",
+                    ),
+                ]
+            )
+            await session.commit()
+
+        transport = httpx.ASGITransport(app=self.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/meta/connections", headers=self.headers)
+            accounts_response = await client.get("/api/accounts", headers=self.headers)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()[0]
+        self.assertEqual(data["connected_account_count"], 2)
+        self.assertEqual(data["business_manager_count"], 2)
+        self.assertEqual(data["business_managers"], ["Business Alpha", "Business Beta"])
+        accounts_by_id = {item["account_id"]: item for item in accounts_response.json()}
+        self.assertEqual(accounts_by_id["act_100001"]["meta_connection_id"], self.connection_id)
+        self.assertIsNone(accounts_by_id["act_100003"]["meta_connection_id"])
 
     async def test_delete_connection_blocks_viewer_and_foreign_workspace(self):
         async with self.sessions() as session:
@@ -919,5 +1002,3 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-

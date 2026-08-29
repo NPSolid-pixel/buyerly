@@ -93,6 +93,7 @@ async def list_accounts(user: User = Depends(get_current_user)):
                     connection_type=(
                         "facebook_login" if a.meta_connection_id else "system_user"
                     ),
+                    meta_connection_id=a.meta_connection_id,
                     owner_user_id=a.owner_user_id,
                     workspace_id=a.workspace_id,
                     owner_id="",
