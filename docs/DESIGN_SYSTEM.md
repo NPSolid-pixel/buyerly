@@ -20,7 +20,7 @@ ClickUp: BL-101 `86eyr6073`
 - `webapp/css/styles.css` сохраняет legacy и domain-specific поведение;
 - `webapp/css/ui-system.css` загружается последним и является единым production-контрактом геометрии, типографики, surfaces и responsive;
 - все семь authenticated-разделов помечены `data-ui-pilot` и используют одну ширину `--ui-page-max` и gutter `--ui-page-gutter`;
-- все 22 modal overlays и command palette получают `.ui-dialog`, `role="dialog"` и `aria-modal="true"` без изменения id и JavaScript handlers;
+- все 23 modal overlays и command palette получают `.ui-dialog`, `role="dialog"` и `aria-modal="true"` без изменения id и JavaScript handlers;
 - production HTML не содержит presentation-specific inline styles: разрешены только шесть стартовых `display:none` для экранов, чья видимость переключается JavaScript; вычисляемые ширины таблиц и user-configured colors остаются в runtime markup;
 - public legal pages используют ту же neutral/action palette через собственный маленький набор semantic tokens в `legal.css`.
 

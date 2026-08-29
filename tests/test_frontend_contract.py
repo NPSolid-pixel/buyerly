@@ -418,7 +418,7 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         modal_count = len(re.findall(r'class="modal-overlay(?:\s|\")', self.index))
         dialog_count = len(re.findall(r'class="[^"]*\bui-dialog\b', self.index))
-        self.assertEqual(modal_count, 22)
+        self.assertEqual(modal_count, 23)
         self.assertEqual(dialog_count, modal_count + 1)
         self.assertEqual(self.index.count('role="dialog" aria-modal="true"'), dialog_count)
         self.assertIn('class="quick-search-dialog ui-dialog"', self.index)
