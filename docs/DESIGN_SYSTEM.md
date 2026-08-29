@@ -117,7 +117,25 @@ ClickUp: BL-101 `86eyr6073`
 
 - selector: `[data-ui-pilot="connections"]`;
 - shared page header, Buttons, Table и EmptyState;
-- OAuth, invite и manual-token handlers сохранены.
+- OAuth, invite и manual-token handlers сохранены;
+- основной OAuth-сценарий начинается с value-before-OAuth dialog: пользователь до перехода в Facebook видит результат подключения, запрашиваемые permissions и влияние на автоматизации;
+- реальная последовательность одинакова на странице и в модальных окнах: `Подключение → Выбор кабинетов → Проверка доступа → Готово`;
+- завершённым отмечается только шаг, подтверждённый ответом Facebook/Meta или Buyerly API; ожидание ответа показывается indeterminate progress без вымышленных процентов;
+- refresh, validate, import и reconnect используют локальный busy-state, `aria-live` feedback и сохраняют доступный повторный action после ошибки;
+- manual-token остаётся явно техническим advanced-сценарием и не маскируется под основной OAuth flow.
+
+## Trust flow и motion contract
+
+`meta-flow-steps` применяется только к конечным процессам с реальными контрольными точками. Он не является декоративным progress bar и не должен предсказывать длительность операции.
+
+- `is-current` означает, что действие пользователя или ответ внешнего сервиса ожидается сейчас;
+- `is-complete` выставляется только после фактического завершения шага;
+- неизвестная длительность использует indeterminate track и понятный текст текущей операции;
+- ошибка завершает loading, сохраняет контекст и показывает следующий безопасный action; успешные частичные результаты не скрываются;
+- footer у длинных trust dialogs остаётся sticky, чтобы `Отмена` и primary action были доступны при любом размере viewport;
+- interaction transitions используют диапазон `140–200ms`; текущий базовый timing — `160ms` для control state и `180ms` для progress/state transition;
+- `prefers-reduced-motion: reduce` отключает движение и оставляет статическое, текстово различимое состояние;
+- секреты, токены, пароли и cookies никогда не используются как display data, progress metadata или diagnostic copy.
 
 ## Responsive contract
 

@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
   <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
-  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.2.0">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.3.0">
 </head>
 
 <body>
@@ -572,6 +572,22 @@
               </button>
             </div>
           </header>
+
+          <section class="connections-trust-flow" aria-labelledby="connectionsTrustFlowTitle">
+            <div class="connections-trust-copy">
+              <span class="connections-trust-kicker">Официальный Facebook Login</span>
+              <h2 id="connectionsTrustFlowTitle">Подключение под вашим контролем</h2>
+              <p>Buyerly запрашивает только доступ к рекламной структуре и выполняет изменения лишь по вашим правилам. Пароль и cookies остаются в Facebook.</p>
+            </div>
+            <ol class="meta-flow-steps meta-flow-steps-static" aria-label="Этапы подключения Meta">
+              <li data-meta-step="connect"><span>1</span><b>Подключение</b></li>
+              <li data-meta-step="select"><span>2</span><b>Выбор кабинетов</b></li>
+              <li data-meta-step="verify"><span>3</span><b>Проверка доступа</b></li>
+              <li data-meta-step="ready"><span>4</span><b>Готово</b></li>
+            </ol>
+          </section>
+
+          <div id="connectionsFlowFeedback" class="connections-flow-feedback hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
           <section class="connections-summary-grid" aria-label="Состояние подключений">
             <article class="connections-summary-card">
@@ -2054,16 +2070,25 @@
 
     <!-- Modal 4: Batch Import Progress -->
     <div id="modalBatchProgress" class="modal-overlay hidden">
-      <div class="modal-dialog ui-dialog" role="dialog" aria-modal="true">
+      <div class="modal-dialog ui-dialog meta-trust-dialog" role="dialog" aria-modal="true" aria-labelledby="batchProgressTitle">
         <div class="modal-header">
-          <h3>Подключение кабинетов...</h3>
+          <div>
+            <h3 id="batchProgressTitle">Проверяем доступ</h3>
+            <p id="batchProgressSubtitle" class="modal-subtitle">Buyerly подтвердит результат после ответа Meta</p>
+          </div>
         </div>
 
         <div class="modal-body">
-          <div class="progress-bar-container">
+          <ol id="batchMetaFlowSteps" class="meta-flow-steps meta-flow-steps-compact" aria-label="Прогресс подключения Meta">
+            <li data-meta-step="connect"><span>1</span><b>Подключение</b></li>
+            <li data-meta-step="select"><span>2</span><b>Выбор</b></li>
+            <li data-meta-step="verify"><span>3</span><b>Проверка</b></li>
+            <li data-meta-step="ready"><span>4</span><b>Готово</b></li>
+          </ol>
+          <div id="batchProgressTrack" class="progress-bar-container" role="progressbar" aria-label="Проверка кабинетов" aria-valuetext="Ожидаем ответ Meta">
             <div id="batchProgressBar" class="progress-bar-fill"></div>
           </div>
-          <p id="batchProgressText" class="progress-status-text">Проверка токена и кабинетов в Meta API...</p>
+          <p id="batchProgressText" class="progress-status-text" aria-live="polite">Проверяем токен и доступ к кабинетам через Meta API…</p>
           <div id="batchResultsList" class="batch-results-list"></div>
         </div>
         <div class="modal-footer">
@@ -2955,9 +2980,66 @@
       </div>
     </div>
 
+    <!-- Meta OAuth value and permissions modal -->
+    <div id="modalMetaOAuthIntro" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalMetaOAuthIntro')">
+      <div class="modal-card ui-dialog meta-trust-dialog meta-oauth-intro-dialog" role="dialog" aria-modal="true" aria-labelledby="metaOAuthIntroTitle" aria-describedby="metaOAuthIntroDescription">
+        <div class="modal-header">
+          <div>
+            <span class="modal-eyebrow">Защищённое подключение</span>
+            <h3 id="metaOAuthIntroTitle">Подключить Facebook-профиль</h3>
+            <p id="metaOAuthIntroDescription" class="modal-subtitle">Сначала объясним, что получит Buyerly и что останется под вашим контролем.</p>
+          </div>
+          <button class="btn-close" type="button" aria-label="Закрыть" onclick="window.closeModal('modalMetaOAuthIntro')">&times;</button>
+        </div>
+        <div class="modal-body modal-body-scrollable">
+          <ol id="metaOAuthIntroSteps" class="meta-flow-steps" aria-label="Этапы подключения Meta">
+            <li data-meta-step="connect"><span>1</span><b>Подключение</b></li>
+            <li data-meta-step="select"><span>2</span><b>Выбор кабинетов</b></li>
+            <li data-meta-step="verify"><span>3</span><b>Проверка доступа</b></li>
+            <li data-meta-step="ready"><span>4</span><b>Готово</b></li>
+          </ol>
+
+          <section class="meta-value-panel" aria-labelledby="metaValueTitle">
+            <div class="meta-value-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
+            <div>
+              <h4 id="metaValueTitle">Что вы получите</h4>
+              <p>Единый список доступных рекламных кабинетов, проверку состояния доступа и безопасную привязку к автоматизациям Buyerly.</p>
+            </div>
+          </section>
+
+          <section class="meta-permissions" aria-labelledby="metaPermissionsTitle">
+            <div class="meta-section-heading">
+              <h4 id="metaPermissionsTitle">Какие разрешения нужны</h4>
+              <span>Только для выбранного рабочего пространства</span>
+            </div>
+            <dl class="meta-permission-list">
+              <div><dt><code>ads_read</code></dt><dd>Показывать структуру и метрики доступных рекламных кабинетов.</dd></div>
+              <div><dt><code>business_management</code></dt><dd>Сопоставлять кабинеты с Business Manager и вашим профилем.</dd></div>
+              <div><dt><code>ads_management</code></dt><dd>Выполнять только явно настроенные вами действия автоматизаций.</dd></div>
+            </dl>
+          </section>
+
+          <div class="meta-trust-note">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <p><strong>Buyerly не видит пароль и cookies Facebook.</strong> Токен хранится на сервере в зашифрованном виде. Новые кабинеты и правила не включаются автоматически.</p>
+          </div>
+          <div id="metaOAuthIntroError" class="meta-inline-feedback hidden" role="alert"></div>
+        </div>
+        <div class="modal-footer meta-sticky-actions">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalMetaOAuthIntro')">Отмена</button>
+          <button id="btnContinueMetaOAuth" type="button" class="btn btn-primary ui-button ui-button-primary" onclick="window.continueMetaOAuthFlow(this)">
+            <span>Продолжить в Facebook</span>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Meta Discovered Assets Modal -->
     <div id="modalMetaAssets" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalMetaAssets')">
-      <div class="modal-card ui-dialog" role="dialog" aria-modal="true">
+      <div class="modal-card ui-dialog meta-trust-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <div>
             <h3 id="metaAssetsTitle">Выберите кабинеты</h3>
@@ -2966,6 +3048,12 @@
           <button class="btn-close" type="button" onclick="window.closeModal('modalMetaAssets')">&times;</button>
         </div>
         <div class="modal-body modal-body-scrollable">
+          <ol id="metaAssetsFlowSteps" class="meta-flow-steps" aria-label="Прогресс подключения Meta">
+            <li data-meta-step="connect"><span>1</span><b>Подключение</b></li>
+            <li data-meta-step="select"><span>2</span><b>Выбор кабинетов</b></li>
+            <li data-meta-step="verify"><span>3</span><b>Проверка доступа</b></li>
+            <li data-meta-step="ready"><span>4</span><b>Готово</b></li>
+          </ol>
           <div class="meta-assets-toolbar">
             <label class="meta-select-all">
               <input id="metaSelectAll" type="checkbox"> Выбрать все неподключённые
@@ -2981,7 +3069,7 @@
           </div>
           <div id="metaAssetGroups" class="meta-asset-groups"></div>
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer meta-sticky-actions">
           <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalMetaAssets')">Отмена</button>
           <button id="btnImportMetaAssets" class="btn btn-primary" type="button" disabled>
             <span>Добавить выбранные кабинеты</span>
@@ -3271,10 +3359,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.4.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.4.0"></script>
-  <script src="/static/js/security.js?v=10.4.0"></script>
-  <script src="/static/js/i18n.js?v=10.4.0"></script>
-  <script src="/static/js/app.js?v=10.4.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.5.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.5.0"></script>
+  <script src="/static/js/security.js?v=10.5.0"></script>
+  <script src="/static/js/i18n.js?v=10.5.0"></script>
+  <script src="/static/js/app.js?v=10.5.0"></script>
 </body>
 </html>

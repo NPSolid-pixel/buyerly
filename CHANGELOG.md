@@ -21,6 +21,12 @@
   - Добавлены human-readable `ЕСЛИ / ТО` preview и preflight последствий с workspace, объектами, охватом кабинетов, частотой проверки, cooldown и лимитами действия.
   - Безопасный create draft сохраняется только локально и изолирован по workspace; edit draft намеренно не восстанавливается, чтобы не перезаписать более свежую серверную версию.
   - Исправлен horizontal overflow condition editor на 390px; готовность и предупреждения больше не передаются только цветом.
+- **Доверительный Meta connection flow**:
+  - Перед Facebook Login добавлено value-before-OAuth объяснение результата, запрашиваемых permissions и влияния на автоматизации без показа или логирования секретов.
+  - Подключение, выбор кабинетов, проверка доступа и готовность собраны в единый step contract для страницы и модальных окон; завершённые шаги отмечаются только после фактического ответа.
+  - Удалены искусственные `30%/35%` при импорте: неизвестная длительность теперь отображается честным indeterminate progress, а итог — только после ответа Meta/API.
+  - Refresh, validate, reconnect и import получили единые локальные loading/error/success states и доступный `aria-live` feedback; действия длинных модальных сценариев закреплены sticky footer.
+  - Motion ограничен диапазоном 140–200ms и полностью отключается при `prefers-reduced-motion`.
 - **Единая визуальная система Buyerly 2.0**:
   - Добавлен отдельный production UI-kit `webapp/css/ui-system.css` с общей шкалой типографики, spacing, page widths, controls, surfaces и dialog sizes.
   - Today, Automations и Efficiency получили premium operations layer: command hero, semantic accents, выразительную KPI-иерархию, lane bands и action rails без возврата к вложенным карточкам.
