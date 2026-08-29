@@ -665,8 +665,6 @@ async def oauth_callback(
                             _app_redirect(
                                 return_path,
                                 meta_status="identity_mismatch",
-                                expected_user=reconnect_target.provider_user_name or reconnect_target.provider_user_id,
-                                actual_user=provider_user_name,
                             ),
                             status_code=303,
                         )
@@ -711,6 +709,54 @@ async def oauth_callback(
                     .values(is_active=True, status_label="Активен")
                 )
 
+            try:
+                await session.flush()
+            except IntegrityError:
+                await session.rollback()
+                # Handle concurrent OAuth callback creation race
+                existing = (
+                    await session.execute(
+                        select(MetaConnection).where(
+                            MetaConnection.workspace_id == target_workspace_id,
+                            MetaConnection.provider_user_id == provider_user_id,
+                        )
+                    )
+                ).scalar_one()
+                existing.provider_user_name = provider_user_name
+                existing.access_token_encrypted = encrypted_token
+                existing.granted_scopes = health["granted_scopes"]
+                existing.token_expires_at = health["token_expires_at"]
+                existing.status = health["status"]
+                existing.last_error = health["error"]
+                existing.last_validated_at = now
+                connection = existing
+
+            connection_id = connection.id
+
+            # Claim the invite in the same transaction as the connection write. This
+            # prevents a revoked/expired invite from completing after OAuth started.
+            if invite_id:
+                invite_claim = await session.execute(
+                    update(MetaConnectionInvite)
+                    .where(
+                        MetaConnectionInvite.id == invite_id,
+                        MetaConnectionInvite.workspace_id == target_workspace_id,
+                        MetaConnectionInvite.status == "pending",
+                        MetaConnectionInvite.expires_at > now,
+                    )
+                    .values(
+                        status="used",
+                        used_at=now,
+                        connected_meta_id=connection_id,
+                    )
+                )
+                if int(invite_claim.rowcount or 0) != 1:
+                    await session.rollback()
+                    return RedirectResponse(
+                        _app_redirect(return_path, meta_status="invite_invalid"),
+                        status_code=303,
+                    )
+
             session.add(
                 AuditEvent(
                     workspace_id=target_workspace_id,
@@ -730,48 +776,8 @@ async def oauth_callback(
                     correlation_id=secrets.token_hex(16),
                 )
             )
-
-            try:
-                await session.commit()
-            except IntegrityError:
-                await session.rollback()
-                # Handle concurrent OAuth callback creation race
-                existing = (
-                    await session.execute(
-                        select(MetaConnection).where(
-                            MetaConnection.workspace_id == target_workspace_id,
-                            MetaConnection.provider_user_id == provider_user_id,
-                        )
-                    )
-                ).scalar_one()
-                existing.provider_user_name = provider_user_name
-                existing.access_token_encrypted = encrypted_token
-                existing.granted_scopes = health["granted_scopes"]
-                existing.token_expires_at = health["token_expires_at"]
-                existing.status = health["status"]
-                existing.last_error = health["error"]
-                existing.last_validated_at = now
-                await session.commit()
-                connection = existing
-
+            await session.commit()
             await session.refresh(connection)
-            connection_id = connection.id
-
-            # Atomically mark the invite as used (if the OAuth flow was invite-triggered)
-            if invite_id:
-                await session.execute(
-                    update(MetaConnectionInvite)
-                    .where(
-                        MetaConnectionInvite.id == invite_id,
-                        MetaConnectionInvite.status == "pending",
-                    )
-                    .values(
-                        status="used",
-                        used_at=now,
-                        connected_meta_id=connection_id,
-                    )
-                )
-                await session.commit()
 
     except HTTPException:
         return RedirectResponse(
@@ -880,6 +886,25 @@ async def delete_connection(
 
         permissions_revoked: bool | None = None
         if revoke_permissions:
+            shared_profile_connection_id = (
+                await session.execute(
+                    select(MetaConnection.id)
+                    .where(
+                        MetaConnection.provider_user_id == connection.provider_user_id,
+                        MetaConnection.id != connection.id,
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if shared_profile_connection_id is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Этот Facebook-профиль используется в другом workspace Buyerly. "
+                        "Отзыв разрешений Meta заблокирован: используйте обычное отключение, "
+                        "чтобы не нарушить другое подключение."
+                    ),
+                )
             permissions_revoked = False
             try:
                 raw_token = decrypt_meta_token(connection.access_token_encrypted)
@@ -1185,7 +1210,7 @@ async def import_accounts(
         )
         caller_role = member.role if member else "buyer"
 
-        if connection.status != "active":
+        if connection.status not in ("active", "expiring"):
             raise HTTPException(status_code=409, detail="Сначала переподключите профиль Meta")
         try:
             access_token = decrypt_meta_token(connection.access_token_encrypted)
@@ -1225,6 +1250,13 @@ async def import_accounts(
                         )
                     ).scalar_one_or_none()
                     if existing:
+                        if (
+                            existing.workspace_id is None
+                            and not entity_is_owned_by(existing, user)
+                        ):
+                            raise RuntimeError(
+                                "Кабинет принадлежит другому пользователю и не может быть перенесён."
+                            )
                         if (
                             existing.workspace_id is not None
                             and ws is not None

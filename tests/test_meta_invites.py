@@ -14,7 +14,7 @@ Tests cover:
 import hashlib
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 from cryptography.fernet import Fernet
@@ -26,7 +26,14 @@ import api.meta_oauth as meta_oauth_module
 import api.server as server_module
 from api.server import create_app
 from core.config import settings
-from database.models import MetaConnectionInvite, MetaOAuthState, User, Workspace, WorkspaceMember
+from database.models import (
+    MetaConnection,
+    MetaConnectionInvite,
+    MetaOAuthState,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 
 from tests.test_db_helper import create_test_engine, init_test_db
 
@@ -448,6 +455,65 @@ class TestMetaInvites(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(state)
         self.assertEqual(state.invite_id, invite_id)
         self.assertEqual(state.workspace_id, self.ws_id)
+
+    async def test_revoked_invite_cannot_complete_an_oauth_flow_already_in_progress(self):
+        async with self._client() as client:
+            create_resp = await client.post(
+                "/api/meta/invites",
+                json={"label": "Revoke during OAuth", "expires_in_hours": 24},
+                headers=self._auth("token-owner"),
+            )
+            raw_token = create_resp.json()["raw_token"]
+            invite_id = create_resp.json()["id"]
+
+            start_client = MagicMock()
+            start_client.build_authorization_url.side_effect = (
+                lambda state: f"https://www.facebook.com/dialog/oauth?state={state}"
+            )
+            with patch("api.meta_oauth._oauth_client", return_value=start_client):
+                start_resp = await client.get(
+                    f"/api/meta/oauth/invite/{raw_token}", follow_redirects=False
+                )
+
+            from urllib.parse import parse_qs, urlparse
+
+            state = parse_qs(urlparse(start_resp.headers["location"]).query)["state"][0]
+            revoke_resp = await client.delete(
+                f"/api/meta/invites/{invite_id}", headers=self._auth("token-owner")
+            )
+            self.assertEqual(revoke_resp.status_code, 200)
+
+            callback_client = AsyncMock()
+            callback_client.exchange_code.return_value = {
+                "access_token": "EAAB-revoked-invite-token",
+                "identity": {"id": "meta-user-revoked-invite", "name": "Revoked Invite User"},
+                "debug": {
+                    "is_valid": True,
+                    "app_id": settings.META_APP_ID,
+                    "scopes": ["ads_read", "ads_management", "business_management"],
+                    "expires_at": 1893456000,
+                },
+            }
+            with patch("api.meta_oauth._oauth_client", return_value=callback_client):
+                callback_resp = await client.get(
+                    f"/api/meta/oauth/callback?state={state}&code=revoked-invite-code",
+                    follow_redirects=False,
+                )
+
+        self.assertEqual(callback_resp.status_code, 303)
+        self.assertIn("meta_status=invite_invalid", callback_resp.headers["location"])
+        async with self.sessions() as session:
+            connection = (
+                await session.execute(
+                    select(MetaConnection).where(
+                        MetaConnection.provider_user_id == "meta-user-revoked-invite"
+                    )
+                )
+            ).scalar_one_or_none()
+            invite = await session.get(MetaConnectionInvite, invite_id)
+        self.assertIsNone(connection)
+        self.assertEqual(invite.status, "revoked")
+        self.assertIsNone(invite.connected_meta_id)
 
     async def test_replay_attack_used_invite_cannot_start_oauth(self):
         """A used invite cannot be used to start another OAuth flow."""

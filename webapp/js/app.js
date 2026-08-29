@@ -782,7 +782,10 @@
     if (state.metaOAuth) {
       if (state.metaOAuth.selectedAccountIds) state.metaOAuth.selectedAccountIds.clear();
       else state.metaOAuth.selectedAccountIds = new Set();
+      state.metaOAuth.connections = [];
       state.metaOAuth.assets = [];
+      state.metaOAuth.activeConnectionId = null;
+      state.metaOAuth.pendingReconnectConnectionId = null;
     }
 
     state.chooseRuleTargetGroupId = null;
@@ -4416,7 +4419,6 @@
     const emptyEl = document.getElementById('fbAccountsEmptyState');
     if (!tableBody) return;
 
-    const callback = consumeMetaOAuthCallback();
     const epoch = state.workspaceEpoch || 0;
     setFacebookConnectionsListState('loading', 'Загружаем подключения и состояние доступа…');
     try {
@@ -4428,6 +4430,7 @@
 
       state.fbConnections = connections || [];
       state.accounts = accounts || [];
+      const callback = consumeMetaOAuthCallback();
       setFacebookConnectionsListState('ready');
       renderFacebookAccounts();
 
@@ -5082,8 +5085,17 @@
 
     // Load invite info from public API
     try {
+      window._connectMetaToken = null;
       document.getElementById('connectMetaRetryBtn')?.classList.add('hidden');
       const response = await fetch(`/api/meta/invites/public/${encodeURIComponent(token)}`);
+      if (response.status === 404) {
+        _connectMetaShowState('connectMetaStateInvalid');
+        const titleEl = document.getElementById('connectMetaInvalidTitle');
+        const msgEl = document.getElementById('connectMetaInvalidMsg');
+        if (titleEl) titleEl.textContent = 'Ссылка недействительна';
+        if (msgEl) msgEl.textContent = 'Ссылка не найдена или повреждена. Попросите тимлида создать новую.';
+        return;
+      }
       if (!response.ok) throw new Error('invite_lookup_failed');
       const info = await response.json();
       const wsName = document.getElementById('connectMetaWorkspaceName');

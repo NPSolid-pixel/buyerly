@@ -1,5 +1,6 @@
 import json
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -127,6 +128,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
             "is_valid": True,
             "app_id": settings.META_APP_ID,
             "scopes": ["ads_read", "ads_management", "business_management"],
+            "expires_at": int((datetime.now(timezone.utc) + timedelta(days=2)).timestamp()),
         }
         fake_oauth.discover_ad_accounts.return_value = [
             {
@@ -188,6 +190,7 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
                 connection.granted_scopes,
                 ["ads_read", "ads_management", "business_management"],
             )
+            self.assertEqual(connection.status, "expiring")
 
     async def test_delete_connection_disables_linked_accounts_and_writes_audit(self):
         async with self.sessions() as session:
@@ -272,6 +275,43 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(success.json()["permissions_revoked"])
         async with self.sessions() as session:
             self.assertIsNone(await session.get(MetaConnection, self.connection_id))
+
+    async def test_explicit_revoke_is_blocked_when_profile_is_shared_across_workspaces(self):
+        async with self.sessions() as session:
+            other_workspace = Workspace(
+                name="Shared profile workspace",
+                slug="shared-profile-workspace",
+                owner_user_id=self.user_id,
+            )
+            session.add(other_workspace)
+            await session.flush()
+            shared_connection = MetaConnection(
+                workspace_id=other_workspace.id,
+                owner_user_id=self.user_id,
+                provider_user_id="meta-user-1",
+                provider_user_name="Meta Test User",
+                access_token_encrypted=encrypt_meta_token("EAAB-shared-profile-token"),
+                status="active",
+            )
+            session.add(shared_connection)
+            await session.commit()
+            shared_connection_id = shared_connection.id
+
+        fake_oauth = AsyncMock()
+        transport = httpx.ASGITransport(app=self.app)
+        with patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.delete(
+                    f"/api/meta/connections/{self.connection_id}?revoke_permissions=true",
+                    headers=self.headers,
+                )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("другом workspace", response.json()["detail"])
+        fake_oauth.revoke_permissions.assert_not_awaited()
+        async with self.sessions() as session:
+            self.assertIsNotNone(await session.get(MetaConnection, self.connection_id))
+            self.assertIsNotNone(await session.get(MetaConnection, shared_connection_id))
 
     async def test_connection_list_reports_only_its_linked_accounts_and_businesses(self):
         async with self.sessions() as session:
@@ -533,6 +573,8 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(cb_resp.status_code, 303)
         self.assertIn("meta_status=identity_mismatch", cb_resp.headers["location"])
+        self.assertNotIn("expected_user", cb_resp.headers["location"])
+        self.assertNotIn("actual_user", cb_resp.headers["location"])
 
     async def test_multi_workspace_same_fb_profile_independent_connections(self):
         async with self.sessions() as session:
@@ -998,6 +1040,89 @@ class TestMetaOAuthApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(import_resp.status_code, 200)
         self.assertEqual(import_resp.json()["error_count"], 1)
         self.assertIn("другом рабочем пространстве", import_resp.json()["errors"][0]["error"])
+
+    async def test_import_cannot_claim_an_unscoped_legacy_account_owned_by_another_user(self):
+        async with self.sessions() as session:
+            other_user = User(
+                telegram_id="10099",
+                username="legacy-account-owner",
+                auth_token="legacy-account-owner-token",
+                role="buyer",
+                is_approved=True,
+            )
+            session.add(other_user)
+            await session.flush()
+            legacy_account = Account(
+                account_id="act_889000",
+                name="Foreign legacy account",
+                workspace_id=None,
+                owner_user_id=other_user.id,
+                access_token_encrypted=encrypt_meta_token("EAAB-foreign-legacy"),
+                meta_connection_id=None,
+            )
+            session.add(legacy_account)
+            await session.commit()
+            other_user_id = other_user.id
+
+        fake_oauth = AsyncMock()
+        fake_oauth.debug_token.return_value = {
+            "is_valid": True,
+            "app_id": settings.META_APP_ID,
+            "scopes": ["ads_read", "ads_management", "business_management"],
+        }
+        fake_oauth.discover_ad_accounts.return_value = [
+            {
+                "id": "act_889000",
+                "name": "Foreign legacy account",
+                "account_status": 1,
+                "currency": "USD",
+                "timezone_name": "UTC",
+                "business": {"id": "bm-legacy", "name": "Legacy BM"},
+            }
+        ]
+        account_info = {
+            "id": "act_889000",
+            "name": "Foreign legacy account",
+            "account_status": 1,
+            "currency": "USD",
+            "timezone_name": "UTC",
+            "status_label": "Активен",
+        }
+
+        transport = httpx.ASGITransport(app=self.app)
+        with (
+            patch.object(meta_oauth_module, "_oauth_client", return_value=fake_oauth),
+            patch.object(
+                meta_oauth_module.meta_client,
+                "get_account_info",
+                new=AsyncMock(return_value=account_info),
+            ),
+        ):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                await client.post(
+                    f"/api/meta/connections/{self.connection_id}/discover",
+                    headers=self.headers,
+                )
+                import_resp = await client.post(
+                    f"/api/meta/connections/{self.connection_id}/import",
+                    headers=self.headers,
+                    json={"account_ids": ["act_889000"]},
+                )
+
+        self.assertEqual(import_resp.status_code, 200)
+        self.assertEqual(import_resp.json()["success_count"], 0)
+        self.assertEqual(import_resp.json()["error_count"], 1)
+        self.assertIn("другому пользователю", import_resp.json()["errors"][0]["error"])
+        async with self.sessions() as session:
+            account = (
+                await session.execute(
+                    select(Account).where(Account.account_id == "act_889000")
+                )
+            ).scalar_one()
+        self.assertIsNone(account.workspace_id)
+        self.assertEqual(account.owner_user_id, other_user_id)
+        self.assertIsNone(account.meta_connection_id)
+        self.assertTrue(account.access_token_encrypted)
 
 
 if __name__ == "__main__":

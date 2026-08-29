@@ -63,4 +63,5 @@ Status: implemented; awaiting GitHub Actions
 - Local public invite success and network-error/retry states were loaded with the production assets at `390`, `768` and `1024` px; `scrollWidth === clientWidth` at every checked size.
 - Public `/connect/meta/*` routing was verified to bypass Buyerly auth; `meta_status=connected` resolves to success, including a trailing-slash URL.
 - Python modules compile and `git diff --check`, duplicate-ID and modal-count static checks pass.
+- Final review added atomic invite claiming, cross-workspace protection for global Meta revoke and owner isolation for legacy account migration; public invalid links no longer appear as retryable network failures.
 - Local pytest/unittest were intentionally not run. GitHub Actions remains the test authority.

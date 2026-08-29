@@ -376,6 +376,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             "function announceMetaInviteFeedback",
             "window.retryConnectMetaInvite",
             "['success', 'connected'].includes(metaStatus)",
+            "if (response.status === 404)",
+            "window._connectMetaToken = null",
             "Number(account.meta_connection_id) === Number(connectionId)",
             "Public Meta invite routes must never be blocked by Buyerly authentication",
             "await initConnectMetaLanding();",
