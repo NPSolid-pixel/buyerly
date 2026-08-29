@@ -56,7 +56,11 @@ echo "[INFO] Creating ephemeral sandbox database '${DRILL_DB}'..."
 docker exec "${POSTGRES_CONTAINER}" psql \
     --username="${POSTGRES_USER}" \
     --dbname="postgres" \
-    --command="DROP DATABASE IF EXISTS ${DRILL_DB} WITH (FORCE); CREATE DATABASE ${DRILL_DB};"
+    --command="DROP DATABASE IF EXISTS ${DRILL_DB} WITH (FORCE);"
+docker exec "${POSTGRES_CONTAINER}" psql \
+    --username="${POSTGRES_USER}" \
+    --dbname="postgres" \
+    --command="CREATE DATABASE ${DRILL_DB};"
 
 echo "[INFO] Executing restore into sandbox database..."
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER}" \
