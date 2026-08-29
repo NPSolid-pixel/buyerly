@@ -652,21 +652,21 @@
         const groupTitle = group ? escapeHtml(group.name) : 'Группа кабинетов';
         breadcrumbArea.innerHTML = `
           <div class="breadcrumb-title">
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px; color:var(--text-muted);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <svg class="breadcrumb-icon breadcrumb-icon-muted" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
             <span>${groupTitle}</span>
           </div>
         `;
         document.title = `${group ? group.name : 'Группа'} — Buyerly`;
       } else {
         const titles = {
-          home: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Сегодня</span>',
-          fb_accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Подключения</span>',
-          accounts: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Все кабинеты</span>',
-          rules: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Автоматизации</span>',
-          summary: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Эффективность</span>',
-          logs: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>История действий</span>',
-          add: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v16m8-8H4"/></svg><span>Добавить кабинеты</span>',
-          settings: '<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Настройки</span>'
+          home: '<svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span>Сегодня</span>',
+          fb_accounts: '<svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Подключения</span>',
+          accounts: '<svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>Все кабинеты</span>',
+          rules: '<svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Автоматизации</span>',
+          summary: '<svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg><span>Эффективность</span>',
+          logs: '<svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><span>История действий</span>',
+          add: '<svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4v16m8-8H4"/></svg><span>Добавить кабинеты</span>',
+          settings: '<svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Настройки</span>'
         };
         breadcrumbArea.innerHTML = `<div class="breadcrumb-title">${titles[tabName] || 'Buyerly'}</div>`;
         document.title = TAB_PAGE_TITLES[tabName] || 'Buyerly — AI Media Buyer';
@@ -732,8 +732,8 @@
         return `
           <div class="dropdown-item ${isActive ? 'active' : ''}" onclick="window.switchWorkspace(${w.id});">
             <div class="dropdown-item-left">
-              <div class="workspace-badge" style="width:20px;height:20px;font-size:11px;background-color:${escapeHtml(bColor)};">${escapeHtml(bText)}</div>
-              <span style="${isActive ? 'font-weight:600;' : ''}">${escapeHtml(w.name)}</span>
+              <div class="workspace-badge workspace-switcher-badge" style="background-color:${escapeHtml(bColor)};">${escapeHtml(bText)}</div>
+              <span class="workspace-switcher-name ${isActive ? 'is-active' : ''}">${escapeHtml(w.name)}</span>
             </div>
             ${isActive ? '<svg class="dropdown-check-icon" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>' : ''}
           </div>
@@ -1138,7 +1138,7 @@
     const invitesTbody = document.getElementById('wsPendingInvitesTableBody');
 
     if (membersTbody) {
-      membersTbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#898A8D;padding:16px;">Loading members...</td></tr>';
+      membersTbody.innerHTML = '<tr><td colspan="4" class="table-message">Loading members...</td></tr>';
     }
 
     try {
@@ -1154,7 +1154,7 @@
       renderWorkspaceInvitesTable(state.currentWorkspaceInvites);
     } catch (err) {
       if (membersTbody) {
-        membersTbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#EB3B3B;padding:16px;">Failed to load members: ${escapeHtml(err.message)}</td></tr>`;
+        membersTbody.innerHTML = `<tr><td colspan="4" class="table-message table-message-error">Failed to load members: ${escapeHtml(err.message)}</td></tr>`;
       }
     }
   };
@@ -1164,7 +1164,7 @@
     if (!tbody) return;
 
     if (!members || members.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#898A8D;padding:16px;">No members found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="table-message">No members found</td></tr>';
       return;
     }
 
@@ -1185,8 +1185,8 @@
               <div class="attio-member-avatar">
                 ${safeAvatar ? `<img src="${escapeHtml(safeAvatar)}" alt="">` : initial}
               </div>
-              <div style="display:flex; flex-direction:column;">
-                <span class="attio-member-name">${escapeHtml(m.full_name || m.username)} ${isCurrentUser ? '<span style="color:#898A8D;font-weight:normal;">(you)</span>' : ''}</span>
+              <div class="attio-member-identity">
+                <span class="attio-member-name">${escapeHtml(m.full_name || m.username)} ${isCurrentUser ? '<span class="attio-member-you">(you)</span>' : ''}</span>
                 <span class="attio-member-email">${escapeHtml(m.email || '')}</span>
               </div>
             </div>
@@ -1202,8 +1202,8 @@
               </select>
             `}
           </td>
-          <td style="color:#898A8D;">${joinedFormatted}</td>
-          <td style="text-align:right;">
+          <td class="table-cell-muted">${joinedFormatted}</td>
+          <td class="table-cell-actions">
             ${!isMemberOwner && !isCurrentUser && isOwnerOrAdmin ? `
               <button type="button" class="attio-btn-icon" title="Remove member" onclick="window.removeWorkspaceMember(${m.user_id}, ${escapeJsArg(m.full_name || m.username)})">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -1220,7 +1220,7 @@
     if (!tbody) return;
 
     if (!invites || invites.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#898A8D;padding:12px;">No pending invitations</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="table-message table-message-compact">No pending invitations</td></tr>';
       return;
     }
 
@@ -1230,13 +1230,13 @@
       return `
         <tr>
           <td>
-            <div style="font-weight:500; color:#101112;">${escapeHtml(targetDisplay)}</div>
+            <div class="workspace-invite-target">${escapeHtml(targetDisplay)}</div>
           </td>
           <td>
             <span class="attio-pill attio-pill-gray">${escapeHtml(inv.role)}</span>
           </td>
-          <td style="color:#898A8D;">${createdFormatted}</td>
-          <td style="text-align:right;">
+          <td class="table-cell-muted">${createdFormatted}</td>
+          <td class="table-cell-actions">
             <button type="button" class="attio-btn-icon" title="Revoke invitation" onclick="window.revokeWorkspaceInvite(${inv.id})">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
@@ -1351,7 +1351,7 @@
 
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+      submitBtn.innerHTML = '<div class="spinner ui-spinner-xs"></div>';
     }
     if (errorEl) errorEl.classList.add('hidden');
 
@@ -1448,7 +1448,7 @@
 
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+      submitBtn.innerHTML = '<div class="spinner ui-spinner-xs"></div>';
     }
     if (errorEl) errorEl.classList.add('hidden');
 
@@ -1722,7 +1722,7 @@
              ondrop="window.onGroupDrop(event, ${group.id})"
              ondragend="window.onGroupDragEnd(event)">
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-          <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${escapeHtml(group.name)}</span>
+          <span class="sidebar-group-name">${escapeHtml(group.name)}</span>
         </div>
       `;
     }).join('');
@@ -3362,7 +3362,7 @@
     const listEl = document.getElementById('bulkGroupDropdownList');
     if (!listEl) return;
     if (!state.accountGroups || state.accountGroups.length === 0) {
-      listEl.innerHTML = '<div style="padding: 6px 10px; font-size: 12px; color: var(--text-muted);">Нет созданных групп</div>';
+      listEl.innerHTML = '<div class="dropdown-empty-message">Нет созданных групп</div>';
       return;
     }
     listEl.innerHTML = state.accountGroups.map(group => `
@@ -3521,7 +3521,7 @@
         return `
           <td class="attio-td sticky-col">
             <div class="cell-entity-wrapper">
-              <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
+              <div class="table-row-check" onclick="event.stopPropagation();">
                 <input type="checkbox" class="attio-checkbox attio-row-checkbox" ${isSelected ? 'checked' : ''} onchange="window.toggleAccountSelection(${escapeJsArg(acc.account_id)}, this.checked)" title="Выбрать кабинет">
               </div>
               <div class="attio-entity-text-block">
@@ -3537,9 +3537,9 @@
         const metaPillClass = metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red');
         return `
           <td class="attio-td">
-            <span class="status-pill ${metaPillClass}" style="max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span class="status-pill table-pill-ellipsis ${metaPillClass}">
               <span class="status-dot"></span>
-              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(metaState.label)}</span>
+              <span class="inline-ellipsis">${escapeHtml(metaState.label)}</span>
             </span>
           </td>
         `;
@@ -3547,7 +3547,7 @@
         const tz = acc.timezone_name || 'UTC';
         return `
           <td class="attio-td">
-            <span style="font-size: 12px; color: var(--text-secondary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(tz)}">
+            <span class="cell-ellipsis cell-meta" title="${escapeHtml(tz)}">
               ${escapeHtml(tz)}
             </span>
           </td>
@@ -3557,35 +3557,35 @@
         const spendStr = formatMoneyOrDash(rawSpend, currency);
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(spendStr)}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(spendStr)}</span>
           </td>
         `;
       case 'cpm':
         const cpmVal = m.cpm !== undefined && m.cpm !== null ? formatMoneyOrDash(m.cpm, currency) : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cpmVal)}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(cpmVal)}</span>
           </td>
         `;
       case 'cpc':
         const cpcVal = m.cpc !== undefined && m.cpc !== null ? formatMoneyOrDash(m.cpc, currency) : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cpcVal)}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(cpcVal)}</span>
           </td>
         `;
       case 'ctr':
         const ctrVal = m.ctr !== undefined && m.ctr !== null ? `${Number(m.ctr).toFixed(2)}%` : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(ctrVal)}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(ctrVal)}</span>
           </td>
         `;
       case 'leads':
         const rawLeads = acc.today_leads !== undefined ? acc.today_leads : (m.leads !== undefined ? m.leads : '—');
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(rawLeads))}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(String(rawLeads))}</span>
           </td>
         `;
       case 'cpl':
@@ -3593,50 +3593,50 @@
         const cplStr = rawCpl !== null && rawCpl !== undefined ? formatMoneyOrDash(rawCpl, currency) : '—';
         return `
           <td class="attio-td">
-            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cplStr)}</span>
+            <span class="cell-ellipsis">${escapeHtml(cplStr)}</span>
           </td>
         `;
       case 'registrations':
         const regsVal = m.registrations !== undefined ? m.registrations : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(regsVal))}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(String(regsVal))}</span>
           </td>
         `;
       case 'cpreg':
         const cpregVal = m.cpreg !== undefined && m.cpreg !== null ? formatMoneyOrDash(m.cpreg, currency) : '—';
         return `
           <td class="attio-td">
-            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cpregVal)}</span>
+            <span class="cell-ellipsis">${escapeHtml(cpregVal)}</span>
           </td>
         `;
       case 'purchases':
         const purchVal = m.purchases !== undefined ? m.purchases : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(purchVal))}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(String(purchVal))}</span>
           </td>
         `;
       case 'cpp':
         const cppVal = m.cpp !== undefined && m.cpp !== null ? formatMoneyOrDash(m.cpp, currency) : '—';
         return `
           <td class="attio-td">
-            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(cppVal)}</span>
+            <span class="cell-ellipsis">${escapeHtml(cppVal)}</span>
           </td>
         `;
       case 'automation':
         return `
           <td class="attio-td">
-            <button class="status-pill ${autoPillClass}" type="button" onclick="window.toggleRules(${escapeJsArg(acc.account_id)}, ${!acc.rules_enabled})" style="cursor: pointer; border: none; font-family: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Нажмите, чтобы переключить автоматику">
+            <button class="status-pill table-pill-button ${autoPillClass}" type="button" onclick="window.toggleRules(${escapeJsArg(acc.account_id)}, ${!acc.rules_enabled})" title="Нажмите, чтобы переключить автоматику">
               <span class="status-dot"></span>
-              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${autoPillText}</span>
+              <span class="inline-ellipsis">${autoPillText}</span>
             </button>
           </td>
         `;
       case 'currency':
         return `
           <td class="attio-td">
-            <span class="mono" style="font-size: 12px; font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span class="mono cell-ellipsis cell-meta cell-medium">
               ${escapeHtml(currency)}
             </span>
           </td>
@@ -3645,7 +3645,7 @@
         const bmName = acc.business_name || acc.batch_name || '—';
         return `
           <td class="attio-td">
-            <span style="font-size: 12px; color: var(--text-secondary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(bmName)}">
+            <span class="cell-ellipsis cell-meta" title="${escapeHtml(bmName)}">
               ${escapeHtml(bmName)}
             </span>
           </td>
@@ -3654,7 +3654,7 @@
         const noteText = String(acc.note || '').trim();
         return `
           <td class="attio-td">
-            <span style="color: ${noteText ? 'var(--text-primary)' : 'var(--text-muted)'}; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(noteText || '')}">
+            <span class="cell-ellipsis cell-meta ${noteText ? 'cell-note-filled' : 'cell-note-empty'}" title="${escapeHtml(noteText || '')}">
               ${escapeHtml(noteText || '—')}
             </span>
           </td>
@@ -3663,49 +3663,49 @@
         const spendCapVal = acc.spend_cap ? formatMoneyOrDash(acc.spend_cap, currency) : '—';
         return `
           <td class="attio-td">
-            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(spendCapVal)}</span>
+            <span class="cell-ellipsis">${escapeHtml(spendCapVal)}</span>
           </td>
         `;
       case 'amount_spent':
         const amountSpentVal = acc.amount_spent ? formatMoneyOrDash(acc.amount_spent, currency) : '—';
         return `
           <td class="attio-td">
-            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(amountSpentVal)}</span>
+            <span class="cell-ellipsis">${escapeHtml(amountSpentVal)}</span>
           </td>
         `;
       case 'impressions':
         const impVal = m.impressions !== undefined ? m.impressions : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(impVal))}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(String(impVal))}</span>
           </td>
         `;
       case 'reach':
         const reachVal = m.reach !== undefined ? m.reach : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(reachVal))}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(String(reachVal))}</span>
           </td>
         `;
       case 'frequency':
         const freqVal = m.frequency !== undefined && m.frequency !== null ? Number(m.frequency).toFixed(2) : '—';
         return `
           <td class="attio-td">
-            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(freqVal)}</span>
+            <span class="cell-ellipsis">${escapeHtml(freqVal)}</span>
           </td>
         `;
       case 'clicks':
         const clicksVal = m.clicks !== undefined ? m.clicks : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(clicksVal))}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(String(clicksVal))}</span>
           </td>
         `;
       case 'link_clicks':
         const linkClicksVal = m.link_clicks !== undefined ? m.link_clicks : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(linkClicksVal))}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(String(linkClicksVal))}</span>
           </td>
         `;
       case 'link_ctr':
@@ -3713,38 +3713,38 @@
         const lCtrStr = lCtr !== null ? `${Number(lCtr).toFixed(2)}%` : '—';
         return `
           <td class="attio-td">
-            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(lCtrStr)}</span>
+            <span class="cell-ellipsis">${escapeHtml(lCtrStr)}</span>
           </td>
         `;
       case 'roas':
         const roasVal = m.roas !== undefined && m.roas !== null ? `${Number(m.roas).toFixed(2)}x` : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(roasVal)}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(roasVal)}</span>
           </td>
         `;
       case 'landing_page_views':
         const lpvVal = m.landing_page_views !== undefined ? m.landing_page_views : '—';
         return `
           <td class="attio-td">
-            <span class="num-bold" style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(String(lpvVal))}</span>
+            <span class="num-bold cell-ellipsis">${escapeHtml(String(lpvVal))}</span>
           </td>
         `;
       case 'cost_per_lpv':
         const costLpv = m.cost_per_lpv !== undefined && m.cost_per_lpv !== null ? formatMoneyOrDash(m.cost_per_lpv, currency) : '—';
         return `
           <td class="attio-td">
-            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(costLpv)}</span>
+            <span class="cell-ellipsis">${escapeHtml(costLpv)}</span>
           </td>
         `;
       case 'rules':
         return `
           <td class="attio-td">
-            <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; min-width: 0;">
-              <span class="status-pill ${activeRules.length > 0 ? 'green' : 'amber'}" style="font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
+            <div class="account-rules-cell">
+              <span class="status-pill account-rules-pill ${activeRules.length > 0 ? 'green' : 'amber'}">
                 ${activeRules.length > 0 ? `${activeRules.length} ${pluralize(activeRules.length, 'правило', 'правила', 'правил')}` : 'Без правил'}
               </span>
-              <button class="btn btn-secondary btn-xs" type="button" onclick="window.openAssignRuleModal(${escapeJsArg(acc.account_id)})" style="padding: 2px 5px; font-size: 10.5px; flex-shrink: 0;">
+              <button class="btn btn-secondary btn-xs account-rules-action" type="button" onclick="window.openAssignRuleModal(${escapeJsArg(acc.account_id)})">
                 Настроить
               </button>
             </div>
@@ -3838,9 +3838,9 @@
               data-col-id="${colId}" 
               id="th-col-${colId}"
               style="width: ${width}px; max-width: ${width}px; min-width: ${width}px;">
-            <div class="attio-th-content" onclick="window.setAccountsSort('name')" style="cursor: pointer;" title="Нажмите для сортировки">
+            <div class="attio-th-content attio-th-sortable" onclick="window.setAccountsSort('name')" title="Нажмите для сортировки">
               <div class="attio-th-left">
-                <div style="display: flex; align-items: center; flex-shrink: 0;" onclick="event.stopPropagation();">
+                <div class="table-row-check" onclick="event.stopPropagation();">
                   <input type="checkbox" id="selectAllAccountsCheckbox" class="attio-checkbox" ${allSelected ? 'checked' : ''} onchange="window.toggleSelectAllAccounts(this.checked)" title="Выбрать все кабинеты">
                 </div>
                 ${colDef.iconSvg ? `<span class="attio-th-type-icon">${colDef.iconSvg}</span>` : ''}
@@ -3978,7 +3978,7 @@
         const colDef = ACCOUNTS_COLUMNS_DEF[colId] || {};
         const width = state.accountsColumnWidths[colId] || colDef.defaultWidth || 130;
         return `<col id="col-track-${colId}" style="width: ${width}px; max-width: ${width}px; min-width: ${width}px;">`;
-      }).join('') + '<col style="width: 120px; max-width: 120px; min-width: 120px;"><col class="col-track-spacer" style="width: 100%;">';
+      }).join('') + '<col class="accounts-add-column"><col class="col-track-spacer">';
 
       listEl.innerHTML = `
         <div class="accounts-desktop-grid attio-table-viewport" id="accountsTableViewport">
@@ -3989,7 +3989,7 @@
             <thead>
               <tr>
                 ${theadHtml}
-                <th class="attio-th attio-th-add-col" style="width: 120px; max-width: 120px; min-width: 120px;">
+                <th class="attio-th attio-th-add-col accounts-add-column">
                   <button type="button" class="attio-add-col-btn" onclick="window.toggleAddColumnPopover(event)" title="Добавить колонку в таблицу">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     <span>Добавить колонку</span>
@@ -4148,45 +4148,45 @@
 
       return `
         <tr class="attio-row">
-          <td class="attio-td sticky-col" style="width: 280px;">
+          <td class="attio-td sticky-col connections-col-profile">
             <div class="cell-entity-wrapper">
               <div class="cell-icon-container">
                 <div class="cell-entity-icon fb-icon" title="Facebook Профиль">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 </div>
               </div>
-              <div style="min-width: 0; overflow: hidden; flex: 1;">
+              <div class="connection-entity-copy">
                 <div class="account-text-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
-                <div class="account-text-id">UID: ${escapeHtml(uid)} · <span class="fb-rk-badge" style="display:inline-block; margin-left:2px;">${rkCount} рк</span></div>
+                <div class="account-text-id">UID: ${escapeHtml(uid)} · <span class="fb-rk-badge fb-rk-badge-inline">${rkCount} рк</span></div>
               </div>
             </div>
           </td>
-          <td class="attio-td" style="width: 220px;">
-            <div style="font-weight: 500; font-size: 12.5px; color: var(--text-primary);">${escapeHtml(name)}</div>
-            <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 1px;">
+          <td class="attio-td connections-col-name">
+            <div class="connection-profile-name">${escapeHtml(name)}</div>
+            <div class="connection-profile-id">
               ID: ${escapeHtml(uid)}
             </div>
           </td>
-          <td class="attio-td" style="width: 220px;">
+          <td class="attio-td connections-col-email">
             <div>
-              <span class="fb-bm-chip">${escapeHtml(name)} <b style="color: var(--text-muted); font-size: 10px; margin-left: 2px;">${rkCount} рк</b></span>
+              <span class="fb-bm-chip">${escapeHtml(name)} <b class="fb-bm-chip-count">${rkCount} рк</b></span>
             </div>
           </td>
-          <td class="attio-td" style="width: 140px;">
+          <td class="attio-td connections-col-status">
             <span class="num-bold">${escapeHtml(spendFormatted)}</span>
           </td>
-          <td class="attio-td" style="width: 160px;">
+          <td class="attio-td connections-col-date">
             <span class="status-pill ${tokenClass}" title="${escapeHtml(tooltipParts)}">
               <span class="status-dot"></span>
               ${tokenText}
             </span>
           </td>
-          <td class="attio-td" style="width: 130px; text-align: right;">
-            <div style="display: inline-flex; align-items: center; gap: 4px;">
-              <button class="btn btn-secondary btn-xs" onclick="window.validateMetaConnection(${conn.id})" title="Проверить статус токена" style="padding: 2px 6px;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
-              <button class="btn btn-secondary btn-xs" onclick="window.reconnectMetaConnection(${conn.id})" title="Переподключить токен" style="padding: 2px 6px; color: var(--accent-primary);"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></button>
-              <button class="btn btn-secondary btn-xs" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты" style="padding: 2px 6px;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
-              <button class="btn btn-secondary btn-xs" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение" style="padding: 2px 6px; color: #BA2525;"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+          <td class="attio-td connections-col-actions">
+            <div class="connection-row-actions">
+              <button class="btn btn-secondary btn-xs connection-row-action" onclick="window.validateMetaConnection(${conn.id})" title="Проверить статус токена"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
+              <button class="btn btn-secondary btn-xs connection-row-action connection-row-action-primary" onclick="window.reconnectMetaConnection(${conn.id})" title="Переподключить токен"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></button>
+              <button class="btn btn-secondary btn-xs connection-row-action" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
+              <button class="btn btn-secondary btn-xs connection-row-action connection-row-action-danger" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
           </td>
           <td class="attio-td attio-td-spacer"></td>
@@ -4232,7 +4232,7 @@
             <div class="connections-mobile-card-head">
               <div class="connections-mobile-identity">
                 <div class="connections-mobile-avatar" aria-hidden="true">${escapeHtml(initial)}</div>
-                <div style="min-width: 0;">
+                <div class="connections-mobile-copy">
                   <div class="connections-mobile-name">${escapeHtml(name)}</div>
                   <div class="connections-mobile-id">UID: ${escapeHtml(uid)}</div>
                 </div>
@@ -4350,18 +4350,18 @@
     const modal = document.getElementById('modalMetaInvite');
     if (!modal) return;
     // Reset form state
-    document.getElementById('metaInviteResultSection').style.display = 'none';
-    document.getElementById('metaInviteCreateSection').style.display = '';
+    document.getElementById('metaInviteResultSection').classList.add('hidden');
+    document.getElementById('metaInviteCreateSection').classList.remove('hidden');
     document.getElementById('metaInviteLabelInput').value = '';
     document.getElementById('metaInviteTtlSelect').value = '24';
     document.getElementById('metaInviteGenerateBtn').disabled = false;
-    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
     await window.refreshMetaInviteList();
   };
 
   window.closeMetaInviteModal = function () {
     const modal = document.getElementById('modalMetaInvite');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.classList.add('hidden');
   };
 
   window.generateMetaInvite = async function () {
@@ -4377,7 +4377,7 @@
         body: JSON.stringify({ label, expires_in_hours: expiresInHours }),
       });
       document.getElementById('metaInviteLinkInput').value = data.invite_url || data.raw_token || '';
-      document.getElementById('metaInviteResultSection').style.display = '';
+      document.getElementById('metaInviteResultSection').classList.remove('hidden');
       await window.refreshMetaInviteList();
     } catch (err) {
       showToast(err.message || 'Ошибка создания инвайт-ссылки', 'error');
@@ -4404,25 +4404,25 @@
     try {
       const invites = await apiRequest('/api/meta/invites');
       if (!invites || !invites.length) {
-        container.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px 0;">Нет активных инвайтов</p>';
+        container.innerHTML = '<p class="meta-invite-empty">Нет активных инвайтов</p>';
         return;
       }
       const statusLabel = { pending: 'Активна', used: 'Использована', revoked: 'Отозвана', expired: 'Истекла' };
-      const statusColor = { pending: 'var(--color-success, #22c55e)', used: 'var(--text-tertiary)', revoked: 'var(--color-danger, #ef4444)', expired: 'var(--text-tertiary)' };
+      const statusClass = { pending: 'is-pending', used: 'is-used', revoked: 'is-revoked', expired: 'is-expired' };
       container.innerHTML = invites.map(inv => `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(inv.label || inv.token_prefix)}</div>
-            <div style="font-size:11px;color:var(--text-tertiary);">Истекает: ${new Date(inv.expires_at).toLocaleString('ru')}</div>
+        <div class="meta-invite-row">
+          <div class="meta-invite-row-main">
+            <div class="meta-invite-row-title">${escHtml(inv.label || inv.token_prefix)}</div>
+            <div class="meta-invite-expiry">Истекает: ${new Date(inv.expires_at).toLocaleString('ru')}</div>
           </div>
-          <span style="font-size:11px;font-weight:600;color:${statusColor[inv.status] || 'var(--text-tertiary)'};">${statusLabel[inv.status] || inv.status}</span>
-          ${inv.status === 'pending' ? `<button class="attio-header-btn" onclick="window.revokeMetaInvite(${inv.id})" title="Отозвать" style="color:var(--color-danger,#ef4444);">
+          <span class="meta-invite-status ${statusClass[inv.status] || ''}">${statusLabel[inv.status] || escHtml(inv.status)}</span>
+          ${inv.status === 'pending' ? `<button class="attio-header-btn meta-invite-revoke" onclick="window.revokeMetaInvite(${inv.id})" title="Отозвать">
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>` : ''}
         </div>
       `).join('');
     } catch (err) {
-      container.innerHTML = '<p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px 0;">Ошибка загрузки инвайтов</p>';
+      container.innerHTML = '<p class="meta-invite-empty">Ошибка загрузки инвайтов</p>';
     }
   };
 
@@ -4448,7 +4448,7 @@
   function _connectMetaShowState(stateId) {
     ['connectMetaStateLoading','connectMetaStateValid','connectMetaStateInvalid','connectMetaStateSuccess'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.style.display = (id === stateId) ? '' : 'none';
+      if (el) el.classList.toggle('hidden', id !== stateId);
     });
   }
 
@@ -4461,7 +4461,7 @@
     if (!isSuccess && !token) return; // not a connect/meta page
 
     const landing = document.getElementById('connectMetaLanding');
-    if (landing) landing.style.display = 'block';
+    if (landing) landing.classList.remove('hidden');
     // Hide main app shell
     const shell = document.getElementById('app') || document.getElementById('appContainer');
     if (shell) shell.style.display = 'none';
@@ -4955,7 +4955,7 @@
             <span class="rule-conditions-text">${escapeHtml(conditionsSummary || 'Без условий')}</span>
           </div>
           <div class="rule-card-meta-right">
-            ${linkedCount > 0 ? `<span class="rule-link-badge active" title="Привязано кабинетов"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:2px; vertical-align:-1px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${linkedCount}</span>` : ''}
+            ${linkedCount > 0 ? `<span class="rule-link-badge active" title="Привязано кабинетов"><svg class="rule-link-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${linkedCount}</span>` : ''}
             <span class="rule-meta-tag" title="Интервал проверки">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               ${p.check_interval_minutes || 5}м
@@ -5050,7 +5050,7 @@
 
     let groupsHtml = '';
     if (matchingGroups.length === 0) {
-      groupsHtml = '<div class="rules-column-empty" style="padding: 14px 0; text-align: center; color: #898a8d; font-size: 12px;">Группы не найдены</div>';
+      groupsHtml = '<div class="rules-column-empty rules-column-empty-compact">Группы не найдены</div>';
     } else {
       groupsHtml = matchingGroups.map((group) => {
         const colorName = group.color || 'purple';
@@ -5808,7 +5808,7 @@
 
     if (state.chooseRuleFilteredList.length === 0) {
       container.innerHTML = `
-        <div style="text-align:center; padding: 18px 10px; color: var(--text-muted); font-size: 12.5px;">
+        <div class="modal-list-empty">
           Правил не найдено. Нажмите «Создать новое правило» ниже.
         </div>
       `;
@@ -6483,7 +6483,7 @@
 
     const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
     if (breadcrumbArea) {
-      breadcrumbArea.innerHTML = `<div class="breadcrumb-title"><svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span></div>`;
+      breadcrumbArea.innerHTML = `<div class="breadcrumb-title"><svg class="breadcrumb-icon" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg><span>Правила</span></div>`;
     }
     document.title = 'Правила — Buyerly';
   };
@@ -6523,9 +6523,9 @@
     const breadcrumbArea = document.getElementById('headerBreadcrumbArea');
     if (breadcrumbArea) {
       breadcrumbArea.innerHTML = `
-        <div class="breadcrumb-title" style="display:flex; align-items:center; gap:6px;">
-          <span style="cursor:pointer; color:var(--text-muted);" onclick="window.closeRuleRecordPage()">Правила</span>
-          <span style="color:var(--text-muted);">/</span>
+        <div class="breadcrumb-title breadcrumb-trail">
+          <span class="breadcrumb-back" onclick="window.closeRuleRecordPage()">Правила</span>
+          <span class="breadcrumb-separator">/</span>
           <span>${escapeHtml(preset.name || 'Правило')}</span>
         </div>
       `;
@@ -6546,7 +6546,7 @@
     // Navigation arrows & pill
     const pill = document.getElementById('recordNavPositionPill');
     if (pill) {
-      pill.innerHTML = `${posIndex} из ${totalCount} в rules &bull; <span style="font-weight:600;">${escapeHtml(groupName)}</span>`;
+      pill.innerHTML = `${posIndex} из ${totalCount} в rules &bull; <span class="record-nav-group">${escapeHtml(groupName)}</span>`;
     }
     const btnPrev = document.getElementById('btnPrevRecord');
     const btnNext = document.getElementById('btnNextRecord');
@@ -6601,7 +6601,7 @@
         const w = winLabels[c.time_window] || c.time_window;
         const val = ['spend', 'cpl', 'cpreg', 'cpp', 'cpc'].includes(c.metric) ? `$${c.value}` : (c.metric === 'ctr' ? `${c.value}%` : `${c.value} шт`);
         return `${m} ${op} ${val} (${w})`;
-      }).join((preset.condition_logic || 'and').toUpperCase() === 'OR' ? ' <b style="color:var(--accent-primary)">ИЛИ</b> ' : ' <b style="color:var(--accent-primary)">И</b> ');
+      }).join((preset.condition_logic || 'and').toUpperCase() === 'OR' ? ' <b class="condition-logic-join">ИЛИ</b> ' : ' <b class="condition-logic-join">И</b> ');
 
       const groupColor = parentGroup ? (state.ruleGroupColors[parentGroup.id] || 'purple') : 'gray';
 
@@ -6612,7 +6612,7 @@
         </div>
         <div class="record-detail-row">
           <span class="record-detail-key">Группа</span>
-          <span class="record-detail-val" style="display:inline-flex;align-items:center;gap:6px;"><span class="rules-column-dot dot-${groupColor}"></span> <span>${escapeHtml(groupName)}</span></span>
+          <span class="record-detail-val record-detail-group"><span class="rules-column-dot dot-${groupColor}"></span> <span>${escapeHtml(groupName)}</span></span>
         </div>
         <div class="record-detail-row">
           <span class="record-detail-key">Логика</span>
@@ -6620,7 +6620,7 @@
         </div>
         <div class="record-detail-row">
           <span class="record-detail-key">Условия</span>
-          <span class="record-detail-val" style="font-size: 12px; line-height: 1.4;">${conditionsFormatted || '—'}</span>
+          <span class="record-detail-val record-detail-conditions">${conditionsFormatted || '—'}</span>
         </div>
         ${preset.action === 'increase_budget' && preset.budget_max_daily ? `
         <div class="record-detail-row">
@@ -6654,7 +6654,7 @@
         `;
       } else {
         groupsList.innerHTML = `
-          <div class="record-group-pill" style="color:var(--text-muted);">
+          <div class="record-group-pill record-group-pill-muted">
             <span class="rules-column-dot dot-gray"></span>
             <span>Без группы (не в колонке)</span>
           </div>
@@ -6670,18 +6670,20 @@
       }
     });
 
-    const accountsBadge = document.getElementById('recordAccountsCountBadge');
-    if (accountsBadge) accountsBadge.textContent = String(linkedAccounts.length);
+    ['recordAccountsCountBadge', 'recordAccountsToolbarCountBadge'].forEach((badgeId) => {
+      const accountsBadge = document.getElementById(badgeId);
+      if (accountsBadge) accountsBadge.textContent = String(linkedAccounts.length);
+    });
 
     // Populate Accounts Tab
     const accountsContainer = document.getElementById('recordAccountsList');
     if (accountsContainer) {
       if (linkedAccounts.length === 0) {
         accountsContainer.innerHTML = `
-          <div class="record-empty-state" style="text-align:center; padding: 40px 20px;">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom: 10px; opacity: 0.6;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
-            <div style="font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Правило не привязано к кабинетам</div>
-            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Привяжите правило к рекламным кабинетам, чтобы воркер начал проверять условия.</div>
+          <div class="record-empty-state record-empty-state-centered">
+            <svg class="record-empty-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+            <div class="record-empty-title">Правило не привязано к кабинетам</div>
+            <div class="record-empty-copy">Привяжите правило к рекламным кабинетам, чтобы воркер начал проверять условия.</div>
             <button type="button" class="btn btn-primary btn-sm" onclick="window.openLinkRuleAccountsModal(${preset.id})">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               <span>Привязать к кабинетам</span>
@@ -6694,7 +6696,7 @@
             <div class="record-account-left">
               <div class="record-account-name">
                 <span>${escapeHtml(acc.custom_name || acc.name)}</span>
-                ${acc.custom_name ? `<span style="font-size:11px; color:var(--text-muted); font-weight:400;">(${escapeHtml(acc.name)})</span>` : ''}
+                ${acc.custom_name ? `<span class="account-native-name">(${escapeHtml(acc.name)})</span>` : ''}
               </div>
               <div class="record-account-id">
                 ID: ${escapeHtml(acc.account_id)} &bull; ${acc.currency || 'USD'} ${acc.batch_name ? `&bull; ${escapeHtml(acc.batch_name)}` : ''}
@@ -6786,7 +6788,7 @@
 
     if (filteredAccounts.length === 0) {
       listEl.innerHTML = `
-        <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">
+        <div class="modal-list-empty modal-list-empty-roomy">
           ${q ? 'Кабинеты не найдены' : 'В этом воркспейсе пока нет рекламных кабинетов'}
         </div>
       `;
@@ -6797,15 +6799,15 @@
       const isSelected = state.linkRuleSelectedAccountIds.has(acc.account_id);
       const attachedRulesCount = (acc.active_rules || []).length;
       return `
-        <div class="choose-group-item ${isSelected ? 'selected' : ''}" style="cursor: pointer;" onclick="window.toggleLinkAccountSelection(${escapeJsArg(acc.account_id)})">
-          <div class="choose-group-item-left" style="gap: 12px;">
+        <div class="choose-group-item choose-group-item-clickable ${isSelected ? 'selected' : ''}" onclick="window.toggleLinkAccountSelection(${escapeJsArg(acc.account_id)})">
+          <div class="choose-group-item-left choose-group-item-left-roomy">
             <input type="checkbox" class="link-account-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); window.toggleLinkAccountSelection(${escapeJsArg(acc.account_id)})">
             <div>
-              <div class="choose-group-item-name" style="font-weight: 600;">
+              <div class="choose-group-item-name choose-group-item-name-strong">
                 ${escapeHtml(acc.custom_name || acc.name)}
-                ${acc.custom_name ? `<span style="font-size:11px; color:var(--text-muted); font-weight:400;">(${escapeHtml(acc.name)})</span>` : ''}
+                ${acc.custom_name ? `<span class="account-native-name">(${escapeHtml(acc.name)})</span>` : ''}
               </div>
-              <div style="font-size: 11px; color: var(--text-muted);">
+              <div class="account-selection-meta">
                 ${escapeHtml(acc.account_id)} &bull; ${acc.currency || 'USD'} ${acc.batch_name ? `&bull; ${escapeHtml(acc.batch_name)}` : ''}
               </div>
             </div>
@@ -6928,7 +6930,7 @@
 
       if (events.length === 0) {
         const emptyHtml = `
-          <div style="padding: 16px 10px; color: var(--text-muted); font-size: 12.5px; text-align: center;">
+          <div class="record-activity-empty">
             Событий и срабатываний по этому правилу пока не зафиксировано.
           </div>
         `;
@@ -6946,10 +6948,10 @@
             <div class="record-activity-text">
               <b>${escapeHtml(evt.actor_id || 'Бот Buyerly')}</b>
               <span>${escapeHtml(evt.message || evt.event_type || 'Выполнил проверку')}</span>
-              ${evt.account_name ? `<span style="color:var(--text-muted)"> &bull; ${escapeHtml(evt.account_name)}</span>` : ''}
-              ${evt.adset_name ? `<span style="color:var(--text-muted)"> &bull; адсет: ${escapeHtml(evt.adset_name)}</span>` : ''}
+              ${evt.account_name ? `<span class="record-activity-meta"> &bull; ${escapeHtml(evt.account_name)}</span>` : ''}
+              ${evt.adset_name ? `<span class="record-activity-meta"> &bull; адсет: ${escapeHtml(evt.adset_name)}</span>` : ''}
             </div>
-            <div class="record-activity-time" style="display:inline-flex;align-items:center;gap:5px;"><span class="rules-column-dot ${statusDotClass}" style="width:6px;height:6px;"></span> ${timeAgo}</div>
+            <div class="record-activity-time record-activity-time-with-status"><span class="rules-column-dot record-activity-status-dot ${statusDotClass}"></span> ${timeAgo}</div>
           </div>
         `;
       };
@@ -6961,7 +6963,7 @@
         fullFeed.innerHTML = events.map(renderItem).join('');
       }
     } catch (e) {
-      if (overviewFeed) overviewFeed.innerHTML = '<div style="color:var(--text-muted); font-size:12px;">Логи временно недоступны</div>';
+      if (overviewFeed) overviewFeed.innerHTML = '<div class="record-activity-unavailable">Логи временно недоступны</div>';
     }
   };
 
@@ -6982,7 +6984,7 @@
     grid.innerHTML = `
       <div class="record-highlight-card">
         <span class="record-highlight-label">Статус</span>
-        <span class="record-highlight-value" style="color: var(--color-success, #02ad6e);">Активно</span>
+        <span class="record-highlight-value record-highlight-success">Активно</span>
       </div>
       <div class="record-highlight-card">
         <span class="record-highlight-label">Срабатываний сегодня</span>
@@ -6990,7 +6992,7 @@
       </div>
       <div class="record-highlight-card">
         <span class="record-highlight-label">Последнее действие</span>
-        <span class="record-highlight-value" style="font-size: 13.5px;">${lastTriggeredText}</span>
+        <span class="record-highlight-value record-highlight-compact">${lastTriggeredText}</span>
       </div>
       <div class="record-highlight-card">
         <span class="record-highlight-label">Кабинетов привязано</span>
@@ -7639,7 +7641,7 @@
         return `
           <div class="assign-group-item ${complete ? 'complete' : ''}">
             <div class="assign-group-copy">
-              <b>${complete ? '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>' : ''}${escapeHtml(group.name)}</b>
+              <b>${complete ? '<svg class="inline-check-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>' : ''}${escapeHtml(group.name)}</b>
               <small>${escapeHtml(detail)}</small>
             </div>
             <button class="btn ${complete ? 'btn-secondary' : 'btn-primary'} btn-sm" ${complete ? 'disabled' : ''} onclick="window.pickRuleGroupForAccount(${group.id})">
@@ -7652,8 +7654,8 @@
     const listEl = document.getElementById('assignPresetsList');
     if (!state.presets || state.presets.length === 0) {
       listEl.innerHTML = `
-        <div style="text-align:center; padding: 24px 12px; color:var(--tg-hint);">
-          <p style="margin-bottom:8px; font-size:13px;">У вас пока нет сохраненных правил.</p>
+        <div class="assign-rules-empty">
+          <p>У вас пока нет сохраненных правил.</p>
         </div>
       `;
     } else {
@@ -7672,10 +7674,10 @@
         return `
           <div class="assign-preset-item ${isCurrent ? 'active' : ''}" onclick="window.${isCurrent ? 'detachRuleFromCurrentAccount' : 'pickRuleForAccount'}(${p.id})">
             <div class="assign-preset-info">
-              <div class="assign-preset-title">${isCurrent ? '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display:inline-block;vertical-align:middle;margin-right:2px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>' : ''}${escapeHtml(p.name)}</div>
+              <div class="assign-preset-title">${isCurrent ? '<svg class="inline-check-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>' : ''}${escapeHtml(p.name)}</div>
               <div class="assign-preset-sub">${actLabel} · ${condCount} условий · каждые ${p.check_interval_minutes || 5}м</div>
             </div>
-            <button class="btn btn-secondary btn-sm" style="pointer-events:none;">
+            <button class="btn btn-secondary btn-sm button-static">
               ${isCurrent ? 'Отвязать' : 'Привязать'}
             </button>
           </div>
@@ -7760,7 +7762,7 @@
     if (!listEl) return;
 
     if (!state.presets || state.presets.length === 0) {
-      listEl.innerHTML = '<span style="font-size:12px; color:var(--tg-hint); padding: 4px 0;">Нет сохраненных пресетов. Соберите первое правило ниже.</span>';
+      listEl.innerHTML = '<span class="preset-list-empty">Нет сохраненных пресетов. Соберите первое правило ниже.</span>';
       return;
     }
 
@@ -8065,8 +8067,8 @@
       : '';
     detailsElement.textContent = `Проверять каждые ${interval} мин. Пауза после срабатывания: ${cooldown ? `${cooldown} мин` : 'нет'}. Telegram: ${notify ? 'да' : 'нет'}.${protection}`;
     messagesElement.innerHTML = [
-      ...validation.errors.map(message => `<div class="rule-validation-message error"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>${escapeHtml(message)}</div>`),
-      ...validation.warnings.map(message => `<div class="rule-validation-message warning"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>${escapeHtml(message)}</div>`)
+      ...validation.errors.map(message => `<div class="rule-validation-message error"><svg class="validation-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>${escapeHtml(message)}</div>`),
+      ...validation.warnings.map(message => `<div class="rule-validation-message warning"><svg class="validation-icon" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>${escapeHtml(message)}</div>`)
     ].join('');
 
     const saveButton = document.getElementById('btnSaveLimits');
@@ -9527,7 +9529,7 @@
       const emptyMessage = allAccounts.length === 0
         ? 'Нет подключенных кабинетов'
         : 'По выбранным фильтрам кабинеты не найдены';
-      tableBody.innerHTML = `<tr><td data-summary-empty colspan="${summaryVisibleColumnCount()}" class="text-center" style="color: var(--tg-hint);">${emptyMessage}</td></tr>`;
+      tableBody.innerHTML = `<tr><td data-summary-empty colspan="${summaryVisibleColumnCount()}" class="text-center summary-table-empty">${emptyMessage}</td></tr>`;
     } else {
       tableBody.innerHTML = accounts.map(acc => {
         const hasMetrics = summaryAccountHasMetrics(acc);
@@ -9536,7 +9538,7 @@
 
         return `
           <tr>
-            <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint" style="font-size:11px;">(${escapeHtml(acc.account_id)})</span></td>
+            <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint summary-account-id">(${escapeHtml(acc.account_id)})</span></td>
             <td class="summary-custom-name-cell" data-summary-column="custom_name">${acc.custom_name ? `<b>${escapeHtml(acc.custom_name)}</b>` : '<span class="text-hint">—</span>'}</td>
             <td class="summary-note-cell" data-summary-column="note" title="${escapeHtml(acc.note || '')}">${acc.note ? escapeHtml(acc.note) : '<span class="text-hint">—</span>'}</td>
             <td data-summary-column="data">${summaryDataStatus(acc)}</td>
@@ -9554,8 +9556,8 @@
             <td class="text-right mono" data-summary-column="ctr_link">${hasMetrics ? formatDecimalOrDash(acc.ctr_link, 2, '%') : '—'}</td>
             <td class="text-right mono" data-summary-column="cpc">${hasMetrics ? formatMoneyOrDash(acc.cpc, acc.currency) : '—'}</td>
             <td class="text-right mono" data-summary-column="cpc_link">${hasMetrics ? formatMoneyOrDash(acc.cpc_link, acc.currency) : '—'}</td>
-            <td class="text-right mono" data-summary-column="leads" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
-            <td class="text-right mono" data-summary-column="registrations" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
+            <td class="text-right mono summary-metric-primary" data-summary-column="leads">${hasMetrics ? formatNumber(acc.leads) : '—'}</td>
+            <td class="text-right mono summary-metric-success" data-summary-column="registrations">${hasMetrics ? formatNumber(acc.registrations) : '—'}</td>
             <td class="text-right mono" data-summary-column="purchases">${hasMetrics ? formatNumber(acc.purchases) : '—'}</td>
             <td class="text-right mono" data-summary-column="cpl">${hasMetrics ? formatMoneyOrDash(acc.cost_per_lead, acc.currency) : '—'}</td>
             <td class="text-right mono" data-summary-column="cpreg">${hasMetrics ? formatMoneyOrDash(acc.cost_per_registration, acc.currency) : '—'}</td>
@@ -9628,12 +9630,12 @@
         return `
           <div class="mob-summary-card">
             <div class="mob-card-head">
-              <div style="display:flex; flex-direction:column; overflow:hidden; padding-right:8px; flex:1;">
-                <b class="mob-card-name" style="font-size:14px; font-weight:600; color:var(--tg-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(displayName)}</b>
-                <span class="mono text-hint" style="font-size:11px; color:var(--tg-hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${subLabel}</span>
+              <div class="summary-mobile-identity-copy">
+                <b class="mob-card-name summary-mobile-name">${escapeHtml(displayName)}</b>
+                <span class="mono text-hint mob-summary-subline">${subLabel}</span>
                 ${statusPillHtml}
               </div>
-              <span class="mono" style="font-size:16px;font-weight:700;color:var(--tg-link);white-space:nowrap;flex-shrink:0;">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0), acc.currency) : '—'}</span>
+              <span class="mono summary-mobile-spend">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0), acc.currency) : '—'}</span>
             </div>
             ${noteHtml}
             ${groupsHtml ? `<div class="mob-summary-groups">${groupsHtml}</div>` : ''}
@@ -9679,7 +9681,7 @@
             <div class="mob-card-stats">
               <div class="stat-box">
                 <span class="stat-box-label">Лиды</span>
-                <span class="stat-box-val" style="color:var(--tg-link);">${hasMetrics ? formatNumber(acc.leads) : '—'}</span>
+                <span class="stat-box-val summary-metric-primary">${hasMetrics ? formatNumber(acc.leads) : '—'}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">CPL</span>
@@ -9687,7 +9689,7 @@
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">Регистрации</span>
-                <span class="stat-box-val" style="color:var(--color-success);">${hasMetrics ? formatNumber(acc.registrations) : '—'}</span>
+                <span class="stat-box-val summary-metric-success">${hasMetrics ? formatNumber(acc.registrations) : '—'}</span>
               </div>
               <div class="stat-box">
                 <span class="stat-box-label">CPReg</span>
@@ -9745,7 +9747,7 @@
     const modifier = ['SUCCESS', 'ERROR', 'WARNING'].includes(normalized)
       ? normalized.toLowerCase()
       : normalized === 'SKIPPED' ? 'warning' : 'info';
-    return `<span class="log-status log-status-${modifier}"><span class="status-dot dot-${modifier === 'error' ? 'danger' : modifier}"></span>${auditStatusLabels[normalized] || escapeHtml(normalized)}</span>`;
+    return `<span class="log-status log-status-${modifier}"><span class="status-dot dot-${modifier === 'error' ? 'danger' : modifier}"></span><span class="log-status-label">${auditStatusLabels[normalized] || escapeHtml(normalized)}</span></span>`;
   }
 
   function formatAuditTime(value, compact = false) {
@@ -9938,11 +9940,11 @@
       <div class="stopped-card-item" id="stopped-item-${escapeHtml(record.adset_id)}">
         <div>
           <b>${escapeHtml(record.adset_name)}</b> <span class="mono text-hint">${escapeHtml(record.account_id)}</span>
-          <div style="font-size:11px;color:var(--tg-hint);margin-top:2px;">
+          <div class="stopped-card-meta">
             Остановлен ${escapeHtml(record.stopped_at || '—')} · Спенд <b>${formatMoneyOrDash(Number(record.stop_spend || 0), record.currency)}</b> · Лиды ${record.stop_leads || 0} · Реги ${record.stop_registrations || 0}
           </div>
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0;">
+        <div class="meta-asset-row-actions">
           <button class="btn btn-primary btn-sm" onclick="window.reactivateAdset(${escapeJsArg(record.adset_id)})">Включить обратно</button>
           <button class="btn btn-secondary btn-sm" title="Скрыть карточку из списка" onclick="window.dismissAdset(${escapeJsArg(record.adset_id)})">Скрыть</button>
         </div>
@@ -10155,11 +10157,11 @@
               badgeClass = 'badge-migration';
               badgeLabel = 'Миграция на OAuth';
               const rules = asset.rules_count || 0;
-              ruleHint = `<small style="color: var(--accent-primary); font-size: 11px; display: block; margin-top: 1px;">Ручной токен · сохранит ${rules} ${pluralize(rules, 'правило', 'правила', 'правил')}</small>`;
+              ruleHint = `<small class="meta-asset-rule-hint meta-asset-rule-hint-accent">Ручной токен · сохранит ${rules} ${pluralize(rules, 'правило', 'правила', 'правил')}</small>`;
             } else if (asset.import_status === 'other_connection') {
               badgeClass = 'badge-migration';
               badgeLabel = 'Сменить профиль';
-              ruleHint = '<small style="color: var(--text-muted); font-size: 11px; display: block; margin-top: 1px;">Привязан к другому профилю</small>';
+              ruleHint = '<small class="meta-asset-rule-hint">Привязан к другому профилю</small>';
             }
             return `
             <label class="meta-asset-row ${isImported ? 'is-imported' : ''} ${isMigratable ? 'is-migratable' : ''}">
@@ -10242,7 +10244,7 @@
           const rulesNote = typeof item.rules_count === 'number' && item.rules_count > 0
             ? ` · сохранено правил: ${item.rules_count}`
             : '';
-          rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${escapeHtml(item.account_id)}) <small style="color:var(--accent-primary); font-weight:600;">Мигрирован на OAuth${rulesNote}</small></span><span class="badge badge-success">OK</span></div>`);
+          rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${escapeHtml(item.account_id)}) <small class="batch-result-note">Мигрирован на OAuth${rulesNote}</small></span><span class="badge badge-success">OK</span></div>`);
         } else {
           rows.push(`<div class="batch-res-item"><span><span class="status-dot dot-success"></span><b>${escapeHtml(item.name)}</b> (${escapeHtml(item.account_id)})</span><span class="badge badge-success">OK</span></div>`);
         }
@@ -11556,7 +11558,7 @@
         if (uAvatar) {
           const safeAvatar = sanitizeUrl(user.avatar_url);
           if (safeAvatar) {
-            uAvatar.innerHTML = `<img src="${escapeHtml(safeAvatar)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="Avatar">`;
+            uAvatar.innerHTML = `<img src="${escapeHtml(safeAvatar)}" class="settings-avatar-image" alt="Avatar">`;
           } else {
             uAvatar.textContent = (user.first_name || user.full_name || user.username || 'B').charAt(0).toUpperCase();
           }
@@ -11804,7 +11806,7 @@
 
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+      submitBtn.innerHTML = '<div class="spinner ui-spinner-xs"></div>';
     }
     if (errorEl) errorEl.classList.add('hidden');
 
@@ -11856,7 +11858,7 @@
 
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+      submitBtn.innerHTML = '<div class="spinner ui-spinner-xs"></div>';
     }
     if (errorEl) errorEl.classList.add('hidden');
 
@@ -12025,7 +12027,7 @@
 
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0 auto;"></div>';
+      submitBtn.innerHTML = '<div class="spinner ui-spinner-xs"></div>';
     }
     if (errorEl) errorEl.classList.add('hidden');
 
