@@ -59,8 +59,8 @@ jobs:
 
           echo "[Step 1] Inserting test state and audit records..."
           psql -h localhost -U buyerly -d buyerly_test -v ON_ERROR_STOP=1 <<EOF
-          INSERT INTO users (username, full_name, email, password_hash, role, is_approved, created_at)
-          VALUES ('drill_admin', 'Drill Admin', 'drill@buyerly.app', 'dummy_hash', 'admin', true, NOW())
+          INSERT INTO users (username, full_name, first_name, last_name, email, password_hash, role, is_approved, created_at)
+          VALUES ('drill_admin', 'Drill Admin', 'Drill', 'Admin', 'drill@buyerly.app', 'dummy_hash', 'admin', true, NOW())
           ON CONFLICT (username) DO NOTHING;
 
           INSERT INTO automation_runtime_states (state_key, payload, updated_at)
