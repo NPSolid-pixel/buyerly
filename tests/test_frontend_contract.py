@@ -394,9 +394,26 @@ class TestFrontendRuleContract(unittest.TestCase):
             ".meta-invite-fields",
             ".connect-meta-landing",
             ".cell-ellipsis",
+            ".nav-item.active::before",
+            ".today-command-loop",
+            '[data-ui-pilot="efficiency"] .summary-page-header::after',
+            '[data-ui-pilot="efficiency"] .kpi-primary-grid .spend-card::after',
+            '[data-ui-pilot="automations"] .automations-summary-card:nth-child(2)',
+            ".rule-card:has(.rule-action-turn_off)::before",
+            "@media (prefers-reduced-motion: reduce)",
             "@media (max-width: 768px)",
         ):
             self.assertIn(contract, self.ui_system)
+
+        for markup_contract in (
+            'id="homeTodayDate"',
+            'class="today-command-loop"',
+            'class="ui-alert ui-alert-info today-command-bar"',
+        ):
+            self.assertIn(markup_contract, self.index)
+
+        self.assertEqual(self.index.count('class="today-action-link"'), 3)
+        self.assertIn("document.getElementById('homeTodayDate')", self.app_script)
 
         for mobile_label in ("Сводка", "Правила", "Связи"):
             self.assertIn(f"<span>{mobile_label}</span>", self.index)

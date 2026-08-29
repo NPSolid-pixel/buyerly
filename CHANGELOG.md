@@ -12,6 +12,8 @@
 ### Added & Improved
 - **Единая визуальная система Buyerly 2.0**:
   - Добавлен отдельный production UI-kit `webapp/css/ui-system.css` с общей шкалой типографики, spacing, page widths, controls, surfaces и dialog sizes.
+  - Today, Automations и Efficiency получили premium operations layer: command hero, semantic accents, выразительную KPI-иерархию, lane bands и action rails без возврата к вложенным карточкам.
+  - В UI-kit закреплены правила visual polish: один dominant surface, ambient depth, semantic mapping amber/blue/violet/teal, отключение декоративного motion по системной настройке и запрет fake metrics.
   - Все рабочие разделы приведены к одному page rhythm; KPI, connection/rule/log stats собраны в плоские divided surfaces вместо россыпи вложенных карточек.
   - Таблицы получили единые header/row sizes и локальную горизонтальную прокрутку, а Settings и rule builders избавлены от декоративных внутренних карточных слоёв.
   - Все 22 модальных окна и command palette используют единый `.ui-dialog` contract, согласованные header/body/footer, размеры desktop и mobile bottom-sheet behavior.

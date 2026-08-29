@@ -1571,7 +1571,8 @@
   function updateHomeGreeting() {
     const el = document.getElementById('homeGreetingTitle');
     if (!el) return;
-    const hour = new Date().getHours();
+    const now = new Date();
+    const hour = now.getHours();
     let greeting = 'Доброе утро';
     if (hour >= 12 && hour < 18) {
       greeting = 'Добрый день';
@@ -1582,6 +1583,15 @@
     }
     const name = state.user?.full_name || state.user?.username || 'Buyerly';
     el.textContent = `${greeting}, ${name}.`;
+    const dateEl = document.getElementById('homeTodayDate');
+    if (dateEl) {
+      const formatted = new Intl.DateTimeFormat('ru-RU', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+      }).format(now);
+      dateEl.textContent = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+    }
   }
 
   // ==========================================================

@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
   <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
-  <link rel="stylesheet" href="/static/css/ui-system.css?v=11.0.0">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.0.0">
 </head>
 
 <body>
@@ -496,29 +496,44 @@
       <section id="tab-home" class="tab-content active">
         <div class="ui-page today-page" data-ui-pilot="today">
           <div class="ui-card today-hero">
-            <div class="today-eyebrow">Сегодня</div>
-            <h1 id="homeGreetingTitle">Доброе утро, Buyerly.</h1>
-            <p>Проверьте состояние подключений, автоматизаций и последних действий — без декоративных контролов и скрытых сценариев.</p>
+            <div class="today-hero-copy">
+              <div class="today-hero-topline">
+                <div class="today-eyebrow">Buyerly Operations</div>
+                <div class="today-date" id="homeTodayDate">Сегодня</div>
+              </div>
+              <h1 id="homeGreetingTitle">Доброе утро, Buyerly.</h1>
+              <p>Ваш операционный центр: эффективность рекламы, автоматические решения и состояние Meta — в одном рабочем контуре.</p>
+            </div>
+            <div class="today-command-loop" aria-hidden="true">
+              <span class="today-loop-caption">Рабочий контур</span>
+              <div class="today-loop-track">
+                <span>Meta</span><i></i><span>Правила</span><i></i><span>Действия</span>
+              </div>
+              <div class="today-loop-signal"><i></i><span>Непрерывный контроль</span></div>
+            </div>
           </div>
-          <div class="ui-alert ui-alert-info" role="status">
-            <div><strong>Рабочий обзор</strong><br>Каждая карточка ведёт к реальному разделу и следующему действию.</div>
+          <div class="ui-alert ui-alert-info today-command-bar" role="status">
+            <div class="today-command-copy"><span class="today-command-pulse" aria-hidden="true"></span><div><strong>Рабочий обзор</strong><br>Начните с ключевых цифр или откройте нужный операционный контур.</div></div>
             <button class="ui-button" type="button" onclick="window.switchTab('summary')">Открыть эффективность</button>
           </div>
           <div class="today-action-grid" aria-label="Быстрые действия">
             <button class="today-action-card" type="button" onclick="window.switchTab('fb_accounts')">
-              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="today-action-topline"><span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></span><span class="today-action-index">01</span></span>
               <strong>Подключения</strong>
               <span>Подключите Facebook-профиль, проверьте токен и доступные Business Manager.</span>
+              <span class="today-action-link">Открыть контур <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
             </button>
             <button class="today-action-card" type="button" onclick="window.switchTab('rules')">
-              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 109 9"/></svg></span>
+              <span class="today-action-topline"><span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 109 9"/></svg></span><span class="today-action-index">02</span></span>
               <strong>Автоматизации</strong>
               <span>Просмотрите активные правила, условия и привязанные рекламные кабинеты.</span>
+              <span class="today-action-link">Открыть контур <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
             </button>
             <button class="today-action-card" type="button" onclick="window.switchTab('logs')">
-              <span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+              <span class="today-action-topline"><span class="today-action-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><span class="today-action-index">03</span></span>
               <strong>История действий</strong>
               <span>Узнайте, что произошло, почему сработало правило и можно ли отменить действие.</span>
+              <span class="today-action-link">Открыть контур <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
             </button>
           </div>
         </div>
