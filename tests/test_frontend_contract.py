@@ -256,9 +256,10 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         self.assertNotIn('placeholder="Ask anything..."', self.index)
         self.assertNotIn('class="ai-prompt-card"', self.index)
-        self.assertIn("onclick=\"window.switchTab('fb_accounts')\"", self.index)
-        self.assertIn("onclick=\"window.switchTab('rules')\"", self.index)
-        self.assertIn("onclick=\"window.switchTab('logs')\"", self.index)
+        for target in ("fb_accounts", "rules", "logs"):
+            self.assertIn(f'data-today-target="{target}"', self.index)
+        self.assertIn("function setupTodayDecisionCenter()", self.app_script)
+        self.assertIn("window.switchTab(targetButton.dataset.todayTarget)", self.app_script)
 
     def test_connections_page_uses_responsive_workspace_layout(self):
         for markup_contract in (
