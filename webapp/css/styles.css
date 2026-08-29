@@ -8432,3 +8432,529 @@ input[type="text"].attio-popover-name-input:focus,
   50% { transform: scale(0.96); opacity: 0.85; }
 }
 
+/* ==========================================================
+   FULL PRODUCT LAYOUT AUDIT — INTERIOR WORKSPACE PAGES
+   Keeps wide data sets inside their own scroll regions and
+   applies one visual rhythm across every first-class section.
+   ========================================================== */
+
+.tab-content.active {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* A single-row connections table must not pretend to be a large empty panel. */
+[data-ui-pilot="connections"] .connections-list-container {
+  min-height: 0;
+}
+
+[data-ui-pilot="connections"] .connections-table-viewport {
+  height: auto;
+  min-height: 0;
+  max-height: clamp(220px, calc(100vh - 420px), 720px);
+}
+
+[data-ui-pilot="efficiency"],
+[data-ui-pilot="action-history"],
+[data-ui-pilot="settings"] {
+  width: 100%;
+  max-width: none;
+  padding: 28px clamp(20px, 3vw, 40px) 80px;
+  background: var(--bg-canvas);
+  box-sizing: border-box;
+}
+
+[data-ui-pilot="efficiency"] > *,
+[data-ui-pilot="action-history"] > *,
+[data-ui-pilot="settings"] > * {
+  width: min(100%, 1440px);
+  margin-right: auto;
+  margin-left: auto;
+  box-sizing: border-box;
+}
+
+[data-ui-pilot="efficiency"] .summary-page-header h1,
+[data-ui-pilot="action-history"] .logs-page-header h1,
+[data-ui-pilot="settings"] .settings-page-header h1,
+[data-ui-pilot="accounts"] .accounts-workspace-heading h1,
+[data-ui-pilot="automations"] .rules-header-info h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+/* Efficiency */
+[data-ui-pilot="efficiency"] .summary-page-header {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+[data-ui-pilot="efficiency"] .summary-source-line {
+  max-width: 100%;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+[data-ui-pilot="efficiency"] .summary-toolbar {
+  min-width: 0;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+}
+
+[data-ui-pilot="efficiency"] .kpi-grid {
+  min-width: 0;
+}
+
+[data-ui-pilot="efficiency"] .kpi-primary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+[data-ui-pilot="efficiency"] .kpi-analytics-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+[data-ui-pilot="efficiency"] .kpi-quality-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-ui-pilot="efficiency"] .kpi-card {
+  min-width: 0;
+  min-height: 132px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-card);
+}
+
+[data-ui-pilot="efficiency"] .summary-breakdown-card {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border-radius: var(--radius-lg);
+}
+
+.table-responsive {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-ui-pilot="efficiency"] .summary-metrics-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+[data-ui-pilot="efficiency"] .summary-view-toolbar,
+[data-ui-pilot="efficiency"] .summary-table-filterbar {
+  min-width: 0;
+}
+
+/* Automations */
+[data-ui-pilot="automations"] .rules-header-info h1 {
+  margin-bottom: 4px;
+}
+
+[data-ui-pilot="automations"] .rules-subview {
+  gap: 16px;
+}
+
+[data-ui-pilot="automations"] .rules-tab-header,
+[data-ui-pilot="automations"] .automations-summary-grid {
+  margin-bottom: 0;
+}
+
+[data-ui-pilot="automations"] .rules-board-wrapper {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+[data-ui-pilot="automations"] .rules-column-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Action history */
+[data-ui-pilot="action-history"] .logs-page-header {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+[data-ui-pilot="action-history"] .logs-page-header p {
+  max-width: 760px;
+  margin-top: 7px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+[data-ui-pilot="action-history"] .logs-stat,
+[data-ui-pilot="action-history"] .logs-panel {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-card);
+}
+
+[data-ui-pilot="action-history"] .logs-panel {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+[data-ui-pilot="action-history"] .logs-filters {
+  margin: 0;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-ui-pilot="action-history"] .logs-table {
+  width: max-content;
+  min-width: 1120px;
+}
+
+[data-ui-pilot="action-history"] .logs-table th:nth-child(1) { width: 116px; }
+[data-ui-pilot="action-history"] .logs-table th:nth-child(2) { width: 112px; }
+[data-ui-pilot="action-history"] .logs-table th:nth-child(3) { width: 150px; }
+[data-ui-pilot="action-history"] .logs-table th:nth-child(4) { width: 220px; }
+[data-ui-pilot="action-history"] .logs-table th:nth-child(5) { width: 180px; }
+[data-ui-pilot="action-history"] .logs-table th:nth-child(6) { width: 310px; }
+
+[data-ui-pilot="action-history"] .log-target,
+[data-ui-pilot="action-history"] .log-message {
+  overflow-wrap: anywhere;
+}
+
+[data-ui-pilot="action-history"] .log-target small,
+[data-ui-pilot="action-history"] .log-message small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.log-row-action {
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.log-row-action:hover {
+  border-color: var(--brand-accent);
+  color: var(--text-primary);
+  background: var(--brand-accent-light);
+}
+
+[data-ui-pilot="action-history"] .logs-pagination {
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Settings */
+.settings-page-header {
+  margin-bottom: 18px;
+}
+
+.settings-page-header p {
+  max-width: 700px;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+[data-ui-pilot="settings"] .settings-cards-grid {
+  min-width: 0;
+}
+
+[data-ui-pilot="settings"] .settings-card {
+  min-width: 0;
+  overflow: hidden;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-card);
+}
+
+[data-ui-pilot="settings"] .settings-input-action-row {
+  min-width: 0;
+}
+
+[data-ui-pilot="settings"] .settings-input-action-row input {
+  width: auto;
+  min-width: 0;
+}
+
+[data-ui-pilot="settings"] .settings-session-row {
+  min-width: 0;
+}
+
+[data-ui-pilot="settings"] .settings-session-copy {
+  flex: 1 1 auto;
+  max-width: calc(100% - 110px);
+}
+
+/* Accounts */
+#tab-accounts.tab-content,
+#tab-accounts.tab-content.active {
+  gap: 16px;
+  padding: 28px clamp(20px, 3vw, 40px) 32px !important;
+  background: var(--bg-canvas);
+}
+
+[data-ui-pilot="accounts"] .accounts-workspace-header {
+  width: min(100%, 1440px);
+  height: auto;
+  min-height: 82px;
+  margin: 0 auto !important;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+[data-ui-pilot="accounts"] .attio-view-header-left {
+  min-width: 0;
+  gap: 18px;
+}
+
+.accounts-workspace-heading {
+  min-width: 0;
+}
+
+.accounts-workspace-heading p {
+  max-width: 640px;
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+[data-ui-pilot="accounts"] #accountsList {
+  width: min(100%, 1440px);
+  height: auto;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--elevation-card);
+}
+
+[data-ui-pilot="accounts"] .attio-table-viewport {
+  border-radius: var(--radius-lg) !important;
+}
+
+.accounts-mobile-list {
+  display: none;
+  padding: 12px;
+}
+
+.account-mobile-card {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-mobile-card + .account-mobile-card {
+  margin-top: 10px;
+}
+
+.account-mobile-card-main {
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.account-mobile-card-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.account-mobile-card-title strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.account-mobile-card-id {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.account-mobile-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--border-subtle);
+}
+
+.account-mobile-metrics > span {
+  min-width: 0;
+  padding: 10px;
+  background: var(--bg-canvas);
+}
+
+.account-mobile-metrics small,
+.account-mobile-metrics strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-mobile-metrics small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.account-mobile-metrics strong {
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+.account-mobile-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  [data-ui-pilot="efficiency"] .kpi-primary-grid,
+  [data-ui-pilot="efficiency"] .kpi-analytics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  [data-ui-pilot="action-history"] .logs-search-box {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  [data-ui-pilot="efficiency"],
+  [data-ui-pilot="action-history"],
+  [data-ui-pilot="settings"] {
+    padding: 18px 14px 80px;
+  }
+
+  [data-ui-pilot="efficiency"] .summary-page-header,
+  [data-ui-pilot="action-history"] .logs-page-header,
+  [data-ui-pilot="accounts"] .accounts-workspace-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-ui-pilot="efficiency"] .summary-page-header .btn,
+  [data-ui-pilot="action-history"] .logs-page-header .btn,
+  [data-ui-pilot="accounts"] .attio-view-header-right,
+  [data-ui-pilot="accounts"] .attio-view-header-right .attio-primary-btn {
+    width: 100%;
+  }
+
+  [data-ui-pilot="efficiency"] .summary-toolbar,
+  [data-ui-pilot="efficiency"] .summary-scope-control,
+  [data-ui-pilot="settings"] .settings-input-action-row,
+  [data-ui-pilot="settings"] .settings-sessions-header,
+  [data-ui-pilot="settings"] .settings-session-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-ui-pilot="efficiency"] .summary-scope-control select,
+  [data-ui-pilot="settings"] .settings-input-action-row input,
+  [data-ui-pilot="settings"] .settings-input-action-row .btn {
+    width: 100%;
+  }
+
+  [data-ui-pilot="efficiency"] .period-switcher {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  [data-ui-pilot="efficiency"] .period-btn {
+    flex: 1 0 auto;
+  }
+
+  [data-ui-pilot="efficiency"] .kpi-primary-grid,
+  [data-ui-pilot="efficiency"] .kpi-analytics-grid,
+  [data-ui-pilot="action-history"] .logs-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  [data-ui-pilot="action-history"] .logs-filter-select {
+    width: 100%;
+  }
+
+  [data-ui-pilot="settings"] .settings-session-copy {
+    max-width: 100%;
+  }
+
+  #tab-accounts.tab-content,
+  #tab-accounts.tab-content.active {
+    height: calc(100vh - 48px - 56px);
+    padding: 18px 14px 80px !important;
+    overflow-y: auto !important;
+  }
+
+  [data-ui-pilot="accounts"] .attio-view-header-left,
+  [data-ui-pilot="accounts"] .attio-view-header-right {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  [data-ui-pilot="accounts"] #accountsList {
+    flex: none;
+    height: auto;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .accounts-desktop-grid {
+    display: none !important;
+  }
+
+  .accounts-mobile-list {
+    display: block;
+    padding: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  [data-ui-pilot="efficiency"] .kpi-primary-grid,
+  [data-ui-pilot="efficiency"] .kpi-analytics-grid,
+  [data-ui-pilot="action-history"] .logs-stats-grid,
+  .account-mobile-metrics {
+    grid-template-columns: 1fr;
+  }
+}
