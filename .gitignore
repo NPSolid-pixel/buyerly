@@ -47,3 +47,8 @@ webapp/prototype.html
 .DS_Store
 .idea/
 .vscode/
+
+# Browser quality-gate artifacts and pull-request baseline checkout
+node_modules/
+test-results/
+.visual-baseline/

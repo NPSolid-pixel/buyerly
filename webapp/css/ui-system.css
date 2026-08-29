@@ -4832,3 +4832,46 @@ textarea {
     transition: none !important;
   }
 }
+
+/* ----------------------------------------------------------
+   Cross-route quality states and keyboard contract
+   ---------------------------------------------------------- */
+
+.ui-route-status {
+  display: grid;
+  grid-template-columns: minmax(140px, auto) minmax(0, 1fr);
+  gap: 8px 16px;
+  width: min(100%, var(--ui-page-max));
+  margin: 0 auto var(--ui-section-gap);
+  box-sizing: border-box;
+}
+
+.ui-route-status strong,
+.ui-route-status span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ui-route-status.is-warning {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+}
+
+.ui-route-status.is-error {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.nav-list .nav-tab:focus-visible {
+  outline: 2px solid var(--action-primary);
+  outline-offset: -2px;
+}
+
+@media (max-width: 768px) {
+  .ui-route-status {
+    grid-template-columns: 1fr;
+    margin-bottom: 16px;
+  }
+}

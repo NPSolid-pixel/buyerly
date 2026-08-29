@@ -1270,3 +1270,45 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertNotIn("image/gif", self.index)
         self.assertNotIn("10 МБ", self.index)
         self.assertNotIn("10MB", self.index)
+
+    def test_visual_quality_gate_is_a_required_pull_request_contract(self):
+        root = Path(__file__).parents[1]
+        package = (root / "package.json").read_text()
+        visual_test = (root / "visual-tests" / "quality-gate.spec.mjs").read_text()
+        fixtures = (root / "visual-tests" / "fixtures.mjs").read_text()
+        guide = (root / "docs" / "VISUAL_QUALITY_GATE.md").read_text()
+
+        for contract in (
+            "Visual Quality Gate",
+            "github.event_name == 'pull_request'",
+            "github.event.pull_request.base.sha",
+            "npx playwright install --with-deps chromium",
+            "npm run test:visual",
+            "actions/upload-artifact@v4",
+        ):
+            self.assertIn(contract, self.workflow)
+
+        for dependency in ("@playwright/test", "pixelmatch", "pngjs"):
+            self.assertIn(dependency, package)
+
+        for tab in ("home", "fb_accounts", "accounts", "rules", "summary", "logs", "settings"):
+            self.assertIn(f"tab: '{tab}'", fixtures)
+        for state in ("loading", "empty", "error", "partial", "long"):
+            self.assertIn(f"'{state}'", fixtures)
+
+        for browser_contract in (
+            "Document-level horizontal overflow is forbidden",
+            "Visible controls need accessible names",
+            "IDs must remain unique",
+            "Visible images must load",
+            "visual regression",
+            "current/baseline/diff",
+        ):
+            self.assertIn(browser_contract, visual_test)
+
+        self.assertIn("1440×1000", guide)
+        self.assertIn("390×844", guide)
+        self.assertIn("setTabBusy", self.app_script)
+        self.assertIn("showTabStatus", self.app_script)
+        self.assertIn("setupKeyboardAccessibility", self.app_script)
+        self.assertIn(".ui-route-status", self.ui_system)

@@ -279,6 +279,47 @@
     // Optional global spinner / loading indicator
   }
 
+  function setTabBusy(tab, busy) {
+    const section = document.getElementById(`tab-${tab}`);
+    if (!section) return;
+    section.setAttribute('aria-busy', busy ? 'true' : 'false');
+    section.classList.toggle('is-loading', Boolean(busy));
+  }
+
+  function clearTabStatus(tab) {
+    document.querySelector(`#tab-${tab} > .ui-route-status`)?.remove();
+  }
+
+  function showTabStatus(tab, kind, title, message) {
+    const section = document.getElementById(`tab-${tab}`);
+    if (!section) return;
+    clearTabStatus(tab);
+    const status = document.createElement('div');
+    status.className = `ui-alert ui-route-status is-${kind}`;
+    status.dataset.kind = kind;
+    status.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    status.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
+    const heading = document.createElement('strong');
+    heading.textContent = title;
+    const copy = document.createElement('span');
+    copy.textContent = message;
+    status.append(heading, copy);
+    section.prepend(status);
+  }
+
+  function setupKeyboardAccessibility() {
+    document.querySelectorAll('.nav-list .nav-tab').forEach((item) => {
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+    });
+    document.addEventListener('keydown', (event) => {
+      const control = event.target.closest('.nav-list .nav-tab[role="button"][tabindex="0"]');
+      if (!control || !['Enter', ' '].includes(event.key)) return;
+      event.preventDefault();
+      control.click();
+    });
+  }
+
   window.hideInitialLoading = hideInitialLoading;
   window.showLoading = showLoading;
   window.hideLoading = hideLoading;
@@ -1915,6 +1956,7 @@
     const epoch = state.workspaceEpoch || 0;
     const version = (state.todayLoadVersion || 0) + 1;
     state.todayLoadVersion = version;
+    setTabBusy('home', true);
     renderTodayLoading();
 
     const results = await Promise.allSettled([
@@ -1941,6 +1983,7 @@
     if (connections) state.fbConnections = connections;
     if (auditEvents) state.todayAuditEvents = auditEvents;
     renderTodayDecisionCenter({ accounts, connections, health, auditEvents, unavailable });
+    setTabBusy('home', false);
   }
 
   function setupTodayDecisionCenter() {
@@ -1986,6 +2029,8 @@
     }
 
     const epoch = state.workspaceEpoch || 0;
+    setTabBusy('accounts', true);
+    clearTabStatus('accounts');
 
     loadAccountsInFlightPromise = (async () => {
       try {
@@ -2014,12 +2059,19 @@
         return { accounts, groups };
       } catch (err) {
         if (state.workspaceEpoch !== epoch) return;
+        showTabStatus(
+          'accounts',
+          'error',
+          'Не удалось загрузить кабинеты',
+          'Обновите страницу или повторите попытку позже. Сохранённые настройки не изменены.'
+        );
         if (listEl && state.activeTab === 'accounts') {
           listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
         }
       } finally {
         if (state.workspaceEpoch === epoch) {
           loadAccountsInFlightPromise = null;
+          setTabBusy('accounts', false);
         }
       }
     })();
@@ -4418,18 +4470,36 @@
     
     const callback = consumeMetaOAuthCallback();
     const epoch = state.workspaceEpoch || 0;
+    setTabBusy('fb_accounts', true);
+    clearTabStatus('fb_accounts');
     try {
-      const [connections, accounts] = await Promise.all([
-        apiRequest('/api/meta/connections').catch(() => []),
-        state.accounts.length ? Promise.resolve(state.accounts) : apiRequest('/api/accounts').catch(() => [])
+      const [connectionsResult, accountsResult] = await Promise.allSettled([
+        apiRequest('/api/meta/connections'),
+        state.accounts.length ? Promise.resolve(state.accounts) : apiRequest('/api/accounts')
       ]);
       if (state.workspaceEpoch !== epoch) return;
+
+      if (connectionsResult.status === 'rejected' && accountsResult.status === 'rejected') {
+        throw connectionsResult.reason;
+      }
+
+      const connections = connectionsResult.status === 'fulfilled' ? connectionsResult.value : [];
+      const accounts = accountsResult.status === 'fulfilled' ? accountsResult.value : [];
       
       state.fbConnections = connections || [];
       if (accounts && accounts.length) {
         state.accounts = accounts;
       }
       renderFacebookAccounts();
+
+      if (connectionsResult.status === 'rejected' || accountsResult.status === 'rejected') {
+        showTabStatus(
+          'fb_accounts',
+          'warning',
+          'Часть данных временно недоступна',
+          'Показаны доступные подключения и кабинеты. Обновите страницу, чтобы повторить синхронизацию.'
+        );
+      }
 
       if (callback.status === 'connected' && callback.connectionId) {
         announceConnectionFeedback('Facebook-профиль подключён. Теперь выберите кабинеты для добавления.', 'success');
@@ -4442,7 +4512,15 @@
     } catch (e) {
       if (state.workspaceEpoch !== epoch) return;
       console.error('Error loading facebook accounts:', e);
+      showTabStatus(
+        'fb_accounts',
+        'error',
+        'Не удалось загрузить подключения',
+        'Проверьте соединение и повторите попытку. Существующие подключения не изменены.'
+      );
       if (emptyEl) emptyEl.classList.remove('hidden');
+    } finally {
+      if (state.workspaceEpoch === epoch) setTabBusy('fb_accounts', false);
     }
   }
 
@@ -5320,8 +5398,13 @@
   let draggedRuleInfo = null;
 
   async function loadRulesTab() {
-    await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
-    renderRulesTab();
+    setTabBusy('rules', true);
+    try {
+      await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
+      renderRulesTab();
+    } finally {
+      setTabBusy('rules', false);
+    }
   }
 
   window.onRulesFilterChange = function () {
@@ -9861,6 +9944,8 @@
     const mobileCards = document.getElementById('summaryMobileCards');
     const fetchBtn = document.getElementById('btnFetchSummary');
     const statusLabel = document.getElementById('summaryStatusLabel');
+    setTabBusy('summary', true);
+    clearTabStatus('summary');
     
     // Update period switchers
     document.querySelectorAll('.period-btn').forEach(btn => {
@@ -9900,8 +9985,20 @@
       if (existingData) {
         if (state.currentPeriod === period) {
           renderSummaryProvenance(existingData, { refreshError: err.message });
+          showTabStatus(
+            'summary',
+            'warning',
+            'Свежие данные недоступны',
+            'Показан последний сохранённый снимок. Итоги не будут обновлены до восстановления синхронизации.'
+          );
         }
       } else if (state.currentPeriod === period) {
+        showTabStatus(
+          'summary',
+          'error',
+          'Не удалось загрузить эффективность',
+          'Метрики временно недоступны. Повторите обновление, чтобы получить новый снимок.'
+        );
         tableBody.innerHTML = `<tr><td colspan="22" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
         mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
         if (statusLabel) statusLabel.textContent = `Не удалось загрузить данные: ${err.message}`;
@@ -9910,6 +10007,7 @@
     } finally {
       if (state.workspaceEpoch === epoch) {
         state.summaryLoading = false;
+        setTabBusy('summary', false);
         if (fetchBtn) {
           fetchBtn.classList.remove('loading');
           fetchBtn.disabled = false;
@@ -10573,12 +10671,15 @@
     const epoch = state.workspaceEpoch || 0;
     state.auditPage = Math.max(1, page);
     refreshBtn?.classList.add('loading');
+    setTabBusy('logs', true);
+    clearTabStatus('logs');
 
     if (state.accounts.length === 0) {
       await loadAccounts();
     }
     if (state.workspaceEpoch !== epoch) {
       refreshBtn?.classList.remove('loading');
+      setTabBusy('logs', false);
       return;
     }
     populateLogsAccountFilter();
@@ -10605,11 +10706,18 @@
       renderAuditEvents(data);
     } catch (err) {
       if (state.workspaceEpoch !== epoch) return;
+      showTabStatus(
+        'logs',
+        'error',
+        'Не удалось загрузить историю действий',
+        'Фильтры сохранены. Обновите историю, когда соединение восстановится.'
+      );
       tableBody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
       document.getElementById('logsMobileList').innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
     } finally {
       if (state.workspaceEpoch === epoch) {
         refreshBtn?.classList.remove('loading');
+        setTabBusy('logs', false);
       }
     }
   }
@@ -11292,6 +11400,8 @@
   };
 
   async function loadSettings() {
+    setTabBusy('settings', true);
+    clearTabStatus('settings');
     try {
       const data = await apiRequest('/api/settings');
       state.settings = data;
@@ -11345,7 +11455,16 @@
         if (aLarge) aLarge.textContent = name.charAt(0).toUpperCase();
       }
       await loadWebSessions();
-    } catch (err) {}
+    } catch (err) {
+      showTabStatus(
+        'settings',
+        'error',
+        'Не удалось загрузить настройки',
+        'Поля показаны без актуальных серверных значений. Не сохраняйте изменения до повторной загрузки.'
+      );
+    } finally {
+      setTabBusy('settings', false);
+    }
   }
 
   async function loadWebSessions() {
@@ -12321,6 +12440,7 @@
     setupModalListeners();
     setupSidebarListeners();
     setupQuickSearchListeners();
+    setupKeyboardAccessibility();
 
     try {
       window.Telegram?.WebApp?.ready();

@@ -10,6 +10,11 @@
 ## [Unreleased]
 
 ### Added & Improved
+- **Visual quality gate BL-109 (`86eyrx9ch`)**:
+  - Все семь workspace-маршрутов получили детерминированный browser-контракт для desktop и mobile с loading, empty, error, partial и adversarial long-content состояниями.
+  - Pull request CI теперь запрещает document-level horizontal overflow, безымянные интерактивные controls, duplicate IDs, broken images и потерю основного landmark/heading.
+  - Репрезентативные экраны сравниваются пиксельно с базовой веткой `main`; при регрессии CI сохраняет current, baseline и diff screenshots.
+  - Общие route loading/error states доступны через `aria-busy`, live status/alert и видимый keyboard focus; desktop-навигация работает с Enter и Space.
 - **Today Decision Center**:
   - Статический Today превращён в workspace-scoped центр решений на реальных данных подключений Meta, здоровья кабинетов, покрытия автоматизациями и последних audit-событий.
   - Command bar теперь выбирает одно следующее действие в детерминированном порядке и объясняет причину приоритета без fake metrics, искусственной срочности и декоративных controls.

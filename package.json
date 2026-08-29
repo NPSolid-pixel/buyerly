@@ -1,0 +1,13 @@
+{
+  "name": "buyerly-visual-quality-gate",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:visual": "playwright test --config=playwright.config.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0"
+  }
+}
