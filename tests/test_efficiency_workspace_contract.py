@@ -73,10 +73,14 @@ class TestEfficiencyWorkspaceContract(unittest.TestCase):
         self.assertIn('aria-pressed="true">Сегодня</button>', self.index)
         self.assertIn('data-summary-view="all" aria-pressed="true"', self.index)
         self.assertIn('data-summary-status-filter="all" aria-pressed="true"', self.index)
+        self.assertIn('id="summaryViewPresets" role="group"', self.index)
+        self.assertIn('id="summaryStatusFilters" role="group"', self.index)
+        self.assertIn('id="summaryRowsCount" class="summary-rows-count" role="status"', self.index)
         self.assertIn("function setSummaryControlsSelectionState()", self.script)
         self.assertIn("info.setAttribute('tabindex', '0')", self.script)
         self.assertIn("info.setAttribute('aria-label', info.title)", self.script)
-        self.assertNotIn('tabindex="0" role="button" aria-sort=', self.script)
+        self.assertIn('class="summary-sort-button" type="button"', self.script)
+        self.assertNotIn('data-summary-sort="${column.key}" tabindex="0"', self.script)
         self.assertIn('aria-labelledby="summaryColumnsTitle"', self.index)
         self.assertIn('aria-describedby="summaryColumnsDescription"', self.index)
         self.assertIn(".summary-column-visible:not([disabled])", self.script)
@@ -98,6 +102,10 @@ class TestEfficiencyWorkspaceContract(unittest.TestCase):
             self.assertIn(contract, self.styles)
         self.assertIn("statusDot.setAttribute('aria-label'", self.script)
         self.assertIn("banner.setAttribute('role'", self.script)
+        self.assertIn("function normalizeSummaryQualityStatus(value)", self.script)
+        self.assertIn("function normalizeSummaryCoverage(value)", self.script)
+        self.assertIn("function normalizeSummaryCount(value)", self.script)
+        self.assertIn("const SUMMARY_ACCOUNT_STATUSES = new Set(['synced', 'blocked', 'error'])", self.script)
 
     def test_mobile_breakdown_and_long_values_are_contained(self):
         for selector in (
@@ -122,6 +130,20 @@ class TestEfficiencyWorkspaceContract(unittest.TestCase):
         self.assertIn('title="${escapeHtml(displayName)}"', self.script)
         self.assertIn("escapeHtml(acc.account_id)", self.script)
         self.assertIn("escapeHtml(acc.note)", self.script)
+        self.assertIn('[data-ui-pilot="efficiency"] .summary-mobile-name', self.styles)
+        self.assertIn("text-overflow: clip", self.styles)
+
+    def test_keyboard_resizer_does_not_trigger_table_sort(self):
+        self.assertIn(
+            "if (event.target.closest('[data-summary-column-resizer]')) {",
+            self.script,
+        )
+        self.assertIn("resizeSummaryColumnWithKeyboard(event);", self.script)
+        keydown_handler = self.script.split(
+            "document.getElementById('summaryTableHead')?.addEventListener('keydown'",
+            1,
+        )[1].split("  });", 1)[0]
+        self.assertNotIn("changeSummarySort", keydown_handler)
 
 
 if __name__ == "__main__":

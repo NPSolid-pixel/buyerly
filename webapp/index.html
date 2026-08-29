@@ -1389,7 +1389,7 @@
           </div>
 
           <div class="summary-view-toolbar desktop-view" aria-label="Представление таблицы">
-            <div class="summary-view-presets" id="summaryViewPresets">
+            <div class="summary-view-presets" id="summaryViewPresets" role="group" aria-label="Набор колонок таблицы">
               <button class="summary-view-btn" type="button" data-summary-view="overview" aria-pressed="false">Обзор</button>
               <button class="summary-view-btn" type="button" data-summary-view="delivery" aria-pressed="false">Доставка</button>
               <button class="summary-view-btn" type="button" data-summary-view="traffic" aria-pressed="false">Трафик</button>
@@ -1407,13 +1407,13 @@
               <input id="summaryAccountSearch" type="search" maxlength="120" placeholder="Найти кабинет или act_ID…" autocomplete="off" aria-label="Поиск кабинета в сводке">
               <button id="summaryAccountSearchClear" class="hidden" type="button" aria-label="Очистить поиск">&times;</button>
             </div>
-            <div class="summary-status-filters" id="summaryStatusFilters">
+            <div class="summary-status-filters" id="summaryStatusFilters" role="group" aria-label="Статус данных кабинета">
               <button class="active" type="button" data-summary-status-filter="all" aria-pressed="true">Все</button>
               <button type="button" data-summary-status-filter="synced" aria-pressed="false">Получены</button>
               <button type="button" data-summary-status-filter="blocked" aria-pressed="false">Недоступны</button>
               <button type="button" data-summary-status-filter="error" aria-pressed="false">Ошибки Meta</button>
             </div>
-            <span id="summaryRowsCount" class="summary-rows-count">0 кабинетов</span>
+            <span id="summaryRowsCount" class="summary-rows-count" role="status" aria-live="polite" aria-atomic="true">0 кабинетов</span>
           </div>
 
           <!-- Desktop Table View -->

@@ -5308,6 +5308,31 @@ textarea {
   color: var(--color-danger);
 }
 
+.summary-sort-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.summary-sortable-header.text-right .summary-sort-button {
+  justify-content: flex-end;
+}
+
+.summary-sort-button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--action-primary);
+  outline-offset: 2px;
+}
+
 .summary-status-filters {
   flex-wrap: wrap;
 }
@@ -5343,9 +5368,14 @@ textarea {
 .mob-summary-subline {
   display: block;
   margin: 4px 0 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+[data-ui-pilot="efficiency"] .summary-mobile-name,
+[data-ui-pilot="efficiency"] .mob-summary-subline {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .summary-mobile-spend {

@@ -68,6 +68,7 @@
   };
   const SUMMARY_COLUMN_MIN_WIDTH = 72;
   const SUMMARY_COLUMN_MAX_WIDTH = 420;
+  const SUMMARY_ACCOUNT_STATUSES = new Set(['synced', 'blocked', 'error']);
   const DEFAULT_ACCOUNTS_COLUMN_ORDER = [
     'name', 'status', 'timezone', 'spend', 'cpm', 'cpc', 'ctr', 'leads', 'cpl',
     'registrations', 'cpreg', 'purchases', 'cpp', 'automation'
@@ -9615,7 +9616,7 @@
       const indicator = isActiveSort ? (direction === 'asc' ? '↑' : '↓') : '↕';
       const ariaSort = isActiveSort ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
       const columnWidth = state.summaryView.column_widths[column.key];
-      return `<th${rowspan ? ' rowspan="2"' : ''} class="summary-sortable-header${alignment}" data-summary-column="${column.key}" data-summary-sort="${column.key}" tabindex="0" aria-sort="${ariaSort}" aria-label="Сортировать по колонке ${escapeHtml(column.label)}">${escapeHtml(column.label)} <span class="summary-sort-indicator">${indicator}</span><span class="summary-column-resizer" data-summary-column-resizer="${column.key}" role="separator" aria-orientation="vertical" aria-label="Изменить ширину колонки ${escapeHtml(column.label)}" aria-valuemin="${SUMMARY_COLUMN_MIN_WIDTH}" aria-valuemax="${SUMMARY_COLUMN_MAX_WIDTH}" aria-valuenow="${columnWidth}" tabindex="0" title="Потяните для изменения ширины · двойной клик — сброс"></span></th>`;
+      return `<th${rowspan ? ' rowspan="2"' : ''} class="summary-sortable-header${alignment}" data-summary-column="${column.key}" aria-sort="${ariaSort}"><button class="summary-sort-button" type="button" data-summary-sort="${column.key}" aria-label="Сортировать по колонке ${escapeHtml(column.label)}">${escapeHtml(column.label)} <span class="summary-sort-indicator" aria-hidden="true">${indicator}</span></button><span class="summary-column-resizer" data-summary-column-resizer="${column.key}" role="separator" aria-orientation="vertical" aria-label="Изменить ширину колонки ${escapeHtml(column.label)}" aria-valuemin="${SUMMARY_COLUMN_MIN_WIDTH}" aria-valuemax="${SUMMARY_COLUMN_MAX_WIDTH}" aria-valuenow="${columnWidth}" tabindex="0" title="Потяните для изменения ширины · двойной клик — сброс"></span></th>`;
     };
     const runs = [];
     orderedColumns.forEach(column => {
@@ -10050,7 +10051,9 @@
   }
 
   function formatSummaryAge(ageSeconds) {
-    const seconds = Math.max(0, Number(ageSeconds || 0));
+    const rawSeconds = Number(ageSeconds);
+    if (!Number.isFinite(rawSeconds)) return 'время неизвестно';
+    const seconds = Math.max(0, rawSeconds);
     if (seconds < 60) return `${Math.round(seconds)} сек назад`;
     if (seconds < 3600) return `${Math.round(seconds / 60)} мин назад`;
     return `${Math.round(seconds / 3600)} ч назад`;
@@ -10273,13 +10276,32 @@
       </div>`).join('');
   }
 
+  function normalizeSummaryCount(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? Math.round(number) : 0;
+  }
+
+  function normalizeSummaryCoverage(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.min(100, Math.max(0, number)) : 0;
+  }
+
+  function normalizeSummaryQualityStatus(value) {
+    return ['complete', 'partial', 'unavailable'].includes(value) ? value : 'unavailable';
+  }
+
   function renderSummaryQuality(quality = {}) {
-    const status = quality.status || 'unavailable';
+    const status = normalizeSummaryQualityStatus(quality.status);
+    const coverage = normalizeSummaryCoverage(quality.metrics_coverage_percent);
+    const synced = normalizeSummaryCount(quality.accounts_synced);
+    const total = normalizeSummaryCount(quality.accounts_total);
+    const failed = normalizeSummaryCount(quality.accounts_failed);
+    const blocked = normalizeSummaryCount(quality.accounts_blocked);
     const coverageCard = document.getElementById('kpiCoverageCard');
     const banner = document.getElementById('summaryQualityBanner');
     const statusDot = document.getElementById('kpiCoverageStatus');
-    coverageCard.classList.remove('complete', 'partial', 'unavailable');
-    coverageCard.classList.add(status);
+    coverageCard?.classList.remove('complete', 'partial', 'unavailable');
+    coverageCard?.classList.add(status);
     if (statusDot) {
       const labels = { complete: 'Синхронизация полная', partial: 'Синхронизация частичная', unavailable: 'Синхронизация недоступна' };
       statusDot.dataset.status = status;
@@ -10287,22 +10309,22 @@
       statusDot.setAttribute('aria-label', labels[status] || labels.unavailable);
       statusDot.title = labels[status] || labels.unavailable;
     }
-    document.getElementById('kpiCoverage').textContent = `${Number(quality.metrics_coverage_percent || 0).toFixed(1)}%`;
-    document.getElementById('kpiSyncedAccounts').textContent = quality.accounts_synced || 0;
-    document.getElementById('kpiTotalAccounts').textContent = quality.accounts_total || 0;
-    document.getElementById('kpiFailedAccounts').textContent = quality.accounts_failed || 0;
+    document.getElementById('kpiCoverage').textContent = `${coverage.toFixed(1)}%`;
+    document.getElementById('kpiSyncedAccounts').textContent = synced;
+    document.getElementById('kpiTotalAccounts').textContent = total;
+    document.getElementById('kpiFailedAccounts').textContent = failed;
 
     if (status === 'complete') {
+      if (!banner) return;
       banner.className = 'summary-quality-banner hidden';
       banner.removeAttribute('role');
       banner.textContent = '';
       return;
     }
-    const failed = quality.accounts_failed || 0;
-    const blocked = quality.accounts_blocked || 0;
+    if (!banner) return;
     banner.className = `summary-quality-banner${status === 'unavailable' ? ' error' : ''}`;
     banner.setAttribute('role', status === 'unavailable' ? 'alert' : 'status');
-    banner.innerHTML = `<b>Неполная синхронизация:</b> данные получены от ${quality.accounts_synced || 0} из ${quality.accounts_total || 0} кабинетов. Ошибок Meta: ${failed}, недоступных кабинетов: ${blocked}. Итоговые суммы рассчитаны только по успешно синхронизированным данным.`;
+    banner.innerHTML = `<b>Неполная синхронизация:</b> данные получены от ${synced} из ${total} кабинетов. Ошибок Meta: ${failed}, недоступных кабинетов: ${blocked}. Итоговые суммы рассчитаны только по успешно синхронизированным данным.`;
   }
 
   function summaryDataStatus(account) {
@@ -10313,8 +10335,11 @@
     return `<span class="summary-data-status ${status}" title="${escapeHtml(detail)}" aria-label="${escapeHtml(`${statusLabel}: ${detail}`)}">${statusLabel}</span>`;
   }
 
-  function summaryAccountStatusKey(account) {
-    return account.data_status || (account.has_error ? 'error' : (account.is_banned ? 'blocked' : 'synced'));
+  function summaryAccountStatusKey(account = {}) {
+    const explicitStatus = String(account.data_status || '').trim().toLowerCase();
+    if (SUMMARY_ACCOUNT_STATUSES.has(explicitStatus)) return explicitStatus;
+    if (explicitStatus || account.has_error) return 'error';
+    return account.is_banned ? 'blocked' : 'synced';
   }
 
   function summaryAccountHasMetrics(account) {
@@ -11983,12 +12008,9 @@
   });
 
   document.getElementById('summaryTableHead')?.addEventListener('keydown', event => {
-    if (resizeSummaryColumnWithKeyboard(event)) return;
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    const header = event.target.closest('[data-summary-sort]');
-    if (!header) return;
-    event.preventDefault();
-    changeSummarySort(header.dataset.summarySort);
+    if (event.target.closest('[data-summary-column-resizer]')) {
+      resizeSummaryColumnWithKeyboard(event);
+    }
   });
 
   document.getElementById('summaryTableHead')?.addEventListener('pointerdown', startSummaryColumnResize);
