@@ -442,14 +442,21 @@
   }
 
   function parsePathLocation(pathname = window.location.pathname, search = window.location.search) {
-    const raw = normalizeAppPath(pathname);
+    const locationValue = String(pathname || '/');
+    const hashStart = locationValue.indexOf('#');
+    const withoutHash = hashStart >= 0 ? locationValue.slice(0, hashStart) : locationValue;
+    const queryStart = withoutHash.indexOf('?');
+    const inlineSearch = queryStart >= 0 ? withoutHash.slice(queryStart) : '';
+    const pathValue = queryStart >= 0 ? withoutHash.slice(0, queryStart) : withoutHash;
+    const effectiveSearch = inlineSearch || search;
+    const raw = normalizeAppPath(pathValue);
     const trimmed = raw.replace(/^\/+|\/+$/g, '');
     let groupFilter = 'all';
 
     // Parse search parameters if provided e.g. ?group=1 or ?group_id=1
-    if (search) {
+    if (effectiveSearch) {
       try {
-        const params = new URLSearchParams(search);
+        const params = new URLSearchParams(effectiveSearch);
         if (params.has('group')) groupFilter = params.get('group') || 'all';
         else if (params.has('group_id')) groupFilter = params.get('group_id') || 'all';
       } catch (e) {}
@@ -473,9 +480,9 @@
       }
       if (parts[1] === 'temporary-password' || parts[1] === 'verify') {
         let email = '';
-        if (search) {
+        if (effectiveSearch) {
           try {
-            const sp = new URLSearchParams(search);
+            const sp = new URLSearchParams(effectiveSearch);
             email = sp.get('email') || '';
           } catch (e) {}
         }
