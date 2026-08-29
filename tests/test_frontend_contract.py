@@ -1313,6 +1313,7 @@ class TestFrontendRuleContract(unittest.TestCase):
             "Visible images must load",
             "visual regression",
             "current/baseline/diff",
+            "includeQaState: false",
             "maximumApprovedChangeRatio = 0.15",
             "item.baselineSha === visualBaselineSha",
             "https://fonts.googleapis.com/**",

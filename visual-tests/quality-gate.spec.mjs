@@ -178,9 +178,10 @@ async function installDeterministicEnvironment(page, tab, scenario) {
   });
 }
 
-async function openRoute(page, origin, contract, scenario) {
+async function openRoute(page, origin, contract, scenario, options = {}) {
   await installDeterministicEnvironment(page, contract.tab, scenario);
-  await page.goto(`${origin}${contract.path}?qa-state=${scenario}`, { waitUntil: 'domcontentloaded' });
+  const qaSearch = options.includeQaState === false ? '' : `?qa-state=${scenario}`;
+  await page.goto(`${origin}${contract.path}${qaSearch}`, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#app')).toBeVisible();
   const section = page.locator(`#tab-${contract.tab}`);
   await expect(section).toHaveClass(/\bactive\b/);
@@ -290,8 +291,8 @@ async function compareScreenshots(currentPage, baselinePage, contract, viewport,
   const currentErrors = capturePageErrors(currentPage);
   const baselineErrors = capturePageErrors(baselinePage);
   await Promise.all([
-    openRoute(currentPage, currentOrigin, contract, 'populated'),
-    openRoute(baselinePage, baselineOrigin, contract, 'populated')
+    openRoute(currentPage, currentOrigin, contract, 'populated', { includeQaState: false }),
+    openRoute(baselinePage, baselineOrigin, contract, 'populated', { includeQaState: false })
   ]);
   await Promise.all([
     waitForPopulatedRoute(currentPage, contract),
