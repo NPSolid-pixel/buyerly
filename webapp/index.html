@@ -14,8 +14,8 @@
   <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=10.2.0">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
-  <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
-  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.3.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=10.3.0">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.4.1">
 </head>
 
 <body>
@@ -1101,41 +1101,64 @@
       <!-- ============================================== -->
       <!-- TAB 2: СВОДКА (SUMMARY) -->
       <!-- ============================================== -->
-      <section id="tab-summary" class="tab-content ui-page" data-ui-pilot="efficiency">
+      <section id="tab-summary" class="tab-content ui-page" data-ui-pilot="efficiency" aria-labelledby="efficiencyPageTitle" aria-busy="false">
         <div class="summary-page-header">
           <div>
             <span class="eyebrow">Meta Marketing API</span>
-            <h1>Сводка эффективности</h1>
-            <div class="summary-source-line">
+            <h1 id="efficiencyPageTitle">Сводка эффективности</h1>
+            <div class="summary-source-line" role="status" aria-live="polite" aria-atomic="true">
               <span id="summaryStatusLabel">Данные ещё не запрошены</span>
               <span id="summaryFreshnessBadge" class="summary-freshness-badge">Нет данных</span>
               <span class="summary-auto-refresh-note">Автообновление · каждые 3 мин</span>
             </div>
           </div>
-          <button id="btnFetchSummary" class="btn btn-primary btn-fetch-summary">
+          <button id="btnFetchSummary" class="btn btn-primary btn-fetch-summary" type="button">
             <svg class="fetch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             <span id="btnFetchSummaryText">Обновить данные</span>
           </button>
         </div>
 
-        <div class="summary-toolbar">
+        <div class="summary-toolbar" aria-label="Параметры сводки">
           <div class="summary-scope-control">
             <label for="summaryAccountGroupSelect">Группа кабинетов</label>
             <select id="summaryAccountGroupSelect" aria-label="Группа кабинетов">
               <option value="all">Все кабинеты</option>
             </select>
           </div>
-          <span>Период отчёта</span>
-          <div class="period-switcher">
-            <button class="period-btn active" data-period="today">Сегодня</button>
-            <button class="period-btn" data-period="yesterday">Вчера</button>
-            <button class="period-btn" data-period="last_3d">3 дня</button>
-            <button class="period-btn" data-period="last_7d">7 дней</button>
+          <span id="summaryPeriodLabel">Период отчёта</span>
+          <div class="period-switcher" role="group" aria-labelledby="summaryPeriodLabel">
+            <button class="period-btn active" type="button" data-period="today" aria-pressed="true">Сегодня</button>
+            <button class="period-btn" type="button" data-period="yesterday" aria-pressed="false">Вчера</button>
+            <button class="period-btn" type="button" data-period="last_3d" aria-pressed="false">3 дня</button>
+            <button class="period-btn" type="button" data-period="last_7d" aria-pressed="false">7 дней</button>
           </div>
         </div>
 
+        <div id="summaryStatePanel" class="summary-state-panel loading" role="status" aria-live="polite" aria-atomic="true">
+          <div class="summary-state-copy">
+            <span class="summary-state-icon" aria-hidden="true"></span>
+            <div>
+              <strong id="summaryStateTitle">Собираем эффективность</strong>
+              <p id="summaryStateDescription">Загружаем последний сохранённый снимок и проверяем его актуальность.</p>
+            </div>
+          </div>
+          <div id="summaryStateSkeleton" class="summary-state-skeleton" aria-hidden="true">
+            <span class="ui-skeleton"></span>
+            <span class="ui-skeleton"></span>
+            <span class="ui-skeleton"></span>
+            <span class="ui-skeleton"></span>
+          </div>
+          <div class="summary-state-actions">
+            <button id="summaryRetryButton" class="btn btn-primary hidden" type="button">Повторить загрузку</button>
+            <button id="summaryOpenConnectionsButton" class="btn btn-primary hidden" type="button">Подключить кабинеты</button>
+            <button id="summaryResetScopeButton" class="btn btn-secondary hidden" type="button">Показать все кабинеты</button>
+          </div>
+        </div>
+
+        <div id="summaryContent" class="summary-content hidden">
+
         <!-- KPI Metrics Cards Grid -->
-        <div class="kpi-grid kpi-primary-grid">
+        <div class="kpi-grid kpi-primary-grid" aria-label="Ключевые показатели">
           <div class="kpi-card spend-card">
             <div class="kpi-header">
               <span class="kpi-title">Spend</span>
@@ -1208,6 +1231,28 @@
             <div class="kpi-subtext">Стоимость покупки</div>
           </div>
         </div>
+
+        <section id="summaryComparisonPanel" class="summary-insight-card" aria-labelledby="summaryComparisonTitle">
+          <div class="summary-insight-header">
+            <div>
+              <span class="eyebrow">Сравнение</span>
+              <h2 id="summaryComparisonTitle">Изменение с предыдущего снимка</h2>
+              <p id="summaryComparisonDescription">Сравниваем два обновления одного выбранного периода.</p>
+            </div>
+          </div>
+          <div id="summaryComparisonContent" class="summary-comparison-grid"></div>
+        </section>
+
+        <figure id="summaryFunnelPanel" class="summary-insight-card summary-funnel-card" aria-labelledby="summaryFunnelTitle">
+          <figcaption class="summary-insight-header">
+            <div>
+              <span class="eyebrow">Путь пользователя</span>
+              <h2 id="summaryFunnelTitle">Воронка выбранного периода</h2>
+              <p>Показываем только события, которые Meta вернула для синхронизированных кабинетов.</p>
+            </div>
+          </figcaption>
+          <ol id="summaryFunnelChart" class="summary-funnel-chart" aria-label="Воронка эффективности: данные загружаются"></ol>
+        </figure>
 
         <div class="metric-category-header">
           <div>
@@ -1345,11 +1390,11 @@
 
           <div class="summary-view-toolbar desktop-view" aria-label="Представление таблицы">
             <div class="summary-view-presets" id="summaryViewPresets">
-              <button class="summary-view-btn" type="button" data-summary-view="overview">Обзор</button>
-              <button class="summary-view-btn" type="button" data-summary-view="delivery">Доставка</button>
-              <button class="summary-view-btn" type="button" data-summary-view="traffic">Трафик</button>
-              <button class="summary-view-btn" type="button" data-summary-view="funnel">Воронка</button>
-              <button class="summary-view-btn active" type="button" data-summary-view="all">Все метрики</button>
+              <button class="summary-view-btn" type="button" data-summary-view="overview" aria-pressed="false">Обзор</button>
+              <button class="summary-view-btn" type="button" data-summary-view="delivery" aria-pressed="false">Доставка</button>
+              <button class="summary-view-btn" type="button" data-summary-view="traffic" aria-pressed="false">Трафик</button>
+              <button class="summary-view-btn" type="button" data-summary-view="funnel" aria-pressed="false">Воронка</button>
+              <button class="summary-view-btn active" type="button" data-summary-view="all" aria-pressed="true">Все метрики</button>
             </div>
             <button id="btnOpenSummaryColumns" class="btn btn-secondary summary-columns-button" type="button">
               Колонки таблицы <span id="summaryVisibleColumnsCount" class="summary-columns-count">24</span>
@@ -1359,14 +1404,14 @@
           <div class="summary-table-filterbar" aria-label="Фильтры таблицы">
             <div class="summary-table-search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input id="summaryAccountSearch" type="search" maxlength="120" placeholder="Найти кабинет или act_ID…" autocomplete="off">
+              <input id="summaryAccountSearch" type="search" maxlength="120" placeholder="Найти кабинет или act_ID…" autocomplete="off" aria-label="Поиск кабинета в сводке">
               <button id="summaryAccountSearchClear" class="hidden" type="button" aria-label="Очистить поиск">&times;</button>
             </div>
             <div class="summary-status-filters" id="summaryStatusFilters">
-              <button class="active" type="button" data-summary-status-filter="all">Все</button>
-              <button type="button" data-summary-status-filter="synced">Получены</button>
-              <button type="button" data-summary-status-filter="blocked">Недоступны</button>
-              <button type="button" data-summary-status-filter="error">Ошибки Meta</button>
+              <button class="active" type="button" data-summary-status-filter="all" aria-pressed="true">Все</button>
+              <button type="button" data-summary-status-filter="synced" aria-pressed="false">Получены</button>
+              <button type="button" data-summary-status-filter="blocked" aria-pressed="false">Недоступны</button>
+              <button type="button" data-summary-status-filter="error" aria-pressed="false">Ошибки Meta</button>
             </div>
             <span id="summaryRowsCount" class="summary-rows-count">0 кабинетов</span>
           </div>
@@ -1386,6 +1431,7 @@
           <div id="summaryMobileCards" class="mobile-view summary-cards-list">
             <!-- Dynamically populated for small screens -->
           </div>
+        </div>
         </div>
       </section>
 
@@ -3158,14 +3204,14 @@
     </div>
 
     <div id="modalSummaryColumns" class="modal-overlay hidden">
-      <div class="bottom-sheet summary-columns-sheet ui-dialog" role="dialog" aria-modal="true">
+      <div class="bottom-sheet summary-columns-sheet ui-dialog" role="dialog" aria-modal="true" aria-labelledby="summaryColumnsTitle" aria-describedby="summaryColumnsDescription">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <div>
-            <h3>Колонки таблицы</h3>
-            <p class="summary-columns-description">Включайте показатели, перетаскивайте их в нужном порядке и задавайте ширину. Настройка сохранится для вашего пользователя.</p>
+            <h3 id="summaryColumnsTitle">Колонки таблицы</h3>
+            <p id="summaryColumnsDescription" class="summary-columns-description">Включайте показатели, перетаскивайте их в нужном порядке и задавайте ширину. Настройка сохранится для вашего пользователя.</p>
           </div>
-          <button class="btn-close" type="button" onclick="window.closeModal('modalSummaryColumns')">&times;</button>
+          <button class="btn-close" type="button" aria-label="Закрыть настройку колонок" onclick="window.closeModal('modalSummaryColumns')">&times;</button>
         </div>
         <div id="summaryColumnOptions" class="summary-column-options"></div>
         <div class="modal-footer summary-columns-footer">
@@ -3359,10 +3405,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.5.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.5.0"></script>
-  <script src="/static/js/security.js?v=10.5.0"></script>
-  <script src="/static/js/i18n.js?v=10.5.0"></script>
-  <script src="/static/js/app.js?v=10.5.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.6.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.6.0"></script>
+  <script src="/static/js/security.js?v=10.6.0"></script>
+  <script src="/static/js/i18n.js?v=10.6.0"></script>
+  <script src="/static/js/app.js?v=10.6.0"></script>
 </body>
 </html>

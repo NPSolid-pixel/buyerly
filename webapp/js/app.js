@@ -112,6 +112,7 @@
   let summaryViewChangeVersion = 0;
   let summaryFilterSaveTimer = null;
   let summaryColumnResizeState = null;
+  let summaryColumnsTrigger = null;
 
   // Application State
   const state = {
@@ -9354,6 +9355,75 @@
     'last_7d': 'за 7 дней'
   };
 
+  function setSummaryWorkspaceState(mode, options = {}) {
+    const root = document.getElementById('tab-summary');
+    const panel = document.getElementById('summaryStatePanel');
+    const content = document.getElementById('summaryContent');
+    const title = document.getElementById('summaryStateTitle');
+    const description = document.getElementById('summaryStateDescription');
+    const skeleton = document.getElementById('summaryStateSkeleton');
+    const retry = document.getElementById('summaryRetryButton');
+    const connections = document.getElementById('summaryOpenConnectionsButton');
+    const resetScope = document.getElementById('summaryResetScopeButton');
+    if (!root || !panel || !content) return;
+
+    const isBusy = mode === 'loading' || mode === 'refreshing';
+    root.dataset.summaryState = mode;
+    root.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+    retry?.classList.add('hidden');
+    connections?.classList.add('hidden');
+    resetScope?.classList.add('hidden');
+
+    if (mode === 'ready' || mode === 'refreshing') {
+      panel.className = 'summary-state-panel hidden';
+      content.classList.remove('hidden');
+      return;
+    }
+
+    panel.className = `summary-state-panel ${mode}`;
+    panel.setAttribute('role', mode === 'error' ? 'alert' : 'status');
+    content.classList.add('hidden');
+    skeleton?.classList.toggle('hidden', mode !== 'loading');
+
+    if (mode === 'loading') {
+      if (title) title.textContent = 'Собираем эффективность';
+      if (description) description.textContent = 'Загружаем последний сохранённый снимок и проверяем его актуальность.';
+    } else if (mode === 'empty') {
+      const scoped = options.scoped === true;
+      if (title) title.textContent = scoped ? 'В этой группе пока нет кабинетов' : 'Подключите первый рекламный кабинет';
+      if (description) {
+        description.textContent = scoped
+          ? 'Выберите все кабинеты или добавьте кабинеты в эту группу, чтобы увидеть её эффективность.'
+          : 'После подключения Buyerly покажет KPI, воронку, качество данных и детализацию по кабинетам.';
+      }
+      (scoped ? resetScope : connections)?.classList.remove('hidden');
+    } else if (mode === 'error') {
+      if (title) title.textContent = 'Не удалось загрузить эффективность';
+      if (description) description.textContent = options.message || 'Проверьте подключение и повторите загрузку.';
+      retry?.classList.remove('hidden');
+    }
+  }
+
+  function setSummaryControlsSelectionState() {
+    document.querySelectorAll('.period-btn').forEach(button => {
+      button.setAttribute('aria-pressed', button.dataset.period === state.summaryView.period ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-summary-view]').forEach(button => {
+      button.setAttribute('aria-pressed', button.dataset.summaryView === state.summaryView.view_mode ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-summary-status-filter]').forEach(button => {
+      button.setAttribute('aria-pressed', button.dataset.summaryStatusFilter === state.summaryView.filters.status ? 'true' : 'false');
+    });
+  }
+
+  function setupSummaryAccessibility() {
+    document.querySelectorAll('[data-ui-pilot="efficiency"] .metric-info[title]').forEach(info => {
+      info.setAttribute('tabindex', '0');
+      info.setAttribute('role', 'note');
+      info.setAttribute('aria-label', info.title);
+    });
+  }
+
   function updateFetchButtonLabel(period) {
     const label = periodTextMap[period] || 'за период';
     const textEl = document.getElementById('btnFetchSummaryText');
@@ -9509,6 +9579,7 @@
     document.querySelectorAll('.period-btn').forEach(button => {
       button.classList.toggle('active', button.dataset.period === state.summaryView.period);
     });
+    setSummaryControlsSelectionState();
     renderSummaryGroupSelector();
   }
 
@@ -9544,7 +9615,7 @@
       const indicator = isActiveSort ? (direction === 'asc' ? '↑' : '↓') : '↕';
       const ariaSort = isActiveSort ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
       const columnWidth = state.summaryView.column_widths[column.key];
-      return `<th${rowspan ? ' rowspan="2"' : ''} class="summary-sortable-header${alignment}" data-summary-column="${column.key}" data-summary-sort="${column.key}" tabindex="0" role="button" aria-sort="${ariaSort}">${escapeHtml(column.label)} <span class="summary-sort-indicator">${indicator}</span><span class="summary-column-resizer" data-summary-column-resizer="${column.key}" role="separator" aria-orientation="vertical" aria-label="Изменить ширину колонки ${escapeHtml(column.label)}" aria-valuemin="${SUMMARY_COLUMN_MIN_WIDTH}" aria-valuemax="${SUMMARY_COLUMN_MAX_WIDTH}" aria-valuenow="${columnWidth}" tabindex="0" title="Потяните для изменения ширины · двойной клик — сброс"></span></th>`;
+      return `<th${rowspan ? ' rowspan="2"' : ''} class="summary-sortable-header${alignment}" data-summary-column="${column.key}" data-summary-sort="${column.key}" tabindex="0" aria-sort="${ariaSort}" aria-label="Сортировать по колонке ${escapeHtml(column.label)}">${escapeHtml(column.label)} <span class="summary-sort-indicator">${indicator}</span><span class="summary-column-resizer" data-summary-column-resizer="${column.key}" role="separator" aria-orientation="vertical" aria-label="Изменить ширину колонки ${escapeHtml(column.label)}" aria-valuemin="${SUMMARY_COLUMN_MIN_WIDTH}" aria-valuemax="${SUMMARY_COLUMN_MAX_WIDTH}" aria-valuenow="${columnWidth}" tabindex="0" title="Потяните для изменения ширины · двойной клик — сброс"></span></th>`;
     };
     const runs = [];
     orderedColumns.forEach(column => {
@@ -9841,6 +9912,9 @@
   window.openSummaryColumns = function () {
     renderSummaryColumnOptions();
     window.openModal('modalSummaryColumns');
+    window.requestAnimationFrame(() => {
+      document.querySelector('#summaryColumnOptions .summary-column-visible:not([disabled])')?.focus();
+    });
   };
 
   // ==========================================================
@@ -9857,8 +9931,6 @@
     const silent = options.silent === true;
     const existingData = state.summaryCache[period] || null;
     let loadedData = null;
-    const tableBody = document.getElementById('summaryTableBody');
-    const mobileCards = document.getElementById('summaryMobileCards');
     const fetchBtn = document.getElementById('btnFetchSummary');
     const statusLabel = document.getElementById('summaryStatusLabel');
     
@@ -9871,9 +9943,11 @@
     document.getElementById('kpiPeriodLabel').textContent = periodTextMap[period] || '';
 
     state.summaryLoading = true;
+    setSummaryWorkspaceState(existingData ? 'refreshing' : 'loading');
     if (fetchBtn) {
       fetchBtn.classList.add('loading');
       fetchBtn.disabled = true;
+      fetchBtn.setAttribute('aria-busy', 'true');
     }
     if (statusLabel) {
       statusLabel.textContent = existingData
@@ -9900,11 +9974,11 @@
       if (existingData) {
         if (state.currentPeriod === period) {
           renderSummaryProvenance(existingData, { refreshError: err.message });
+          setSummaryWorkspaceState('ready');
         }
       } else if (state.currentPeriod === period) {
-        tableBody.innerHTML = `<tr><td colspan="22" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
-        mobileCards.innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
         if (statusLabel) statusLabel.textContent = `Не удалось загрузить данные: ${err.message}`;
+        setSummaryWorkspaceState('error', { message: err.message });
       }
       if (!silent) showToast(`Ошибка обновления: ${err.message}`, 'error');
     } finally {
@@ -9913,6 +9987,7 @@
         if (fetchBtn) {
           fetchBtn.classList.remove('loading');
           fetchBtn.disabled = false;
+          fetchBtn.removeAttribute('aria-busy');
         }
         if (!force && options.refreshIfStale !== false && loadedData) {
           refreshSummaryIfStale(period, loadedData);
@@ -10043,6 +10118,112 @@
     comparison.textContent = `До обновления ${formatSummaryTime(previous.generated_at)} · ${formatMoneyOrDash(previousSpend, currency)} · изменение ${deltaLabel}`;
   }
 
+  function finiteSummaryNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  function previousSummaryCost(previous, countKey) {
+    const spend = finiteSummaryNumber(previous?.total_spend);
+    const count = finiteSummaryNumber(previous?.[countKey]);
+    return spend !== null && count > 0 ? spend / count : null;
+  }
+
+  function summaryComparisonDelta(current, previous, formatter) {
+    if (current === null || previous === null) {
+      return '<span class="summary-comparison-delta unavailable">Сравнение недоступно</span>';
+    }
+    const delta = current - previous;
+    if (Math.abs(delta) < Number.EPSILON) {
+      return '<span class="summary-comparison-delta flat">Без изменений</span>';
+    }
+    if (previous === 0) {
+      return `<span class="summary-comparison-delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? 'Рост' : 'Снижение'} · ${formatter(Math.abs(delta))}</span>`;
+    }
+    const percent = Math.abs((delta / previous) * 100);
+    return `<span class="summary-comparison-delta ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? 'Рост' : 'Снижение'} ${percent.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%</span>`;
+  }
+
+  function renderSummaryComparison(data) {
+    const container = document.getElementById('summaryComparisonContent');
+    const description = document.getElementById('summaryComparisonDescription');
+    if (!container) return;
+
+    if (data.scope?.group_id && data.scope.group_id !== 'all') {
+      if (description) description.textContent = 'Для выбранной группы показываем текущий срез без несопоставимого общего снимка.';
+      container.innerHTML = '<div class="summary-insight-empty">Сравнение по группе появится после сохранения групповых снимков. Текущие KPI и воронка уже учитывают выбранную группу.</div>';
+      return;
+    }
+
+    const previous = data.snapshot?.previous;
+    if (!previous) {
+      if (description) description.textContent = 'Сравниваем два обновления одного выбранного периода.';
+      container.innerHTML = '<div class="summary-insight-empty">Предыдущего снимка пока нет. Обновите данные позже, чтобы увидеть изменения KPI.</div>';
+      return;
+    }
+
+    const currency = normalizeCurrencyCode(data.display_currency);
+    const previousCurrency = normalizeCurrencyCode(previous.display_currency);
+    const moneyComparable = Boolean(
+      currency && currency === previousCurrency && !data.mixed_currencies && !previous.mixed_currencies
+    );
+    const money = value => formatMoneyOrDash(value, currency);
+    const integer = value => value === null ? '—' : formatNumber(value);
+    const currentSpend = moneyComparable ? finiteSummaryNumber(data.total_spend) : null;
+    const previousSpend = moneyComparable ? finiteSummaryNumber(previous.total_spend) : null;
+    const metrics = [
+      { label: 'Spend', current: currentSpend, previous: previousSpend, formatter: money },
+      { label: 'Лиды', current: finiteSummaryNumber(data.total_leads), previous: finiteSummaryNumber(previous.total_leads), formatter: integer },
+      { label: 'CPL', current: moneyComparable ? finiteSummaryNumber(data.cost_per_lead) : null, previous: moneyComparable ? previousSummaryCost(previous, 'total_leads') : null, formatter: money },
+      { label: 'Регистрации', current: finiteSummaryNumber(data.total_regs), previous: finiteSummaryNumber(previous.total_regs), formatter: integer },
+      { label: 'CPReg', current: moneyComparable ? finiteSummaryNumber(data.cost_per_registration) : null, previous: moneyComparable ? previousSummaryCost(previous, 'total_regs') : null, formatter: money },
+      { label: 'Покупки', current: finiteSummaryNumber(data.total_purchases), previous: finiteSummaryNumber(previous.total_purchases), formatter: integer },
+      { label: 'CPP', current: moneyComparable ? finiteSummaryNumber(data.cost_per_purchase) : null, previous: moneyComparable ? previousSummaryCost(previous, 'total_purchases') : null, formatter: money }
+    ];
+
+    if (description) {
+      description.textContent = `Текущий снимок и данные до обновления ${formatSummaryTime(previous.generated_at)} для одного периода.`;
+    }
+    container.innerHTML = metrics.map(metric => `
+      <article class="summary-comparison-item">
+        <span>${metric.label}</span>
+        <strong>${metric.formatter(metric.current)}</strong>
+        ${summaryComparisonDelta(metric.current, metric.previous, metric.formatter)}
+        <small>До обновления: ${metric.formatter(metric.previous)}</small>
+      </article>`).join('');
+  }
+
+  function renderSummaryFunnel(data) {
+    const chart = document.getElementById('summaryFunnelChart');
+    if (!chart) return;
+    const stages = [
+      { label: 'Показы', value: finiteSummaryNumber(data.total_impressions) || 0 },
+      { label: 'Link Clicks', value: finiteSummaryNumber(data.total_link_clicks) || 0 },
+      { label: 'LP Views', value: finiteSummaryNumber(data.total_landing_page_views) || 0 },
+      { label: 'Лиды', value: finiteSummaryNumber(data.total_leads) || 0 },
+      { label: 'Регистрации', value: finiteSummaryNumber(data.total_regs) || 0 },
+      { label: 'Покупки', value: finiteSummaryNumber(data.total_purchases) || 0 }
+    ];
+    const maximum = Math.max(...stages.map(stage => stage.value), 0);
+    const ariaParts = [];
+    chart.classList.toggle('zero', maximum === 0);
+    chart.innerHTML = stages.map((stage, index) => {
+      const previousValue = index > 0 ? stages[index - 1].value : null;
+      const conversion = previousValue > 0 ? (stage.value / previousValue) * 100 : null;
+      const conversionLabel = index === 0
+        ? 'Начало воронки'
+        : (conversion === null ? 'Конверсия недоступна' : `Конверсия ${conversion.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`);
+      const width = maximum > 0 && stage.value > 0 ? Math.max(0.8, (stage.value / maximum) * 100) : 0;
+      ariaParts.push(`${stage.label}: ${formatNumber(stage.value)}${index ? `, ${conversionLabel.toLocaleLowerCase('ru')}` : ''}`);
+      return `
+        <li class="summary-funnel-stage">
+          <div class="summary-funnel-label"><span>${stage.label}</span><strong>${formatNumber(stage.value)}</strong></div>
+          <div class="summary-funnel-track" aria-hidden="true"><span style="width: ${width}%"></span></div>
+          <small>${conversionLabel}</small>
+        </li>`;
+    }).join('');
+    chart.setAttribute('aria-label', `Воронка эффективности ${periodTextMap[data.period] || 'за выбранный период'}. ${ariaParts.join('. ')}`);
+  }
+
   function renderCurrencyBreakdown(data) {
     const container = document.getElementById('summaryCurrencyBreakdown');
     if (!container) return;
@@ -10093,8 +10274,16 @@
     const status = quality.status || 'unavailable';
     const coverageCard = document.getElementById('kpiCoverageCard');
     const banner = document.getElementById('summaryQualityBanner');
+    const statusDot = document.getElementById('kpiCoverageStatus');
     coverageCard.classList.remove('complete', 'partial', 'unavailable');
     coverageCard.classList.add(status);
+    if (statusDot) {
+      const labels = { complete: 'Синхронизация полная', partial: 'Синхронизация частичная', unavailable: 'Синхронизация недоступна' };
+      statusDot.dataset.status = status;
+      statusDot.setAttribute('role', 'img');
+      statusDot.setAttribute('aria-label', labels[status] || labels.unavailable);
+      statusDot.title = labels[status] || labels.unavailable;
+    }
     document.getElementById('kpiCoverage').textContent = `${Number(quality.metrics_coverage_percent || 0).toFixed(1)}%`;
     document.getElementById('kpiSyncedAccounts').textContent = quality.accounts_synced || 0;
     document.getElementById('kpiTotalAccounts').textContent = quality.accounts_total || 0;
@@ -10102,19 +10291,23 @@
 
     if (status === 'complete') {
       banner.className = 'summary-quality-banner hidden';
+      banner.removeAttribute('role');
       banner.textContent = '';
       return;
     }
     const failed = quality.accounts_failed || 0;
     const blocked = quality.accounts_blocked || 0;
     banner.className = `summary-quality-banner${status === 'unavailable' ? ' error' : ''}`;
+    banner.setAttribute('role', status === 'unavailable' ? 'alert' : 'status');
     banner.innerHTML = `<b>Неполная синхронизация:</b> данные получены от ${quality.accounts_synced || 0} из ${quality.accounts_total || 0} кабинетов. Ошибок Meta: ${failed}, недоступных кабинетов: ${blocked}. Итоговые суммы рассчитаны только по успешно синхронизированным данным.`;
   }
 
   function summaryDataStatus(account) {
     const status = summaryAccountStatusKey(account);
     const labels = { synced: 'Получены', blocked: 'Недоступны', error: 'Ошибка Meta' };
-    return `<span class="summary-data-status ${status}" title="${escapeHtml(account.data_status_label || '')}">${labels[status] || 'Нет данных'}</span>`;
+    const statusLabel = labels[status] || 'Нет данных';
+    const detail = account.data_status_label || statusLabel;
+    return `<span class="summary-data-status ${status}" title="${escapeHtml(detail)}" aria-label="${escapeHtml(`${statusLabel}: ${detail}`)}">${statusLabel}</span>`;
   }
 
   function summaryAccountStatusKey(account) {
@@ -10325,7 +10518,7 @@
 
         return `
           <tr>
-            <td data-summary-column="account"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint summary-account-id">(${escapeHtml(acc.account_id)})</span></td>
+            <td data-summary-column="account" title="${escapeHtml(`${displayName} · ${acc.account_id}`)}"><b>${escapeHtml(displayName)}</b> <span class="mono text-hint summary-account-id">(${escapeHtml(acc.account_id)})</span></td>
             <td class="summary-custom-name-cell" data-summary-column="custom_name">${acc.custom_name ? `<b>${escapeHtml(acc.custom_name)}</b>` : '<span class="text-hint">—</span>'}</td>
             <td class="summary-note-cell" data-summary-column="note" title="${escapeHtml(acc.note || '')}">${acc.note ? escapeHtml(acc.note) : '<span class="text-hint">—</span>'}</td>
             <td data-summary-column="data">${summaryDataStatus(acc)}</td>
@@ -10385,6 +10578,8 @@
     document.getElementById('kpiCostPerLandingPageView').textContent = formatMoneyOrDash(data.cost_per_landing_page_view, displayCurrency);
     document.getElementById('kpiUniqueClicks').textContent = formatOptionalNumber(data.total_unique_clicks);
     renderSpendComparison(data);
+    renderSummaryComparison(data);
+    renderSummaryFunnel(data);
     renderSummaryProvenance(data);
     renderSummaryQuality(data.data_quality || {});
     renderCurrencyBreakdown(data);
@@ -10418,11 +10613,11 @@
           <div class="mob-summary-card">
             <div class="mob-card-head">
               <div class="summary-mobile-identity-copy">
-                <b class="mob-card-name summary-mobile-name">${escapeHtml(displayName)}</b>
-                <span class="mono text-hint mob-summary-subline">${subLabel}</span>
+                <b class="mob-card-name summary-mobile-name" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</b>
+                <span class="mono text-hint mob-summary-subline" title="${subLabel}">${subLabel}</span>
                 ${statusPillHtml}
               </div>
-              <span class="mono summary-mobile-spend">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0), acc.currency) : '—'}</span>
+              <span class="mono summary-mobile-spend" title="${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0), acc.currency) : 'Нет данных'}">${hasMetrics ? formatMoneyOrDash(Number(acc.spend || 0), acc.currency) : '—'}</span>
             </div>
             ${noteHtml}
             ${groupsHtml ? `<div class="mob-summary-groups">${groupsHtml}</div>` : ''}
@@ -10495,6 +10690,10 @@
         `;
       }).join('');
     }
+    const isScopedEmpty = data.scope?.group_id && data.scope.group_id !== 'all';
+    setSummaryWorkspaceState(Array.isArray(data.accounts) && data.accounts.length > 0 ? 'ready' : 'empty', {
+      scoped: Boolean(isScopedEmpty)
+    });
   }
 
 
@@ -11581,16 +11780,52 @@
     if (activeModalStack.length === 0) {
       document.body.style.overflow = '';
     }
+    if (modalId === 'modalSummaryColumns' && summaryColumnsTrigger?.isConnected) {
+      summaryColumnsTrigger.focus();
+      summaryColumnsTrigger = null;
+    }
   };
 
   document.getElementById('btnOpenTokenGuide')?.addEventListener('click', () => {
     window.openModal('modalTokenGuide');
   });
 
-  document.getElementById('btnOpenSummaryColumns')?.addEventListener('click', () => {
+  document.getElementById('btnOpenSummaryColumns')?.addEventListener('click', event => {
+    summaryColumnsTrigger = event.currentTarget;
     haptic('selection');
     window.openSummaryColumns();
   });
+
+  document.getElementById('modalSummaryColumns')?.addEventListener('keydown', event => {
+    if (event.key !== 'Tab') return;
+    const focusable = Array.from(event.currentTarget.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter(element => element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+
+  document.getElementById('summaryRetryButton')?.addEventListener('click', () => {
+    loadSummary(state.currentPeriod, false);
+  });
+
+  document.getElementById('summaryOpenConnectionsButton')?.addEventListener('click', () => {
+    window.switchTab('fb_accounts');
+  });
+
+  document.getElementById('summaryResetScopeButton')?.addEventListener('click', () => {
+    updateSummaryFilters({ group_id: 'all' }, { immediate: true });
+  });
+
+  setupSummaryAccessibility();
 
   document.querySelectorAll('[data-summary-view]').forEach(button => {
     button.addEventListener('click', () => {
@@ -11766,6 +12001,7 @@
 
       document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      setSummaryControlsSelectionState();
 
       updateFetchButtonLabel(period);
       document.getElementById('kpiPeriodLabel').textContent = periodTextMap[period] || '';
