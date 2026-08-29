@@ -893,22 +893,22 @@
               <small>Сценарии организованы по задачам</small>
             </article>
             <article class="automations-summary-card">
-              <span>Кабинеты под контролем</span>
+              <span>Кабинеты</span>
               <strong id="rulesLinkedAccsCount">0</strong>
               <small>Есть активные назначения правил</small>
             </article>
           </section>
 
           <div class="rules-toolbar" role="search" aria-label="Поиск и фильтры правил">
-            <label class="rules-search-control" for="rulesSearchInput">
+            <div class="rules-search-control">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <span class="sr-only">Найти правило</span>
-              <input id="rulesSearchInput" type="search" placeholder="Название, действие или метрика" autocomplete="off" oninput="window.onRulesFilterChange()">
+              <label class="sr-only" for="rulesSearchInput">Найти правило</label>
+              <input id="rulesSearchInput" type="search" aria-controls="ruleGroupsContainer" placeholder="Название, действие или метрика" autocomplete="off" oninput="window.onRulesFilterChange()">
               <button id="rulesSearchClear" class="rules-search-clear hidden" type="button" aria-label="Очистить поиск правил" onclick="window.clearRulesSearch()">&times;</button>
-            </label>
+            </div>
             <label class="rules-filter-control" for="rulesActionFilter">
               <span>Действие</span>
-              <select id="rulesActionFilter" onchange="window.onRulesFilterChange()">
+              <select id="rulesActionFilter" aria-controls="ruleGroupsContainer" onchange="window.onRulesFilterChange()">
                 <option value="all">Все действия</option>
                 <option value="turn_off">Выключение</option>
                 <option value="notify_only">Уведомление</option>
@@ -932,16 +932,16 @@
           </div>
 
           <!-- Kanban Board: Groups as Columns & Rules as Cards -->
-          <div class="rules-board-wrapper hidden" aria-label="Доска правил" aria-busy="true">
-            <div id="ruleGroupsContainer" class="rule-groups-grid rules-kanban-board" aria-live="polite">
+          <div class="rules-board-wrapper hidden" role="region" aria-label="Доска правил" aria-describedby="rulesResultCount" aria-busy="true">
+            <div id="ruleGroupsContainer" class="rule-groups-grid rules-kanban-board">
               <!-- Dynamically populated Kanban columns with rule cards inside -->
             </div>
           </div>
 
           <!-- Floating Bulk Actions Bar (Attio Style) -->
-          <div id="rulesBulkActionsBar" class="rules-bulk-bar hidden">
+          <div id="rulesBulkActionsBar" class="rules-bulk-bar hidden" role="toolbar" aria-label="Действия с выбранными правилами">
             <div class="rules-bulk-bar-inner">
-              <button type="button" class="rules-bulk-selected-pill" onclick="window.clearRuleSelection()" title="Снять выделение">
+              <button id="btnClearRulesSelection" type="button" class="rules-bulk-selected-pill" aria-label="Снять выбор со всех правил" onclick="window.clearRuleSelection()" title="Снять выделение">
                 <span id="rulesBulkCount" class="rules-bulk-count-badge">1</span>
                 <span>Выбрано</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>

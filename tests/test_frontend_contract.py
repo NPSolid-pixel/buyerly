@@ -896,7 +896,9 @@ class TestFrontendRuleContract(unittest.TestCase):
             'id="rulesErrorState"',
             'id="btnRetryRules"',
             'id="rulesFilteredEmptyState"',
+            'id="btnClearRulesSelection"',
             'aria-label="Доска правил"',
+            'role="toolbar" aria-label="Действия с выбранными правилами"',
             'role="alert" aria-live="polite"',
             'aria-labelledby="chooseRuleDialogTitle"',
         ):
@@ -908,6 +910,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             'window.clearRulesSearch',
             'window.resetRulesFilters',
             'state.rulesBulkDeleting',
+            'getRuleAssignmentImpact',
+            'setRulesBulkActionsAvailable',
             'CONFIRMED_RULE_ACTIONS',
             'confirmRuleMutation',
             'setRuleSubmitState',
@@ -916,6 +920,10 @@ class TestFrontendRuleContract(unittest.TestCase):
             "e.key === 'Tab' && activeModalStack.length > 0",
             'aria-pressed="${isSelected}"',
             'class="rule-card-open-target"',
+            'Все эти назначения будут удалены',
+            'await window.deletePresetDirectly(presetId)',
+            'Number.isInteger(normalizedPresetId)',
+            'topModal.contains(returnTarget)',
         ):
             self.assertIn(script_contract, self.script)
 

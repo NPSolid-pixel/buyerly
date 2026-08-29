@@ -5404,6 +5404,18 @@
     return true;
   }
 
+  function getRuleAssignmentImpact(ruleIds) {
+    const targetIds = new Set((ruleIds || []).map(Number).filter(Number.isFinite));
+    let linkedAccounts = 0;
+    (state.accounts || []).forEach(account => {
+      const linkedRules = (account.active_rules || []).filter(rule => targetIds.has(Number(rule.preset_id)));
+      if (linkedRules.length > 0) {
+        linkedAccounts += 1;
+      }
+    });
+    return { linkedAccounts };
+  }
+
   function buildKanbanRuleCard(p, groupId = null) {
     const actionBadgeMap = {
       'turn_off': { label: 'Стоп', class: 'rule-action-turn_off' },
@@ -5435,12 +5447,15 @@
       }
     });
 
+    const budgetStep = Number(p.budget_change_percent);
+    const safeBudgetStep = Number.isFinite(budgetStep) && budgetStep > 0 ? budgetStep : 20;
     const stepInfo = (p.action === 'increase_budget' || p.action === 'decrease_budget')
-      ? ` ${p.action === 'increase_budget' ? '+' : '-'}${p.budget_change_percent || 20}%`
+      ? ` ${p.action === 'increase_budget' ? '+' : '-'}${safeBudgetStep}%`
       : '';
+    const actionBadgeText = `${act.label || ''}${stepInfo}`;
 
     const isSelected = state.selectedRuleIds && state.selectedRuleIds.has(p.id);
-    const accessibleName = `Открыть правило «${p.name}». Действие: ${act.label}. ${condList.length} условий.`;
+    const accessibleName = `Открыть правило «${p.name}». Действие: ${actionBadgeText}. ${condList.length} условий.`;
 
     return `
       <article class="rules-kanban-card rule-card ${isSelected ? 'selected' : ''}"
@@ -5458,7 +5473,7 @@
             <span class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
           </div>
           <div class="rule-card-top-right">
-            <span class="rule-action-badge ${act.class}" aria-label="Действие: ${escapeHtml(act.label + stepInfo)}">${act.label}${stepInfo}</span>
+            <span class="rule-action-badge ${act.class}" aria-label="Действие: ${escapeHtml(actionBadgeText)}">${escapeHtml(actionBadgeText)}</span>
           </div>
         </div>
         
@@ -5518,13 +5533,27 @@
     }
   }
 
+  function setRulesBulkActionsAvailable(available) {
+    updateRulesBulkActionsBar();
+    if (available) return;
+    document.getElementById('rulesBulkActionsBar')?.classList.add('hidden');
+    const moveButton = document.getElementById('btnBulkMoveRules');
+    const deleteButton = document.getElementById('btnBulkDeleteRules');
+    if (moveButton) moveButton.disabled = true;
+    if (deleteButton) deleteButton.disabled = true;
+  }
+
   window.bulkDeleteSelectedRules = async function() {
     if (state.rulesBulkDeleting) return;
     const count = state.selectedRuleIds ? state.selectedRuleIds.size : 0;
     if (count === 0) return;
-    if (!confirm(`Удалить выбранные правила (${count} шт.)?`)) return;
-
     const idsToDelete = [...state.selectedRuleIds];
+    const impact = getRuleAssignmentImpact(idsToDelete);
+    const impactText = impact.linkedAccounts > 0
+      ? ` Связанных кабинетов: ${impact.linkedAccounts}. Все эти назначения будут удалены, а автоматизация в кабинетах без других правил будет отключена.`
+      : ' Эти правила сейчас не назначены кабинетам.';
+    if (!confirm(`Удалить выбранные правила (${count} шт.)?${impactText} Отменить удаление будет нельзя.`)) return;
+
     state.rulesBulkDeleting = true;
     updateRulesBulkActionsBar();
     showGlobalLoading(`Удаление правил (${count})...`);
@@ -5901,11 +5930,10 @@
     const linkedCountEl = document.getElementById('rulesLinkedAccsCount');
     if (!boardContainer || !emptyEl) return;
 
-    updateRulesBulkActionsBar();
-
     const status = state.rulesViewStatus || 'idle';
     const isLoading = status === 'loading' || status === 'idle';
     const hasError = status === 'error';
+    setRulesBulkActionsAvailable(!isLoading && !hasError);
     loadingEl?.classList.toggle('hidden', !isLoading);
     errorEl?.classList.toggle('hidden', !hasError);
     if (errorMessageEl && hasError) errorMessageEl.textContent = state.rulesViewError || 'Проверьте соединение и попробуйте ещё раз.';
@@ -6444,7 +6472,7 @@
             </div>
           </div>
           <div class="choose-rule-item-right">
-            <span class="rule-action-badge ${act.class}">${act.label}</span>
+            <span class="rule-action-badge ${act.class}">${escapeHtml(act.label || '')}</span>
           </div>
         </button>
       `;
@@ -6534,7 +6562,7 @@
     const linkedCount = (state.accounts || []).filter(account => (account.active_rules || [])
       .some(rule => Number(rule.preset_id) === Number(presetId))).length;
     const reach = linkedCount > 0
-      ? `Изменение затронет конфигурацию правила. Назначено кабинетам: ${linkedCount}.`
+      ? `После сохранения действие обновится в связанных кабинетах (${linkedCount}) и будет использоваться при следующей автоматической проверке.`
       : 'Сейчас правило не назначено кабинетам.';
     return window.confirm(`Сохранить действие «${actionLabel}» для правила «${ruleName}»? ${reach}`);
   }
@@ -8088,12 +8116,17 @@
 
   window.deleteRuleFromOverlay = async function () {
     if (!state.currentRecordPresetId) return;
-    const preset = state.presets.find(p => p.id === state.currentRecordPresetId);
+    const presetId = state.currentRecordPresetId;
+    const preset = state.presets.find(p => p.id === presetId);
     const name = preset ? preset.name : 'правило';
-    if (!confirm(`Вы уверены, что хотите удалить «${name}»?`)) return;
+    const impact = getRuleAssignmentImpact([presetId]);
+    const impactText = impact.linkedAccounts > 0
+      ? ` Связанных кабинетов: ${impact.linkedAccounts}. Назначение будет удалено; автоматизация в кабинетах без других правил будет отключена.`
+      : ' Правило сейчас не назначено кабинетам.';
+    if (!confirm(`Удалить «${name}»?${impactText} Отменить удаление будет нельзя.`)) return;
 
     window.closeRuleRecordPage('push');
-    await window.deletePresetDirectly(state.currentRecordPresetId);
+    await window.deletePresetDirectly(presetId);
   };
 
   // ==========================================================
@@ -8477,9 +8510,14 @@
   };
 
   window.deletePresetDirectly = async function (presetId) {
+    const normalizedPresetId = Number(presetId);
+    if (!Number.isInteger(normalizedPresetId) || normalizedPresetId <= 0) {
+      showToast('Не удалось определить удаляемое правило', 'error');
+      return;
+    }
     haptic('impact', 'medium');
     try {
-      await apiRequest(`/api/presets/${presetId}`, { method: 'DELETE' });
+      await apiRequest(`/api/presets/${normalizedPresetId}`, { method: 'DELETE' });
       showToast('Правило удалено', 'success');
       await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
       renderRulesTab();
@@ -11806,12 +11844,17 @@
     const returnTarget = modalReturnFocus.get(modalId);
     modalReturnFocus.delete(modalId);
     setTimeout(() => {
+      const topModalId = activeModalStack[activeModalStack.length - 1];
+      const topModal = document.getElementById(topModalId);
+      if (topModal && (!returnTarget || !topModal.contains(returnTarget))) {
+        topModal.querySelector(modalFocusableSelector)?.focus();
+        return;
+      }
       if (returnTarget instanceof HTMLElement && returnTarget.isConnected && returnTarget.getClientRects().length > 0) {
         returnTarget.focus();
         return;
       }
-      const topModalId = activeModalStack[activeModalStack.length - 1];
-      document.getElementById(topModalId)?.querySelector(modalFocusableSelector)?.focus();
+      topModal?.querySelector(modalFocusableSelector)?.focus();
     }, 0);
   };
 
