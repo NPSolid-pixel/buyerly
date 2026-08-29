@@ -3901,6 +3901,40 @@
       `;
     }).join('');
 
+    const mobileCardsHtml = filtered.map(acc => {
+      const metaState = getAccountMetaState(acc);
+      const displayName = accountDisplayName(acc);
+      const metrics = acc.latest_metrics || acc.insights || {};
+      const currency = acc.currency || 'USD';
+      const rawSpend = acc.today_spend !== undefined
+        ? acc.today_spend
+        : (metrics.spend !== undefined ? metrics.spend : 0);
+      const rawLeads = acc.today_leads !== undefined
+        ? acc.today_leads
+        : (metrics.leads !== undefined ? metrics.leads : 0);
+      return `
+        <article class="account-mobile-card">
+          <button class="account-mobile-card-main" type="button" onclick="window.openAccountDetails(${escapeJsArg(acc.account_id)})">
+            <span class="account-mobile-card-title">
+              <strong>${escapeHtml(displayName)}</strong>
+              <span class="status-pill ${metaState.key === 'active' ? 'green' : (metaState.key === 'paused' ? 'amber' : 'red')}">
+                <span class="status-dot"></span>${escapeHtml(metaState.label)}
+              </span>
+            </span>
+            <span class="account-mobile-card-id">${escapeHtml(acc.account_id)}</span>
+          </button>
+          <div class="account-mobile-metrics">
+            <span><small>Расход</small><strong>${escapeHtml(formatMoneyOrDash(rawSpend, currency))}</strong></span>
+            <span><small>Лиды</small><strong>${escapeHtml(String(rawLeads))}</strong></span>
+            <span><small>Часовой пояс</small><strong>${escapeHtml(acc.timezone_name || 'UTC')}</strong></span>
+          </div>
+          <div class="account-mobile-card-footer">
+            <span>${acc.rules_enabled ? 'Автоматика включена' : 'Автоматика на паузе'}</span>
+            <button class="ui-button ui-button-compact" type="button" onclick="window.openAccountDetails(${escapeJsArg(acc.account_id)})">Подробнее</button>
+          </div>
+        </article>`;
+    }).join('');
+
     // Build Calculations Footer Row (Attio _3wkrhj0 & Radix Popover)
     const calcCellsHtml = colOrder.map(colId => {
       const isSticky = colId === 'name';
@@ -3947,7 +3981,7 @@
       }).join('') + '<col style="width: 120px; max-width: 120px; min-width: 120px;"><col class="col-track-spacer" style="width: 100%;">';
 
       listEl.innerHTML = `
-        <div class="attio-table-viewport" id="accountsTableViewport">
+        <div class="accounts-desktop-grid attio-table-viewport" id="accountsTableViewport">
           <table class="attio-table">
             <colgroup>
               ${colgroupHtml}
@@ -3979,6 +4013,7 @@
             <div data-state="visible" class="attio-scroll-area-thumb" id="accountsScrollbarThumb"></div>
           </div>
         </div>
+        <div class="accounts-mobile-list" aria-live="polite">${mobileCardsHtml}</div>
       `;
       setupAttioTableScrollbar();
     }

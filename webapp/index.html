@@ -11,10 +11,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   
   <!-- App Stylesheet & Favicon -->
-  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=10.1.0">
+  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg?v=10.2.0">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
-  <link rel="stylesheet" href="/static/css/styles.css?v=10.1.0">
+  <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
 </head>
 
 <body>
@@ -680,10 +680,15 @@
       <!-- ============================================== -->
       <!-- TAB: РЕКЛАМНЫЕ КАБИНЕТЫ (ACCOUNTS / LISTS) -->
       <!-- ============================================== -->
-      <section id="tab-accounts" class="tab-content">
+      <section id="tab-accounts" class="tab-content ui-page accounts-page" data-ui-pilot="accounts">
         <!-- Accounts Minimal Toolbar (Sort & Add Account) -->
-        <div class="attio-view-header">
+        <div class="attio-view-header accounts-workspace-header">
           <div class="attio-view-header-left">
+            <div class="accounts-workspace-heading">
+              <span class="eyebrow">Рекламные аккаунты</span>
+              <h1>Все кабинеты</h1>
+              <p>Метрики, статус Meta и автоматика в одном рабочем представлении.</p>
+            </div>
             <!-- Sort Popover -->
             <div class="attio-popover-container">
               <button type="button" class="attio-filter-pill-btn" id="btnAccountsSort" onclick="window.toggleAccountsSortDropdown(event)">
@@ -822,7 +827,7 @@
           <!-- Rules Header & Actions -->
           <div class="rules-tab-header ui-page-header">
             <div class="rules-header-info">
-              <h2>Автоматизации</h2>
+              <h1>Автоматизации</h1>
               <p class="ui-page-description">Правила, которые отслеживают рекламу и выполняют контролируемые действия.</p>
             </div>
             <div class="rules-header-actions">
@@ -1053,11 +1058,11 @@
       <!-- ============================================== -->
       <!-- TAB 2: СВОДКА (SUMMARY) -->
       <!-- ============================================== -->
-      <section id="tab-summary" class="tab-content">
+      <section id="tab-summary" class="tab-content ui-page" data-ui-pilot="efficiency">
         <div class="summary-page-header">
           <div>
             <span class="eyebrow">Meta Marketing API</span>
-            <h2>Сводка эффективности</h2>
+            <h1>Сводка эффективности</h1>
             <div class="summary-source-line">
               <span id="summaryStatusLabel">Данные ещё не запрошены</span>
               <span id="summaryFreshnessBadge" class="summary-freshness-badge">Нет данных</span>
@@ -1344,11 +1349,11 @@
       <!-- ============================================== -->
       <!-- TAB 3: ЛОГИ И ИСТОРИЯ ДЕЙСТВИЙ -->
       <!-- ============================================== -->
-      <section id="tab-logs" class="tab-content">
+      <section id="tab-logs" class="tab-content ui-page" data-ui-pilot="action-history">
         <div class="logs-page-header">
           <div>
             <span class="eyebrow">Контроль автоматики</span>
-            <h2>Логи и действия</h2>
+            <h1>Логи и действия</h1>
             <p>Прозрачная история решений Buyerly: что произошло, какое правило сработало и что изменилось.</p>
           </div>
           <button id="btnRefreshLogs" class="btn btn-secondary" type="button">
@@ -1426,8 +1431,13 @@
       <!-- ============================================== -->
       <!-- TAB 5: НАСТРОЙКИ (SETTINGS) -->
       <!-- ============================================== -->
-      <section id="tab-settings" class="tab-content">
+      <section id="tab-settings" class="tab-content ui-page" data-ui-pilot="settings">
         <div class="settings-cards-grid">
+          <header class="settings-page-header">
+            <span class="eyebrow">Рабочее пространство</span>
+            <h1>Настройки</h1>
+            <p>Профиль, безопасность и параметры автоматического контроля Meta.</p>
+          </header>
           <nav class="settings-subnav" aria-label="Разделы настроек">
             <button type="button" class="settings-subnav-btn active" data-settings-nav="account" onclick="window.switchSettingsPage('account')">Учётная запись</button>
             <button type="button" class="settings-subnav-btn" data-settings-nav="automation" onclick="window.switchSettingsPage('automation')">Автоматика Meta</button>
@@ -3210,10 +3220,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.1.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.1.0"></script>
-  <script src="/static/js/security.js?v=10.1.0"></script>
-  <script src="/static/js/i18n.js?v=10.1.0"></script>
-  <script src="/static/js/app.js?v=10.1.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.2.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.2.0"></script>
+  <script src="/static/js/security.js?v=10.2.0"></script>
+  <script src="/static/js/i18n.js?v=10.2.0"></script>
+  <script src="/static/js/app.js?v=10.2.0"></script>
 </body>
 </html>

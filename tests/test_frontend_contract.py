@@ -296,6 +296,38 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertIn(automation_contract, self.index + self.styles)
 
+    def test_all_workspace_pages_have_contained_responsive_layouts(self):
+        for pilot in (
+            "accounts",
+            "efficiency",
+            "action-history",
+            "settings",
+        ):
+            self.assertIn(f'data-ui-pilot="{pilot}"', self.index)
+
+        for markup_contract in (
+            'class="accounts-workspace-heading"',
+            'class="settings-page-header"',
+        ):
+            self.assertIn(markup_contract, self.index)
+
+        for script_contract in (
+            'class="accounts-desktop-grid attio-table-viewport"',
+            'class="accounts-mobile-list"',
+            'class="account-mobile-card"',
+        ):
+            self.assertIn(script_contract, self.script)
+
+        for style_contract in (
+            ".tab-content.active",
+            ".table-responsive",
+            '[data-ui-pilot="efficiency"] .kpi-primary-grid',
+            ".log-row-action",
+            ".accounts-mobile-list",
+            "@media (max-width: 768px)",
+        ):
+            self.assertIn(style_contract, self.styles)
+
     def test_logs_are_a_first_class_section_not_a_summary_table(self):
         self.assertIn('data-tab="logs"', self.index)
         self.assertIn('id="tab-logs"', self.index)
