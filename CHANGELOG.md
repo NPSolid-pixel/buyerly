@@ -10,6 +10,15 @@
 ## [Unreleased]
 
 ### Added & Improved
+- **Единая визуальная система Buyerly 2.0**:
+  - Добавлен отдельный production UI-kit `webapp/css/ui-system.css` с общей шкалой типографики, spacing, page widths, controls, surfaces и dialog sizes.
+  - Все рабочие разделы приведены к одному page rhythm; KPI, connection/rule/log stats собраны в плоские divided surfaces вместо россыпи вложенных карточек.
+  - Таблицы получили единые header/row sizes и локальную горизонтальную прокрутку, а Settings и rule builders избавлены от декоративных внутренних карточных слоёв.
+  - Все 22 модальных окна и command palette используют единый `.ui-dialog` contract, согласованные header/body/footer, размеры desktop и mobile bottom-sheet behavior.
+  - Auth/onboarding и public legal pages синхронизированы с общей neutral/action palette; интерактивный текст и controls приведены к читаемым размерам.
+  - После Browser QA на production-данных канбан автоматизаций очищен от wrapper/column card layers, пустая KPI-ячейка устранена через двухколоночный Spend, а Today переведён на segmented actions.
+  - Исправлены mobile-дефекты: native SVG больше не раздувает кнопки обновления, нижняя навигация не прокручивается горизонтально, auth footer остаётся внутри 390px viewport.
+  - Статусы журнала получили стабильный зазор между маркером и подписью; сводка автоматизаций больше не сжимается при небольшой высоте окна.
 - **Автоматизация зашифрованных оффсайт-бэкапов PostgreSQL и Restore Drills (`[OPS][P1]`)**:
   - Реализован потоковый дамп с симметричным шифрованием `AES-256-CBC` с PBKDF2 (`scripts/backup_db.sh`) без создания избыточных промежуточных несжатых файлов на диске.
   - Добавлен межпроцессный `flock` для защиты от гонок Cron vs Deploy.

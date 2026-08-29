@@ -15,6 +15,7 @@
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
   <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=11.0.0">
 </head>
 
 <body>
@@ -24,7 +25,7 @@
       <div class="app-initial-logo-wrapper">
         <img src="/static/icons/buyerly_logo_badge.svg" width="36" height="40" alt="Buyerly">
       </div>
-      <div class="spinner" style="width: 20px; height: 20px; border-width: 2px; margin: 0;"></div>
+      <div class="spinner ui-spinner-sm"></div>
     </div>
   </div>
 
@@ -50,7 +51,7 @@
           </div>
         </div>
 
-        <div class="attio-field" id="onboardingSignInPasswordGroup" style="margin-top: -6px;">
+        <div class="attio-field attio-field-tight" id="onboardingSignInPasswordGroup">
           <div class="attio-input-wrapper">
             <span class="attio-input-prefix">
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 016 0v2"/></svg>
@@ -67,8 +68,8 @@
           <span>Продолжить</span>
         </button>
 
-        <div style="margin-top: 12px; text-align: center;">
-          <button type="button" style="background:none; border:none; color:#266DF0; font-size:12.5px; cursor:pointer; font-family:inherit;" onclick="window.requestTemporaryPassword()">Войти по временному паролю</button>
+        <div class="attio-auth-secondary-action">
+          <button type="button" class="attio-text-button" onclick="window.requestTemporaryPassword()">Войти по временному паролю</button>
         </div>
       </form>
     </div>
@@ -103,9 +104,9 @@
           <span>Продолжить</span>
         </button>
 
-        <div style="margin-top: 14px; display:flex; justify-content:space-between; align-items:center;">
-          <button type="button" style="background:none; border:none; color:#898A8D; font-size:12px; cursor:pointer; font-family:inherit;" onclick="window.showOnboardingStep('signin')">&larr; Назад</button>
-          <button type="button" id="btnResendTemporaryPassword" style="background:none; border:none; color:#266DF0; font-size:12px; font-weight:500; cursor:pointer; font-family:inherit;" onclick="window.requestTemporaryPassword(true)">Отправить снова</button>
+        <div class="attio-auth-secondary-actions">
+          <button type="button" class="attio-text-button attio-text-button-muted" onclick="window.showOnboardingStep('signin')">&larr; Назад</button>
+          <button type="button" id="btnResendTemporaryPassword" class="attio-text-button" onclick="window.requestTemporaryPassword(true)">Отправить снова</button>
         </div>
       </form>
     </div>
@@ -116,7 +117,7 @@
 
       <!-- Profile picture section -->
       <div class="attio-avatar-section">
-        <input type="file" id="onboardingAvatarFileInput" accept=".png,.jpg,.jpeg,.webp" style="display:none;" onchange="window.handleOnboardingAvatarUpload(event)">
+        <input type="file" id="onboardingAvatarFileInput" class="ui-file-input" accept=".png,.jpg,.jpeg,.webp" onchange="window.handleOnboardingAvatarUpload(event)">
         <div class="attio-avatar-circle" id="onboardingAvatarBadge" title="Загрузить изображение" onclick="document.getElementById('onboardingAvatarFileInput').click()">
           <span id="onboardingAvatarLetter">B</span>
           <img id="onboardingAvatarImg" class="attio-avatar-img hidden" alt="Avatar">
@@ -161,9 +162,9 @@
           </button>
         </div>
 
-        <div id="onboardingPersonalError" class="attio-error-text hidden" style="margin-bottom: 8px;"></div>
+        <div id="onboardingPersonalError" class="attio-error-text attio-error-spaced hidden"></div>
 
-        <button type="submit" id="btnOnboardingPersonalSubmit" class="attio-btn-primary" style="margin-top: 10px;">
+        <button type="submit" id="btnOnboardingPersonalSubmit" class="attio-btn-primary attio-submit-spaced">
           <span>Продолжить</span>
         </button>
       </form>
@@ -183,7 +184,7 @@
       <span class="attio-footer-dot" id="onboardingSignOutDot" style="display:none;">&middot;</span>
       <button type="button" id="btnOnboardingSignOut" style="display:none;" onclick="if(window.logoutUser) window.logoutUser();">Выйти</button>
     </footer>
-    <div style="margin-top: 10px; text-align: center; font-size: 10px; color: #898A8D; line-height: 1.45;">
+    <div class="attio-auth-legal-note">
       <div>Individual Entrepreneur Artem Petruchenko · Tax ID: 305879234</div>
     </div>
   </div>
@@ -191,7 +192,7 @@
   <!-- Standalone Create Workspace Screen (Attio Style) -->
   <div id="createWorkspaceScreen" class="ws-create-screen-wrapper" style="display: none;">
     <div class="ws-create-top-header">
-      <div class="brand-logo" style="width: 32px; height: 32px;">
+      <div class="brand-logo ws-create-brand-mark">
         <svg width="20" height="20" viewBox="0 0 512 512" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <defs>
             <linearGradient id="wsCreateLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -216,7 +217,7 @@
 
       <div class="ws-create-logo-row">
         <div class="ws-logo-avatar-wrapper">
-          <input type="file" id="createWsLogoFileInput" accept="image/png,image/jpeg,image/webp" style="display: none;" onchange="window.handleWorkspaceLogoUpload(event)">
+          <input type="file" id="createWsLogoFileInput" class="ui-file-input" accept="image/png,image/jpeg,image/webp" onchange="window.handleWorkspaceLogoUpload(event)">
           <div class="ws-logo-avatar" id="createWsLogoBadge" title="Загрузить логотип" onclick="document.getElementById('createWsLogoFileInput').click()">
             <span id="createWsBadgeLetter">W</span>
             <img id="createWsLogoImg" class="ws-logo-uploaded-img hidden" alt="Workspace Logo">
@@ -231,12 +232,12 @@
         </div>
       </div>
 
-      <div class="form-group" style="margin-bottom: 20px;">
+      <div class="form-group form-group-roomy">
         <label class="form-label" for="createWsNameInput">Название воркспейса</label>
         <input type="text" id="createWsNameInput" class="form-control ws-input-lg" placeholder="Введите название воркспейса..." maxlength="60" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.submitCreateWorkspaceFromPage();}">
       </div>
 
-      <div class="form-group" style="margin-bottom: 24px;">
+      <div class="form-group form-group-roomiest">
         <label class="form-label" for="createWsSlugInput">Адрес воркспейса</label>
         <div class="ws-slug-input-wrapper">
           <span class="ws-slug-prefix">buyerly.app/</span>
@@ -270,8 +271,8 @@
     </header>
 
     <div class="attio-auth-card card-wide">
-      <h1 class="attio-auth-title" style="text-align: center;">Almost there!</h1>
-      <p style="font-size: 13.5px; color: #505155; margin-top: -12px; margin-bottom: 20px; text-align: center;">You have been invited to collaborate in this workspace:</p>
+      <h1 class="attio-auth-title attio-auth-title-centered">Almost there!</h1>
+      <p class="attio-invite-intro">You have been invited to collaborate in this workspace:</p>
 
       <div class="attio-invite-target-card">
         <div class="attio-invite-target-badge" id="inviteTargetBadge">B</div>
@@ -282,11 +283,11 @@
         <div class="attio-pill attio-pill-blue" id="inviteTargetRole">Member</div>
       </div>
 
-      <div id="inviteAcceptError" class="attio-error-text hidden" style="margin-top: 8px; margin-bottom: 8px; text-align: center;"></div>
+      <div id="inviteAcceptError" class="attio-error-text attio-invite-error hidden"></div>
 
-      <div style="display: flex; gap: 10px; margin-top: 14px;">
-        <button type="button" class="attio-btn-secondary" style="flex: 1; height: 36px;" onclick="window.rejectInviteAccept()">Not now</button>
-        <button type="button" id="btnAcceptInviteSubmit" class="attio-btn-primary" style="flex: 1; height: 36px;" onclick="window.submitAcceptInvite()">
+      <div class="attio-invite-actions">
+        <button type="button" class="attio-btn-secondary" onclick="window.rejectInviteAccept()">Not now</button>
+        <button type="button" id="btnAcceptInviteSubmit" class="attio-btn-primary" onclick="window.submitAcceptInvite()">
           <span>Accept & Join</span>
         </button>
       </div>
@@ -343,9 +344,9 @@
           </div>
         </div>
         <div class="dropdown-divider"></div>
-        <div class="dropdown-item" style="color:#BA2525;" onclick="if(window.logoutUser) window.logoutUser();">
+        <div class="dropdown-item dropdown-item-danger" onclick="if(window.logoutUser) window.logoutUser();">
           <div class="dropdown-item-left">
-            <svg style="color:#BA2525;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
             <span>Выйти</span>
           </div>
         </div>
@@ -592,7 +593,7 @@
             <table class="attio-table ui-table" id="fbAccountsTable">
               <thead>
                 <tr>
-                  <th class="attio-th sticky-col" style="width: 280px;">
+                  <th class="attio-th sticky-col connections-col-profile">
                     <div class="attio-th-content">
                       <div class="attio-th-left">
                         <span class="attio-th-type-icon">
@@ -602,7 +603,7 @@
                       </div>
                     </div>
                   </th>
-                  <th class="attio-th" style="width: 220px;">
+                  <th class="attio-th connections-col-name">
                     <div class="attio-th-content">
                       <div class="attio-th-left">
                         <span class="attio-th-type-icon">
@@ -612,7 +613,7 @@
                       </div>
                     </div>
                   </th>
-                  <th class="attio-th" style="width: 220px;">
+                  <th class="attio-th connections-col-email">
                     <div class="attio-th-content">
                       <div class="attio-th-left">
                         <span class="attio-th-type-icon">
@@ -622,7 +623,7 @@
                       </div>
                     </div>
                   </th>
-                  <th class="attio-th" style="width: 140px;">
+                  <th class="attio-th connections-col-status">
                     <div class="attio-th-content">
                       <div class="attio-th-left">
                         <span class="attio-th-type-icon">
@@ -632,7 +633,7 @@
                       </div>
                     </div>
                   </th>
-                  <th class="attio-th" style="width: 160px;">
+                  <th class="attio-th connections-col-date">
                     <div class="attio-th-content">
                       <div class="attio-th-left">
                         <span class="attio-th-type-icon">
@@ -642,8 +643,8 @@
                       </div>
                     </div>
                   </th>
-                  <th class="attio-th" style="width: 110px; text-align: right;">
-                    <div class="attio-th-content" style="justify-content: flex-end;">
+                  <th class="attio-th connections-col-actions">
+                    <div class="attio-th-content attio-th-content-end">
                       <span class="attio-th-title">Действия</span>
                     </div>
                   </th>
@@ -662,9 +663,9 @@
             </div>
             <h3 id="fbAccountsEmptyTitle">Нет подключений Meta</h3>
             <p id="fbAccountsEmptyText">Подключите Facebook-профиль через официальный Facebook Login или вручную по токену.</p>
-            <div id="fbAccountsEmptyActions" style="display: flex; gap: 8px; justify-content: center; margin-top: 16px;">
+            <div id="fbAccountsEmptyActions" class="empty-state-actions">
               <button class="btn btn-primary ui-button ui-button-primary" onclick="window.startMetaOAuthFlow()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <svg class="button-leading-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Подключить Facebook
               </button>
               <button class="btn btn-secondary ui-button" onclick="window.openManualTokenModal()">
@@ -760,7 +761,7 @@
               <span>Ещё</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
             </button>
-            <div id="bulkMoreDropdown" class="attio-dropdown-menu hidden" style="right: 0; left: auto;">
+            <div id="bulkMoreDropdown" class="attio-dropdown-menu dropdown-align-right hidden">
               <div class="attio-dropdown-item" onclick="window.bulkCopyAccountIds()">
                 <div class="attio-dropdown-item-left">
                   <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
@@ -790,7 +791,7 @@
         </div>
 
         <!-- Attio Calculation Popover -->
-        <div id="accountsCalcPopover" class="attio-dropdown-menu hidden" onclick="event.stopPropagation()" style="position: absolute; z-index: 1050; min-width: 170px;">
+        <div id="accountsCalcPopover" class="attio-dropdown-menu accounts-calc-popover hidden" onclick="event.stopPropagation()">
           <div class="attio-dropdown-section-title">Вычисление</div>
           <div id="accountsCalcMenuList"></div>
         </div>
@@ -1037,7 +1038,7 @@
                 <div class="record-accounts-toolbar">
                   <div class="record-accounts-toolbar-left">
                     <span class="record-accounts-toolbar-title">Привязанные кабинеты</span>
-                    <span id="recordAccountsCountBadge" class="tab-badge">0</span>
+                    <span id="recordAccountsToolbarCountBadge" class="tab-badge">0</span>
                   </div>
                   <button type="button" class="btn btn-secondary btn-sm" id="btnOpenLinkAccounts" onclick="window.openLinkRuleAccountsModal()">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -1455,7 +1456,7 @@
                 <div class="profile-display-name" id="settingsDisplayName">Пользователь</div>
                 <div class="profile-meta-line">
                   <span class="profile-role-tag" id="settingsUserRole">admin</span>
-                  <span class="mono text-hint" id="settingsUserDesc" style="font-size:12px;">@user</span>
+                  <span class="mono text-hint ui-meta-text" id="settingsUserDesc">@user</span>
                 </div>
               </div>
             </div>
@@ -1662,7 +1663,7 @@
               </div>
             </div>
             
-            <div class="settings-system-status-row" style="margin-top: 16px;">
+            <div class="settings-system-status-row settings-system-status-spaced">
               <div class="setting-info">
                 <span class="setting-title">Системный статус</span>
                 <span class="setting-desc">Buyerly Engine v1.0 · Standalone Web App</span>
@@ -1670,9 +1671,9 @@
               <span class="badge badge-success"><span class="status-dot dot-success"></span>Онлайн 24/7</span>
             </div>
 
-            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
+            <div class="settings-signout-section">
               <button type="button" class="btn btn-danger btn-block" onclick="window.logoutUser()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:6px;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <svg class="button-leading-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                 Выйти из аккаунта
               </button>
             </div>
@@ -1688,7 +1689,7 @@
 
     <!-- Modal 1: Rule & Presets Builder Bottom Sheet -->
     <div id="modalEditLimits" class="modal-overlay hidden">
-      <div class="bottom-sheet" style="max-height: 90vh;">
+      <div class="bottom-sheet ui-dialog" role="dialog" aria-modal="true">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <div class="modal-title-with-back">
@@ -1706,7 +1707,7 @@
           <input type="hidden" id="editingPresetId" value="">
           
           <!-- Group Selector -->
-          <div class="form-group" id="ruleGroupSelectGroup" style="margin-bottom: 12px;">
+          <div class="form-group form-group-compact" id="ruleGroupSelectGroup">
             <label for="ruleGroupSelect">Группа правил:</label>
             <select id="ruleGroupSelect" class="form-select dark-select">
               <option value="">Без группы</option>
@@ -1716,7 +1717,7 @@
           <!-- Saved User Presets List -->
           <div class="presets-section">
             <div class="presets-section-head">
-              <label class="section-label" style="margin-bottom:0;">Взять сохранённое правило за основу:</label>
+              <label class="section-label section-label-flush">Взять сохранённое правило за основу:</label>
               <button type="button" class="btn-link-action" onclick="window.newPresetMode()">+ Новое правило</button>
             </div>
             <div id="userPresetsList" class="preset-chips-list">
@@ -1731,13 +1732,13 @@
             </div>
 
             <!-- 1. Rule Name -->
-            <div class="form-group" style="margin-bottom: 12px;">
+            <div class="form-group form-group-compact">
               <label for="ruleNameInput">Название правила (пресета):</label>
               <input type="text" id="ruleNameInput" class="form-input" maxlength="120" placeholder="Например: Выключить при расходе 6 и не больше 1 лида">
             </div>
 
             <!-- 2. Action Selector -->
-            <div class="form-group" style="margin-bottom: 12px;">
+            <div class="form-group form-group-compact">
               <label for="ruleActionSelect">Действие (Action):</label>
               <select id="ruleActionSelect" class="form-select dark-select">
                 <option value="turn_off">Turn off ad sets (Выключить адсеты)</option>
@@ -1749,34 +1750,34 @@
             </div>
 
             <!-- Budget Management Parameters (shown for increase/decrease budget) -->
-            <div id="budgetConfigSection" class="form-group hidden" style="margin-bottom: 12px; background: rgba(155, 140, 255, 0.06); padding: 12px; border-radius: 7px; border: 1px solid rgba(155, 140, 255, 0.18);">
-              <div style="display: flex; gap: 10px;">
-                <div style="flex: 1;">
-                  <label for="budgetChangePercentInput" style="font-size: 12px;">Изменение (%)</label>
+            <div id="budgetConfigSection" class="form-group rule-inline-panel hidden">
+              <div class="rule-budget-fields">
+                <div>
+                  <label for="budgetChangePercentInput">Изменение (%)</label>
                   <input type="number" id="budgetChangePercentInput" class="form-input" placeholder="20" min="1" max="100" step="5" value="20">
                 </div>
-                <div style="flex: 1;">
-                  <label for="budgetMaxDailyInput" style="font-size: 12px;">Потолок (валюта кабинета / день)</label>
+                <div>
+                  <label for="budgetMaxDailyInput">Потолок (валюта кабинета / день)</label>
                   <input type="number" id="budgetMaxDailyInput" class="form-input" placeholder="Обязателен для увеличения" min="0" max="10000000" step="10" value="0">
                 </div>
               </div>
-              <span class="input-hint" style="font-size: 11px; margin-top: 4px;">Все денежные пороги применяются в валюте конкретного кабинета. Потолок защищает от чрезмерного увеличения.</span>
+              <span class="input-hint">Все денежные пороги применяются в валюте конкретного кабинета. Потолок защищает от чрезмерного увеличения.</span>
             </div>
 
-            <div id="funnelProtectionNotice" class="form-group" style="margin-bottom: 12px; background: rgba(52, 211, 153, 0.06); padding: 12px; border-radius: 7px; border: 1px solid rgba(52, 211, 153, 0.2);">
-              <div style="font-size: 12px; font-weight: 650; color: var(--color-success);">Защита воронки включена</div>
-              <span class="input-hint" style="font-size: 11px; margin-top: 4px;">Любой STOP не выполнится, если Meta уже показывает хотя бы одну регистрацию или покупку. Перед выключением нулевая воронка должна повторно подтвердиться.</span>
+            <div id="funnelProtectionNotice" class="form-group rule-inline-panel rule-inline-panel-success">
+              <div class="rule-inline-panel-title">Защита воронки включена</div>
+              <span class="input-hint">Любой STOP не выполнится, если Meta уже показывает хотя бы одну регистрацию или покупку. Перед выключением нулевая воронка должна повторно подтвердиться.</span>
             </div>
 
             <!-- 3. Conditions Builder -->
-            <div class="form-group" style="margin-bottom: 8px;">
-              <div class="form-label-group" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="form-group form-group-snug">
+              <div class="form-label-group form-label-group-split">
                 <label>Условия (Conditions):</label>
                 <div class="logic-toggle-wrap">
-                  <span style="font-size: 12px; color: var(--tg-hint); margin-right: 6px;">Логика:</span>
-                  <div class="chip-group" id="logicToggleGroup" style="display: inline-flex; gap: 4px;">
-                    <button type="button" class="chip-btn active" data-logic="and" style="padding: 2px 10px; font-size: 11px;">AND (Все)</button>
-                    <button type="button" class="chip-btn" data-logic="or" style="padding: 2px 10px; font-size: 11px;">OR (Любое)</button>
+                  <span class="logic-toggle-label">Логика:</span>
+                  <div class="chip-group chip-group-inline" id="logicToggleGroup">
+                    <button type="button" class="chip-btn active" data-logic="and">AND (Все)</button>
+                    <button type="button" class="chip-btn" data-logic="or">OR (Любое)</button>
                   </div>
                 </div>
               </div>
@@ -1865,19 +1866,19 @@
                 </label>
                 <div class="settings-toggle-text">
                   <span class="settings-field-label">Уведомление в Telegram</span>
-                  <span class="tg-status-subtext"><span class="status-dot dot-success" style="display:inline-block; margin-right:4px;"></span>Бот подключен (@buyerly_bot)</span>
+                  <span class="tg-status-subtext"><span class="status-dot dot-success status-dot-inline"></span>Бот подключен (@buyerly_bot)</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="sheet-actions" style="flex-direction: column; gap: 8px; margin-top: 16px;">
+          <div class="sheet-actions sheet-actions-stack">
             <button id="btnSaveLimits" class="btn btn-primary btn-block btn-lg">Сохранить и применить</button>
             <div class="modal-sub-actions">
-              <button type="button" id="btnDeletePreset" class="btn-sub-link hidden" style="color: var(--tg-hint);" onclick="window.deleteActivePreset()">
+              <button type="button" id="btnDeletePreset" class="btn-sub-link text-muted-action hidden" onclick="window.deleteActivePreset()">
                 Удалить этот пресет
               </button>
-              <button type="button" id="btnOpenDeleteFromModal" class="btn-sub-link" style="color: var(--color-danger);" title="Удалить кабинет из мониторинга">
+              <button type="button" id="btnOpenDeleteFromModal" class="btn-sub-link text-danger-action" title="Удалить кабинет из мониторинга">
                 Удалить кабинет
               </button>
             </div>
@@ -1888,7 +1889,7 @@
 
     <!-- Modal 7: Account Details -->
     <div id="modalAccountDetails" class="modal-overlay hidden">
-      <div class="bottom-sheet account-details-sheet">
+      <div class="bottom-sheet account-details-sheet ui-dialog" role="dialog" aria-modal="true">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <h3>Карточка кабинета</h3>
@@ -1900,7 +1901,7 @@
 
     <!-- Modal 8: Internal Account Name & Note -->
     <div id="modalAccountProfile" class="modal-overlay hidden">
-      <div class="modal-dialog account-profile-dialog">
+      <div class="modal-dialog account-profile-dialog ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <div>
             <h3>Название и заметка</h3>
@@ -1930,7 +1931,7 @@
     </div>
 
     <div id="modalAccountGroup" class="modal-overlay hidden">
-      <div class="modal-dialog account-group-dialog">
+      <div class="modal-dialog account-group-dialog ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <div>
             <h3 id="accountGroupModalTitle">Новая группа кабинетов</h3>
@@ -1965,7 +1966,7 @@
 
     <!-- Modal 2: Token Guide -->
     <div id="modalTokenGuide" class="modal-overlay hidden">
-      <div class="modal-dialog">
+      <div class="modal-dialog ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <h3>Как получить Access Token в Meta BM</h3>
           <button class="btn-close" onclick="window.closeModal('modalTokenGuide')">&times;</button>
@@ -2009,7 +2010,7 @@
 
     <!-- Modal 3: Delete Account Confirmation -->
     <div id="modalDeleteConfirm" class="modal-overlay hidden">
-      <div class="modal-dialog">
+      <div class="modal-dialog ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <h3>Удаление кабинета</h3>
           <button class="btn-close" onclick="window.closeModal('modalDeleteConfirm')">&times;</button>
@@ -2027,7 +2028,7 @@
 
     <!-- Modal 4: Batch Import Progress -->
     <div id="modalBatchProgress" class="modal-overlay hidden">
-      <div class="modal-dialog">
+      <div class="modal-dialog ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <h3>Подключение кабинетов...</h3>
         </div>
@@ -2048,7 +2049,7 @@
 
     <!-- Modal 5: Quick Assign Rule Bottom Sheet (Photo 3) -->
     <div id="modalAssignRule" class="modal-overlay hidden">
-      <div class="bottom-sheet" style="max-height: 80vh;">
+      <div class="bottom-sheet ui-dialog" role="dialog" aria-modal="true">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <h3 id="assignRuleModalTitle">Выбор правила для кабинета</h3>
@@ -2056,7 +2057,7 @@
         </div>
         <div class="sheet-body">
           <input type="hidden" id="assignRuleAccountId">
-          <p class="text-hint" style="margin-bottom: 14px; font-size: 13px;">Привязывайте несколько правил к кабинету. Нажмите на уже привязанное правило, чтобы отвязать его.</p>
+          <p class="text-hint modal-helper-copy">Привязывайте несколько правил к кабинету. Нажмите на уже привязанное правило, чтобы отвязать его.</p>
 
           <section id="assignGroupsSection" class="assign-groups-section hidden">
             <div class="assign-list-heading">
@@ -2075,9 +2076,9 @@
             <!-- Dynamically populated list of rules to pick in 1 click -->
           </div>
 
-          <div class="assign-modal-actions" style="display: flex; flex-direction: column; gap: 8px; margin-top: 16px;">
+          <div class="assign-modal-actions assign-modal-actions-stack">
             <button type="button" class="btn btn-secondary btn-block" onclick="window.openCreateRuleForCurrentAccount()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <svg class="button-leading-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Создать новое правило
             </button>
           </div>
@@ -2087,7 +2088,7 @@
 
     <!-- Modal 6: Rule Group Builder -->
     <div id="modalRuleGroup" class="modal-overlay hidden">
-      <div class="bottom-sheet rule-group-sheet">
+      <div class="bottom-sheet rule-group-sheet ui-dialog" role="dialog" aria-modal="true">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <h3 id="ruleGroupModalTitle">Новая группа правил</h3>
@@ -2120,7 +2121,7 @@
 
     <!-- Modal: Attio Choose / Add Rule ("Choose record" / Photo 4) -->
     <div id="modalChooseRule" class="modal-overlay hidden" onclick="window.onChooseRuleOverlayClick(event)">
-      <div class="modal-card choose-rule-card" onclick="event.stopPropagation()">
+      <div class="modal-card choose-rule-card ui-dialog" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
         <div class="choose-rule-header">
           <div class="choose-rule-title-wrap">
             <span class="choose-rule-title">Выбор правила</span>
@@ -2137,7 +2138,7 @@
           <div id="chooseRuleList" class="choose-rule-list">
             <!-- Dynamically populated rules list with action badges and group status -->
           </div>
-          <div class="choose-rule-section-label" style="margin-top: 12px;">ДЕЙСТВИЯ</div>
+          <div class="choose-rule-section-label section-label-spaced">ДЕЙСТВИЯ</div>
           <div class="choose-rule-actions">
             <div class="choose-rule-action-row" id="chooseRuleCreateBtn" onclick="window.openCreateRuleFromChooser()">
               <div class="choose-rule-action-icon">
@@ -2165,7 +2166,7 @@
 
     <!-- Modal: Attio Create Rule Dialog ("Create Record") -->
     <div id="modalCreateRule" class="modal-overlay hidden" onclick="window.onCreateRuleOverlayClick(event)">
-      <div class="modal-card create-rule-card" onclick="event.stopPropagation()">
+      <div class="modal-card create-rule-card ui-dialog" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
         
         <!-- Header with Back Button and Breadcrumbs -->
         <div class="create-rule-header">
@@ -2288,15 +2289,15 @@
                       <option value="1440">24 часа</option>
                       <option value="custom">Указать вручную...</option>
                     </select>
-                    <input type="number" id="createRuleCustomCooldownInput" class="attio-field-input hidden" placeholder="Минут" min="1" max="10080" style="margin-top: 6px;">
+                    <input type="number" id="createRuleCustomCooldownInput" class="attio-field-input field-reveal-spaced hidden" placeholder="Минут" min="1" max="10080">
                   </div>
                 </div>
 
-                <div class="attio-field-row" style="align-items: center;">
+                <div class="attio-field-row attio-field-row-centered">
                   <div class="attio-field-label">
                     <span>Уведомление в Telegram</span>
                   </div>
-                  <div class="attio-field-input-wrap" style="display: flex; align-items: center; justify-content: space-between;">
+                  <div class="attio-field-input-wrap attio-field-input-wrap-split">
                     <label class="switch">
                       <input type="checkbox" id="createRuleNotifyTgToggle" checked>
                       <span class="slider round"></span>
@@ -2337,7 +2338,7 @@
 
     <!-- Modal: Attio Edit Rule Modal / Popup ("Photo 2") -->
     <div id="modalEditRule" class="modal-overlay hidden" onclick="window.onEditRuleOverlayClick(event)">
-      <div class="modal-card create-rule-card" onclick="event.stopPropagation()">
+      <div class="modal-card create-rule-card ui-dialog" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
         
         <!-- Header -->
         <div class="create-rule-header">
@@ -2452,15 +2453,15 @@
                       <option value="1440">24 часа</option>
                       <option value="custom">Указать вручную...</option>
                     </select>
-                    <input type="number" id="editRuleCustomCooldownInput" class="attio-field-input hidden" placeholder="Минут" min="1" max="10080" style="margin-top: 6px;">
+                    <input type="number" id="editRuleCustomCooldownInput" class="attio-field-input field-reveal-spaced hidden" placeholder="Минут" min="1" max="10080">
                   </div>
                 </div>
 
-                <div class="attio-field-row" style="align-items: center;">
+                <div class="attio-field-row attio-field-row-centered">
                   <div class="attio-field-label">
                     <span>Уведомление в Telegram</span>
                   </div>
-                  <div class="attio-field-input-wrap" style="display: flex; align-items: center; justify-content: space-between;">
+                  <div class="attio-field-input-wrap attio-field-input-wrap-split">
                     <label class="switch">
                       <input type="checkbox" id="editRuleNotifyTgToggle" checked>
                       <span class="slider round"></span>
@@ -2501,7 +2502,7 @@
 
     <!-- Modal: Attio Choose / Move to Group ("Choose list") -->
     <div id="modalChooseGroup" class="modal-overlay hidden" onclick="window.onChooseGroupOverlayClick(event)">
-      <div class="choose-group-modal-card" onclick="event.stopPropagation()">
+      <div class="choose-group-modal-card ui-dialog" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
         
         <!-- View 1: Select Existing Group -->
         <div id="chooseGroupViewSelect" class="choose-group-view">
@@ -2526,7 +2527,7 @@
               <!-- Dynamically populated group items -->
             </div>
 
-            <div class="choose-group-section-label" style="margin-top: 10px;">ДЕЙСТВИЯ</div>
+            <div class="choose-group-section-label section-label-spaced-sm">ДЕЙСТВИЯ</div>
             <div class="choose-group-actions">
               <div class="choose-group-action-row" id="chooseGroupCreateActionRow" onclick="window.openCreateGroupFromChooseModal()">
                 <div class="choose-group-action-icon">
@@ -2568,7 +2569,7 @@
           </div>
 
           <div class="choose-group-create-body">
-            <div class="form-group" style="margin-bottom: 16px;">
+            <div class="form-group form-group-medium">
               <label class="form-label" for="newGroupNameModalInput">Название группы</label>
               <div class="choose-group-input-wrapper">
                 <div class="choose-group-color-picker-trigger" id="chooseGroupColorTrigger" onclick="window.toggleModalNewGroupColorPalette(event)" title="Выбрать цвет">
@@ -2578,7 +2579,7 @@
               </div>
               
               <!-- Inline color palette dropdown for modal -->
-              <div id="chooseGroupColorPalette" class="attio-color-palette hidden" style="margin-top: 8px;">
+              <div id="chooseGroupColorPalette" class="attio-color-palette color-palette-spaced hidden">
                 <button type="button" class="color-swatch swatch-purple" data-color="purple" title="Фиолетовый" onclick="window.selectModalNewGroupColor('purple')"></button>
                 <button type="button" class="color-swatch swatch-indigo" data-color="indigo" title="Индиго" onclick="window.selectModalNewGroupColor('indigo')"></button>
                 <button type="button" class="color-swatch swatch-blue" data-color="blue" title="Синий" onclick="window.selectModalNewGroupColor('blue')"></button>
@@ -2590,7 +2591,7 @@
               </div>
             </div>
 
-            <div class="form-group" style="margin-bottom: 0;">
+            <div class="form-group form-group-flush">
               <label class="form-label" for="newGroupDescModalInput">Описание (опционально)</label>
               <input type="text" id="newGroupDescModalInput" class="form-control" placeholder="Для каких офферов или связок использовать" maxlength="250" onkeydown="window.onNewGroupNameModalKeydown(event)">
             </div>
@@ -2613,7 +2614,7 @@
 
     <!-- Modal: Link Rule to Accounts (Attio Style) -->
     <div id="modalLinkRuleAccounts" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalLinkRuleAccounts')">
-      <div class="choose-group-modal-card" style="width: 520px;" onclick="event.stopPropagation()">
+      <div class="choose-group-modal-card ui-dialog" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
         <div class="choose-group-header">
           <div class="choose-group-breadcrumb">
             <span class="choose-group-title">Привязка кабинетов</span>
@@ -2629,10 +2630,10 @@
           <input type="text" id="linkRuleAccountsSearchInput" class="choose-group-search-input" placeholder="Поиск кабинетов по названию или ID..." autocomplete="off" oninput="window.filterLinkRuleAccountsList(this.value)">
         </div>
 
-        <div class="choose-group-body" style="max-height: 340px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-            <div class="choose-group-section-label" style="margin: 0;">РЕКЛАМНЫЕ КАБИНЕТЫ ВОРКСПЕЙСА</div>
-            <button type="button" class="btn-link-action" style="font-size: 11.5px;" onclick="window.toggleSelectAllLinkRuleAccounts()">Выбрать все</button>
+        <div class="choose-group-body choose-group-body-compact">
+          <div class="choose-group-toolbar">
+            <div class="choose-group-section-label section-label-flush">РЕКЛАМНЫЕ КАБИНЕТЫ ВОРКСПЕЙСА</div>
+            <button type="button" class="btn-link-action" onclick="window.toggleSelectAllLinkRuleAccounts()">Выбрать все</button>
           </div>
           <div id="linkRuleAccountsList" class="choose-group-list" role="listbox">
             <!-- Dynamically populated accounts with checkboxes -->
@@ -2719,7 +2720,7 @@
 
     <!-- New Workspace Modal -->
     <div id="modalNewWorkspace" class="modal-overlay hidden">
-      <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-card ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <h3>Создать воркспейс</h3>
           <button class="btn-close" type="button" onclick="window.closeModal('modalNewWorkspace')">&times;</button>
@@ -2731,18 +2732,18 @@
           </div>
           <div class="form-group">
             <label class="form-label">URL адрес (slug)</label>
-            <div class="slug-preview-box">buyerly.app/<span id="newWorkspaceSlugPreview" style="font-weight: 600; color: var(--brand-accent);">your-workspace</span>/home</div>
+            <div class="slug-preview-box">buyerly.app/<span id="newWorkspaceSlugPreview" class="slug-preview-value">your-workspace</span>/home</div>
           </div>
           <div class="form-group">
             <label class="form-label">Цвет бейджа</label>
             <div class="color-picker-row" id="newWorkspaceColorPicker">
-              <div class="color-swatch active" data-color="#F5A300" style="background:#F5A300;" onclick="window.selectWorkspaceColor(this, 'new');"></div>
-              <div class="color-swatch" data-color="#7C3AED" style="background:#7C3AED;" onclick="window.selectWorkspaceColor(this, 'new');"></div>
-              <div class="color-swatch" data-color="#2563EB" style="background:#2563EB;" onclick="window.selectWorkspaceColor(this, 'new');"></div>
-              <div class="color-swatch" data-color="#059669" style="background:#059669;" onclick="window.selectWorkspaceColor(this, 'new');"></div>
-              <div class="color-swatch" data-color="#DB2777" style="background:#DB2777;" onclick="window.selectWorkspaceColor(this, 'new');"></div>
-              <div class="color-swatch" data-color="#DC2626" style="background:#DC2626;" onclick="window.selectWorkspaceColor(this, 'new');"></div>
-              <div class="color-swatch" data-color="#374151" style="background:#374151;" onclick="window.selectWorkspaceColor(this, 'new');"></div>
+              <div class="color-swatch active" data-color="#F5A300" onclick="window.selectWorkspaceColor(this, 'new');"></div>
+              <div class="color-swatch" data-color="#7C3AED" onclick="window.selectWorkspaceColor(this, 'new');"></div>
+              <div class="color-swatch" data-color="#2563EB" onclick="window.selectWorkspaceColor(this, 'new');"></div>
+              <div class="color-swatch" data-color="#059669" onclick="window.selectWorkspaceColor(this, 'new');"></div>
+              <div class="color-swatch" data-color="#DB2777" onclick="window.selectWorkspaceColor(this, 'new');"></div>
+              <div class="color-swatch" data-color="#DC2626" onclick="window.selectWorkspaceColor(this, 'new');"></div>
+              <div class="color-swatch" data-color="#374151" onclick="window.selectWorkspaceColor(this, 'new');"></div>
             </div>
           </div>
         </div>
@@ -2755,7 +2756,7 @@
 
     <!-- Attio Invite Team Members Modal Dialog (invite-members-popup.html) -->
     <div id="modalInviteMembers" class="modal-overlay hidden">
-      <div class="attio-dialog-card">
+      <div class="attio-dialog-card ui-dialog" role="dialog" aria-modal="true">
         <div class="attio-dialog-header">
           <div class="attio-dialog-title">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -2799,9 +2800,9 @@
 
         <div class="attio-dialog-footer">
           <span class="attio-dialog-footer-hint">Press <b>Ctrl + Enter</b> to send</span>
-          <div style="display:flex; gap:8px;">
+          <div class="attio-dialog-footer-actions">
             <button type="button" class="attio-btn-secondary" onclick="window.closeModal('modalInviteMembers')">Cancel</button>
-            <button type="button" id="btnSendInvitesSubmit" class="attio-btn-primary" style="width:auto; min-width:110px;" onclick="window.submitSendInvites()">
+            <button type="button" id="btnSendInvitesSubmit" class="attio-btn-primary attio-dialog-submit" onclick="window.submitSendInvites()">
               <span>Send Invites</span>
             </button>
           </div>
@@ -2811,19 +2812,19 @@
 
     <!-- Attio Workspace Settings Modal (Tabs: General, Members & Roles) -->
     <div id="modalWorkspaceSettings" class="modal-overlay hidden">
-      <div class="modal-card" style="max-width: 680px; width: 100%;">
-        <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+      <div class="modal-card ui-dialog" role="dialog" aria-modal="true">
+        <div class="modal-header workspace-settings-header">
           <h3>Workspace settings</h3>
           <button class="btn-close" type="button" onclick="window.closeModal('modalWorkspaceSettings')">&times;</button>
         </div>
 
-        <div class="attio-dialog-tabs" style="padding: 0 24px; margin-top: 12px;">
+        <div class="attio-dialog-tabs workspace-settings-tabs">
           <button type="button" id="wsTabBtnGeneral" class="attio-dialog-tab active" onclick="window.switchWorkspaceSettingsTab('general')">General</button>
           <button type="button" id="wsTabBtnMembers" class="attio-dialog-tab" onclick="window.switchWorkspaceSettingsTab('members')">Members & Roles</button>
         </div>
 
         <!-- TAB 1: GENERAL -->
-        <div id="wsTabContentGeneral" class="modal-body" style="padding-top: 16px;">
+        <div id="wsTabContentGeneral" class="modal-body workspace-settings-body">
           <div class="form-group">
             <label class="form-label" for="editWorkspaceNameInput">Workspace name</label>
             <input type="text" id="editWorkspaceNameInput" class="form-control" maxlength="60">
@@ -2831,46 +2832,46 @@
           <div class="form-group">
             <label class="form-label">Badge color</label>
             <div class="color-picker-row" id="editWorkspaceColorPicker">
-              <div class="color-swatch" data-color="#F5A300" style="background:#F5A300;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
-              <div class="color-swatch" data-color="#7C3AED" style="background:#7C3AED;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
-              <div class="color-swatch" data-color="#2563EB" style="background:#2563EB;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
-              <div class="color-swatch" data-color="#059669" style="background:#059669;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
-              <div class="color-swatch" data-color="#DB2777" style="background:#DB2777;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
-              <div class="color-swatch" data-color="#DC2626" style="background:#DC2626;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
-              <div class="color-swatch" data-color="#374151" style="background:#374151;" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
+              <div class="color-swatch" data-color="#F5A300" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
+              <div class="color-swatch" data-color="#7C3AED" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
+              <div class="color-swatch" data-color="#2563EB" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
+              <div class="color-swatch" data-color="#059669" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
+              <div class="color-swatch" data-color="#DB2777" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
+              <div class="color-swatch" data-color="#DC2626" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
+              <div class="color-swatch" data-color="#374151" onclick="window.selectWorkspaceColor(this, 'edit');"></div>
             </div>
           </div>
-          <div class="form-group" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
-            <label class="form-label" style="color: #DC2626;">Danger zone</label>
-            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Deleting a workspace removes all associated presets, members and campaign scopes.</p>
+          <div class="form-group workspace-danger-zone">
+            <label class="form-label text-danger">Danger zone</label>
+            <p class="workspace-danger-copy">Deleting a workspace removes all associated presets, members and campaign scopes.</p>
             <button id="btnDeleteCurrentWorkspace" class="btn btn-danger btn-sm" type="button" onclick="window.submitDeleteCurrentWorkspace()">Delete workspace</button>
           </div>
-          <div class="modal-footer" style="padding: 16px 0 0; margin-top: 16px;">
+          <div class="modal-footer workspace-settings-footer">
             <button class="btn btn-secondary" type="button" onclick="window.closeModal('modalWorkspaceSettings')">Cancel</button>
             <button id="btnSaveWorkspaceSettings" class="btn btn-primary" type="button" onclick="window.submitSaveWorkspaceSettings()">Save changes</button>
           </div>
         </div>
 
         <!-- TAB 2: MEMBERS & ROLES -->
-        <div id="wsTabContentMembers" class="modal-body hidden" style="padding-top: 16px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px;">
-            <div style="position: relative; flex: 1;">
-              <input type="text" id="wsMembersSearchInput" class="attio-input" placeholder="Search members..." style="height: 32px;" oninput="window.filterWorkspaceMembers(this.value)">
+        <div id="wsTabContentMembers" class="modal-body workspace-settings-body hidden">
+          <div class="workspace-members-toolbar">
+            <div class="workspace-members-search">
+              <input type="text" id="wsMembersSearchInput" class="attio-input" placeholder="Search members..." oninput="window.filterWorkspaceMembers(this.value)">
             </div>
-            <button type="button" class="attio-btn-primary" style="height: 32px; width: auto; font-size: 12.5px; padding: 0 12px;" onclick="window.openInviteMembersModal()">
+            <button type="button" class="attio-btn-primary workspace-members-invite" onclick="window.openInviteMembersModal()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
               <span>Invite members</span>
             </button>
           </div>
 
-          <div class="attio-table-container" style="max-height: 280px; overflow-y: auto; border: 1px solid #E6E7EA; border-radius: 8px;">
+          <div class="attio-table-container workspace-members-table workspace-members-table-main">
             <table class="attio-members-table">
               <thead>
                 <tr>
                   <th>Member</th>
                   <th>Role</th>
                   <th>Joined</th>
-                  <th style="width: 40px; text-align: right;"></th>
+                  <th class="table-actions-column"></th>
                 </tr>
               </thead>
               <tbody id="wsMembersTableBody">
@@ -2879,16 +2880,16 @@
             </table>
           </div>
 
-          <div style="margin-top: 20px;">
-            <h4 style="font-size: 13px; font-weight: 600; color: #101112; margin-bottom: 10px;">Pending invitations</h4>
-            <div class="attio-table-container" style="max-height: 180px; overflow-y: auto; border: 1px solid #E6E7EA; border-radius: 8px;">
+          <div class="workspace-invites-section">
+            <h4>Pending invitations</h4>
+            <div class="attio-table-container workspace-members-table workspace-invites-table">
               <table class="attio-members-table">
                 <thead>
                   <tr>
                     <th>Email / Link</th>
                     <th>Role</th>
                     <th>Invited</th>
-                    <th style="width: 40px; text-align: right;"></th>
+                    <th class="table-actions-column"></th>
                   </tr>
                 </thead>
                 <tbody id="wsPendingInvitesTableBody">
@@ -2903,20 +2904,20 @@
 
     <!-- Meta Discovered Assets Modal -->
     <div id="modalMetaAssets" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalMetaAssets')">
-      <div class="modal-card" style="max-width: 680px; width: 100%;">
+      <div class="modal-card ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <div>
             <h3 id="metaAssetsTitle">Выберите кабинеты</h3>
-            <p id="metaAssetsSubtitle" class="modal-subtitle" style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">Отметьте рекламные кабинеты для импорта в Buyerly</p>
+            <p id="metaAssetsSubtitle" class="modal-subtitle">Отметьте рекламные кабинеты для импорта в Buyerly</p>
           </div>
           <button class="btn-close" type="button" onclick="window.closeModal('modalMetaAssets')">&times;</button>
         </div>
-        <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
-          <div class="meta-assets-toolbar" style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);">
-            <label class="meta-select-all" style="font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; user-select: none;">
+        <div class="modal-body modal-body-scrollable">
+          <div class="meta-assets-toolbar">
+            <label class="meta-select-all">
               <input id="metaSelectAll" type="checkbox"> Выбрать все неподключённые
             </label>
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="meta-assets-toolbar-actions">
               <span id="metaSelectionCount" class="label-badge">Выбрано: 0</span>
               <button id="btnRefreshMetaAssets" class="btn btn-secondary btn-xs" type="button">Обновить список</button>
             </div>
@@ -2927,7 +2928,7 @@
           </div>
           <div id="metaAssetGroups" class="meta-asset-groups"></div>
         </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+        <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalMetaAssets')">Отмена</button>
           <button id="btnImportMetaAssets" class="btn btn-primary" type="button" disabled>
             <span>Добавить выбранные кабинеты</span>
@@ -2938,66 +2939,63 @@
 
     <!-- Manual Token Import Modal -->
     <div id="modalManualToken" class="modal-overlay hidden" onclick="if(event.target === this) window.closeModal('modalManualToken')">
-      <div class="modal-card" style="max-width: 580px; width: 100%;">
+      <div class="modal-card ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <div>
             <h3>Ручное подключение по токену</h3>
-            <p class="modal-subtitle" style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">Для системных пользователей и технических сценариев</p>
+            <p class="modal-subtitle">Для системных пользователей и технических сценариев</p>
           </div>
           <button class="btn-close" type="button" onclick="window.closeModal('modalManualToken')">&times;</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <div class="form-label-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label for="rawAccountsInput" style="font-weight: 500; font-size: 13px;">1. Текст из Facebook BM или список ID</label>
+            <div class="form-label-group manual-token-label-row">
+              <label for="rawAccountsInput">1. Текст из Facebook BM или список ID</label>
               <span class="label-badge" id="parsedCountBadge">Найдено: 0</span>
             </div>
             <textarea 
               id="rawAccountsInput" 
-              class="form-textarea" 
+              class="form-textarea manual-token-textarea"
               rows="4" 
               placeholder="Вставьте список ID кабинетов или скопированный текст из Business Manager, например:&#10;act_1018756607700064&#10;Швеция 1&#10;act_1009347965254238..."
-              style="width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); padding: 8px 12px; font-family: var(--font-mono); font-size: 12px; resize: vertical;"
             ></textarea>
           </div>
 
-          <div id="parsedPreviewBox" class="parsed-preview-box hidden" style="margin-bottom: 12px;">
-            <span class="preview-title" style="font-size: 12px; color: var(--text-muted); font-weight: 500; display: block; margin-bottom: 6px;">Распознанные кабинеты:</span>
-            <div id="parsedChipsList" class="parsed-chips-list" style="display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow-y: auto;"></div>
+          <div id="parsedPreviewBox" class="parsed-preview-box manual-token-preview hidden">
+            <span class="preview-title">Распознанные кабинеты:</span>
+            <div id="parsedChipsList" class="parsed-chips-list"></div>
           </div>
 
-          <div class="form-group" style="margin-top: 12px;">
-            <label for="batchNameInput" style="font-weight: 500; font-size: 13px; display: block; margin-bottom: 6px;">2. Название группы / BM (опционально)</label>
+          <div class="form-group manual-token-field">
+            <label for="batchNameInput">2. Название группы / BM (опционально)</label>
             <input 
               type="text" 
               id="batchNameInput" 
-              class="form-input" 
+              class="form-input manual-token-input"
               placeholder="например: Основной BM или Швеция"
-              style="width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); padding: 8px 12px; font-size: 13px;"
             >
           </div>
 
-          <div class="form-group" style="margin-top: 12px;">
-            <div class="form-label-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <label for="accessTokenInput" style="font-weight: 500; font-size: 13px;">3. Meta System User Access Token</label>
-              <button type="button" class="btn-link" id="btnOpenTokenGuide" style="font-size: 12px; background: none; border: none; color: var(--brand-accent); cursor: pointer;">Как получить токен?</button>
+          <div class="form-group manual-token-field">
+            <div class="form-label-group manual-token-label-row">
+              <label for="accessTokenInput">3. Meta System User Access Token</label>
+              <button type="button" class="btn-link manual-token-help" id="btnOpenTokenGuide">Как получить токен?</button>
             </div>
-            <div class="input-password-wrapper" style="position: relative;">
+            <div class="input-password-wrapper manual-token-password">
               <input 
                 type="password" 
                 id="accessTokenInput" 
-                class="form-input" 
+                class="form-input manual-token-input manual-token-secret"
                 placeholder="EAA..." 
                 autocomplete="off"
-                style="width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); padding: 8px 36px 8px 12px; font-family: var(--font-mono); font-size: 12px;"
               >
-              <button type="button" id="btnToggleTokenVisibility" class="btn-eye" title="Показать/скрыть токен" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-muted);">
+              <button type="button" id="btnToggleTokenVisibility" class="btn-eye manual-token-eye" title="Показать/скрыть токен">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
           </div>
         </div>
-        <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+        <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="window.closeModal('modalManualToken')">Отмена</button>
           <button id="btnSubmitBatchAdd" class="btn btn-primary" disabled>
             <span>Подключить кабинеты</span>
@@ -3008,7 +3006,7 @@
 
     <!-- Toast Notification Container -->
     <div id="modalLogDetails" class="modal-overlay hidden">
-      <div class="bottom-sheet log-details-sheet">
+      <div class="bottom-sheet log-details-sheet ui-dialog" role="dialog" aria-modal="true">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <h3>Детали события</h3>
@@ -3019,7 +3017,7 @@
     </div>
 
     <div id="modalSummaryColumns" class="modal-overlay hidden">
-      <div class="bottom-sheet summary-columns-sheet">
+      <div class="bottom-sheet summary-columns-sheet ui-dialog" role="dialog" aria-modal="true">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
           <div>
@@ -3044,11 +3042,11 @@
       </button>
       <button class="mobile-nav-item" data-tab="summary" onclick="window.switchTab('summary');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        <span>Эффективность</span>
+        <span>Сводка</span>
       </button>
       <button class="mobile-nav-item" data-tab="rules" onclick="window.switchTab('rules');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Автоматизации</span>
+        <span>Правила</span>
       </button>
       <button class="mobile-nav-item" data-tab="logs" onclick="window.switchTab('logs');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
@@ -3056,7 +3054,7 @@
       </button>
       <button class="mobile-nav-item" data-tab="fb_accounts" onclick="window.switchTab('fb_accounts');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>Подключения</span>
+        <span>Связи</span>
       </button>
       <button class="mobile-nav-item" data-tab="settings" onclick="window.switchTab('settings');">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1-2.9 2.9-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5v.1h-4v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1-2.9-2.9.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3v-4h.1a1.7 1.7 0 001.5-1"/></svg>
@@ -3066,7 +3064,7 @@
 
     <!-- Global Quick Search / Command Palette Modal (Attio Style) -->
     <div id="quickSearchModal" class="quick-search-overlay hidden" onclick="if(event.target === this) window.closeQuickSearchModal();">
-      <div class="quick-search-dialog" role="dialog" aria-modal="true" aria-label="Поиск по сайту">
+      <div class="quick-search-dialog ui-dialog" role="dialog" aria-modal="true" aria-label="Поиск по сайту">
         <div class="quick-search-header">
           <svg class="quick-search-icon" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -3099,30 +3097,30 @@
     <!-- ============================================== -->
     <!-- MODAL: Meta Invite Create / Manage             -->
     <!-- ============================================== -->
-    <div id="modalMetaInvite" class="modal-overlay" style="display:none;" onclick="if(event.target===this)window.closeMetaInviteModal()">
-      <div class="modal-box" style="max-width:520px;">
+    <div id="modalMetaInvite" class="modal-overlay hidden" onclick="if(event.target===this)window.closeMetaInviteModal()">
+      <div class="modal-box ui-dialog" role="dialog" aria-modal="true">
         <div class="modal-header">
           <span class="modal-title">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="margin-right:6px;vertical-align:-2px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+            <svg class="modal-title-icon" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
             Инвайт-ссылка Facebook
           </span>
-          <button class="modal-close" onclick="window.closeMetaInviteModal()">×</button>
+          <button class="modal-close btn-close" type="button" aria-label="Закрыть" onclick="window.closeMetaInviteModal()">×</button>
         </div>
-        <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;">
+        <div class="modal-body meta-invite-body">
 
           <!-- Create form -->
           <div id="metaInviteCreateSection">
-            <p style="margin:0 0 12px;font-size:13px;color:var(--text-secondary);">
+            <p class="meta-invite-intro">
               Сгенерируйте одноразовую защищённую ссылку. Байер откроет её в антидетект-браузере и авторизует Facebook-профиль без передачи паролей или куки.
             </p>
-            <div style="display:flex;flex-direction:column;gap:10px;">
-              <label style="font-size:13px;font-weight:500;">
+            <div class="meta-invite-fields">
+              <label class="meta-invite-field">
                 Метка (необязательно)
-                <input id="metaInviteLabelInput" type="text" maxlength="100" placeholder="Иван Покупатель — Профиль #3" style="width:100%;margin-top:4px;padding:8px 10px;border:1px solid var(--border-color);border-radius:6px;font-size:13px;background:var(--bg-primary);color:var(--text-primary);">
+                <input id="metaInviteLabelInput" type="text" maxlength="100" placeholder="Иван Покупатель — Профиль #3">
               </label>
-              <label style="font-size:13px;font-weight:500;">
+              <label class="meta-invite-field">
                 Срок действия
-                <select id="metaInviteTtlSelect" style="width:100%;margin-top:4px;padding:8px 10px;border:1px solid var(--border-color);border-radius:6px;font-size:13px;background:var(--bg-primary);color:var(--text-primary);">
+                <select id="metaInviteTtlSelect">
                   <option value="1">1 час</option>
                   <option value="6">6 часов</option>
                   <option value="24" selected>24 часа</option>
@@ -3131,30 +3129,30 @@
                 </select>
               </label>
             </div>
-            <button id="metaInviteGenerateBtn" class="btn btn-primary" style="margin-top:14px;width:100%;" onclick="window.generateMetaInvite()">
+            <button id="metaInviteGenerateBtn" class="btn btn-primary meta-invite-generate" onclick="window.generateMetaInvite()">
               Создать ссылку
             </button>
           </div>
 
           <!-- Generated link display -->
-          <div id="metaInviteResultSection" style="display:none;">
-            <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;padding:14px;">
-              <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px;">Одноразовая ссылка</p>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <input id="metaInviteLinkInput" type="text" readonly style="flex:1;padding:8px 10px;border:1px solid var(--border-color);border-radius:6px;font-size:12px;font-family:monospace;background:var(--bg-primary);color:var(--text-primary);" value="">
+          <div id="metaInviteResultSection" class="hidden">
+            <div class="meta-invite-result">
+              <p class="meta-invite-section-label">Одноразовая ссылка</p>
+              <div class="meta-invite-link-row">
+                <input id="metaInviteLinkInput" type="text" readonly value="">
                 <button class="attio-header-btn" onclick="window.copyMetaInviteLink()" title="Копировать">
                   <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                 </button>
               </div>
-              <p style="margin:8px 0 0;font-size:12px;color:var(--text-tertiary);">⚠️ Скопируйте ссылку сейчас — она больше не будет показана в полном виде.</p>
+              <p class="meta-invite-warning">Скопируйте ссылку сейчас — она больше не будет показана в полном виде.</p>
             </div>
           </div>
 
           <!-- Invite list -->
           <div>
-            <p style="margin:0 0 8px;font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.4px;">Активные инвайты</p>
-            <div id="metaInviteList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;">
-              <p style="font-size:13px;color:var(--text-tertiary);text-align:center;padding:16px 0;">Загрузка…</p>
+            <p class="meta-invite-section-label">Активные инвайты</p>
+            <div id="metaInviteList" class="meta-invite-list">
+              <p class="meta-invite-empty">Загрузка…</p>
             </div>
           </div>
 
@@ -3165,55 +3163,55 @@
     <!-- ============================================== -->
     <!-- PUBLIC: Connect/Meta Landing (Fullscreen)      -->
     <!-- ============================================== -->
-    <div id="connectMetaLanding" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg-primary);overflow-y:auto;">
-      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;">
-        <div style="max-width:420px;width:100%;text-align:center;">
+    <div id="connectMetaLanding" class="connect-meta-landing hidden">
+      <div class="connect-meta-shell">
+        <div class="connect-meta-layout">
 
           <!-- Logo / brand -->
-          <div style="margin-bottom:24px;">
-            <div style="width:64px;height:64px;border-radius:16px;background:#EBF3FF;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;">
+          <div class="connect-meta-brand">
+            <div class="connect-meta-mark">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
             </div>
-            <h1 id="connectMetaWorkspaceName" style="font-size:20px;font-weight:700;margin:0 0 4px;">Buyerly</h1>
-            <p id="connectMetaInviterName" style="font-size:14px;color:var(--text-secondary);margin:0;"></p>
+            <h1 id="connectMetaWorkspaceName">Buyerly</h1>
+            <p id="connectMetaInviterName"></p>
           </div>
 
           <!-- Card -->
-          <div id="connectMetaCard" style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:16px;padding:28px 24px;">
+          <div id="connectMetaCard" class="connect-meta-card">
 
             <!-- State: loading -->
             <div id="connectMetaStateLoading">
-              <p style="font-size:14px;color:var(--text-secondary);">Проверяем ссылку…</p>
+              <p class="connect-meta-loading-copy">Проверяем ссылку…</p>
             </div>
 
             <!-- State: valid -->
-            <div id="connectMetaStateValid" style="display:none;">
-              <p style="font-size:15px;font-weight:600;margin:0 0 8px;">Подключить Facebook-профиль</p>
-              <p id="connectMetaLabel" style="font-size:13px;color:var(--text-secondary);margin:0 0 20px;"></p>
-              <p style="font-size:12px;color:var(--text-tertiary);margin:0 0 20px;">Нажмите кнопку ниже в браузере, где залогинен нужный Facebook-профиль. Мы не получаем доступ к паролям или cookies.</p>
-              <a id="connectMetaOAuthBtn" href="#" class="btn btn-primary" style="display:block;width:100%;text-align:center;padding:12px;" onclick="window.startConnectMetaOAuth(event)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;vertical-align:-2px;"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+            <div id="connectMetaStateValid" class="hidden">
+              <p class="connect-meta-title">Подключить Facebook-профиль</p>
+              <p id="connectMetaLabel" class="connect-meta-label"></p>
+              <p class="connect-meta-help">Нажмите кнопку ниже в браузере, где залогинен нужный Facebook-профиль. Мы не получаем доступ к паролям или cookies.</p>
+              <a id="connectMetaOAuthBtn" href="#" class="btn btn-primary connect-meta-action" onclick="window.startConnectMetaOAuth(event)">
+                <svg class="connect-meta-action-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 Подключить через Facebook
               </a>
             </div>
 
             <!-- State: invalid / expired / used / revoked -->
-            <div id="connectMetaStateInvalid" style="display:none;">
-              <div style="font-size:36px;margin-bottom:12px;">⛔</div>
-              <p id="connectMetaInvalidTitle" style="font-size:15px;font-weight:600;margin:0 0 6px;">Ссылка недействительна</p>
-              <p id="connectMetaInvalidMsg" style="font-size:13px;color:var(--text-secondary);margin:0;">Эта ссылка уже была использована, отозвана или истёк срок её действия. Попросите тимлида создать новую ссылку.</p>
+            <div id="connectMetaStateInvalid" class="hidden">
+              <div class="connect-meta-state-icon">⛔</div>
+              <p id="connectMetaInvalidTitle" class="connect-meta-title">Ссылка недействительна</p>
+              <p id="connectMetaInvalidMsg" class="connect-meta-state-copy">Эта ссылка уже была использована, отозвана или истёк срок её действия. Попросите тимлида создать новую ссылку.</p>
             </div>
 
             <!-- State: success -->
-            <div id="connectMetaStateSuccess" style="display:none;">
-              <div style="font-size:36px;margin-bottom:12px;">✅</div>
-              <p style="font-size:15px;font-weight:600;margin:0 0 6px;">Профиль подключён!</p>
-              <p style="font-size:13px;color:var(--text-secondary);margin:0;">Facebook-профиль успешно добавлен в рабочее пространство. Можно закрыть это окно.</p>
+            <div id="connectMetaStateSuccess" class="hidden">
+              <div class="connect-meta-state-icon">✅</div>
+              <p class="connect-meta-title">Профиль подключён!</p>
+              <p class="connect-meta-state-copy">Facebook-профиль успешно добавлен в рабочее пространство. Можно закрыть это окно.</p>
             </div>
 
           </div>
 
-          <p style="font-size:11px;color:var(--text-tertiary);margin-top:20px;">Buyerly — AI Media Buyer Platform</p>
+          <p class="connect-meta-footer">Buyerly — AI Media Buyer Platform</p>
         </div>
       </div>
     </div>

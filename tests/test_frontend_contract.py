@@ -14,7 +14,12 @@ class TestFrontendRuleContract(unittest.TestCase):
         cls.app_script = cls.scripts["app.js"]
         cls.script = "\n".join(cls.scripts.values())
         cls.index = (webapp / "index.html").read_text()
-        cls.styles = (webapp / "css" / "styles.css").read_text()
+        cls.style_files = {
+            path.name: path.read_text()
+            for path in sorted((webapp / "css").glob("*.css"))
+        }
+        cls.styles = "\n".join(cls.style_files.values())
+        cls.ui_system = cls.style_files["ui-system.css"]
         cls.server = (Path(__file__).parents[1] / "api" / "server.py").read_text()
         cls.workflow = (Path(__file__).parents[1] / ".github" / "workflows" / "deploy.yml").read_text()
 
@@ -327,6 +332,74 @@ class TestFrontendRuleContract(unittest.TestCase):
             "@media (max-width: 768px)",
         ):
             self.assertIn(style_contract, self.styles)
+
+    def test_unified_ui_system_covers_every_page_and_modal(self):
+        self.assertIn('/static/css/ui-system.css?v=', self.index)
+
+        element_ids = re.findall(r'\bid="([^"]+)"', self.index)
+        self.assertEqual(len(element_ids), len(set(element_ids)))
+
+        inline_styles = re.findall(r'\bstyle="([^"]+)"', self.index)
+        self.assertTrue(inline_styles)
+        self.assertTrue(
+            all(style.replace(" ", "") == "display:none;" for style in inline_styles)
+        )
+        self.assertLessEqual(len(re.findall(r'\bstyle="', self.app_script)), 5)
+
+        for token in (
+            "--ui-page-max:",
+            "--ui-page-gutter:",
+            "--ui-title-size:",
+            "--ui-control-height:",
+            "--ui-radius-dialog:",
+            "--ui-shadow-dialog:",
+        ):
+            self.assertIn(token, self.ui_system)
+
+        for pilot in (
+            "today",
+            "connections",
+            "accounts",
+            "automations",
+            "efficiency",
+            "action-history",
+            "settings",
+        ):
+            self.assertIn(f'data-ui-pilot="{pilot}"', self.index)
+
+        modal_count = len(re.findall(r'class="modal-overlay(?:\s|\")', self.index))
+        dialog_count = len(re.findall(r'class="[^"]*\bui-dialog\b', self.index))
+        self.assertEqual(modal_count, 22)
+        self.assertEqual(dialog_count, modal_count + 1)
+        self.assertEqual(self.index.count('role="dialog" aria-modal="true"'), dialog_count)
+        self.assertIn('class="quick-search-dialog ui-dialog"', self.index)
+
+        for contract in (
+            ".connections-summary-grid",
+            ".automations-summary-grid",
+            "flex: 0 0 auto",
+            ".logs-stats-grid",
+            '[data-ui-pilot="efficiency"] .kpi-grid',
+            '[data-ui-pilot="efficiency"] .kpi-primary-grid .spend-card',
+            '[data-ui-pilot="automations"] .rules-column:not(.collapsed)',
+            '[data-ui-pilot="settings"] .settings-card',
+            ".btn-fetch-summary .fetch-icon",
+            "#btnRefreshLogs .sync-icon",
+            ".log-status",
+            "gap: 7px",
+            "grid-template-columns: repeat(6, minmax(0, 1fr))",
+            ".ui-dialog",
+            ".workspace-members-toolbar",
+            ".manual-token-textarea",
+            ".meta-invite-fields",
+            ".connect-meta-landing",
+            ".cell-ellipsis",
+            "@media (max-width: 768px)",
+        ):
+            self.assertIn(contract, self.ui_system)
+
+        for mobile_label in ("Сводка", "Правила", "Связи"):
+            self.assertIn(f"<span>{mobile_label}</span>", self.index)
 
     def test_logs_are_a_first_class_section_not_a_summary_table(self):
         self.assertIn('data-tab="logs"', self.index)
