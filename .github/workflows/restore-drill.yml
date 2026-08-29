@@ -1,0 +1,115 @@
+name: Automated PostgreSQL Restore Drill
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore-drill:
+    name: Execute PostgreSQL Backup & Restore Drill
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: buyerly
+          POSTGRES_PASSWORD: buyerly_secret
+          POSTGRES_DB: buyerly_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Initialize Database Schema with Alembic
+        env:
+          DATABASE_URL: postgresql+asyncpg://buyerly:buyerly_secret@localhost:5432/buyerly_test
+        run: |
+          python -m alembic upgrade head
+
+      - name: Run Synthetic Database Restore Drill
+        env:
+          BACKUP_ENCRYPTION_KEY: "test_master_encryption_key_for_ci_drill_12345"
+          PGPASSWORD: buyerly_secret
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/buyerly_backups /tmp/buyerly_restore_test
+
+          echo "[Step 1] Inserting test state and audit records..."
+          psql -h localhost -U buyerly -d buyerly_test -v ON_ERROR_STOP=1 <<EOF
+          INSERT INTO users (id, email, hashed_password, role, is_active, created_at, updated_at)
+          VALUES ('00000000-0000-0000-0000-000000000001', 'drill@buyerly.app', 'hash', 'admin', true, NOW(), NOW())
+          ON CONFLICT (id) DO NOTHING;
+
+          INSERT INTO automation_runtime_states (state_key, payload, updated_at)
+          VALUES ('monitoring', '{"drill_test": true, "last_backup_at": "2026-08-29T00:00:00Z"}'::jsonb, NOW())
+          ON CONFLICT (state_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW();
+          EOF
+
+          echo "[Step 2] Creating encrypted database backup..."
+          backup_file="/tmp/buyerly_backups/buyerly_postgres_drill.sql.gz.enc"
+          pg_dump -h localhost -U buyerly -d buyerly_test --clean --if-exists --no-owner --no-privileges \
+            | gzip -c \
+            | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass "env:BACKUP_ENCRYPTION_KEY" > "${backup_file}"
+
+          test -s "${backup_file}"
+          echo "[SUCCESS] Encrypted backup file created ($(wc -c < "${backup_file}") bytes)."
+
+          echo "[Step 3] Creating isolated sandbox database for restore drill..."
+          psql -h localhost -U buyerly -d postgres -v ON_ERROR_STOP=1 <<EOF
+          DROP DATABASE IF EXISTS buyerly_restore_drill WITH (FORCE);
+          CREATE DATABASE buyerly_restore_drill;
+          EOF
+
+          echo "[Step 4] Decrypting and streaming restore into sandbox database..."
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -pass "env:BACKUP_ENCRYPTION_KEY" -in "${backup_file}" \
+            | gzip -dc \
+            | psql -h localhost -U buyerly -d buyerly_restore_drill -v ON_ERROR_STOP=1 --quiet
+
+          echo "[Step 5] Asserting restored schema, Alembic version, and JSONB integrity..."
+          for table in users accounts rules automation_runtime_states audit_events campaign_facts alembic_version; do
+            table_exists=$(psql -h localhost -U buyerly -d buyerly_restore_drill -t -A -c "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '${table}';")
+            if [ "${table_exists}" != "1" ]; then
+              echo "::error::Sanity check failed: table '${table}' missing after restore."
+              exit 1
+            fi
+          done
+
+          alembic_rev=$(psql -h localhost -U buyerly -d buyerly_restore_drill -t -A -c "SELECT version_num FROM alembic_version LIMIT 1;")
+          if [ -z "${alembic_rev}" ]; then
+            echo "::error::Alembic version is empty in restored database."
+            exit 1
+          fi
+          echo "Restored Alembic revision: ${alembic_rev}"
+
+          payload_check=$(psql -h localhost -U buyerly -d buyerly_restore_drill -t -A -c "SELECT payload->>'drill_test' FROM automation_runtime_states WHERE state_key = 'monitoring';")
+          if [ "${payload_check}" != "true" ]; then
+            echo "::error::Payload check failed: expected true, got '${payload_check}'."
+            exit 1
+          fi
+
+          echo "=========================================================="
+          echo " 🎉 Automated Restore Drill Succeeded with 100% Integrity!"
+          echo "=========================================================="

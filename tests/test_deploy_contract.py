@@ -24,6 +24,18 @@ class TestDeployContract(unittest.TestCase):
         cls.backup_script = (
             project_root / "scripts" / "backup_db.sh"
         ).read_text()
+        cls.restore_script = (
+            project_root / "scripts" / "restore_db.sh"
+        ).read_text()
+        cls.drill_script = (
+            project_root / "scripts" / "drill_restore.sh"
+        ).read_text()
+        cls.offsite_sync_script = (
+            project_root / "scripts" / "offsite_sync.py"
+        ).read_text()
+        cls.restore_drill_workflow = (
+            project_root / ".github" / "workflows" / "restore-drill.yml"
+        ).read_text()
         cls.log_verification_script = (
             project_root / "scripts" / "verify_docker_log_rotation.sh"
         ).read_text()
@@ -157,6 +169,7 @@ class TestDeployContract(unittest.TestCase):
             "## Token expiry, revocation, or encryption key",
             "## Disk capacity",
             "## Release smoke failure and rollback gate",
+            "## Disaster Recovery from off-site backup",
         ):
             self.assertIn(heading, self.incident_runbooks)
 
@@ -282,6 +295,26 @@ class TestDeployContract(unittest.TestCase):
         for relative_path in forbidden:
             self.assertFalse((root / relative_path).exists(), relative_path)
 
+    def test_encrypted_backup_and_offsite_sync_contract(self):
+        self.assertIn("BACKUP_ENCRYPTION_KEY", self.backup_script)
+        self.assertIn("openssl enc -aes-256-cbc", self.backup_script)
+        self.assertIn("flock -n", self.backup_script)
+        self.assertIn("offsite_sync.py", self.backup_script)
+        self.assertIn("S3Client", self.offsite_sync_script)
+        self.assertIn("AWS4-HMAC-SHA256", self.offsite_sync_script)
+        self.assertIn("min_keep_count", self.offsite_sync_script)
+        self.assertIn("prune_old_backups", self.offsite_sync_script)
+
+    def test_database_restore_and_drill_contracts(self):
+        self.assertIn("openssl enc -d -aes-256-cbc", self.restore_script)
+        self.assertIn("ON_ERROR_STOP=1", self.restore_script)
+        self.assertIn("DRILL_DB", self.drill_script)
+        self.assertIn("strictly forbidden from using production database", self.drill_script)
+        self.assertIn("information_schema.tables", self.drill_script)
+        self.assertIn("alembic_version", self.drill_script)
+        self.assertIn("schedule:", self.restore_drill_workflow)
+        self.assertIn("cron:", self.restore_drill_workflow)
+        self.assertIn("alembic upgrade head", self.restore_drill_workflow)
 
 
 if __name__ == "__main__":

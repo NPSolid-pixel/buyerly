@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="${BACKUP_DIR:-/opt/buyerly/backups}"
 DATA_DIR="${DATA_DIR:-/opt/buyerly/data}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-buyerly-db}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 KEEP_BACKUPS="${KEEP_BACKUPS:-30}"
+OFFSITE_RETENTION_DAYS="${OFFSITE_RETENTION_DAYS:-60}"
+BACKUP_LOCK_FILE="${BACKUP_LOCK_FILE:-/tmp/buyerly-backup.lock}"
+
+# Concurrency lock to prevent race conditions
+exec 9>"${BACKUP_LOCK_FILE}"
+if ! flock -n 9; then
+    echo "[WARNING] Another backup process is currently running. Skipping."
+    exit 0
+fi
 
 mkdir -p "${BACKUP_DIR}"
 
@@ -15,18 +25,33 @@ if [[ "${postgres_state}" != "running" ]]; then
     exit 0
 fi
 
-backup_file="${BACKUP_DIR}/buyerly_postgres_${TIMESTAMP}.sql"
-echo "[INFO] Creating PostgreSQL backup: ${backup_file}.gz"
-docker exec "${POSTGRES_CONTAINER}" pg_dump \
-    --username=buyerly \
-    --dbname=buyerly \
-    --clean \
-    --if-exists \
-    --no-owner \
-    --no-privileges > "${backup_file}"
-test -s "${backup_file}"
-gzip -f "${backup_file}"
-gzip -t "${backup_file}.gz"
+if [[ -n "${BACKUP_ENCRYPTION_KEY:-}" ]]; then
+    target_file="${BACKUP_DIR}/buyerly_postgres_${TIMESTAMP}.sql.gz.enc"
+    echo "[INFO] Creating encrypted PostgreSQL backup: ${target_file}"
+    docker exec "${POSTGRES_CONTAINER}" pg_dump \
+        --username=buyerly \
+        --dbname=buyerly \
+        --clean \
+        --if-exists \
+        --no-owner \
+        --no-privileges \
+        | gzip -c \
+        | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt -pass "env:BACKUP_ENCRYPTION_KEY" > "${target_file}"
+else
+    target_file="${BACKUP_DIR}/buyerly_postgres_${TIMESTAMP}.sql.gz"
+    echo "[INFO] Creating PostgreSQL backup: ${target_file}"
+    docker exec "${POSTGRES_CONTAINER}" pg_dump \
+        --username=buyerly \
+        --dbname=buyerly \
+        --clean \
+        --if-exists \
+        --no-owner \
+        --no-privileges \
+        | gzip -c > "${target_file}"
+    gzip -t "${target_file}"
+fi
+
+test -s "${target_file}"
 backup_completed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 if docker exec "${POSTGRES_CONTAINER}" psql \
         --username=buyerly \
@@ -40,10 +65,22 @@ else
     # backup republishes the timestamp after migrations have caught up.
     echo "[WARNING] Backup is valid, but runtime timestamp publication failed."
 fi
-pattern="buyerly_postgres_*.sql.gz"
 
+# Local backup rotation
+pattern="buyerly_postgres_*.sql.gz*"
 ls -tp "${BACKUP_DIR}"/${pattern} 2>/dev/null \
     | grep -v '/$' \
     | tail -n +$((KEEP_BACKUPS + 1)) \
     | xargs -r rm -f --
-echo "[SUCCESS] Database backup created and verified."
+
+# Off-site S3 synchronization if configured
+if [[ -n "${S3_BUCKET:-}" && -n "${S3_ACCESS_KEY_ID:-}" && -n "${S3_SECRET_ACCESS_KEY:-}" ]]; then
+    echo "[INFO] Triggering off-site S3 backup sync..."
+    if python3 "${SCRIPT_DIR}/offsite_sync.py" --upload "${target_file}" --prune --retention-days "${OFFSITE_RETENTION_DAYS}"; then
+        echo "[SUCCESS] Off-site S3 backup sync completed."
+    else
+        echo "[WARNING] Off-site S3 sync failed, but local backup is verified and intact."
+    fi
+fi
+
+echo "[SUCCESS] Database backup created and verified: ${target_file}"

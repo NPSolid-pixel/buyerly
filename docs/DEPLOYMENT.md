@@ -152,13 +152,43 @@ Alembic/schema contract. Все операции — GET/SELECT; Meta Marketing 
 предыдущих app/web images. Процедуры реакции собраны в
 [`INCIDENT_RUNBOOKS.md`](INCIDENT_RUNBOOKS.md).
 
-## Резервные копии
+## Резервные копии и Disaster Recovery
 
-`scripts/backup_db.sh` автоматически выполняет горячий дамп PostgreSQL:
+`scripts/backup_db.sh` автоматически выполняет потоковый горячий дамп PostgreSQL:
 
-- `buyerly_postgres_YYYYMMDD_HHMMSS.sql.gz` через `pg_dump`.
+- `buyerly_postgres_YYYYMMDD_HHMMSS.sql.gz.enc` с потоковым шифрованием `AES-256-CBC` (при наличии `BACKUP_ENCRYPTION_KEY`) или `buyerly_postgres_YYYYMMDD_HHMMSS.sql.gz`.
+- Потоковая передача данных через Unix pipeline исключает накопление промежуточных несжатых файлов на диске.
+- По умолчанию локально сохраняются последние 30 архивов в `/opt/buyerly/backups`.
+- При настроенных переменных `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` и `OFFSITE_RETENTION_DAYS` зашифрованный архив автоматически выгружается в удаленное хранилище (Cloudflare R2 / AWS S3 / Backblaze B2) через `scripts/offsite_sync.py` с автоматической ротацией копий старше `OFFSITE_RETENTION_DAYS` дней и защитным порогом (не менее 7 копий).
 
-По умолчанию сохраняются последние 30 архивов. Для восстановления PostgreSQL остановите пишущие сервисы, разверните нужный архив через `psql`, затем запустите `migrate`, `api`, `bot`, `worker` и `web`.
+### Настройка расписания бэкапов на сервере
+
+Для ежедневного создания резервной копии (в 03:00 UTC) выполните:
+```bash
+sudo bash scripts/setup_backup_cron.sh
+```
+
+### Восстановление базы данных
+
+Для восстановления PostgreSQL используйте унифицированный скрипт `scripts/restore_db.sh`:
+```bash
+# Восстановление из конкретного зашифрованного или сжатого файла
+bash scripts/restore_db.sh --file /opt/buyerly/backups/buyerly_postgres_YYYYMMDD_HHMMSS.sql.gz.enc
+
+# Восстановление из последнего локального бэкапа
+bash scripts/restore_db.sh --latest-local
+
+# Скачивание и восстановление последней оффсайт-копии из S3/Cloudflare R2
+bash scripts/restore_db.sh --download-latest-offsite
+```
+
+### Автоматические учения по восстановлению (Restore Drills)
+
+Для проверки целостности бэкапа без риска задеть боевую базу используется изолированный скрипт:
+```bash
+bash scripts/drill_restore.sh
+```
+Drill создает временную изолированную БД `buyerly_restore_drill`, разворачивает дамп, валидирует таблицы, Alembic-миграцию и JSONB-поля, после чего автоматически очищает тестовые ресурсы. В GitHub Actions учения запускаются автоматически каждую ночь по расписанию (`.github/workflows/restore-drill.yml`).
 
 `migrate` изменяет production-схему только через `alembic upgrade head`. Одновременный запуск блокируется PostgreSQL advisory lock; после миграции контейнер сверяет текущий revision с Alembic head и проверяет наличие всех таблиц и колонок из моделей. Для исторической базы без `alembic_version` разрешён только одноразовый переход на явно зафиксированный baseline `0009_web_sessions`, причём перед stamp выполняется fail-closed проверка схемы. `create_all()` и ручные `ALTER TABLE` в production-runner не используются.
 

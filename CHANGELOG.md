@@ -10,6 +10,15 @@
 ## [Unreleased]
 
 ### Added & Improved
+- **Автоматизация зашифрованных оффсайт-бэкапов PostgreSQL и Restore Drills (`[OPS][P1]`)**:
+  - Реализован потоковый дамп с симметричным шифрованием `AES-256-CBC` с PBKDF2 (`scripts/backup_db.sh`) без создания избыточных промежуточных несжатых файлов на диске.
+  - Добавлен межпроцессный `flock` для защиты от гонок Cron vs Deploy.
+  - Создана утилита `scripts/offsite_sync.py` для выгрузки, скачивания и ротации бэкапов в S3-совместимые хранилища (Cloudflare R2 / AWS S3 / Backblaze B2) без внешних зависимостей.
+  - Реализован защитный порог очистки (min keep guard), запрещающий удаление при наличии $\le 7$ бэкапов в бакете.
+  - Создан унифицированный скрипт восстановления базы данных `scripts/restore_db.sh` с поддержкой расшифровки, стриминга в `psql` и проверки целостности.
+  - Создан скрипт автоматических изолированных учений `scripts/drill_restore.sh` с жестким fail-safe запретом на использование боевой БД `buyerly` и автоочисткой тестовой БД `buyerly_restore_drill`.
+  - Добавлен ежедневный ночной GitHub Actions workflow `.github/workflows/restore-drill.yml` для автоматической верификации целостности восстановления схемы и JSONB данных.
+  - Добавлен скрипт `scripts/setup_backup_cron.sh` для установки ежедневного расписания на VPS и обновлен Disaster Recovery ранбук в `docs/INCIDENT_RUNBOOKS.md`.
 - **Workspace-isolated Analytics Fact Store (`86eyr60pk`)**:
   - Создана реляционная таблица `analytics_entity_daily_facts` (Alembic-миграция `0021_analytics_entity_facts`) для сохранения нормализованных снимков метрик (spend, impressions, clicks, leads, registrations, purchases, CPC, CTR, CPM) по всей иерархии Account → Campaign → AdSet → Ad.
   - Реализован deadlock-safe сервис `AnalyticsFactService` с детерминированной сортировкой PK перед bulk UPSERT в PostgreSQL.
