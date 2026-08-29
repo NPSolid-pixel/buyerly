@@ -1,6 +1,6 @@
 # Buyerly Design System
 
-Version: Unified UI 2.1
+Version: Unified UI 2.2
 Owner: Product / Frontend
 ClickUp: BL-101 `86eyr6073`
 
@@ -79,10 +79,12 @@ ClickUp: BL-101 `86eyr6073`
 
 - selector: `[data-ui-pilot="today"]`;
 - удалён декоративный AI composer;
-- тёмный command hero показывает живую дату и реальный цикл `Meta → Правила → Действия`, не имитируя данные или состояние API;
-- рабочий обзор оформлен отдельной command bar, а быстрые действия собраны в один segmented surface без россыпи вложенных карточек;
-- Alert, Button и action segments ведут только к существующим product routes;
-- нет fake metrics или controls без обработчика.
+- тёмный command hero показывает живую дату и фактическое состояние workspace по `/api/meta/connections`, `/api/health/overview` и `/api/accounts`;
+- три hero-сигнала означают только реальные величины: активные/все Meta-подключения, healthy/все кабинеты и покрытые/активные кабинеты;
+- command bar содержит ровно одно next-best action с фиксированным порядком: setup → доступ/токен → critical/degraded health → покрытие правилами → ошибки действий → эффективность;
+- сигналы и пять последних `/api/audit-events` собраны в одну divided operations surface, без карточек внутри карточек;
+- при частичной ошибке успешные источники остаются видимыми, недоступные значения получают `—` и явное объяснение; данные не вычисляются и не подменяются;
+- secondary navigation сохраняет только существующие product routes, а каждая интерактивная строка имеет реальный handler.
 
 ### Automations
 
@@ -108,6 +110,7 @@ ClickUp: BL-101 `86eyr6073`
 ## Responsive contract
 
 - `390px`: шесть mobile destinations помещаются без горизонтального scroll; длинные desktop-названия сокращены до `Сводка`, `Правила` и `Связи`;
+- `390px`: Today сохраняет live status, складывает operations surface и context links в одну колонку, а primary next action занимает полную ширину;
 - `390–480px`: KPI используют две колонки, а главный Spend занимает всю строку; при ширине до `360px` сетка безопасно складывается в одну колонку;
 - `768px`: sidebar уступает место mobile navigation, data surfaces не создают document-level horizontal overflow;
 - `1024px+`: sidebar и content shell сохраняют независимую геометрию, таблицы прокручиваются только внутри собственного viewport;
