@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import false, func, or_, select
+from sqlalchemy import String, cast, false, func, or_, select
 
 from api.auth import get_current_user
 from api.deps import (
@@ -42,7 +42,7 @@ async def list_audit_events(
     date_to: Optional[datetime] = Query(None),
     user: User = Depends(get_current_user),
 ):
-    """Return an owner-isolated, filterable audit history for the web UI."""
+    """Return a workspace-isolated, filterable audit history for the web UI."""
     async with async_session_maker() as session:
         ws, member = await get_user_workspace_member(session, user)
         workspace_id = ws.id if ws else None
@@ -69,29 +69,34 @@ async def list_audit_events(
             search_pattern = f"%{search.strip()}%"
             filters.append(
                 or_(
+                    cast(AuditEvent.id, String).ilike(search_pattern),
                     AuditEvent.account_name.ilike(search_pattern),
                     AuditEvent.account_id.ilike(search_pattern),
                     AuditEvent.adset_name.ilike(search_pattern),
                     AuditEvent.adset_id.ilike(search_pattern),
                     AuditEvent.rule_name.ilike(search_pattern),
                     AuditEvent.message.ilike(search_pattern),
+                    AuditEvent.event_type.ilike(search_pattern),
+                    AuditEvent.category.ilike(search_pattern),
+                    AuditEvent.action.ilike(search_pattern),
+                    AuditEvent.correlation_id.ilike(search_pattern),
+                    AuditEvent.actor_id.ilike(search_pattern),
                 )
             )
 
         status_filters = list(filters)
+        reverted_source_ids = select(AuditEvent.reverts_event_id).where(
+            AuditEvent.reverts_event_id.is_not(None),
+            AuditEvent.workspace_id == workspace_id,
+        )
         if event_status:
             normalized_status = event_status.upper()
             if normalized_status == "REVERTED":
-                filters.append(
-                    AuditEvent.id.in_(
-                        select(AuditEvent.reverts_event_id).where(
-                            AuditEvent.reverts_event_id.is_not(None),
-                            AuditEvent.workspace_id == workspace_id,
-                        )
-                    )
-                )
+                filters.append(AuditEvent.id.in_(reverted_source_ids))
             else:
                 filters.append(AuditEvent.status == normalized_status)
+                if normalized_status == "SUCCESS":
+                    filters.append(AuditEvent.id.not_in(reverted_source_ids))
 
         total = (
             await session.execute(
@@ -108,19 +113,22 @@ async def list_audit_events(
         ).all()
         reverted_count = (
             await session.execute(
-                select(func.count(AuditEvent.reverts_event_id)).where(
-                    AuditEvent.reverts_event_id.is_not(None),
+                select(func.count(AuditEvent.id)).where(
+                    AuditEvent.id.in_(reverted_source_ids),
                     *status_filters,
                 )
             )
         ).scalar_one()
+
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        resolved_page = min(page, total_pages)
 
         rows = (
             await session.execute(
                 select(AuditEvent)
                 .where(*filters)
                 .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
-                .offset((page - 1) * page_size)
+                .offset((resolved_page - 1) * page_size)
                 .limit(page_size)
             )
         ).scalars().all()
@@ -176,15 +184,15 @@ async def list_audit_events(
     items = []
     for row in rows:
         reversal_id = reversed_by.get(row.id)
-        is_reversible = (
-            row.status == "SUCCESS"
-            and row.event_type in REVERSIBLE_EVENT_TYPES
-            and bool(row.account_id and row.adset_id)
-        )
+        is_successful = str(row.status or "").upper() == "SUCCESS"
+        has_reversible_type = str(row.event_type or "").upper() in REVERSIBLE_EVENT_TYPES
+        has_target = bool(row.account_id and row.adset_id)
         latest_id = latest_mutating_by_target.get((row.account_id, row.adset_id))
         can_undo = bool(
             can_write_workspace
-            and is_reversible
+            and is_successful
+            and has_reversible_type
+            and has_target
             and reversal_id is None
             and latest_id == row.id
             and event_is_within_undo_window(row)
@@ -193,10 +201,14 @@ async def list_audit_events(
             undo_reason = "Роль Наблюдатель (Viewer) не может отменять действия."
         elif reversal_id is not None:
             undo_reason = "Действие уже отменено."
-        elif not is_reversible:
+        elif not is_successful:
+            undo_reason = "Отменять можно только успешно выполненные действия."
+        elif not has_reversible_type:
             undo_reason = "Это событие не меняется обратной командой."
+        elif not has_target:
+            undo_reason = "В истории нет кабинета или группы объявлений для безопасной отмены."
         elif latest_id != row.id:
-            undo_reason = "После этого события ad set уже изменялся."
+            undo_reason = "После этого события группа объявлений уже изменялась."
         elif not event_is_within_undo_window(row):
             undo_reason = "Окно безопасной отмены 24 часа закрыто."
         else:
@@ -232,17 +244,19 @@ async def list_audit_events(
             "created_at": _utc_iso(row.created_at),
         })
 
-    total_pages = max(1, (total + page_size - 1) // page_size)
+    status_counts = {status_name: count for status_name, count in status_rows}
+    status_counts["SUCCESS"] = max(
+        0,
+        status_counts.get("SUCCESS", 0) - reverted_count,
+    )
+    status_counts["REVERTED"] = reverted_count
     return {
         "items": items,
-        "page": page,
+        "page": resolved_page,
         "page_size": page_size,
         "total": total,
         "total_pages": total_pages,
-        "status_counts": {
-            **{status_name: count for status_name, count in status_rows},
-            "REVERTED": reverted_count,
-        },
+        "status_counts": status_counts,
     }
 
 

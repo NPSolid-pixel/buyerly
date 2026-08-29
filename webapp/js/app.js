@@ -206,6 +206,7 @@
     todayLoadVersion: 0,
     auditPage: 1,
     auditTotalPages: 1,
+    auditLoadVersion: 0,
     pendingLogsAccountId: '',
     stoppedAdsets: [],
     settings: {
@@ -806,6 +807,7 @@
     state.todayLoadVersion = (state.todayLoadVersion || 0) + 1;
     state.auditPage = 1;
     state.auditTotalPages = 1;
+    state.auditLoadVersion = (state.auditLoadVersion || 0) + 1;
     state.parsedAccounts = [];
     state.accountGroupFilter = 'all';
 
@@ -10499,25 +10501,43 @@
 
 
   const auditEventLabels = {
-    STOP: 'Ad set остановлен',
+    STOP: 'Группа объявлений остановлена',
     NOTIFY_ONLY: 'Отправлено уведомление',
-    AUTO_REACTIVATE: 'Ad set включён автоматически',
-    MANUAL_REACTIVATE: 'Ad set включён вручную',
+    AUTO_REACTIVATE: 'Группа объявлений включена автоматически',
+    MANUAL_REACTIVATE: 'Группа объявлений включена вручную',
     PROPOSE_REACTIVATE: 'Предложено включение',
     INCREASE_BUDGET: 'Бюджет увеличен',
     DECREASE_BUDGET: 'Бюджет уменьшен',
-    RULE_ACTION_COOLDOWN: 'Пропуск по cooldown',
+    RULE_ACTION_COOLDOWN: 'Пропуск из-за защитной паузы',
     ACCOUNT_ISSUE: 'Проблема кабинета',
     TOKEN_EXPIRED: 'Проблема токена',
-    ACCOUNT_DAY_STARTED: 'Новые сутки кабинета',
-    DAY_START: 'Старое обнаружение Spend',
+    ACCOUNT_DAY_STARTED: 'Начат новый отчётный день',
+    DAY_START: 'Обнаружены расходы за день',
     HIDE_STOPPED_NOTIFICATION: 'Карточка остановки скрыта',
-    MANUAL_PAUSE: 'Ad set остановлен вручную',
+    MANUAL_PAUSE: 'Группа объявлений остановлена вручную',
     UNDO_ACTION: 'Действие отменено',
     UNDO_ACTION_FAILED: 'Ошибка отмены',
     RULE_ACTION_PENDING: 'Действие зафиксировано',
     RULE_ACTION_RECONCILED: 'Действие сверено с Meta',
-    RULE_ACTION: 'Действие правила'
+    RULE_ACTION: 'Действие правила',
+    STOP_CONFIRMATION_STARTED: 'Запущено подтверждение остановки',
+    ACCOUNT_HEALTH_ALERT: 'Изменилось состояние кабинета',
+    ACCOUNT_HEALTH_RECOVERED: 'Работа кабинета восстановлена',
+    META_INVITE_CREATED: 'Создано приглашение Meta',
+    META_INVITE_REVOKED: 'Приглашение Meta отозвано',
+    META_CONNECTION_CONNECTED: 'Facebook-профиль подключён',
+    META_CONNECTION_RECONNECTED: 'Facebook-профиль переподключён',
+    META_CONNECTION_DISCONNECTED: 'Facebook-профиль отключён',
+    ACCOUNT_MIGRATED_TO_OAUTH: 'Кабинет переведён на OAuth',
+    DELETE_RULE_PRESET: 'Автоматизация удалена',
+    UNAUTHORIZED_ACCESS_ATTEMPT: 'Заблокирована попытка доступа',
+    SUPPORT_SESSION_GRANTED: 'Открыта сессия поддержки',
+    SUPPORT_SESSION_REVOKED: 'Сессия поддержки закрыта',
+    INVITE_CREATE: 'Создано приглашение в команду',
+    INVITE_SEND: 'Приглашение в команду отправлено',
+    INVITE_REVOKE: 'Приглашение в команду отозвано',
+    INVITE_REJECT: 'Приглашение в команду отклонено',
+    INVITE_ACCEPT: 'Приглашение в команду принято'
   };
 
   const auditStatusLabels = {
@@ -10531,7 +10551,7 @@
 
   function auditStatusBadge(status) {
     const normalized = (status || 'INFO').toUpperCase();
-    const modifier = ['SUCCESS', 'ERROR', 'WARNING'].includes(normalized)
+    const modifier = ['SUCCESS', 'ERROR', 'WARNING', 'REVERTED'].includes(normalized)
       ? normalized.toLowerCase()
       : normalized === 'SKIPPED' ? 'warning' : 'info';
     return `<span class="log-status log-status-${modifier}"><span class="status-dot dot-${modifier === 'error' ? 'danger' : modifier}"></span><span class="log-status-label">${auditStatusLabels[normalized] || escapeHtml(normalized)}</span></span>`;
@@ -10541,8 +10561,9 @@
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return escapeHtml(value);
+    const includeYear = date.getFullYear() !== new Date().getFullYear();
     return new Intl.DateTimeFormat('ru-RU', {
-      day: '2-digit', month: '2-digit',
+      day: '2-digit', month: '2-digit', year: includeYear ? '2-digit' : undefined,
       hour: '2-digit', minute: '2-digit', second: compact ? undefined : '2-digit'
     }).format(date);
   }
@@ -10555,14 +10576,112 @@
     return auditEventLabels[(event.event_type || '').toUpperCase()] || (event.event_type || event.category || 'Событие');
   }
 
+  const auditActorLabels = {
+    system: 'Buyerly',
+    monitoring_worker: 'Мониторинг Buyerly',
+    user: 'Пользователь',
+    telegram_user: 'Пользователь Telegram',
+    meta: 'Meta'
+  };
+
+  function auditActorLabel(event) {
+    const actorType = String(event.actor_type || 'system').toLowerCase();
+    return auditActorLabels[actorType] || event.actor_type || 'Buyerly';
+  }
+
+  function logsFilterValues() {
+    return {
+      search: document.getElementById('logsSearchInput')?.value.trim() || '',
+      category: document.getElementById('logsCategoryFilter')?.value || '',
+      status: document.getElementById('logsStatusFilter')?.value || '',
+      accountId: document.getElementById('logsAccountFilter')?.value || '',
+      period: document.getElementById('logsPeriodFilter')?.value || 'all'
+    };
+  }
+
+  function activeLogsFilterCount(values = logsFilterValues()) {
+    return [values.search, values.category, values.status, values.accountId, values.period !== 'all' ? values.period : '']
+      .filter(Boolean).length;
+  }
+
+  function updateLogsFilterControls(values = logsFilterValues()) {
+    const count = activeLogsFilterCount(values);
+    const clearButton = document.getElementById('btnClearLogsFilters');
+    const countBadge = document.getElementById('logsActiveFilterCount');
+    clearButton?.classList.toggle('hidden', count === 0);
+    if (countBadge) countBadge.textContent = String(count);
+    return count;
+  }
+
+  function logsDateFrom(period) {
+    const durations = { '24h': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000, '30d': 30 * 24 * 60 * 60 * 1000 };
+    return durations[period] ? new Date(Date.now() - durations[period]).toISOString() : '';
+  }
+
+  function setLogsResultState(kind, message, { retry = false } = {}) {
+    const resultState = document.getElementById('logsResultState');
+    if (!resultState) return;
+    if (!message) {
+      resultState.className = 'logs-result-state hidden';
+      resultState.innerHTML = '';
+      return;
+    }
+    resultState.className = `logs-result-state logs-result-state-${kind}`;
+    resultState.innerHTML = `
+      <span>${escapeHtml(message)}</span>
+      ${retry ? '<button class="btn btn-secondary btn-sm" type="button" onclick="window.retryLogsLoad()">Повторить</button>' : ''}`;
+  }
+
+  function renderAuditLoading() {
+    const tableBody = document.getElementById('logsTableBody');
+    const mobileList = document.getElementById('logsMobileList');
+    const emptyState = document.getElementById('logsEmptyState');
+    const pagination = document.querySelector('.logs-pagination');
+    document.getElementById('logsPanel')?.setAttribute('aria-busy', 'true');
+    emptyState?.classList.add('hidden');
+    pagination?.classList.add('hidden');
+    setLogsResultState('loading', 'Загружаем события рабочего пространства…');
+    if (tableBody) {
+      tableBody.innerHTML = Array.from({ length: 5 }, () => `
+        <tr class="logs-skeleton-row" aria-hidden="true">
+          ${Array.from({ length: 7 }, () => '<td><span class="ui-skeleton logs-skeleton-line"></span></td>').join('')}
+        </tr>`).join('');
+    }
+    if (mobileList) {
+      mobileList.innerHTML = Array.from({ length: 3 }, () => `
+        <div class="log-mobile-card logs-mobile-skeleton" aria-hidden="true">
+          <span class="ui-skeleton logs-skeleton-line"></span>
+          <span class="ui-skeleton logs-skeleton-line logs-skeleton-line-wide"></span>
+          <span class="ui-skeleton logs-skeleton-line"></span>
+        </div>`).join('');
+    }
+  }
+
+  function renderAuditError(error) {
+    const tableBody = document.getElementById('logsTableBody');
+    const mobileList = document.getElementById('logsMobileList');
+    const emptyState = document.getElementById('logsEmptyState');
+    const pagination = document.querySelector('.logs-pagination');
+    const message = error?.message || 'Не удалось загрузить историю действий.';
+    if (tableBody) tableBody.innerHTML = '';
+    if (mobileList) mobileList.innerHTML = '';
+    emptyState?.classList.add('hidden');
+    pagination?.classList.add('hidden');
+    document.getElementById('logsPanel')?.setAttribute('aria-busy', 'false');
+    setLogsResultState('error', message, { retry: true });
+  }
+
   function populateLogsAccountFilter() {
     const select = document.getElementById('logsAccountFilter');
     if (!select) return;
-    const current = select.value;
+    const current = state.pendingLogsAccountId || select.value;
     select.innerHTML = '<option value="">Все кабинеты</option>' + state.accounts.map(account =>
       `<option value="${escapeHtml(account.account_id)}">${escapeHtml(accountDisplayName(account))}</option>`
     ).join('');
-    select.value = state.pendingLogsAccountId || current;
+    if (current && !state.accounts.some(account => String(account.account_id) === String(current))) {
+      select.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(current)}">${escapeHtml(current)}</option>`);
+    }
+    select.value = current;
     state.pendingLogsAccountId = '';
   }
 
@@ -10571,45 +10690,47 @@
     const refreshBtn = document.getElementById('btnRefreshLogs');
     if (!tableBody) return;
     const epoch = state.workspaceEpoch || 0;
+    const loadVersion = ++state.auditLoadVersion;
     state.auditPage = Math.max(1, page);
     refreshBtn?.classList.add('loading');
+    refreshBtn?.setAttribute('aria-busy', 'true');
+    renderAuditLoading();
 
     if (state.accounts.length === 0) {
       await loadAccounts();
     }
-    if (state.workspaceEpoch !== epoch) {
+    if (state.workspaceEpoch !== epoch || state.auditLoadVersion !== loadVersion) {
       refreshBtn?.classList.remove('loading');
+      refreshBtn?.removeAttribute('aria-busy');
       return;
     }
     populateLogsAccountFilter();
 
     const params = new URLSearchParams({ page: state.auditPage.toString(), page_size: '25' });
-    const category = document.getElementById('logsCategoryFilter')?.value;
-    const status = document.getElementById('logsStatusFilter')?.value;
-    const accountId = document.getElementById('logsAccountFilter')?.value;
-    const search = document.getElementById('logsSearchInput')?.value.trim();
-    if (category) params.set('category', category);
-    if (status) params.set('status', status);
-    if (accountId) params.set('account_id', accountId);
-    if (search) params.set('search', search);
+    const filters = logsFilterValues();
+    const dateFrom = logsDateFrom(filters.period);
+    if (filters.category) params.set('category', filters.category);
+    if (filters.status) params.set('status', filters.status);
+    if (filters.accountId) params.set('account_id', filters.accountId);
+    if (filters.search) params.set('search', filters.search);
+    if (dateFrom) params.set('date_from', dateFrom);
+    updateLogsFilterControls(filters);
+    loadStoppedAdsets();
 
     try {
-      const [data] = await Promise.all([
-        apiRequest(`/api/audit-events?${params.toString()}`),
-        loadStoppedAdsets()
-      ]);
-      if (state.workspaceEpoch !== epoch) return;
+      const data = await apiRequest(`/api/audit-events?${params.toString()}`);
+      if (state.workspaceEpoch !== epoch || state.auditLoadVersion !== loadVersion) return;
       state.auditEvents = data.items || [];
       state.auditPage = data.page || 1;
       state.auditTotalPages = data.total_pages || 1;
       renderAuditEvents(data);
     } catch (err) {
-      if (state.workspaceEpoch !== epoch) return;
-      tableBody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">${escapeHtml(err.message)}</td></tr>`;
-      document.getElementById('logsMobileList').innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
+      if (state.workspaceEpoch !== epoch || state.auditLoadVersion !== loadVersion) return;
+      renderAuditError(err);
     } finally {
-      if (state.workspaceEpoch === epoch) {
+      if (state.workspaceEpoch === epoch && state.auditLoadVersion === loadVersion) {
         refreshBtn?.classList.remove('loading');
+        refreshBtn?.removeAttribute('aria-busy');
       }
     }
   }
@@ -10626,75 +10747,118 @@
     document.getElementById('logsSuccessCount').textContent = counts.SUCCESS || 0;
     document.getElementById('logsErrorCount').textContent = counts.ERROR || 0;
     document.getElementById('logsSkippedCount').textContent = counts.SKIPPED || 0;
+    document.getElementById('logsRevertedCount').textContent = counts.REVERTED || 0;
     document.getElementById('logsPageLabel').textContent = `Страница ${state.auditPage} из ${state.auditTotalPages}`;
     document.getElementById('btnLogsPrev').disabled = state.auditPage <= 1;
     document.getElementById('btnLogsNext').disabled = state.auditPage >= state.auditTotalPages;
+    document.getElementById('logsPanel')?.setAttribute('aria-busy', 'false');
+    setLogsResultState('ready', data.total === 1 ? 'Найдено 1 событие.' : `Найдено событий: ${data.total || 0}.`);
 
     emptyState.classList.toggle('hidden', events.length > 0);
     pagination.classList.toggle('hidden', events.length === 0);
     if (events.length === 0) {
+      const hasFilters = activeLogsFilterCount() > 0;
+      document.getElementById('logsEmptyTitle').textContent = hasFilters ? 'События не найдены' : 'Событий пока нет';
+      document.getElementById('logsEmptyDescription').textContent = hasFilters
+        ? 'Измените запрос или сбросьте фильтры, чтобы увидеть другие события рабочего пространства.'
+        : 'Здесь появятся решения автоматических правил, ошибки и ручные действия.';
+      document.getElementById('btnClearLogsFiltersEmpty')?.classList.toggle('hidden', !hasFilters);
       tableBody.innerHTML = '';
       mobileList.innerHTML = '';
       return;
     }
 
-    tableBody.innerHTML = events.map(event => `
+    tableBody.innerHTML = events.map(event => {
+      const eventId = Number(event.id);
+      const secondaryTarget = event.adset_name || event.adset_id || (event.account_name ? event.account_id : '');
+      const undoLabel = event.can_undo ? 'Можно отменить' : 'Отмена недоступна';
+      return `
       <tr>
         <td class="mono text-hint">${formatAuditTime(event.created_at)}</td>
         <td>${auditStatusBadge(event.display_status || event.status)}</td>
         <td class="log-event-cell">${escapeHtml(auditEventLabel(event))}</td>
-        <td class="log-target">${escapeHtml(auditTarget(event))}<small>${escapeHtml(event.adset_name || event.adset_id || event.account_id || '')}</small></td>
+        <td class="log-target">${escapeHtml(auditTarget(event))}<small>${escapeHtml(secondaryTarget || '')}</small></td>
         <td>${escapeHtml(event.rule_name || '—')}</td>
         <td class="log-message">${escapeHtml(event.message || 'Без дополнительного сообщения')}<small>${event.action ? `Действие: ${escapeHtml(event.action)}` : ''}</small></td>
-        <td><button class="log-row-action" type="button" onclick="window.openLogDetails(${event.id})">Детали</button></td>
-      </tr>`).join('');
+        <td class="log-actions-cell">
+          <span class="log-undo-availability ${event.can_undo ? 'is-available' : ''}" title="${escapeHtml(event.undo_reason || undoLabel)}">${undoLabel}</span>
+          <button class="log-row-action" type="button" aria-label="Открыть детали события ${eventId}" onclick="window.openLogDetails(${eventId})">Детали</button>
+        </td>
+      </tr>`;
+    }).join('');
 
-    mobileList.innerHTML = events.map(event => `
-      <article class="log-mobile-card" onclick="window.openLogDetails(${event.id})" role="button" tabindex="0">
+    mobileList.innerHTML = events.map(event => {
+      const eventId = Number(event.id);
+      return `
+      <button class="log-mobile-card" type="button" onclick="window.openLogDetails(${eventId})" aria-label="Открыть детали: ${escapeHtml(auditEventLabel(event))}">
         <div class="log-mobile-head">${auditStatusBadge(event.display_status || event.status)}<span class="log-mobile-time">${formatAuditTime(event.created_at, true)}</span></div>
         <h4>${escapeHtml(auditEventLabel(event))}</h4>
         <p>${escapeHtml(event.message || 'Без дополнительного сообщения')}</p>
         <div class="log-mobile-target"><span>${escapeHtml(auditTarget(event))}</span><span>${escapeHtml(event.rule_name || '')}</span></div>
-      </article>`).join('');
+        <span class="log-undo-availability ${event.can_undo ? 'is-available' : ''}">${event.can_undo ? 'Можно отменить' : 'Только просмотр'}</span>
+      </button>`;
+    }).join('');
   }
 
+  let logDetailsReturnFocus = null;
+
   window.openLogDetails = function (eventId) {
-    const event = state.auditEvents.find(item => item.id === eventId)
-      || state.todayAuditEvents.find(item => item.id === eventId);
+    const event = state.auditEvents.find(item => String(item.id) === String(eventId))
+      || state.todayAuditEvents.find(item => String(item.id) === String(eventId));
     const content = document.getElementById('logDetailsContent');
     if (!event || !content) return;
+    logDetailsReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const detailsJson = Object.keys(event.details || {}).length ? JSON.stringify(event.details, null, 2) : 'Нет дополнительных данных';
     const stateJson = Object.keys(event.before_state || {}).length || Object.keys(event.after_state || {}).length
       ? JSON.stringify({ before: event.before_state || {}, after: event.after_state || {} }, null, 2)
       : 'Изменения состояния не зафиксированы';
+    const operationId = event.correlation_id || '—';
+    const undoReason = event.undo_reason || 'Это событие доступно только для просмотра.';
+    const duration = Number.isFinite(Number(event.duration_ms)) && Number(event.duration_ms) > 0
+      ? `${Math.round(Number(event.duration_ms))} мс`
+      : '—';
+    state.activeAuditEventId = event.id;
+    document.getElementById('logDetailsTitle').textContent = `Детали события #${event.id}`;
     content.innerHTML = `
       <div class="log-details-grid">
         <div class="log-detail-block"><span>Статус</span>${auditStatusBadge(event.display_status || event.status)}</div>
         <div class="log-detail-block"><span>Время</span><b>${formatAuditTime(event.created_at)}</b></div>
         <div class="log-detail-block"><span>Событие</span><b>${escapeHtml(auditEventLabel(event))}</b></div>
-        <div class="log-detail-block"><span>Инициатор</span><b>${escapeHtml(event.actor_type || 'system')}</b></div>
-        <div class="log-detail-block"><span>Кабинет</span><b>${escapeHtml(event.account_name || event.account_id || '—')}</b></div>
-        <div class="log-detail-block"><span>Ad set</span><b>${escapeHtml(event.adset_name || event.adset_id || '—')}</b></div>
+        <div class="log-detail-block"><span>Инициатор</span><b>${escapeHtml(auditActorLabel(event))}</b></div>
+        <div class="log-detail-block"><span>Кабинет</span><b>${escapeHtml(event.account_name || '—')}</b><code>${escapeHtml(event.account_id || '')}</code></div>
+        <div class="log-detail-block"><span>Группа объявлений</span><b>${escapeHtml(event.adset_name || '—')}</b><code>${escapeHtml(event.adset_id || '')}</code></div>
         <div class="log-detail-block"><span>Правило</span><b>${escapeHtml(event.rule_name || '—')}</b></div>
         <div class="log-detail-block"><span>Действие</span><b>${escapeHtml(event.action || '—')}</b></div>
+        <div class="log-detail-block"><span>Длительность</span><b>${duration}</b></div>
         <div class="log-detail-block wide"><span>Описание</span><p>${escapeHtml(event.message || '—')}</p></div>
-        <div class="log-detail-block wide"><span>Метрики и условия</span><pre class="log-json">${escapeHtml(detailsJson)}</pre></div>
-        <div class="log-detail-block wide"><span>До / после</span><pre class="log-json">${escapeHtml(stateJson)}</pre></div>
-        <div class="log-detail-block wide"><span>ID операции</span><p class="mono">${escapeHtml(event.correlation_id || '—')}</p></div>
+        <div class="log-detail-block wide log-operation-id"><span>ID операции</span><button type="button" class="log-copy-id mono" onclick="window.copyToClipboard(${escapeJsArg(operationId)}, this)">${escapeHtml(operationId)}<small>Копировать</small></button></div>
         ${event.reverts_event_id ? `<div class="log-detail-block wide"><span>Отменяет событие</span><p class="mono">#${event.reverts_event_id}</p></div>` : ''}
         ${event.reverted_by_event_id ? `<div class="log-detail-block wide"><span>Событие отмены</span><p class="mono">#${event.reverted_by_event_id}</p></div>` : ''}
-        ${event.can_undo ? `<div class="log-detail-block wide"><button id="btnUndoAuditEvent" class="btn btn-secondary btn-block" type="button" onclick="window.undoAuditEvent(${event.id})">Отменить действие</button></div>` : ''}
-        ${!event.can_undo && event.undo_reason ? `<div class="log-detail-block wide"><span>Отмена недоступна</span><p>${escapeHtml(event.undo_reason)}</p></div>` : ''}
+        <details class="log-technical-details wide">
+          <summary>Технические данные события</summary>
+          <div><span>Метрики и условия</span><pre class="log-json">${escapeHtml(detailsJson)}</pre></div>
+          <div><span>Состояние до / после</span><pre class="log-json">${escapeHtml(stateJson)}</pre></div>
+        </details>
+        ${event.can_undo ? `<div class="log-detail-block wide log-undo-block"><span>Безопасная отмена</span><p>Buyerly сверит текущее состояние с Meta перед обратным действием.</p><button id="btnUndoAuditEvent" class="btn btn-secondary btn-block" type="button" onclick="window.undoAuditEvent(${event.id})">Отменить действие</button><div id="logUndoFeedback" class="log-undo-feedback hidden" role="alert"></div></div>` : ''}
+        ${!event.can_undo ? `<div class="log-detail-block wide log-undo-unavailable"><span>Отмена недоступна</span><p>${escapeHtml(undoReason)}</p></div>` : ''}
       </div>`;
     window.openModal('modalLogDetails');
+    window.setTimeout(() => document.getElementById('btnCloseLogDetails')?.focus(), 30);
   };
 
   window.undoAuditEvent = async function (eventId) {
+    const event = state.auditEvents.find(item => String(item.id) === String(eventId))
+      || state.todayAuditEvents.find(item => String(item.id) === String(eventId));
+    if (!event?.can_undo) return;
+    const target = event.adset_name || event.adset_id || 'выбранную группу объявлений';
+    if (!window.confirm(`Отменить действие «${auditEventLabel(event)}» для ${target}? Buyerly сначала сверит текущее состояние с Meta.`)) return;
     const button = document.getElementById('btnUndoAuditEvent');
+    const feedback = document.getElementById('logUndoFeedback');
     if (button) {
       button.disabled = true;
       button.textContent = 'Сверяем с Meta…';
     }
+    feedback?.classList.add('hidden');
     haptic('impact', 'medium');
     try {
       const result = await apiRequest(`/api/audit-events/${eventId}/undo`, { method: 'POST' });
@@ -10703,11 +10867,35 @@
       await loadLogsTab(state.auditPage);
     } catch (error) {
       showToast(error.message || 'Не удалось отменить действие', 'error');
+      if (feedback) {
+        feedback.textContent = error.message || 'Не удалось отменить действие. Состояние в Meta не изменено.';
+        feedback.classList.remove('hidden');
+      }
       if (button) {
         button.disabled = false;
         button.textContent = 'Отменить действие';
       }
     }
+  };
+
+  window.retryLogsLoad = function () {
+    return loadLogsTab(state.auditPage);
+  };
+
+  window.clearLogsFilters = function () {
+    window.clearTimeout(logsSearchTimer);
+    const search = document.getElementById('logsSearchInput');
+    const category = document.getElementById('logsCategoryFilter');
+    const status = document.getElementById('logsStatusFilter');
+    const account = document.getElementById('logsAccountFilter');
+    const period = document.getElementById('logsPeriodFilter');
+    if (search) search.value = '';
+    if (category) category.value = '';
+    if (status) status.value = '';
+    if (account) account.value = '';
+    if (period) period.value = 'all';
+    updateLogsFilterControls();
+    return loadLogsTab(1);
   };
 
   function renderStoppedAdsets() {
@@ -10741,11 +10929,14 @@
 
   // Load stopped adsets independently from the audit history.
   async function loadStoppedAdsets() {
+    const epoch = state.workspaceEpoch || 0;
     try {
       const records = await apiRequest('/api/adsets/stopped');
+      if (state.workspaceEpoch !== epoch) return;
       state.stoppedAdsets = records || [];
       renderStoppedAdsets();
     } catch (e) {
+      if (state.workspaceEpoch !== epoch) return;
       state.stoppedAdsets = [];
       renderStoppedAdsets();
     }
@@ -10769,7 +10960,7 @@
       await apiRequest(`/api/adsets/${adsetId}/dismiss`, { method: 'POST' });
       state.stoppedAdsets = state.stoppedAdsets.filter(item => item.adset_id !== adsetId);
       renderStoppedAdsets();
-      showToast('Карточка скрыта. Ad set остался выключенным.', 'success');
+      showToast('Карточка скрыта. Группа объявлений осталась выключенной.', 'success');
       if (state.activeTab === 'logs') loadLogsTab(state.auditPage);
     } catch (err) {
       showToast(`Ошибка: ${err.message}`, 'error');
@@ -11564,6 +11755,7 @@
     const el = document.getElementById(modalId);
     if (!el) return;
     el.classList.remove('hidden');
+    el.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
     if (!activeModalStack.includes(modalId)) {
       activeModalStack.push(modalId);
@@ -11572,7 +11764,16 @@
 
   window.closeModal = function (modalId) {
     const el = document.getElementById(modalId);
-    if (el) el.classList.add('hidden');
+    if (el) {
+      el.classList.add('hidden');
+      el.setAttribute('aria-hidden', 'true');
+    }
+    if (modalId === 'modalLogDetails') {
+      state.activeAuditEventId = null;
+      const returnFocus = logDetailsReturnFocus;
+      logDetailsReturnFocus = null;
+      window.setTimeout(() => returnFocus?.isConnected && returnFocus.focus(), 0);
+    }
     if (modalId === 'modalCreateRule') state.createRuleModalOpen = false;
     const idx = activeModalStack.indexOf(modalId);
     if (idx !== -1) {
@@ -11842,8 +12043,24 @@
   document.getElementById('btnRefreshLogs')?.addEventListener('click', () => loadLogsTab(state.auditPage));
   document.getElementById('btnLogsPrev')?.addEventListener('click', () => loadLogsTab(state.auditPage - 1));
   document.getElementById('btnLogsNext')?.addEventListener('click', () => loadLogsTab(state.auditPage + 1));
-  ['logsCategoryFilter', 'logsStatusFilter', 'logsAccountFilter'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', () => loadLogsTab(1));
+  document.getElementById('btnClearLogsFilters')?.addEventListener('click', window.clearLogsFilters);
+  document.getElementById('btnClearLogsFiltersEmpty')?.addEventListener('click', window.clearLogsFilters);
+  let logsSearchTimer = null;
+  document.getElementById('logsFiltersForm')?.addEventListener('submit', event => {
+    event.preventDefault();
+    window.clearTimeout(logsSearchTimer);
+    loadLogsTab(1);
+  });
+  ['logsCategoryFilter', 'logsStatusFilter', 'logsAccountFilter', 'logsPeriodFilter'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => {
+      window.clearTimeout(logsSearchTimer);
+      loadLogsTab(1);
+    });
+  });
+  document.getElementById('logsSearchInput')?.addEventListener('input', () => {
+    updateLogsFilterControls();
+    window.clearTimeout(logsSearchTimer);
+    logsSearchTimer = window.setTimeout(() => loadLogsTab(1), 350);
   });
 
   // ==========================================================
@@ -12925,11 +13142,27 @@
     if (modalListenersInitialized) return;
     modalListenersInitialized = true;
 
-    // Close modals on Escape key or return from Rule Record page
+    // Trap focus in the action-history details and close modals on Escape.
     document.addEventListener('keydown', (e) => {
+      const topModal = activeModalStack[activeModalStack.length - 1];
+      if (e.key === 'Tab' && topModal === 'modalLogDetails') {
+        const modal = document.getElementById(topModal);
+        const focusable = Array.from(modal?.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])') || [])
+          .filter(element => !element.closest('.hidden'));
+        if (focusable.length > 0) {
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
       if (e.key === 'Escape') {
         if (activeModalStack.length > 0) {
-          const topModal = activeModalStack[activeModalStack.length - 1];
           window.closeModal(topModal);
         } else if (state.activeTab === 'rules' && state.currentRecordPresetId) {
           window.closeRuleRecordPage('push');

@@ -2299,6 +2299,14 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 "/api/audit-events?status=ERROR",
                 headers={"Authorization": f"tma {buyer_data}"},
             )
+            buyer_operation_search = await client.get(
+                "/api/audit-events?search=buyer-cycle",
+                headers={"Authorization": f"tma {buyer_data}"},
+            )
+            buyer_out_of_range_page = await client.get(
+                "/api/audit-events?page=999",
+                headers={"Authorization": f"tma {buyer_data}"},
+            )
             admin_response = await client.get(
                 "/api/audit-events?page_size=1",
                 headers={"Authorization": f"tma {admin_data}"},
@@ -2311,6 +2319,12 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(buyer_response.json()["status_counts"]["SUCCESS"], 1)
         self.assertEqual(buyer_error_filter.json()["total"], 0)
         self.assertEqual(buyer_error_filter.json()["status_counts"]["SUCCESS"], 1)
+        self.assertEqual(buyer_operation_search.status_code, 200)
+        self.assertEqual(buyer_operation_search.json()["total"], 1)
+        self.assertEqual(buyer_operation_search.json()["items"][0]["correlation_id"], "buyer-cycle")
+        self.assertEqual(buyer_out_of_range_page.status_code, 200)
+        self.assertEqual(buyer_out_of_range_page.json()["page"], 1)
+        self.assertEqual(len(buyer_out_of_range_page.json()["items"]), 1)
 
         self.assertEqual(admin_response.status_code, 200)
         self.assertEqual(admin_response.json()["total"], 2)
@@ -2425,6 +2439,7 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
                 first = await client.post(f"/api/audit-events/{source_id}/undo", headers=headers)
                 second = await client.post(f"/api/audit-events/{source_id}/undo", headers=headers)
                 history = await client.get("/api/audit-events?page_size=100", headers=headers)
+                successful_history = await client.get("/api/audit-events?status=SUCCESS&page_size=100", headers=headers)
 
         self.assertEqual(first.status_code, 200)
         self.assertFalse(first.json()["already_reverted"])
@@ -2436,6 +2451,9 @@ class TestWebApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(source_item["display_status"], "REVERTED")
         self.assertFalse(source_item["can_undo"])
         self.assertIsNotNone(source_item["reverted_by_event_id"])
+        self.assertEqual(history.json()["status_counts"]["REVERTED"], 1)
+        self.assertEqual(history.json()["status_counts"]["SUCCESS"], 1)
+        self.assertNotIn(source_id, {item["id"] for item in successful_history.json()["items"]})
 
         async with self.test_session_maker() as session:
             source_row = await session.get(AuditEvent, source_id)

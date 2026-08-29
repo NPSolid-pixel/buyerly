@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
   <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
-  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.3.0">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.4.0">
 </head>
 
 <body>
@@ -1396,7 +1396,7 @@
         <div class="logs-page-header">
           <div>
             <span class="eyebrow">Контроль автоматики</span>
-            <h1>Логи и действия</h1>
+            <h1>История действий</h1>
             <p>Прозрачная история решений Buyerly: что произошло, какое правило сработало и что изменилось.</p>
           </div>
           <button id="btnRefreshLogs" class="btn btn-secondary" type="button">
@@ -1410,6 +1410,7 @@
           <div class="logs-stat logs-stat-success"><span>Выполнено</span><strong id="logsSuccessCount">0</strong></div>
           <div class="logs-stat logs-stat-error"><span>С ошибкой</span><strong id="logsErrorCount">0</strong></div>
           <div class="logs-stat logs-stat-warning"><span>Пропущено</span><strong id="logsSkippedCount">0</strong></div>
+          <div class="logs-stat logs-stat-reverted"><span>Отменено</span><strong id="logsRevertedCount">0</strong></div>
         </div>
 
         <section id="logsStoppedSection" class="logs-attention-section hidden">
@@ -1418,22 +1419,27 @@
               <span class="eyebrow">Выполненные действия</span>
               <h3>Недавние остановки <span id="stoppedCountBadge" class="label-badge">0</span></h3>
             </div>
-            <p>Остановка уже выполнена в Meta. При необходимости включите ad set обратно или скройте карточку.</p>
+            <p>Остановка уже выполнена в Meta. При необходимости включите группу объявлений обратно или скройте карточку.</p>
           </div>
           <div id="stoppedAdsetsList" class="stopped-adsets-list"></div>
         </section>
 
-        <div class="logs-panel">
-          <div class="logs-filters">
+        <div id="logsPanel" class="logs-panel" aria-busy="false">
+          <form id="logsFiltersForm" class="logs-filters" role="search">
             <label class="logs-search-box">
+              <span class="sr-only">Поиск по истории действий</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <input id="logsSearchInput" type="search" placeholder="Кабинет, ad set, правило или сообщение">
+              <input id="logsSearchInput" type="search" maxlength="100" autocomplete="off" placeholder="Название, ID, правило или сообщение">
             </label>
             <select id="logsCategoryFilter" class="logs-filter-select" aria-label="Категория события">
               <option value="">Все категории</option>
               <option value="rule_action">Действия правил</option>
+              <option value="rule_engine">Проверки правил</option>
+              <option value="monitoring">Мониторинг</option>
               <option value="manual_action">Ручные действия</option>
               <option value="account_health">Состояние кабинетов</option>
+              <option value="workspace_invite">Команда и доступ</option>
+              <option value="security">Безопасность</option>
             </select>
             <select id="logsStatusFilter" class="logs-filter-select" aria-label="Статус события">
               <option value="">Все статусы</option>
@@ -1447,19 +1453,32 @@
             <select id="logsAccountFilter" class="logs-filter-select" aria-label="Рекламный кабинет">
               <option value="">Все кабинеты</option>
             </select>
-          </div>
+            <select id="logsPeriodFilter" class="logs-filter-select" aria-label="Период событий">
+              <option value="all">За всё время</option>
+              <option value="24h">Последние 24 часа</option>
+              <option value="7d">Последние 7 дней</option>
+              <option value="30d">Последние 30 дней</option>
+            </select>
+            <button id="btnClearLogsFilters" class="btn btn-secondary btn-sm logs-clear-filters hidden" type="button">
+              Сбросить <span id="logsActiveFilterCount" class="label-badge">0</span>
+            </button>
+          </form>
+
+          <div id="logsResultState" class="logs-result-state hidden" role="status" aria-live="polite"></div>
 
           <div class="table-responsive desktop-view">
             <table class="logs-table">
-              <thead><tr><th>Время</th><th>Статус</th><th>Событие</th><th>Кабинет / ad set</th><th>Правило</th><th>Что произошло</th><th></th></tr></thead>
+              <caption class="sr-only">События активного рабочего пространства</caption>
+              <thead><tr><th>Время</th><th>Статус</th><th>Событие</th><th>Кабинет / группа объявлений</th><th>Правило</th><th>Что произошло</th><th></th></tr></thead>
               <tbody id="logsTableBody"></tbody>
             </table>
           </div>
           <div id="logsMobileList" class="logs-mobile-list mobile-view"></div>
 
           <div id="logsEmptyState" class="empty-state hidden">
-            <h3>Событий пока нет</h3>
-            <p>Здесь появятся решения автоматических правил, ошибки и ручные действия.</p>
+            <h3 id="logsEmptyTitle">Событий пока нет</h3>
+            <p id="logsEmptyDescription">Здесь появятся решения автоматических правил, ошибки и ручные действия.</p>
+            <button id="btnClearLogsFiltersEmpty" class="btn btn-secondary hidden" type="button">Сбросить фильтры</button>
           </div>
           <div class="logs-pagination">
             <button id="btnLogsPrev" class="btn btn-secondary btn-sm" type="button">← Назад</button>
@@ -3146,12 +3165,15 @@
     </div>
 
     <!-- Toast Notification Container -->
-    <div id="modalLogDetails" class="modal-overlay hidden">
-      <div class="bottom-sheet log-details-sheet ui-dialog" role="dialog" aria-modal="true">
+    <div id="modalLogDetails" class="modal-overlay hidden" aria-hidden="true">
+      <div class="bottom-sheet log-details-sheet ui-dialog" role="dialog" aria-modal="true" aria-labelledby="logDetailsTitle">
         <div class="sheet-handle"></div>
         <div class="sheet-header">
-          <h3>Детали события</h3>
-          <button class="btn-close" onclick="window.closeModal('modalLogDetails')">&times;</button>
+          <div>
+            <span class="eyebrow">История действий</span>
+            <h3 id="logDetailsTitle">Детали события</h3>
+          </div>
+          <button id="btnCloseLogDetails" class="btn-close" type="button" aria-label="Закрыть детали события" onclick="window.closeModal('modalLogDetails')">&times;</button>
         </div>
         <div id="logDetailsContent" class="sheet-body"></div>
       </div>
@@ -3359,10 +3381,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.5.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.5.0"></script>
-  <script src="/static/js/security.js?v=10.5.0"></script>
-  <script src="/static/js/i18n.js?v=10.5.0"></script>
-  <script src="/static/js/app.js?v=10.5.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.6.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.6.0"></script>
+  <script src="/static/js/security.js?v=10.6.0"></script>
+  <script src="/static/js/i18n.js?v=10.6.0"></script>
+  <script src="/static/js/app.js?v=10.6.0"></script>
 </body>
 </html>

@@ -494,6 +494,56 @@ class TestFrontendRuleContract(unittest.TestCase):
         for obsolete in ('Ждут решения', 'Нужна проверка', 'Подтвердить остановку'):
             self.assertNotIn(obsolete, self.index)
 
+    def test_action_history_has_complete_states_filters_and_accessibility(self):
+        for markup_contract in (
+            'id="logsPanel"',
+            'aria-busy="false"',
+            'id="logsFiltersForm"',
+            'id="logsSearchInput"',
+            'id="logsCategoryFilter"',
+            'id="logsStatusFilter"',
+            'id="logsAccountFilter"',
+            'id="logsPeriodFilter"',
+            'id="btnClearLogsFilters"',
+            'id="logsResultState"',
+            'aria-live="polite"',
+            'id="logsRevertedCount"',
+            'id="logsEmptyTitle"',
+            'id="btnClearLogsFiltersEmpty"',
+            'aria-labelledby="logDetailsTitle"',
+            'id="btnCloseLogDetails"',
+            'aria-label="Закрыть детали события"',
+        ):
+            self.assertIn(markup_contract, self.index)
+
+        for script_contract in (
+            'const loadVersion = ++state.auditLoadVersion',
+            'state.auditLoadVersion !== loadVersion',
+            'function renderAuditLoading()',
+            'function renderAuditError(error)',
+            'function logsDateFrom(period)',
+            'window.clearLogsFilters',
+            "logsSearchInput')?.addEventListener('input'",
+            'window.retryLogsLoad',
+            'log-undo-availability',
+            'log-technical-details',
+            'window.confirm(',
+            "document.getElementById('btnCloseLogDetails')?.focus()",
+            'logDetailsReturnFocus',
+        ):
+            self.assertIn(script_contract, self.app_script)
+
+        for style_contract in (
+            '.log-mobile-card',
+            '.log-details-grid',
+            '.log-json',
+            'overflow-wrap: anywhere',
+            'word-break: break-all',
+            '@media (max-width: 390px)',
+            '.logs-result-state-error',
+        ):
+            self.assertIn(style_contract, self.ui_system)
+
     def test_mobile_settings_are_first_class_navigation(self):
         self.assertIn('id="userBadge"', self.index)
         self.assertIn('role="button" tabindex="0"', self.index)
