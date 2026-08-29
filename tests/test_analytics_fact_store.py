@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import api.auth as api_auth_module
+import api.routers.analytics as analytics_router_module
 import api.routes as api_routes_module
 import api.server as api_server_module
 from api.server import create_app
@@ -50,6 +51,7 @@ class TestAnalyticsFactStore(unittest.IsolatedAsyncioTestCase):
 
         api_routes_module.async_session_maker = self.test_session_maker
         api_auth_module.async_session_maker = self.test_session_maker
+        analytics_router_module.async_session_maker = self.test_session_maker
         api_server_module.async_session_maker = self.test_session_maker
 
         settings.BOT_TOKEN = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
