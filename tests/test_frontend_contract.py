@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import re
 import unittest
 
@@ -1276,13 +1277,19 @@ class TestFrontendRuleContract(unittest.TestCase):
         package = (root / "package.json").read_text()
         visual_test = (root / "visual-tests" / "quality-gate.spec.mjs").read_text()
         fixtures = (root / "visual-tests" / "fixtures.mjs").read_text()
+        approvals = json.loads(
+            (root / "visual-tests" / "approved-visual-changes.json").read_text()
+        )
         guide = (root / "docs" / "VISUAL_QUALITY_GATE.md").read_text()
 
         for contract in (
             "Visual Quality Gate",
             "github.event_name == 'pull_request'",
             "github.event.pull_request.base.sha",
-            "npx playwright install --with-deps chromium",
+            "persist-credentials: false",
+            "npm ci --ignore-scripts --no-audit --no-fund",
+            "./node_modules/.bin/playwright install --with-deps chromium",
+            "VISUAL_BASELINE_SHA",
             "npm run test:visual",
             "actions/upload-artifact@v4",
         ):
@@ -1303,9 +1310,13 @@ class TestFrontendRuleContract(unittest.TestCase):
             "Visible images must load",
             "visual regression",
             "current/baseline/diff",
+            "maximumApprovedChangeRatio = 0.15",
+            "item.baselineSha === visualBaselineSha",
+            "https://fonts.googleapis.com/**",
         ):
             self.assertIn(browser_contract, visual_test)
 
+        self.assertEqual(approvals, {"version": 1, "changes": []})
         self.assertIn("1440×1000", guide)
         self.assertIn("390×844", guide)
         self.assertIn("setTabBusy", self.app_script)

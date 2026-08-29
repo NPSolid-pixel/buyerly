@@ -37,8 +37,8 @@ redesigns.
    scrolling while forbidding page-level horizontal scrolling.
 5. Run the browser gate as a required GitHub Actions job, upload diagnostics and
    screenshots on failure, and keep the existing Python suite unchanged.
-6. Document the route/state contract and the process for intentionally updating
-   visual baselines.
+6. Document the route/state contract and a reviewed, base-SHA-scoped exception
+   process for intentional visual changes without weakening future pull requests.
 
 ## Verification
 
@@ -58,8 +58,8 @@ redesigns.
 - No route can introduce global horizontal overflow at the audited widths.
 - Interactive controls retain visible keyboard focus and accessible names;
   documents have one main landmark and no duplicate IDs.
-- Representative screenshots have reviewed, versioned baselines and a documented
-  update workflow.
+- Representative screenshots compare with the exact PR base SHA; narrowly
+  reviewed exceptions expire with that SHA and retain diagnostic artifacts.
 - CI emits actionable failure artifacts and is green on the pull request.
 - The PR lists ClickUp BL-109 / `86eyrx9ch`, the changes and verification. The PR
   remains unmerged and the ClickUp task remains open until production deploy.

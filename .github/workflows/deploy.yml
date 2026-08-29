@@ -44,6 +44,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Validate Frontend JavaScript Syntax
         run: |
@@ -83,25 +85,32 @@ jobs:
     steps:
       - name: Checkout pull request
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Checkout visual baseline
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .visual-baseline
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install visual quality dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
 
       - name: Run responsive and visual quality gate
+        env:
+          VISUAL_BASELINE_SHA: ${{ github.event.pull_request.base.sha }}
         run: npm run test:visual
 
       - name: Upload visual diagnostics

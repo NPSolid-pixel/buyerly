@@ -38,9 +38,32 @@ captured on desktop and mobile and compared pixel-by-pixel. A change above 0.5%
 fails the job and uploads current, baseline and diff PNGs with the Playwright
 trace.
 
-This base-SHA model avoids stale committed screenshots. Intentional visual work
-must be reviewed from the uploaded diff; the comparison threshold or fixture
-must not be loosened just to make an unexplained regression pass.
+This base-SHA model avoids stale committed screenshots. External font requests
+are replaced with a deterministic local fallback so network availability cannot
+change layout or pixels.
+
+Intentional visual work must first be reviewed from the uploaded diff. A narrow
+exception can then be added to `visual-tests/approved-visual-changes.json` for
+one route and one viewport. Every entry must contain the exact 40-character base
+commit SHA, a `BL-…` ClickUp ID, a meaningful rationale and the smallest reviewed
+`maxChangedRatio`. The cap is 15%; current, baseline and diff images are still
+uploaded whenever the default 0.5% budget is exceeded. Binding an exception to
+the base SHA prevents it from silently weakening later pull requests.
+
+```json
+{
+  "baselineSha": "0123456789abcdef0123456789abcdef01234567",
+  "route": "home",
+  "viewport": "mobile",
+  "clickupId": "BL-109",
+  "rationale": "Reviewed mobile navigation spacing update.",
+  "maxChangedRatio": 0.012
+}
+```
+
+Do not raise the global threshold, use a blanket exception or change a fixture
+to make an unexplained regression pass. Remove obsolete approvals after their
+base commit is no longer used.
 
 ## Adding a route or state
 
@@ -52,6 +75,8 @@ must not be loosened just to make an unexplained regression pass.
 4. Keep long strings human-readable and adversarial; do not hide overflow with a
    global `overflow-x: hidden` fix.
 5. Open a pull request and inspect the uploaded diagnostic set if the gate fails.
+6. If a reviewed visual change needs an exception, scope it to the failing route,
+   viewport and exact PR base SHA as described above.
 
 Repository policy forbids running the local test suite. The visual gate runs in
 GitHub Actions together with the existing unit/integration checks.

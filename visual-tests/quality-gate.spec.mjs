@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { createServer } from 'node:http';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import pixelmatch from 'pixelmatch';
@@ -11,6 +11,13 @@ const currentRoot = resolve(process.cwd());
 const baselineRoot = resolve(currentRoot, '.visual-baseline');
 const currentOrigin = 'http://127.0.0.1:4173';
 const baselineOrigin = 'http://127.0.0.1:4174';
+const defaultVisualChangeRatio = 0.005;
+const maximumApprovedChangeRatio = 0.15;
+const visualBaselineSha = process.env.VISUAL_BASELINE_SHA || '';
+const visualChangePolicy = JSON.parse(readFileSync(
+  join(currentRoot, 'visual-tests', 'approved-visual-changes.json'),
+  'utf8'
+));
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 1000 },
@@ -79,6 +86,48 @@ function shouldFail(tab, scenario, pathname) {
   return primaryEndpoint(tab, pathname);
 }
 
+function validateVisualChangePolicy() {
+  if (visualChangePolicy.version !== 1 || !Array.isArray(visualChangePolicy.changes)) {
+    throw new Error('Visual change policy must use version 1 and a changes array');
+  }
+  const allowedRoutes = new Set(routeContracts.map((contract) => contract.tab));
+  const allowedViewports = new Set(viewports.map((viewport) => viewport.name));
+  const keys = new Set();
+  for (const approval of visualChangePolicy.changes) {
+    const key = `${approval.baselineSha}/${approval.route}/${approval.viewport}`;
+    if (
+      !/^[0-9a-f]{40}$/.test(String(approval.baselineSha || ''))
+      || !allowedRoutes.has(approval.route)
+      || !allowedViewports.has(approval.viewport)
+      || !/^BL-\d+$/.test(String(approval.clickupId || ''))
+      || String(approval.rationale || '').trim().length < 20
+      || !Number.isFinite(approval.maxChangedRatio)
+      || approval.maxChangedRatio <= defaultVisualChangeRatio
+      || approval.maxChangedRatio > maximumApprovedChangeRatio
+      || keys.has(key)
+    ) {
+      throw new Error(`Invalid visual change approval: ${key}`);
+    }
+    keys.add(key);
+  }
+}
+
+function approvedVisualChangeRatio(tab, viewport) {
+  const approval = (visualChangePolicy.changes || []).find((item) => (
+    item.baselineSha === visualBaselineSha
+    && item.route === tab
+    && item.viewport === viewport
+  ));
+  if (!approval) return defaultVisualChangeRatio;
+  return approval.maxChangedRatio;
+}
+
+function capturePageErrors(page) {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  return errors;
+}
+
 async function installDeterministicEnvironment(page, tab, scenario) {
   await page.addInitScript(() => {
     const fixedTime = new Date('2026-08-29T12:00:00Z').valueOf();
@@ -101,11 +150,16 @@ async function installDeterministicEnvironment(page, tab, scenario) {
     });
   });
 
+  await page.route('https://fonts.googleapis.com/**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'text/css', body: '' });
+  });
+  await page.route('https://fonts.gstatic.com/**', async (route) => route.abort());
+
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const pathname = url.pathname;
     if (scenario === 'loading' && primaryEndpoint(tab, pathname)) {
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 12_000));
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000));
     }
     if (shouldFail(tab, scenario, pathname)) {
       await route.fulfill({
@@ -233,6 +287,8 @@ async function waitForPopulatedRoute(page, contract) {
 }
 
 async function compareScreenshots(currentPage, baselinePage, contract, viewport, testInfo) {
+  const currentErrors = capturePageErrors(currentPage);
+  const baselineErrors = capturePageErrors(baselinePage);
   await Promise.all([
     openRoute(currentPage, currentOrigin, contract, 'populated'),
     openRoute(baselinePage, baselineOrigin, contract, 'populated')
@@ -241,6 +297,8 @@ async function compareScreenshots(currentPage, baselinePage, contract, viewport,
     waitForPopulatedRoute(currentPage, contract),
     waitForPopulatedRoute(baselinePage, contract)
   ]);
+  expect(currentErrors, 'Current route emitted uncaught browser errors').toEqual([]);
+  expect(baselineErrors, 'Baseline route emitted uncaught browser errors').toEqual([]);
   await Promise.all([
     currentPage.addStyleTag({ content: '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}' }),
     baselinePage.addStyleTag({ content: '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}' })
@@ -252,6 +310,10 @@ async function compareScreenshots(currentPage, baselinePage, contract, viewport,
   ]);
   const currentImage = PNG.sync.read(currentBuffer);
   const baselineImage = PNG.sync.read(baselineBuffer);
+  if (currentImage.width !== baselineImage.width || currentImage.height !== baselineImage.height) {
+    await testInfo.attach(`${contract.tab}-${viewport.name}-current`, { body: currentBuffer, contentType: 'image/png' });
+    await testInfo.attach(`${contract.tab}-${viewport.name}-baseline`, { body: baselineBuffer, contentType: 'image/png' });
+  }
   expect(
     { width: currentImage.width, height: currentImage.height },
     'The route geometry changed; review the attached screenshots'
@@ -267,18 +329,29 @@ async function compareScreenshots(currentPage, baselinePage, contract, viewport,
     { threshold: 0.12, includeAA: false }
   );
   const ratio = changedPixels / (currentImage.width * currentImage.height);
-  if (ratio > 0.005) {
+  const approvedRatio = approvedVisualChangeRatio(contract.tab, viewport.name);
+  if (ratio > defaultVisualChangeRatio) {
     await testInfo.attach(`${contract.tab}-${viewport.name}-current`, { body: currentBuffer, contentType: 'image/png' });
     await testInfo.attach(`${contract.tab}-${viewport.name}-baseline`, { body: baselineBuffer, contentType: 'image/png' });
     await testInfo.attach(`${contract.tab}-${viewport.name}-diff`, { body: PNG.sync.write(diffImage), contentType: 'image/png' });
   }
-  expect(ratio, 'Unexpected visual change exceeds 0.5%; inspect attached current/baseline/diff images').toBeLessThanOrEqual(0.005);
+  expect(
+    ratio,
+    `Unexpected visual change exceeds the reviewed ${(approvedRatio * 100).toFixed(1)}% budget; inspect attached current/baseline/diff images`
+  ).toBeLessThanOrEqual(approvedRatio);
+}
+
+async function attachFallbackScreenshot(page, name, testInfo) {
+  if (page.isClosed()) return;
+  const body = await page.screenshot({ fullPage: true });
+  await testInfo.attach(name, { body, contentType: 'image/png' });
 }
 
 let currentServer;
 let baselineServer;
 
 test.beforeAll(async () => {
+  validateVisualChangePolicy();
   currentServer = await createStaticServer(currentRoot, 4173);
   if (existsSync(join(baselineRoot, 'webapp', 'index.html'))) {
     baselineServer = await createStaticServer(baselineRoot, 4174);
@@ -297,9 +370,11 @@ for (const viewport of viewports) {
     for (const scenario of contract.states) {
       test(`${viewport.name} · ${contract.tab} · ${scenario}`, async ({ page }) => {
         await page.setViewportSize(viewport);
+        const pageErrors = capturePageErrors(page);
         await openRoute(page, currentOrigin, contract, scenario);
         await assertStateEvidence(page, contract, scenario);
         await assertQualityContract(page, contract);
+        expect(pageErrors, 'Route emitted uncaught browser errors').toEqual([]);
       });
     }
   }
@@ -327,20 +402,27 @@ for (const viewport of viewports) {
 
 for (const viewport of viewports) {
   for (const contract of routeContracts) {
-    test(`visual regression · ${viewport.name} · ${contract.tab}`, async ({ browser }, testInfo) => {
+    test(`visual regression · ${viewport.name} · ${contract.tab}`, async ({ page, browser }, testInfo) => {
       test.skip(!baselineServer, 'Baseline checkout is available in pull-request CI');
-      const currentContext = await browser.newContext({ viewport, locale: 'ru-RU', colorScheme: 'light', reducedMotion: 'reduce' });
+      await page.setViewportSize(viewport);
       const baselineContext = await browser.newContext({ viewport, locale: 'ru-RU', colorScheme: 'light', reducedMotion: 'reduce' });
+      const baselinePage = await baselineContext.newPage();
       try {
         await compareScreenshots(
-          await currentContext.newPage(),
-          await baselineContext.newPage(),
+          page,
+          baselinePage,
           contract,
           viewport,
           testInfo
         );
+      } catch (error) {
+        await Promise.allSettled([
+          attachFallbackScreenshot(page, `${contract.tab}-${viewport.name}-current-failure`, testInfo),
+          attachFallbackScreenshot(baselinePage, `${contract.tab}-${viewport.name}-baseline-failure`, testInfo)
+        ]);
+        throw error;
       } finally {
-        await Promise.all([currentContext.close(), baselineContext.close()]);
+        await baselineContext.close();
       }
     });
   }

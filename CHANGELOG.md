@@ -14,6 +14,8 @@
   - Все семь workspace-маршрутов получили детерминированный browser-контракт для desktop и mobile с loading, empty, error, partial и adversarial long-content состояниями.
   - Pull request CI теперь запрещает document-level horizontal overflow, безымянные интерактивные controls, duplicate IDs, broken images и потерю основного landmark/heading.
   - Репрезентативные экраны сравниваются пиксельно с базовой веткой `main`; при регрессии CI сохраняет current, baseline и diff screenshots.
+  - Осознанные визуальные изменения оформляются узкими исключениями для конкретного route, viewport и base SHA; исключение не ослабляет будущие PR и не отключает diagnostic artifacts.
+  - Visual job использует read-only checkout без сохранённого credential, lockfile-only install без lifecycle scripts, локальный Playwright binary и детерминированный fallback вместо сетевых web fonts.
   - Общие route loading/error states доступны через `aria-busy`, live status/alert и видимый keyboard focus; desktop-навигация работает с Enter и Space.
 - **Today Decision Center**:
   - Статический Today превращён в workspace-scoped центр решений на реальных данных подключений Meta, здоровья кабинетов, покрытия автоматизациями и последних audit-событий.
