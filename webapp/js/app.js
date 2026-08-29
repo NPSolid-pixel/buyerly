@@ -6277,6 +6277,321 @@
   // ==========================================================
   // ATTIO CREATE RULE CONTROLLER (MODAL 2)
   // ==========================================================
+  const GUIDED_RULE_ACTIONS = Object.freeze({
+    turn_off: 'Выключить группы объявлений',
+    notify_only: 'Только отправить уведомление',
+    turn_on: 'Включить группы объявлений',
+    increase_budget: 'Увеличить дневной бюджет',
+    decrease_budget: 'Уменьшить дневной бюджет'
+  });
+  const GUIDED_RULE_METRICS = new Set(['spend', 'cpl', 'cpreg', 'cpp', 'leads', 'registrations', 'purchases', 'ctr', 'cpc']);
+  const GUIDED_RULE_OPERATORS = new Set(['gt', 'gte', 'lt', 'lte', 'eq']);
+  const GUIDED_RULE_WINDOWS = new Set(['today', 'yesterday', 'last_3d', 'last_7d']);
+  const GUIDED_RULE_ACTION_KEYS = new Set(Object.keys(GUIDED_RULE_ACTIONS));
+  let createRuleDraftSaveTimer = null;
+
+  function guidedRulePrefix(mode) {
+    return mode === 'edit' ? 'editRule' : 'createRule';
+  }
+
+  function getCreateRuleDraftKey() {
+    const workspaceKey = String(state.activeWorkspace?.id || state.activeWorkspace?.slug || 'unknown')
+      .replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `buyerly_guided_rule_draft_v1_${workspaceKey}`;
+  }
+
+  function isValidCreateRuleDraft(value) {
+    if (!isPlainObject(value) || value.version !== 1) return false;
+    if (typeof value.name !== 'string' || value.name.length > 120) return false;
+    if (typeof value.groupId !== 'string' || value.groupId.length > 32) return false;
+    if (!GUIDED_RULE_ACTION_KEYS.has(value.action) && value.action !== '') return false;
+    if (!['and', 'or'].includes(value.logic) || typeof value.notifyTg !== 'boolean') return false;
+    if (!Number.isFinite(value.cooldown) || value.cooldown < 0 || value.cooldown > 10080) return false;
+    if (!Number.isFinite(value.budgetPercent) || value.budgetPercent < 0 || value.budgetPercent > 100) return false;
+    if (!Number.isFinite(value.budgetCeiling) || value.budgetCeiling < 0 || value.budgetCeiling > 10000000) return false;
+    if (!Number.isInteger(value.step) || value.step < 1 || value.step > 3) return false;
+    if (!Array.isArray(value.conditions) || value.conditions.length < 1 || value.conditions.length > 20) return false;
+    return value.conditions.every(condition => isPlainObject(condition)
+      && GUIDED_RULE_METRICS.has(condition.metric)
+      && GUIDED_RULE_OPERATORS.has(condition.operator)
+      && GUIDED_RULE_WINDOWS.has(condition.time_window)
+      && (condition.value === '' || (Number.isFinite(condition.value) && condition.value >= 0)));
+  }
+
+  function getRawRuleConditions(mode) {
+    const prefix = guidedRulePrefix(mode);
+    return [...document.querySelectorAll(`#${prefix}ConditionsList .attio-cond-row`)].map(row => {
+      const rawValue = row.querySelector('.attio-cond-val')?.value ?? '';
+      return {
+        metric: row.querySelector('.attio-cond-metric')?.value || 'spend',
+        operator: row.querySelector('.attio-cond-op')?.value || 'gte',
+        value: rawValue === '' ? '' : Number(rawValue),
+        time_window: row.querySelector('.attio-cond-win')?.value || 'today'
+      };
+    });
+  }
+
+  function captureCreateRuleDraft() {
+    return {
+      version: 1,
+      name: document.getElementById('createRuleNameInput')?.value || '',
+      groupId: document.getElementById('createRuleGroupSelect')?.value || '',
+      action: document.getElementById('createRuleActionSelect')?.value || '',
+      logic: window.getCreateRuleLogic(),
+      conditions: getRawRuleConditions('create'),
+      cooldown: window.getCreateRuleCooldownFromUI(),
+      notifyTg: document.getElementById('createRuleNotifyTgToggle')?.checked !== false,
+      budgetPercent: Number(document.getElementById('createRuleBudgetPercentInput')?.value || 0),
+      budgetCeiling: Number(document.getElementById('createRuleBudgetCeilingInput')?.value || 0),
+      step: Number(state.createRuleBuilderStep || 1)
+    };
+  }
+
+  function queueCreateRuleDraftSave() {
+    if (!state.createRuleModalOpen || state.createRuleDraftHydrating) return;
+    clearTimeout(createRuleDraftSaveTimer);
+    createRuleDraftSaveTimer = setTimeout(() => {
+      const draft = captureCreateRuleDraft();
+      const meaningful = draft.name.trim() || draft.action || draft.conditions.some(condition => condition.value !== '');
+      if (meaningful && isValidCreateRuleDraft(draft)) {
+        writeBrowserPreference(getCreateRuleDraftKey(), draft, { json: true });
+      } else if (!meaningful) {
+        resetBrowserPreference(getCreateRuleDraftKey());
+      }
+    }, 180);
+  }
+
+  function applyCreateRuleDraft(draft) {
+    if (!isValidCreateRuleDraft(draft)) return false;
+    const nameInput = document.getElementById('createRuleNameInput');
+    const groupSelect = document.getElementById('createRuleGroupSelect');
+    const actionSelect = document.getElementById('createRuleActionSelect');
+    if (nameInput) nameInput.value = draft.name;
+    if (groupSelect && state.createRuleTargetGroupId === null
+      && [...groupSelect.options].some(option => option.value === draft.groupId)) groupSelect.value = draft.groupId;
+    if (actionSelect) actionSelect.value = draft.action;
+    window.onCreateRuleActionChange(draft.action);
+    const budgetPercent = document.getElementById('createRuleBudgetPercentInput');
+    const budgetCeiling = document.getElementById('createRuleBudgetCeilingInput');
+    if (budgetPercent) budgetPercent.value = String(draft.budgetPercent || 20);
+    if (budgetCeiling) budgetCeiling.value = draft.budgetCeiling ? String(draft.budgetCeiling) : '';
+    window.setCreateRuleLogic(draft.logic);
+    const cooldownSelect = document.getElementById('createRuleCooldownSelect');
+    const customCooldown = document.getElementById('createRuleCustomCooldownInput');
+    const standard = ['0', '15', '30', '60', '120', '360', '720', '1440'];
+    if (standard.includes(String(draft.cooldown))) {
+      if (cooldownSelect) cooldownSelect.value = String(draft.cooldown);
+      customCooldown?.classList.add('hidden');
+    } else {
+      if (cooldownSelect) cooldownSelect.value = 'custom';
+      if (customCooldown) {
+        customCooldown.value = String(draft.cooldown);
+        customCooldown.classList.remove('hidden');
+      }
+    }
+    const notifyToggle = document.getElementById('createRuleNotifyTgToggle');
+    if (notifyToggle) notifyToggle.checked = draft.notifyTg;
+    const conditionsList = document.getElementById('createRuleConditionsList');
+    if (conditionsList) conditionsList.innerHTML = '';
+    draft.conditions.forEach(condition => window.addCreateRuleConditionRow(
+      condition.metric, condition.operator, condition.value, condition.time_window
+    ));
+    state.createRuleBuilderStep = draft.step;
+    document.getElementById('createRuleDraftBanner')?.classList.remove('hidden');
+    return true;
+  }
+
+  function prepareGuidedRuleDialog(mode) {
+    const prefix = guidedRulePrefix(mode);
+    const modal = document.getElementById(mode === 'edit' ? 'modalEditRule' : 'modalCreateRule');
+    if (!modal || modal.dataset.guidedPrepared === 'true') return;
+    const form = modal.querySelector('.create-rule-form');
+    const nameRow = document.getElementById(`${prefix}NameInput`)?.closest('.attio-field-row');
+    const groupRow = document.getElementById(`${prefix}GroupSelect`)?.closest('.attio-field-row');
+    const actionRow = document.getElementById(`${prefix}ActionSelect`)?.closest('.attio-field-row');
+    const stepNodes = {
+      1: [document.getElementById(`${prefix}ConditionsList`)?.closest('.attio-conditions-section')],
+      2: [actionRow, document.getElementById(`${prefix}BudgetSection`), document.getElementById(`${prefix}MoreBody`)?.closest('.attio-more-settings')],
+      3: [nameRow, groupRow, document.getElementById(`${prefix}SummaryCard`), document.getElementById(`${prefix}Preflight`)]
+    };
+    Object.entries(stepNodes).forEach(([step, nodes]) => nodes.filter(Boolean).forEach(node => {
+      node.dataset.ruleStepSection = step;
+      node.classList.add('guided-rule-step-section');
+    }));
+    const headings = {
+      1: ['ЕСЛИ', 'Задайте наблюдаемые условия', 'Метрики групп объявлений проверяются каждые 5 минут.'],
+      2: ['ТО', 'Выберите разрешённое действие', 'Ничего опасного не выбирается автоматически.'],
+      3: ['ПРОВЕРКА', 'Проверьте последствия', mode === 'edit' ? 'Сверьте текущий охват и ограничения до сохранения.' : 'Шаблон не запустится и не назначит кабинеты автоматически.']
+    };
+    Object.entries(headings).forEach(([step, content]) => {
+      const firstNode = stepNodes[step].find(Boolean);
+      if (!firstNode || !form) return;
+      const heading = document.createElement('div');
+      heading.className = 'guided-rule-panel-heading guided-rule-step-section';
+      heading.dataset.ruleStepSection = step;
+      heading.innerHTML = `<span class="ui-kicker">${content[0]}</span><div><h3>${content[1]}</h3><p>${content[2]}</p></div>`;
+      form.insertBefore(heading, firstNode);
+    });
+    [
+      `${prefix}NameInput`, `${prefix}GroupSelect`, `${prefix}BudgetPercentInput`,
+      `${prefix}BudgetCeilingInput`, `${prefix}CustomCooldownInput`, `${prefix}NotifyTgToggle`
+    ].forEach(id => {
+      const control = document.getElementById(id);
+      if (!control || control.dataset.guidedListener === 'true') return;
+      const render = mode === 'edit' ? window.renderEditRuleDraftSummary : window.renderCreateRuleDraftSummary;
+      control.addEventListener(control.tagName === 'SELECT' || control.type === 'checkbox' ? 'change' : 'input', render);
+      control.dataset.guidedListener = 'true';
+    });
+    modal.dataset.guidedPrepared = 'true';
+  }
+
+  function getGuidedRuleValidation(mode) {
+    const prefix = guidedRulePrefix(mode);
+    const action = document.getElementById(`${prefix}ActionSelect`)?.value || '';
+    const name = document.getElementById(`${prefix}NameInput`)?.value.trim() || '';
+    const rawConditions = getRawRuleConditions(mode);
+    const conditions = mode === 'edit' ? window.getEditRuleConditionsFromUI() : window.getCreateRuleConditionsFromUI();
+    const budgetPercent = Number(document.getElementById(`${prefix}BudgetPercentInput`)?.value || 0);
+    const budgetCeiling = Number(document.getElementById(`${prefix}BudgetCeilingInput`)?.value || 0);
+    const step1 = [];
+    const step2 = [];
+    const step3 = [];
+    if (!rawConditions.length || rawConditions.some(condition => condition.value === '' || !Number.isFinite(condition.value))) {
+      step1.push('Заполните числовое значение в каждом условии.');
+    }
+    if (conditions.some(condition => ['leads', 'registrations', 'purchases'].includes(condition.metric) && !Number.isInteger(condition.value))) {
+      step1.push('Лиды, регистрации и покупки указываются только целыми числами.');
+    }
+    if (!action) step2.push('Выберите действие явно — по умолчанию ничего не произойдёт.');
+    if ((action === 'increase_budget' || action === 'decrease_budget') && (budgetPercent <= 0 || budgetPercent > 100)) {
+      step2.push('Изменение бюджета должно быть от 1% до 100%.');
+    }
+    if (action === 'increase_budget' && (budgetCeiling <= 0 || budgetCeiling > 10000000)) {
+      step2.push('Для увеличения бюджета укажите безопасный дневной потолок.');
+    }
+    if (!name) step3.push('Дайте правилу понятное название.');
+    return { action, name, conditions, rawConditions, budgetPercent, budgetCeiling, step1, step2, step3, all: [...step1, ...step2, ...step3] };
+  }
+
+  function renderGuidedRulePreflight(mode, validation) {
+    const prefix = guidedRulePrefix(mode);
+    const logic = mode === 'edit' ? window.getEditRuleLogic() : window.getCreateRuleLogic();
+    const cooldown = mode === 'edit' ? window.getEditRuleCooldownFromUI() : window.getCreateRuleCooldownFromUI();
+    const ifText = validation.conditions.length
+      ? validation.conditions.map(plainRuleCondition).join(logic === 'or' ? ' ИЛИ ' : ' И ')
+      : 'Условия ещё не заполнены';
+    const thenText = validation.action ? GUIDED_RULE_ACTIONS[validation.action] : 'Действие не выбрано';
+    const ifElement = document.getElementById(`${prefix}IfText`);
+    const thenElement = document.getElementById(`${prefix}ThenText`);
+    if (ifElement) ifElement.textContent = ifText;
+    if (thenElement) thenElement.textContent = thenText;
+
+    let scopeText = '0 кабинетов · шаблон ещё никуда не назначен';
+    let scopeDetail = 'После создания назначьте шаблон нужным кабинетам отдельным действием.';
+    if (mode === 'edit') {
+      const presetId = Number(document.getElementById('editRulePresetId')?.value || 0);
+      const linked = (state.accounts || []).filter(account => (account.active_rules || []).some(rule => Number(rule.preset_id) === presetId));
+      const names = linked.slice(0, 3).map(account => account.custom_name || account.name || account.account_name || `Кабинет ${account.id}`);
+      const countMod100 = linked.length % 100;
+      const countMod10 = linked.length % 10;
+      const cabinetNoun = countMod100 >= 11 && countMod100 <= 14
+        ? 'кабинетов'
+        : countMod10 === 1 ? 'кабинет' : countMod10 >= 2 && countMod10 <= 4 ? 'кабинета' : 'кабинетов';
+      scopeText = `${linked.length} ${cabinetNoun} сейчас ${linked.length === 1 ? 'использует' : 'используют'} правило`;
+      scopeDetail = names.length ? `${names.join(', ')}${linked.length > 3 ? ` и ещё ${linked.length - 3}` : ''}` : 'Правило сейчас не назначено кабинетам.';
+    }
+    const workspaceName = state.activeWorkspace?.name || state.activeWorkspace?.slug || 'Текущий воркспейс';
+    const notify = document.getElementById(`${prefix}NotifyTgToggle`)?.checked !== false;
+    let actionLimit = 'Действие применяется только к совпавшим группам объявлений';
+    if (validation.action === 'increase_budget') {
+      actionLimit = `+${validation.budgetPercent || 0}% за срабатывание, потолок ${validation.budgetCeiling || 'не задан'} в валюте кабинета`;
+    } else if (validation.action === 'decrease_budget') {
+      actionLimit = `−${validation.budgetPercent || 0}% за срабатывание`;
+    } else if (validation.action === 'notify_only') {
+      actionLimit = 'Наблюдение без изменения статуса или бюджета';
+    } else if (validation.action === 'turn_off') {
+      actionLimit = 'Статус совпавших групп объявлений изменится на OFF';
+    } else if (validation.action === 'turn_on') {
+      actionLimit = 'Статус совпавших групп объявлений изменится на ON';
+    }
+    const preflight = document.getElementById(`${prefix}Preflight`);
+    if (!preflight) return;
+    preflight.innerHTML = `
+      <div class="guided-rule-preflight-status ${validation.all.length ? 'has-warning' : 'is-ready'}">
+        <span class="guided-rule-state-icon" aria-hidden="true">${validation.all.length ? '!' : '✓'}</span>
+        <div><strong>${validation.all.length ? 'Нужна проверка' : 'Конфигурация готова'}</strong><span>${escapeHtml(scopeText)}</span></div>
+      </div>
+      <dl class="guided-rule-facts">
+        <div><dt>Контекст</dt><dd>${escapeHtml(workspaceName)}</dd></div>
+        <div><dt>Объекты</dt><dd>Группы объявлений (ad sets)</dd></div>
+        <div><dt>Охват</dt><dd>${escapeHtml(scopeDetail)}</dd></div>
+        <div><dt>Проверка</dt><dd>Каждые 5 минут</dd></div>
+        <div><dt>Повтор</dt><dd>${cooldown > 0 ? `Не чаще чем раз в ${cooldown} мин.` : 'Без паузы между срабатываниями'}</dd></div>
+        <div><dt>Логика</dt><dd>${logic === 'or' ? 'Любое условие (OR)' : 'Все условия (AND)'}</dd></div>
+        <div><dt>Ограничение</dt><dd>${escapeHtml(actionLimit)}</dd></div>
+        <div><dt>Уведомление</dt><dd>${notify ? 'Telegram включён' : 'Telegram выключен'}</dd></div>
+      </dl>`;
+  }
+
+  function updateGuidedRuleStepState(mode, validation) {
+    const step = Number(state[`${mode}RuleBuilderStep`] || 1);
+    document.querySelectorAll(`#modal${mode === 'edit' ? 'Edit' : 'Create'}Rule [data-rule-step-section]`).forEach(section => {
+      section.classList.toggle('guided-rule-step-hidden', Number(section.dataset.ruleStepSection) !== step);
+    });
+    document.querySelectorAll(`#modal${mode === 'edit' ? 'Edit' : 'Create'}Rule [data-rule-step-button]`).forEach(button => {
+      const buttonStep = Number(button.dataset.ruleStepButton);
+      const isComplete = buttonStep < step && validation[`step${buttonStep}`].length === 0;
+      button.classList.toggle('is-current', buttonStep === step);
+      button.classList.toggle('is-complete', isComplete);
+      const index = button.querySelector('.guided-rule-step-index');
+      if (index) index.textContent = isComplete ? '✓' : String(buttonStep);
+      const label = button.querySelector('strong')?.textContent || `Шаг ${buttonStep}`;
+      button.setAttribute('aria-label', `${label}${isComplete ? ', завершено' : buttonStep === step ? ', текущий шаг' : ''}`);
+      if (buttonStep === step) button.setAttribute('aria-current', 'step'); else button.removeAttribute('aria-current');
+    });
+    const previous = document.getElementById(`btn${mode === 'edit' ? 'Edit' : 'Create'}RulePrevious`);
+    const next = document.getElementById(`btn${mode === 'edit' ? 'Edit' : 'Create'}RuleNext`);
+    const submit = document.getElementById(`btnSubmit${mode === 'edit' ? 'Edit' : 'Create'}Rule`);
+    previous?.classList.toggle('hidden', step === 1);
+    next?.classList.toggle('hidden', step === 3);
+    submit?.classList.toggle('hidden', step !== 3);
+    if (submit) submit.disabled = validation.all.length > 0;
+  }
+
+  window.goToRuleBuilderStep = function (mode, nextStep, options = {}) {
+    const validation = getGuidedRuleValidation(mode);
+    const current = Number(state[`${mode}RuleBuilderStep`] || 1);
+    const target = Math.max(1, Math.min(3, Number(nextStep) || 1));
+    if (!options.force && target > current) {
+      for (let step = current; step < target; step += 1) {
+        const errors = validation[`step${step}`];
+        if (errors.length) {
+          showToast(errors[0], 'error');
+          return;
+        }
+      }
+    }
+    state[`${mode}RuleBuilderStep`] = target;
+    updateGuidedRuleStepState(mode, validation);
+    const modal = document.getElementById(`modal${mode === 'edit' ? 'Edit' : 'Create'}Rule`);
+    const body = modal?.querySelector('.create-rule-body');
+    if (body) body.scrollTop = 0;
+    if (mode === 'create') queueCreateRuleDraftSave();
+    const firstControl = document.querySelector(`#modal${mode === 'edit' ? 'Edit' : 'Create'}Rule [data-rule-step-section="${target}"] input, #modal${mode === 'edit' ? 'Edit' : 'Create'}Rule [data-rule-step-section="${target}"] select`);
+    setTimeout(() => firstControl?.focus(), 30);
+  };
+
+  window.changeRuleBuilderStep = function (mode, delta) {
+    window.goToRuleBuilderStep(mode, Number(state[`${mode}RuleBuilderStep`] || 1) + Number(delta || 0));
+  };
+
+  window.discardCreateRuleDraft = function () {
+    resetBrowserPreference(getCreateRuleDraftKey());
+    clearTimeout(createRuleDraftSaveTimer);
+    window.openCreateRuleModal(state.createRuleTargetGroupId, { ignoreDraft: true });
+    showToast('Локальный черновик удалён', 'success');
+  };
+
   window.openCreateRuleFromChooser = function () {
     const targetGroupId = state.chooseRuleTargetGroupId;
     window.closeModal('modalChooseRule');
@@ -6287,8 +6602,11 @@
     window.openCreateRuleModal(targetGroupId);
   };
 
-  window.openCreateRuleModal = function (targetGroupId = null) {
+  window.openCreateRuleModal = function (targetGroupId = null, options = {}) {
     haptic('selection');
+    state.createRuleModalOpen = true;
+    state.createRuleDraftHydrating = true;
+    state.createRuleBuilderStep = 1;
     state.createRuleTargetGroupId = targetGroupId !== null && targetGroupId !== undefined ? Number(targetGroupId) : null;
     
     // Reset form fields
@@ -6298,19 +6616,19 @@
     window.populateCreateRuleGroupSelect(state.createRuleTargetGroupId);
     
     const actionSelect = document.getElementById('createRuleActionSelect');
-    if (actionSelect) actionSelect.value = 'turn_off';
-    window.onCreateRuleActionChange('turn_off');
+    if (actionSelect) actionSelect.value = '';
+    window.onCreateRuleActionChange('');
     
     const budgetPercent = document.getElementById('createRuleBudgetPercentInput');
     if (budgetPercent) budgetPercent.value = 20;
     const budgetCeiling = document.getElementById('createRuleBudgetCeilingInput');
-    if (budgetCeiling) budgetCeiling.value = 0;
+    if (budgetCeiling) budgetCeiling.value = '';
     
     window.setCreateRuleLogic('and');
     
     // Cooldown & Telegram
     const cooldownSelect = document.getElementById('createRuleCooldownSelect');
-    if (cooldownSelect) cooldownSelect.value = '0';
+    if (cooldownSelect) cooldownSelect.value = '15';
     const customCooldown = document.getElementById('createRuleCustomCooldownInput');
     if (customCooldown) {
       customCooldown.classList.add('hidden');
@@ -6324,15 +6642,31 @@
     const moreArrow = document.getElementById('createRuleMoreArrow');
     if (moreBody) moreBody.classList.add('hidden');
     if (moreArrow) moreArrow.classList.remove('open');
+    document.querySelector('#modalCreateRule .attio-more-toggle')?.setAttribute('aria-expanded', 'false');
+    document.getElementById('createRuleDraftBanner')?.classList.add('hidden');
 
-    // Default condition: Spend >= 2.0 (today)
+    // Safe scaffold: the operator must enter a threshold and choose an action.
     const container = document.getElementById('createRuleConditionsList');
     if (container) container.innerHTML = '';
-    window.addCreateRuleConditionRow('spend', 'gte', 2.0, 'today');
+    window.addCreateRuleConditionRow('spend', 'gte', '', 'today');
+
+    prepareGuidedRuleDialog('create');
+    if (!options.ignoreDraft) {
+      const draft = readBrowserPreference(getCreateRuleDraftKey(), null, {
+        json: true,
+        validate: value => value === null || isValidCreateRuleDraft(value)
+      });
+      if (draft) applyCreateRuleDraft(draft);
+    }
 
     window.renderCreateRuleDraftSummary();
+    window.goToRuleBuilderStep('create', state.createRuleBuilderStep || 1, { force: true });
     window.openModal('modalCreateRule');
-    setTimeout(() => nameInput?.focus(), 50);
+    state.createRuleDraftHydrating = false;
+    const focusTarget = state.createRuleBuilderStep === 1
+      ? document.querySelector('#createRuleConditionsList .attio-cond-val')
+      : nameInput;
+    setTimeout(() => focusTarget?.focus(), 50);
   };
 
   window.backToRuleChooser = function () {
@@ -6397,6 +6731,7 @@
     const isHidden = moreBody.classList.contains('hidden');
     moreBody.classList.toggle('hidden', !isHidden);
     moreArrow.classList.toggle('open', isHidden);
+    document.querySelector('#modalCreateRule .attio-more-toggle')?.setAttribute('aria-expanded', String(isHidden));
   };
 
   window.onCreateRuleCooldownChange = function (val) {
@@ -6421,7 +6756,7 @@
     return parseInt(select.value) || 0;
   };
 
-  window.addCreateRuleConditionRow = function (metric = 'spend', operator = 'gte', value = '2.0', timeWindow = 'today') {
+  window.addCreateRuleConditionRow = function (metric = 'spend', operator = 'gte', value = '', timeWindow = 'today') {
     haptic('selection');
     const container = document.getElementById('createRuleConditionsList');
     if (!container) return;
@@ -6429,7 +6764,7 @@
     const row = document.createElement('div');
     row.className = 'attio-cond-row';
     row.innerHTML = `
-      <select class="attio-cond-metric attio-field-select" onchange="window.renderCreateRuleDraftSummary()">
+      <select class="attio-cond-metric attio-field-select" aria-label="Метрика" onchange="window.renderCreateRuleDraftSummary()">
         <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд (валюта кабинета)</option>
         <option value="cpl" ${metric === 'cpl' ? 'selected' : ''}>CPL (Цена лида)</option>
         <option value="cpreg" ${metric === 'cpreg' ? 'selected' : ''}>CPReg (Цена регистрации)</option>
@@ -6440,15 +6775,15 @@
         <option value="ctr" ${metric === 'ctr' ? 'selected' : ''}>CTR All (%)</option>
         <option value="cpc" ${metric === 'cpc' ? 'selected' : ''}>CPC All (валюта кабинета)</option>
       </select>
-      <select class="attio-cond-op attio-field-select" onchange="window.renderCreateRuleDraftSummary()">
+      <select class="attio-cond-op attio-field-select" aria-label="Оператор" onchange="window.renderCreateRuleDraftSummary()">
         <option value="gt" ${operator === 'gt' ? 'selected' : ''}>&gt; (больше)</option>
         <option value="gte" ${operator === 'gte' ? 'selected' : ''}>&ge; (не меньше)</option>
         <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt; (меньше)</option>
         <option value="lte" ${operator === 'lte' ? 'selected' : ''}>&le; (не больше)</option>
         <option value="eq" ${operator === 'eq' ? 'selected' : ''}>= (равно)</option>
       </select>
-      <input type="number" class="attio-cond-val attio-field-input text-center" placeholder="0.0" step="0.5" min="0" inputmode="decimal" value="${value}" oninput="window.renderCreateRuleDraftSummary()">
-      <select class="attio-cond-win attio-field-select" onchange="window.renderCreateRuleDraftSummary()">
+      <input type="number" class="attio-cond-val attio-field-input text-center" aria-label="Порог" placeholder="Введите порог" step="0.5" min="0" inputmode="decimal" value="${value}" oninput="window.renderCreateRuleDraftSummary()">
+      <select class="attio-cond-win attio-field-select" aria-label="Период" onchange="window.renderCreateRuleDraftSummary()">
         <option value="today" ${timeWindow === 'today' ? 'selected' : ''}>Сегодня</option>
         <option value="yesterday" ${timeWindow === 'yesterday' ? 'selected' : ''}>Вчера</option>
         <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
@@ -6467,7 +6802,7 @@
     const container = document.getElementById('createRuleConditionsList');
     button?.closest('.attio-cond-row')?.remove();
     if (container && container.children.length === 0) {
-      window.addCreateRuleConditionRow('spend', 'gte', 2.0, 'today');
+      window.addCreateRuleConditionRow('spend', 'gte', '', 'today');
     } else {
       window.renderCreateRuleDraftSummary();
     }
@@ -6495,7 +6830,7 @@
     const saveButton = document.getElementById('btnSubmitCreateRule');
     if (!textElement || !errorsElement) return [];
 
-    const action = document.getElementById('createRuleActionSelect')?.value || 'turn_off';
+    const action = document.getElementById('createRuleActionSelect')?.value || '';
     const logic = window.getCreateRuleLogic();
     const conditions = window.getCreateRuleConditionsFromUI();
     const budgetPercent = parseFloat(document.getElementById('createRuleBudgetPercentInput')?.value) || 0;
@@ -6505,19 +6840,8 @@
     textElement.textContent = plainText;
     textElement.dataset.plainName = fitPlainRuleName(plainText);
 
-    const errors = [];
-    if (conditions.length === 0) {
-      errors.push('Добавьте хотя бы одно корректное условие.');
-    }
-    if (conditions.some(c => ['leads', 'registrations', 'purchases'].includes(c.metric) && !Number.isInteger(c.value))) {
-      errors.push('Лиды, регистрации и покупки указываются только целыми числами.');
-    }
-    if ((action === 'increase_budget' || action === 'decrease_budget') && (budgetPercent <= 0 || budgetPercent > 100)) {
-      errors.push('Изменение бюджета должно быть от 1% до 100%.');
-    }
-    if (action === 'increase_budget' && (budgetCeiling <= 0 || budgetCeiling > 10000000)) {
-      errors.push('Для увеличения бюджета укажите безопасный дневной потолок (> 0).');
-    }
+    const validation = getGuidedRuleValidation('create');
+    const errors = validation.all;
 
     errorsElement.innerHTML = errors.map(e => `
       <div class="attio-val-item error">
@@ -6526,6 +6850,9 @@
       </div>
     `).join('');
 
+    renderGuidedRulePreflight('create', validation);
+    updateGuidedRuleStepState('create', validation);
+    queueCreateRuleDraftSave();
     if (saveButton) saveButton.disabled = errors.length > 0;
     return errors;
   };
@@ -6535,6 +6862,7 @@
     const name = document.getElementById('createRulePlainText')?.dataset.plainName || '';
     if (input && name) {
       input.value = name;
+      window.renderCreateRuleDraftSummary();
       input.focus();
       showToast('Понятное название вставлено', 'success');
     }
@@ -6547,7 +6875,7 @@
     const saveButton = document.getElementById('btnSubmitCreateRule');
 
     const name = nameInput?.value.trim() || document.getElementById('createRulePlainText')?.dataset.plainName || 'Новое правило';
-    const action = actionSelect?.value || 'turn_off';
+    const action = actionSelect?.value || '';
     const selectedGroupId = groupSelect?.value ? Number(groupSelect.value) : null;
     const logic = window.getCreateRuleLogic();
     const conditions = window.getCreateRuleConditionsFromUI();
@@ -6600,6 +6928,8 @@
 
       haptic('notification', 'success');
       showToast(`Правило «${newPreset.name || name}» успешно создано!`, 'success');
+      resetBrowserPreference(getCreateRuleDraftKey());
+      clearTimeout(createRuleDraftSaveTimer);
       window.closeModal('modalCreateRule');
 
       await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
@@ -7513,6 +7843,7 @@
   window.openEditRuleModal = function (presetId) {
     haptic('selection');
     state.ruleBuilderMode = 'edit';
+    state.editRuleBuilderStep = 1;
     const preset = state.presets.find(p => p.id === Number(presetId));
     if (!preset) {
       showToast('Правило не найдено', 'error');
@@ -7579,9 +7910,11 @@
       window.addEditRuleConditionRow(c.metric, c.operator, c.value, c.time_window);
     });
 
+    prepareGuidedRuleDialog('edit');
     window.renderEditRuleDraftSummary();
+    window.goToRuleBuilderStep('edit', 1, { force: true });
     window.openModal('modalEditRule');
-    setTimeout(() => nameInput?.focus(), 50);
+    setTimeout(() => document.querySelector('#editRuleConditionsList .attio-cond-val')?.focus(), 50);
   };
 
   window.onEditRuleOverlayClick = function (event) {
@@ -7635,6 +7968,7 @@
     const isHidden = moreBody.classList.contains('hidden');
     moreBody.classList.toggle('hidden', !isHidden);
     moreArrow.classList.toggle('open', isHidden);
+    document.querySelector('#modalEditRule .attio-more-toggle')?.setAttribute('aria-expanded', String(isHidden));
   };
 
   window.onEditRuleCooldownChange = function (val) {
@@ -7667,7 +8001,7 @@
     const row = document.createElement('div');
     row.className = 'attio-cond-row';
     row.innerHTML = `
-      <select class="attio-cond-metric attio-field-select" onchange="window.renderEditRuleDraftSummary()">
+      <select class="attio-cond-metric attio-field-select" aria-label="Метрика" onchange="window.renderEditRuleDraftSummary()">
         <option value="spend" ${metric === 'spend' ? 'selected' : ''}>Спенд (валюта кабинета)</option>
         <option value="cpl" ${metric === 'cpl' ? 'selected' : ''}>CPL (Цена лида)</option>
         <option value="cpreg" ${metric === 'cpreg' ? 'selected' : ''}>CPReg (Цена регистрации)</option>
@@ -7678,15 +8012,15 @@
         <option value="ctr" ${metric === 'ctr' ? 'selected' : ''}>CTR All (%)</option>
         <option value="cpc" ${metric === 'cpc' ? 'selected' : ''}>CPC All (валюта кабинета)</option>
       </select>
-      <select class="attio-cond-op attio-field-select" onchange="window.renderEditRuleDraftSummary()">
+      <select class="attio-cond-op attio-field-select" aria-label="Оператор" onchange="window.renderEditRuleDraftSummary()">
         <option value="gt" ${operator === 'gt' ? 'selected' : ''}>&gt; (больше)</option>
         <option value="gte" ${operator === 'gte' ? 'selected' : ''}>&ge; (не меньше)</option>
         <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt; (меньше)</option>
         <option value="lte" ${operator === 'lte' ? 'selected' : ''}>&le; (не больше)</option>
         <option value="eq" ${operator === 'eq' ? 'selected' : ''}>= (равно)</option>
       </select>
-      <input type="number" class="attio-cond-val attio-field-input text-center" placeholder="0.0" step="0.5" min="0" inputmode="decimal" value="${value}" oninput="window.renderEditRuleDraftSummary()">
-      <select class="attio-cond-win attio-field-select" onchange="window.renderEditRuleDraftSummary()">
+      <input type="number" class="attio-cond-val attio-field-input text-center" aria-label="Порог" placeholder="Введите порог" step="0.5" min="0" inputmode="decimal" value="${value}" oninput="window.renderEditRuleDraftSummary()">
+      <select class="attio-cond-win attio-field-select" aria-label="Период" onchange="window.renderEditRuleDraftSummary()">
         <option value="today" ${timeWindow === 'today' ? 'selected' : ''}>Сегодня</option>
         <option value="yesterday" ${timeWindow === 'yesterday' ? 'selected' : ''}>Вчера</option>
         <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
@@ -7705,7 +8039,7 @@
     const container = document.getElementById('editRuleConditionsList');
     button?.closest('.attio-cond-row')?.remove();
     if (container && container.children.length === 0) {
-      window.addEditRuleConditionRow('spend', 'gte', 2.0, 'today');
+      window.addEditRuleConditionRow('spend', 'gte', '', 'today');
     } else {
       window.renderEditRuleDraftSummary();
     }
@@ -7733,7 +8067,7 @@
     const saveButton = document.getElementById('btnSubmitEditRule');
     if (!textElement || !errorsElement) return [];
 
-    const action = document.getElementById('editRuleActionSelect')?.value || 'turn_off';
+    const action = document.getElementById('editRuleActionSelect')?.value || '';
     const logic = window.getEditRuleLogic();
     const conditions = window.getEditRuleConditionsFromUI();
     const budgetPercent = parseFloat(document.getElementById('editRuleBudgetPercentInput')?.value) || 0;
@@ -7743,19 +8077,8 @@
     textElement.textContent = plainText;
     textElement.dataset.plainName = fitPlainRuleName(plainText);
 
-    const errors = [];
-    if (conditions.length === 0) {
-      errors.push('Добавьте хотя бы одно корректное условие.');
-    }
-    if (conditions.some(c => ['leads', 'registrations', 'purchases'].includes(c.metric) && !Number.isInteger(c.value))) {
-      errors.push('Лиды, регистрации и покупки указываются только целыми числами.');
-    }
-    if ((action === 'increase_budget' || action === 'decrease_budget') && (budgetPercent <= 0 || budgetPercent > 100)) {
-      errors.push('Изменение бюджета должно быть от 1% до 100%.');
-    }
-    if (action === 'increase_budget' && (budgetCeiling <= 0 || budgetCeiling > 10000000)) {
-      errors.push('Для увеличения бюджета укажите безопасный дневной потолок (> 0).');
-    }
+    const validation = getGuidedRuleValidation('edit');
+    const errors = validation.all;
 
     errorsElement.innerHTML = errors.map(e => `
       <div class="attio-val-item error">
@@ -7764,6 +8087,8 @@
       </div>
     `).join('');
 
+    renderGuidedRulePreflight('edit', validation);
+    updateGuidedRuleStepState('edit', validation);
     if (saveButton) saveButton.disabled = errors.length > 0;
     return errors;
   };
@@ -7773,6 +8098,7 @@
     const name = document.getElementById('editRulePlainText')?.dataset.plainName || '';
     if (input && name) {
       input.value = name;
+      window.renderEditRuleDraftSummary();
       input.focus();
       showToast('Понятное название вставлено', 'success');
     }
@@ -7789,7 +8115,7 @@
     const saveButton = document.getElementById('btnSubmitEditRule');
 
     const name = nameInput?.value.trim() || document.getElementById('editRulePlainText')?.dataset.plainName || 'Правило';
-    const action = actionSelect?.value || 'turn_off';
+    const action = actionSelect?.value || '';
     const newGroupId = groupSelect?.value ? Number(groupSelect.value) : null;
     const logic = window.getEditRuleLogic();
     const conditions = window.getEditRuleConditionsFromUI();
@@ -8412,6 +8738,11 @@
     };
     const joiner = logic === 'or' ? ' или ' : ' и ';
     const conditionText = conditions.map(plainRuleCondition).join(joiner);
+    if (!action) {
+      return conditionText
+        ? `Выберите действие, если ${conditionText}.`
+        : 'Настройте условия и явно выберите действие.';
+    }
     return conditionText
       ? `${actions[action] || 'Выполнить действие'}, если ${conditionText}.`
       : 'Настройте действие и условия — здесь появится понятное описание.';
@@ -11120,6 +11451,7 @@
   window.closeModal = function (modalId) {
     const el = document.getElementById(modalId);
     if (el) el.classList.add('hidden');
+    if (modalId === 'modalCreateRule') state.createRuleModalOpen = false;
     const idx = activeModalStack.indexOf(modalId);
     if (idx !== -1) {
       activeModalStack.splice(idx, 1);

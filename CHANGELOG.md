@@ -15,6 +15,12 @@
   - Command bar теперь выбирает одно следующее действие в детерминированном порядке и объясняет причину приоритета без fake metrics, искусственной срочности и декоративных controls.
   - Hero показывает три проверяемых отношения, а основной контент собран в одну divided operations surface с loading, empty, partial, healthy, warning и critical состояниями.
   - При недоступности одного API остальные сигналы продолжают работать; responsive-контракт закреплён для 390/768/1024/1440px.
+- **Guided Rule Builder для автоматизаций**:
+  - Создание и редактирование правила переведено в понятный поток `Условия → Действие → Проверка` с progressive disclosure дополнительных ограничений.
+  - Убраны опасные smart defaults: новое правило не получает STOP-действие и числовой порог без явного выбора оператора.
+  - Добавлены human-readable `ЕСЛИ / ТО` preview и preflight последствий с workspace, объектами, охватом кабинетов, частотой проверки, cooldown и лимитами действия.
+  - Безопасный create draft сохраняется только локально и изолирован по workspace; edit draft намеренно не восстанавливается, чтобы не перезаписать более свежую серверную версию.
+  - Исправлен horizontal overflow condition editor на 390px; готовность и предупреждения больше не передаются только цветом.
 - **Единая визуальная система Buyerly 2.0**:
   - Добавлен отдельный production UI-kit `webapp/css/ui-system.css` с общей шкалой типографики, spacing, page widths, controls, surfaces и dialog sizes.
   - Today, Automations и Efficiency получили premium operations layer: command hero, semantic accents, выразительную KPI-иерархию, lane bands и action rails без возврата к вложенным карточкам.

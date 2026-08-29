@@ -3154,6 +3154,356 @@ textarea {
   font-weight: 600;
 }
 
+/* ----------------------------------------------------------
+   Guided Rule Builder
+   ---------------------------------------------------------- */
+
+.guided-rule-dialog {
+  max-height: min(880px, calc(100dvh - 32px));
+}
+
+.guided-rule-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--ui-line);
+  background: var(--ui-surface-subtle);
+}
+
+.guided-rule-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  padding: 14px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ui-ink-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.guided-rule-step::after {
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  content: "";
+}
+
+.guided-rule-step:hover {
+  color: var(--ui-ink);
+}
+
+.guided-rule-step:focus-visible {
+  border-radius: var(--ui-radius-control);
+  outline: 2px solid var(--action-primary);
+  outline-offset: -3px;
+}
+
+.guided-rule-step.is-current {
+  color: var(--ui-ink);
+}
+
+.guided-rule-step.is-current::after {
+  background: var(--action-primary);
+}
+
+.guided-rule-step-index {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 50%;
+  background: var(--ui-surface);
+  color: var(--ui-ink-secondary);
+  font-size: var(--ui-meta-size);
+  font-weight: 700;
+}
+
+.guided-rule-step.is-current .guided-rule-step-index {
+  border-color: var(--action-primary);
+  background: var(--action-primary);
+  color: var(--ui-surface);
+}
+
+.guided-rule-step.is-complete .guided-rule-step-index {
+  border-color: var(--ui-success-line);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.guided-rule-step strong,
+.guided-rule-step small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guided-rule-step strong {
+  font-size: var(--ui-label-size);
+  font-weight: 650;
+}
+
+.guided-rule-step small {
+  margin-top: 1px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.guided-rule-dialog .create-rule-body {
+  overflow-x: hidden;
+}
+
+.guided-rule-step-section {
+  min-width: 0;
+}
+
+.guided-rule-step-hidden {
+  display: none !important;
+}
+
+.guided-rule-panel-heading {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 2px 0 4px;
+}
+
+.guided-rule-panel-heading .ui-kicker {
+  padding-top: 3px;
+  color: var(--action-primary);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+}
+
+.guided-rule-panel-heading h3 {
+  margin: 0;
+  color: var(--ui-ink);
+  font-size: var(--ui-heading-size);
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
+.guided-rule-panel-heading p {
+  margin: 4px 0 0;
+  color: var(--ui-ink-secondary);
+  font-size: var(--ui-label-size);
+  line-height: 1.5;
+}
+
+.guided-rule-dialog .create-rule-form {
+  gap: 16px;
+}
+
+.guided-rule-dialog .attio-field-row {
+  align-items: center;
+  padding: 0;
+}
+
+.guided-rule-dialog .attio-field-label {
+  width: 116px;
+  padding-top: 0;
+  color: var(--ui-ink-secondary);
+  font-size: var(--ui-label-size);
+  font-weight: 600;
+}
+
+.guided-rule-dialog .attio-field-input,
+.guided-rule-dialog .attio-field-select {
+  min-height: var(--ui-control-height);
+  color: var(--ui-ink);
+  font-size: var(--ui-body-size);
+  background-color: var(--ui-surface);
+  border-color: var(--ui-line-strong);
+}
+
+.guided-rule-dialog .attio-conditions-section,
+.guided-rule-dialog .attio-budget-section,
+.guided-rule-dialog .attio-summary-card {
+  margin: 0;
+  padding: 16px 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+}
+
+.guided-rule-dialog .attio-cond-row {
+  grid-template-columns: minmax(160px, 1.8fr) minmax(120px, 1.2fr) minmax(112px, 0.8fr) minmax(108px, 1fr) 32px;
+  gap: 8px;
+}
+
+.guided-rule-dialog .attio-cond-row .attio-field-select,
+.guided-rule-dialog .attio-cond-row .attio-field-input {
+  min-width: 0;
+  height: var(--ui-control-height);
+  font-size: var(--ui-label-size);
+}
+
+.guided-rule-dialog .attio-more-settings {
+  margin-top: 0;
+  padding-top: 16px;
+  border-top-color: var(--ui-line);
+}
+
+.guided-rule-dialog .attio-more-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--ui-ink-secondary);
+  font-size: var(--ui-label-size);
+}
+
+.guided-rule-dialog .attio-summary-head {
+  margin-bottom: 10px;
+}
+
+.guided-rule-if-then {
+  border-top: 1px solid var(--ui-line);
+}
+
+.guided-rule-if-then > div {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.guided-rule-if-then span {
+  color: var(--action-primary);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.guided-rule-if-then p {
+  margin: 0;
+  color: var(--ui-ink);
+  font-size: var(--ui-body-size);
+  font-weight: 550;
+  line-height: 1.5;
+}
+
+.guided-rule-preflight {
+  border-top: 1px solid var(--ui-line);
+}
+
+.guided-rule-preflight-status,
+.guided-rule-draft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+}
+
+.guided-rule-preflight-status > div,
+.guided-rule-draft > div {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.guided-rule-preflight-status strong,
+.guided-rule-draft strong {
+  color: var(--ui-ink);
+  font-size: var(--ui-label-size);
+}
+
+.guided-rule-preflight-status span:not(.guided-rule-state-icon),
+.guided-rule-draft span:not(.guided-rule-state-icon) {
+  color: var(--ui-ink-secondary);
+  font-size: var(--ui-meta-size);
+}
+
+.guided-rule-state-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 50%;
+  background: var(--ui-surface-subtle);
+  color: var(--ui-ink-secondary);
+  font-size: var(--ui-label-size);
+  font-weight: 800;
+}
+
+.guided-rule-preflight-status.is-ready .guided-rule-state-icon {
+  border-color: var(--ui-success-line);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.guided-rule-preflight-status.has-warning .guided-rule-state-icon {
+  border-color: var(--ui-accent-bright);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.guided-rule-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--ui-line);
+}
+
+.guided-rule-facts > div {
+  min-width: 0;
+  padding: 12px 14px 12px 0;
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.guided-rule-facts > div:nth-child(even) {
+  padding-right: 0;
+  padding-left: 14px;
+  border-left: 1px solid var(--ui-line);
+}
+
+.guided-rule-facts dt {
+  color: var(--ui-ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.guided-rule-facts dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--ui-ink);
+  font-size: var(--ui-label-size);
+  line-height: 1.45;
+}
+
+.guided-rule-draft {
+  padding: 12px 14px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-surface-subtle);
+}
+
+.guided-rule-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guided-rule-dialog .create-rule-footer {
+  justify-content: space-between;
+}
+
 .rule-budget-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3810,6 +4160,108 @@ textarea {
 }
 
 @media (max-width: 480px) {
+  #modalCreateRule,
+  #modalEditRule {
+    align-items: flex-end;
+    padding: 8px 0 0;
+  }
+
+  #modalCreateRule .guided-rule-dialog,
+  #modalEditRule .guided-rule-dialog {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 8px);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--ui-radius-dialog) var(--ui-radius-dialog) 0 0;
+  }
+
+  .guided-rule-steps {
+    padding: 0 8px;
+  }
+
+  .guided-rule-step {
+    justify-content: center;
+    padding: 11px 6px;
+  }
+
+  .guided-rule-step > span:last-child {
+    display: none;
+  }
+
+  .guided-rule-panel-heading {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .guided-rule-panel-heading .ui-kicker {
+    padding-top: 0;
+  }
+
+  .guided-rule-dialog .attio-field-row,
+  .guided-rule-dialog .attio-conditions-header,
+  .guided-rule-dialog .attio-budget-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .guided-rule-dialog .attio-field-row,
+  .guided-rule-dialog .attio-conditions-header,
+  .guided-rule-dialog .attio-budget-row {
+    gap: 8px;
+  }
+
+  .guided-rule-dialog .attio-field-label {
+    width: auto;
+  }
+
+  .guided-rule-dialog .attio-logic-toggle {
+    flex-wrap: wrap;
+  }
+
+  .guided-rule-dialog .attio-cond-row {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+    border: 1px solid var(--ui-line);
+    border-radius: var(--ui-radius-control);
+    background: var(--ui-surface-subtle);
+  }
+
+  .guided-rule-dialog .attio-cond-del-btn {
+    justify-self: end;
+  }
+
+  .guided-rule-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .guided-rule-facts > div,
+  .guided-rule-facts > div:nth-child(even) {
+    padding: 11px 0;
+    border-left: 0;
+  }
+
+  .guided-rule-dialog .create-rule-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .guided-rule-footer-actions,
+  .guided-rule-footer-actions .btn,
+  .guided-rule-dialog .create-rule-footer > .btn {
+    width: 100%;
+  }
+
+  .guided-rule-footer-actions .btn {
+    justify-content: center;
+  }
+
+  .guided-rule-draft {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
   .attio-auth-footer {
     flex-wrap: wrap;
     width: 100%;
