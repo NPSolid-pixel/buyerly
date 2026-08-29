@@ -113,6 +113,7 @@ class TestFrontendRuleContract(unittest.TestCase):
     def test_meta_oauth_is_primary_and_manual_token_is_advanced(self):
         for contract in (
             'id="fbAccountsTable"',
+            'id="modalMetaOAuthIntro"',
             'id="modalMetaAssets"',
             'id="metaAssetGroups"',
             'id="metaSelectAll"',
@@ -122,6 +123,8 @@ class TestFrontendRuleContract(unittest.TestCase):
             self.assertIn(contract, self.index)
         for contract in (
             'window.startMetaOAuthFlow',
+            'window.openMetaOAuthIntro',
+            'window.continueMetaOAuthFlow',
             'window.openManualTokenModal',
             'window.migrateAccountFromDetails',
             'Миграция на OAuth',
@@ -261,6 +264,51 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertIn("function setupTodayDecisionCenter()", self.app_script)
         self.assertIn("window.switchTab(targetButton.dataset.todayTarget)", self.app_script)
 
+    def test_meta_connections_use_trust_flow_and_honest_progress(self):
+        for markup_contract in (
+            'id="connectionsFlowFeedback"',
+            'id="metaOAuthIntroSteps"',
+            'id="metaAssetsFlowSteps"',
+            'id="batchMetaFlowSteps"',
+            'id="batchProgressTrack"',
+            'data-meta-step="connect"',
+            'data-meta-step="select"',
+            'data-meta-step="verify"',
+            'data-meta-step="ready"',
+            'ads_read',
+            'business_management',
+            'ads_management',
+            'Buyerly не видит пароль и cookies Facebook',
+        ):
+            self.assertIn(markup_contract, self.index)
+
+        for script_contract in (
+            'function announceConnectionFeedback',
+            'function setActionBusy',
+            'function setMetaFlowState',
+            'function beginBatchProgress',
+            'function finishBatchProgress',
+            'function failBatchProgress',
+            "beginBatchProgress('oauth'",
+            "beginBatchProgress('manual'",
+        ):
+            self.assertIn(script_contract, self.script)
+
+        self.assertNotIn("style.width = '35%'", self.script)
+        self.assertNotIn("style.width = '30%'", self.script)
+        self.assertNotIn("batchProgressBar').style.width", self.script)
+
+        for style_contract in (
+            '.connections-trust-flow',
+            '.meta-flow-steps',
+            '.meta-sticky-actions',
+            '.progress-bar-container.is-indeterminate',
+            '.progress-bar-container.is-complete',
+            '@keyframes meta-progress-indeterminate',
+            '@media (prefers-reduced-motion: reduce)',
+        ):
+            self.assertIn(style_contract, self.styles)
+
     def test_connections_page_uses_responsive_workspace_layout(self):
         for markup_contract in (
             'class="connections-page-inner"',
@@ -370,7 +418,7 @@ class TestFrontendRuleContract(unittest.TestCase):
 
         modal_count = len(re.findall(r'class="modal-overlay(?:\s|\")', self.index))
         dialog_count = len(re.findall(r'class="[^"]*\bui-dialog\b', self.index))
-        self.assertEqual(modal_count, 22)
+        self.assertEqual(modal_count, 23)
         self.assertEqual(dialog_count, modal_count + 1)
         self.assertEqual(self.index.count('role="dialog" aria-modal="true"'), dialog_count)
         self.assertIn('class="quick-search-dialog ui-dialog"', self.index)

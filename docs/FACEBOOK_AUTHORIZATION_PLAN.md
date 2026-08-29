@@ -1,5 +1,11 @@
 # META-AUTH-001 — официальное подключение Facebook-профилей
 
+## Frontend trust-flow contract
+
+Основной интерфейс подключения следует последовательности `Подключение → Выбор кабинетов → Проверка доступа → Готово`. До запуска OAuth Buyerly объясняет ценность подключения, назначение `ads_read`, `business_management` и `ads_management`, а также явно сообщает, что пароль/cookies Facebook не передаются Buyerly и автоматизации не включаются автоматически.
+
+UI не имитирует прогресс: до завершения Meta/API запроса используется indeterminate loading, а завершённые шаги и итоговый результат показываются только после ответа сервера. Ошибки OAuth, discovery, refresh, validate, reconnect и import сохраняют контекст и дают пользователю повторить безопасное действие. Эти изменения не меняют существующие OAuth state, workspace binding, RBAC, encryption или import/migration invariants, описанные ниже.
+
 Статус: `OAuth production настроен; готов к первому app-role тесту`
 
 Приоритет: `P0`

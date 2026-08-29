@@ -196,6 +196,7 @@
       configured: false,
       connections: [],
       activeConnectionId: null,
+      pendingReconnectConnectionId: null,
       assets: [],
       selectedAccountIds: new Set(),
       callbackHandled: false
@@ -4431,7 +4432,12 @@
       renderFacebookAccounts();
 
       if (callback.status === 'connected' && callback.connectionId) {
-        await discoverMetaAssets(callback.connectionId);
+        announceConnectionFeedback('Facebook-профиль подключён. Теперь выберите кабинеты для добавления.', 'success');
+        try {
+          await discoverMetaAssets(callback.connectionId);
+        } catch (error) {
+          announceConnectionFeedback(error.message || 'Профиль подключён, но кабинеты пока не удалось получить.', 'error');
+        }
       }
     } catch (e) {
       if (state.workspaceEpoch !== epoch) return;
@@ -4570,9 +4576,9 @@
           </td>
           <td class="attio-td connections-col-actions">
             <div class="connection-row-actions">
-              <button class="btn btn-secondary btn-xs connection-row-action" onclick="window.validateMetaConnection(${conn.id})" title="Проверить статус токена"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
-              <button class="btn btn-secondary btn-xs connection-row-action connection-row-action-primary" onclick="window.reconnectMetaConnection(${conn.id})" title="Переподключить токен"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></button>
-              <button class="btn btn-secondary btn-xs connection-row-action" onclick="window.discoverMetaConnectionAssets(${conn.id})" title="Синхронизировать кабинеты"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
+              <button class="btn btn-secondary btn-xs connection-row-action" onclick="window.validateMetaConnection(${conn.id}, this)" title="Проверить статус токена"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
+              <button class="btn btn-secondary btn-xs connection-row-action connection-row-action-primary" onclick="window.reconnectMetaConnection(${conn.id}, this)" title="Переподключить токен"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></button>
+              <button class="btn btn-secondary btn-xs connection-row-action" onclick="window.discoverMetaConnectionAssets(${conn.id}, this)" title="Синхронизировать кабинеты"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg></button>
               <button class="btn btn-secondary btn-xs connection-row-action connection-row-action-danger" onclick="window.deleteMetaConnectionPrompt(${conn.id})" title="Удалить подключение"><svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
           </td>
@@ -4631,9 +4637,9 @@
               <div class="connections-mobile-detail"><span>Расход сегодня</span><strong>${escapeHtml(spendFormatted)}</strong></div>
             </div>
             <div class="connections-mobile-actions">
-              <button class="ui-button" type="button" onclick="window.validateMetaConnection(${connection.id})">Проверить токен</button>
-              <button class="ui-button" type="button" onclick="window.discoverMetaConnectionAssets(${connection.id})">Синхронизировать</button>
-              <button class="ui-button" type="button" onclick="window.reconnectMetaConnection(${connection.id})">Переподключить</button>
+              <button class="ui-button" type="button" onclick="window.validateMetaConnection(${connection.id}, this)">Проверить токен</button>
+              <button class="ui-button" type="button" onclick="window.discoverMetaConnectionAssets(${connection.id}, this)">Синхронизировать</button>
+              <button class="ui-button" type="button" onclick="window.reconnectMetaConnection(${connection.id}, this)">Переподключить</button>
               <button class="ui-button ui-button-danger" type="button" onclick="window.deleteMetaConnectionPrompt(${connection.id})">Удалить</button>
             </div>
           </article>
@@ -4647,51 +4653,84 @@
     renderFacebookAccounts();
   };
 
-  window.discoverMetaConnectionAssets = async function (connectionId) {
+  function setActionBusy(button, busy, busyLabel = 'Выполняем…') {
+    if (!button) return;
+    if (busy) {
+      button.dataset.originalContent = button.innerHTML;
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      if (button.textContent.trim()) button.textContent = busyLabel;
+      return;
+    }
+    if (button.dataset.originalContent) button.innerHTML = button.dataset.originalContent;
+    delete button.dataset.originalContent;
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+  }
+
+  function announceConnectionFeedback(message, tone = 'info') {
+    const feedback = document.getElementById('connectionsFlowFeedback');
+    if (!feedback) return;
+    feedback.textContent = message;
+    feedback.dataset.tone = tone;
+    feedback.classList.remove('hidden');
+  }
+
+  function setMetaFlowState(containerId, currentStep, completedSteps = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.querySelectorAll('[data-meta-step]').forEach(item => {
+      const step = item.dataset.metaStep;
+      item.classList.toggle('is-complete', completedSteps.includes(step));
+      item.classList.toggle('is-current', step === currentStep);
+      if (step === currentStep) item.setAttribute('aria-current', 'step');
+      else item.removeAttribute('aria-current');
+    });
+  }
+
+  window.discoverMetaConnectionAssets = async function (connectionId, triggerButton = null) {
+    setActionBusy(triggerButton, true, 'Обновляем…');
+    announceConnectionFeedback('Получаем актуальный список кабинетов из Meta…');
     try {
-      showLoading();
       await discoverMetaAssets(connectionId);
       showToast('Кабинеты синхронизированы', 'success');
+      announceConnectionFeedback('Список кабинетов обновлён. Выберите нужные для подключения.', 'success');
       await loadAccounts();
     } catch (e) {
       showToast(e.message || 'Ошибка синхронизации', 'error');
+      announceConnectionFeedback(e.message || 'Не удалось обновить кабинеты. Повторите попытку.', 'error');
     } finally {
-      hideLoading();
+      setActionBusy(triggerButton, false);
     }
   };
 
-  window.validateMetaConnection = async function (connectionId) {
+  window.validateMetaConnection = async function (connectionId, triggerButton = null) {
+    setActionBusy(triggerButton, true, 'Проверяем…');
+    announceConnectionFeedback('Проверяем актуальность доступа к Meta…');
     try {
-      showLoading();
       const res = await apiRequest(`/api/meta/connections/${connectionId}/validate`, { method: 'POST' });
       if (res.status === 'active') {
         const days = res.days_until_expiration != null ? ` (осталось ${res.days_until_expiration} дн.)` : '';
         showToast(`Токен валиден${days}`, 'success');
+        announceConnectionFeedback(`Доступ подтверждён${days}.`, 'success');
       } else if (res.status === 'expiring') {
         showToast(`Токен истекает через ${res.days_until_expiration} дн. Рекомендуется переподключить.`, 'warning');
+        announceConnectionFeedback(`Доступ работает, но истекает через ${res.days_until_expiration} дн.`, 'warning');
       } else {
         showToast(`Требуется внимание: ${res.last_error || res.status}`, 'error');
+        announceConnectionFeedback('Доступ требует внимания. Переподключите профиль и повторите проверку.', 'error');
       }
       await loadFacebookAccounts();
     } catch (err) {
       showToast(err.message || 'Ошибка проверки токена', 'error');
+      announceConnectionFeedback(err.message || 'Не удалось проверить доступ. Повторите попытку.', 'error');
     } finally {
-      hideLoading();
+      setActionBusy(triggerButton, false);
     }
   };
 
-  window.reconnectMetaConnection = async function (connectionId) {
-    try {
-      showLoading();
-      const slug = (typeof getWorkspaceSlug === 'function' ? getWorkspaceSlug() : '') || (state.activeWorkspace?.slug || '');
-      const returnPath = slug ? `/${slug}/facebook-accounts` : '/facebook-accounts';
-      const result = await apiRequest(`/api/meta/oauth/start?return_path=${encodeURIComponent(returnPath)}&reconnect_connection_id=${connectionId}`, { method: 'POST' });
-      window.location.assign(result.authorization_url);
-    } catch (err) {
-      showToast(err.message || 'Ошибка запуска переподключения', 'error');
-    } finally {
-      hideLoading();
-    }
+  window.reconnectMetaConnection = function (connectionId) {
+    window.openMetaOAuthIntro(connectionId);
   };
 
   window.deleteMetaConnectionPrompt = async function (connectionId) {
@@ -4708,20 +4747,50 @@
     }
   };
 
-  window.startMetaOAuthFlow = async function () {
-    const btns = document.querySelectorAll('button[onclick*="startMetaOAuthFlow"]');
-    btns.forEach(b => { b.disabled = true; });
+  window.openMetaOAuthIntro = function (reconnectConnectionId = null) {
+    state.metaOAuth.pendingReconnectConnectionId = reconnectConnectionId || null;
+    const title = document.getElementById('metaOAuthIntroTitle');
+    const description = document.getElementById('metaOAuthIntroDescription');
+    const error = document.getElementById('metaOAuthIntroError');
+    if (title) title.textContent = reconnectConnectionId ? 'Переподключить Facebook-профиль' : 'Подключить Facebook-профиль';
+    if (description) description.textContent = reconnectConnectionId
+      ? 'Повторный вход обновит доступ. Кабинеты, группы и правила останутся на месте.'
+      : 'Сначала объясним, что получит Buyerly и что останется под вашим контролем.';
+    if (error) {
+      error.textContent = '';
+      error.classList.add('hidden');
+    }
+    setMetaFlowState('metaOAuthIntroSteps', 'connect');
+    window.openModal('modalMetaOAuthIntro');
+  };
+
+  window.startMetaOAuthFlow = function () {
+    window.openMetaOAuthIntro();
+  };
+
+  window.continueMetaOAuthFlow = async function (triggerButton = null) {
+    const error = document.getElementById('metaOAuthIntroError');
+    setActionBusy(triggerButton, true, 'Открываем Facebook…');
+    if (error) error.classList.add('hidden');
     try {
-      showLoading();
       const slug = (typeof getWorkspaceSlug === 'function' ? getWorkspaceSlug() : '') || (state.activeWorkspace?.slug || '');
       const returnPath = slug ? `/${slug}/facebook-accounts` : '/facebook-accounts';
-      const result = await apiRequest(`/api/meta/oauth/start?return_path=${encodeURIComponent(returnPath)}`, { method: 'POST' });
+      const reconnectParam = state.metaOAuth.pendingReconnectConnectionId
+        ? `&reconnect_connection_id=${encodeURIComponent(state.metaOAuth.pendingReconnectConnectionId)}`
+        : '';
+      const result = await apiRequest(`/api/meta/oauth/start?return_path=${encodeURIComponent(returnPath)}${reconnectParam}`, { method: 'POST' });
       window.location.assign(result.authorization_url);
     } catch (err) {
-      showToast(err.message || 'Ошибка запуска авторизации Facebook', 'error');
-      btns.forEach(b => { b.disabled = false; });
+      const message = err.message || 'Не удалось открыть авторизацию Facebook. Повторите попытку.';
+      if (error) {
+        error.textContent = message;
+        error.classList.remove('hidden');
+      }
+      showToast(message, 'error');
+      announceConnectionFeedback(message, 'error');
+      setActionBusy(triggerButton, false);
     } finally {
-      hideLoading();
+      if (!document.hidden && !error?.classList.contains('hidden')) setActionBusy(triggerButton, false);
     }
   };
 
@@ -10728,6 +10797,7 @@
       };
       const item = messages[status] || ['Не удалось завершить подключение Meta.', 'error'];
       showToast(item[0], item[1]);
+      announceConnectionFeedback(item[0], item[1]);
       try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
     }
     return { status, connectionId };
@@ -10786,27 +10856,15 @@
     }
   }
 
-  document.getElementById('btnStartMetaOAuth')?.addEventListener('click', async () => {
-    const button = document.getElementById('btnStartMetaOAuth');
+  document.getElementById('btnStartMetaOAuth')?.addEventListener('click', () => {
     if (!state.metaOAuth.configured) return;
-    button.disabled = true;
-    button.querySelector('span').textContent = 'Открываем Facebook…';
-    try {
-      const slug = (typeof getWorkspaceSlug === 'function' ? getWorkspaceSlug() : '') || (state.activeWorkspace?.slug || '');
-      const returnPath = slug ? `/${slug}/facebook-accounts` : '/facebook-accounts';
-      const result = await apiRequest(`/api/meta/oauth/start?return_path=${encodeURIComponent(returnPath)}`, { method: 'POST' });
-      window.location.assign(result.authorization_url);
-    } catch (err) {
-      showToast(err.message, 'error');
-      button.disabled = false;
-      button.querySelector('span').textContent = 'Войти через Facebook';
-    }
+    window.openMetaOAuthIntro();
   });
 
   window.openMetaConnection = async function (connectionId) {
     const connection = state.metaOAuth.connections.find(item => item.id === connectionId);
     if (connection && connection.status !== 'active') {
-      document.getElementById('btnStartMetaOAuth')?.click();
+      window.openMetaOAuthIntro(connectionId);
       return;
     }
     await discoverMetaAssets(connectionId);
@@ -10815,6 +10873,7 @@
   async function discoverMetaAssets(connectionId) {
     state.metaOAuth.activeConnectionId = connectionId;
     state.metaOAuth.selectedAccountIds.clear();
+    setMetaFlowState('metaAssetsFlowSteps', 'select', ['connect']);
     window.openModal('modalMetaAssets');
     const groups = document.getElementById('metaAssetGroups');
     if (groups) groups.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Получаем доступные кабинеты из Meta…</p></div>';
@@ -10837,6 +10896,7 @@
       if (errTitle) errTitle.textContent = 'Не удалось получить кабинеты';
       if (errP) errP.textContent = err.message;
       showToast(err.message, 'error');
+      throw err;
     }
   }
 
@@ -10937,26 +10997,89 @@
     updateMetaSelection();
   });
 
-  document.getElementById('btnRefreshMetaAssets')?.addEventListener('click', () => {
-    if (state.metaOAuth.activeConnectionId) discoverMetaAssets(state.metaOAuth.activeConnectionId);
+  document.getElementById('btnRefreshMetaAssets')?.addEventListener('click', async event => {
+    if (!state.metaOAuth.activeConnectionId) return;
+    const button = event.currentTarget;
+    setActionBusy(button, true, 'Обновляем…');
+    announceConnectionFeedback('Получаем актуальный список кабинетов из Meta…');
+    try {
+      await discoverMetaAssets(state.metaOAuth.activeConnectionId);
+      announceConnectionFeedback('Список кабинетов обновлён.', 'success');
+    } catch (error) {
+      announceConnectionFeedback(error.message || 'Не удалось обновить список кабинетов.', 'error');
+    } finally {
+      setActionBusy(button, false);
+    }
   });
+
+  function beginBatchProgress(mode, message) {
+    const isOAuth = mode === 'oauth';
+    const title = document.getElementById('batchProgressTitle');
+    const subtitle = document.getElementById('batchProgressSubtitle');
+    const steps = document.getElementById('batchMetaFlowSteps');
+    const track = document.getElementById('batchProgressTrack');
+    if (title) title.textContent = isOAuth ? 'Проверяем доступ' : 'Проверяем кабинеты';
+    if (subtitle) subtitle.textContent = 'Buyerly подтвердит результат только после ответа Meta';
+    steps?.classList.toggle('hidden', !isOAuth);
+    if (isOAuth) setMetaFlowState('batchMetaFlowSteps', 'verify', ['connect', 'select']);
+    track?.classList.remove('is-complete', 'is-error');
+    track?.classList.add('is-indeterminate');
+    track?.removeAttribute('aria-valuenow');
+    track?.setAttribute('aria-valuetext', 'Ожидаем ответ Meta');
+    document.getElementById('batchProgressText').textContent = message;
+    document.getElementById('batchResultsList').innerHTML = '';
+    document.getElementById('btnBatchDone').classList.add('hidden');
+    document.getElementById('btnBatchDone').classList.toggle('btn-block', !isOAuth);
+    document.getElementById('btnBatchOpenRules').classList.add('hidden');
+    window.openModal('modalBatchProgress');
+  }
+
+  function finishBatchProgress(mode, successCount, totalCount, errorCount = 0) {
+    const isOAuth = mode === 'oauth';
+    const hasSuccess = successCount > 0;
+    const track = document.getElementById('batchProgressTrack');
+    track?.classList.remove('is-indeterminate', 'is-complete', 'is-error');
+    track?.classList.add(hasSuccess ? 'is-complete' : 'is-error');
+    track?.setAttribute('aria-valuenow', '100');
+    track?.setAttribute('aria-valuetext', hasSuccess ? 'Проверка завершена' : 'Проверка завершена без подключений');
+    if (isOAuth) {
+      if (hasSuccess) setMetaFlowState('batchMetaFlowSteps', 'ready', ['connect', 'select', 'verify', 'ready']);
+      else setMetaFlowState('batchMetaFlowSteps', 'verify', ['connect', 'select']);
+      const title = document.getElementById('batchProgressTitle');
+      const subtitle = document.getElementById('batchProgressSubtitle');
+      if (title) title.textContent = !hasSuccess
+        ? 'Кабинеты не подключены'
+        : errorCount ? 'Проверка завершена с замечаниями' : 'Кабинеты готовы';
+      if (subtitle) subtitle.textContent = !hasSuccess
+        ? 'Проверьте ошибки ниже и повторите действие после исправления доступа'
+        : errorCount
+          ? 'Успешные подключения сохранены, ошибки перечислены ниже'
+          : 'Доступ подтверждён, автоматизации остаются выключенными до вашей настройки';
+    }
+    document.getElementById('batchProgressText').textContent = `Подключено: ${successCount} из ${totalCount}`;
+  }
+
+  function failBatchProgress(message) {
+    const track = document.getElementById('batchProgressTrack');
+    track?.classList.remove('is-indeterminate', 'is-complete');
+    track?.classList.add('is-error');
+    track?.removeAttribute('aria-valuenow');
+    track?.setAttribute('aria-valuetext', 'Проверка завершилась ошибкой');
+    document.getElementById('batchProgressText').textContent = `Не удалось завершить проверку: ${message}`;
+    document.getElementById('btnBatchDone').classList.remove('hidden');
+  }
 
   document.getElementById('btnImportMetaAssets')?.addEventListener('click', async () => {
     const accountIds = Array.from(state.metaOAuth.selectedAccountIds);
     if (!accountIds.length || !state.metaOAuth.activeConnectionId) return;
-    window.openModal('modalBatchProgress');
-    document.getElementById('batchProgressBar').style.width = '35%';
-    document.getElementById('batchProgressText').textContent = `Проверяем и подключаем ${accountIds.length} кабинетов…`;
-    document.getElementById('batchResultsList').innerHTML = '';
-    document.getElementById('btnBatchDone').classList.add('hidden');
-    document.getElementById('btnBatchOpenRules').classList.add('hidden');
+    setMetaFlowState('metaAssetsFlowSteps', 'verify', ['connect', 'select']);
+    beginBatchProgress('oauth', `Проверяем доступ к ${accountIds.length} кабинетам через Meta API…`);
     try {
       const result = await apiRequest(`/api/meta/connections/${state.metaOAuth.activeConnectionId}/import`, {
         method: 'POST',
         body: JSON.stringify({ account_ids: accountIds })
       });
-      document.getElementById('batchProgressBar').style.width = '100%';
-      document.getElementById('batchProgressText').textContent = `Подключено: ${result.success_count} из ${accountIds.length}`;
+      finishBatchProgress('oauth', result.success_count, accountIds.length, (result.errors || []).length);
       const rows = [];
       (result.added || []).forEach(item => {
         if (item.migrated) {
@@ -10974,11 +11097,17 @@
       if (result.success_count > 0) document.getElementById('btnBatchOpenRules').classList.remove('hidden');
       state.metaOAuth.selectedAccountIds.clear();
       window.closeModal('modalMetaAssets');
+      announceConnectionFeedback(
+        result.success_count > 0
+          ? `Готово: подключено ${result.success_count} из ${accountIds.length} кабинетов.`
+          : 'Проверка завершена, но ни один кабинет не подключён. Откройте детали ошибок.',
+        result.success_count > 0 ? 'success' : 'error'
+      );
       await loadFacebookAccounts();
       await loadAccounts();
     } catch (err) {
-      document.getElementById('batchProgressText').textContent = `Ошибка: ${err.message}`;
-      document.getElementById('btnBatchDone').classList.remove('hidden');
+      failBatchProgress(err.message || 'Meta API не вернул результат');
+      announceConnectionFeedback(err.message || 'Не удалось подключить выбранные кабинеты.', 'error');
     }
   });
 
@@ -11085,13 +11214,8 @@
     }
 
     haptic('impact', 'heavy');
-    window.openModal('modalBatchProgress');
-    document.getElementById('batchProgressBar').style.width = '30%';
-    document.getElementById('batchProgressText').textContent = `Проверка ${state.parsedAccounts.length} кабинетов через Meta API...`;
-    document.getElementById('batchResultsList').innerHTML = '';
-    document.getElementById('btnBatchDone').classList.add('hidden');
+    beginBatchProgress('manual', `Проверяем ${state.parsedAccounts.length} кабинетов через Meta API…`);
     document.getElementById('btnBatchDone').classList.add('btn-block');
-    document.getElementById('btnBatchOpenRules').classList.add('hidden');
 
     try {
       const res = await apiRequest('/api/accounts/batch-add', {
@@ -11103,8 +11227,7 @@
         })
       });
 
-      document.getElementById('batchProgressBar').style.width = '100%';
-      document.getElementById('batchProgressText').textContent = `Успешно подключено: ${res.success_count} из ${state.parsedAccounts.length}`;
+      finishBatchProgress('manual', res.success_count, state.parsedAccounts.length, (res.errors || []).length);
       
       const resultsHtml = [];
       if (res.added) {
@@ -11141,8 +11264,7 @@
       rawInput.dispatchEvent(new Event('input'));
       document.getElementById('batchNameInput').value = '';
     } catch (err) {
-      document.getElementById('batchProgressText').textContent = `Ошибка: ${err.message}`;
-      document.getElementById('btnBatchDone').classList.remove('hidden');
+      failBatchProgress(err.message || 'Meta API не вернул результат');
     }
 
   });
