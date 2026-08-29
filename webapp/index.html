@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta property="og:image" content="/static/icons/og-image.png">
   <link rel="stylesheet" href="/static/css/styles.css?v=10.2.0">
-  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.1.0">
+  <link rel="stylesheet" href="/static/css/ui-system.css?v=12.2.0">
 </head>
 
 <body>
@@ -2192,7 +2192,7 @@
 
     <!-- Modal: Attio Create Rule Dialog ("Create Record") -->
     <div id="modalCreateRule" class="modal-overlay hidden" onclick="window.onCreateRuleOverlayClick(event)">
-      <div class="modal-card create-rule-card ui-dialog" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+      <div class="modal-card create-rule-card ui-dialog guided-rule-dialog" role="dialog" aria-modal="true" aria-labelledby="createRuleDialogTitle" onclick="event.stopPropagation()">
         
         <!-- Header with Back Button and Breadcrumbs -->
         <div class="create-rule-header">
@@ -2207,17 +2207,29 @@
                 <span class="crumb-icon">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                 </span>
-                <span class="crumb-title">Создать правило</span>
+                <span id="createRuleDialogTitle" class="crumb-title">Создать правило</span>
               </li>
             </ol>
           </div>
           <button class="btn-close" type="button" onclick="window.closeModal('modalCreateRule')" title="Закрыть (ESC)">&times;</button>
         </div>
 
+        <nav class="guided-rule-steps" aria-label="Шаги создания правила">
+          <button type="button" id="createRuleStepButton1" class="guided-rule-step is-current" data-rule-step-button="1" aria-current="step" onclick="window.goToRuleBuilderStep('create', 1)"><span class="guided-rule-step-index" aria-hidden="true">1</span><span><strong>Условия</strong><small>Когда сработать</small></span></button>
+          <button type="button" id="createRuleStepButton2" class="guided-rule-step" data-rule-step-button="2" onclick="window.goToRuleBuilderStep('create', 2)"><span class="guided-rule-step-index" aria-hidden="true">2</span><span><strong>Действие</strong><small>Что разрешено</small></span></button>
+          <button type="button" id="createRuleStepButton3" class="guided-rule-step" data-rule-step-button="3" onclick="window.goToRuleBuilderStep('create', 3)"><span class="guided-rule-step-index" aria-hidden="true">3</span><span><strong>Проверка</strong><small>Охват и лимиты</small></span></button>
+        </nav>
+
         <!-- Body with Form Fields -->
         <div class="create-rule-body">
           <div class="create-rule-form">
             
+            <div id="createRuleDraftBanner" class="guided-rule-draft hidden" role="status">
+              <span class="guided-rule-state-icon" aria-hidden="true">↻</span>
+              <div><strong>Черновик восстановлен</strong><span>Он сохранён только в этом браузере и воркспейсе.</span></div>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="window.discardCreateRuleDraft()">Начать заново</button>
+            </div>
+
             <!-- 1. Name Field -->
             <div class="attio-field-row">
               <div class="attio-field-label">
@@ -2247,7 +2259,8 @@
               </div>
               <div class="attio-field-input-wrap">
                 <select id="createRuleActionSelect" class="attio-field-select" onchange="window.onCreateRuleActionChange(this.value)">
-                  <option value="turn_off">Выключить адсет (STOP)</option>
+                  <option value="">Выберите действие — ничего не изменится</option>
+                  <option value="turn_off">Выключить группу объявлений (STOP)</option>
                   <option value="notify_only">Только прислать уведомление (NOTIFY)</option>
                   <option value="turn_on">Включить адсет (START)</option>
                   <option value="increase_budget">Увеличить дневной бюджет (+Budget)</option>
@@ -2265,7 +2278,7 @@
                 </div>
                 <div class="attio-budget-field" id="createRuleBudgetCeilingField">
                   <label for="createRuleBudgetCeilingInput">Потолок (в валюте кабинета/день)</label>
-                  <input type="number" id="createRuleBudgetCeilingInput" class="attio-field-input text-center" placeholder="Обязателен для увеличения" min="0" max="10000000" step="10" value="0">
+                  <input type="number" id="createRuleBudgetCeilingInput" class="attio-field-input text-center" placeholder="Обязателен для увеличения" min="0" max="10000000" step="10" value="">
                 </div>
               </div>
               <div class="attio-budget-hint">Потолок защищает от чрезмерного разгона бюджета. Все пороги считаются в валюте кабинета.</div>
@@ -2294,10 +2307,10 @@
 
             <!-- 5. Additional Settings (Collapsible / Compact) -->
             <div class="attio-more-settings">
-              <div class="attio-more-toggle" onclick="window.toggleCreateRuleMoreSettings()">
+              <button type="button" class="attio-more-toggle" aria-expanded="false" aria-controls="createRuleMoreBody" onclick="window.toggleCreateRuleMoreSettings()">
                 <span id="createRuleMoreArrow" class="attio-more-arrow">▸</span>
                 <span>Дополнительные параметры (Уведомления, Пауза)</span>
-              </div>
+              </button>
               <div id="createRuleMoreBody" class="attio-more-body hidden">
                 <div class="attio-field-row">
                   <div class="attio-field-label">
@@ -2305,8 +2318,8 @@
                   </div>
                   <div class="attio-field-input-wrap">
                     <select id="createRuleCooldownSelect" class="attio-field-select" onchange="window.onCreateRuleCooldownChange(this.value)">
-                      <option value="0">Без паузы (0 мин)</option>
                       <option value="15">15 минут</option>
+                      <option value="0">Без паузы (0 мин)</option>
                       <option value="30">30 минут</option>
                       <option value="60">1 час</option>
                       <option value="120">2 часа</option>
@@ -2340,9 +2353,12 @@
                 <span class="attio-summary-label">Предпросмотр правила:</span>
                 <button type="button" class="btn-link-action" onclick="window.useCreateRulePlainName()">Вставить в название</button>
               </div>
-              <div id="createRulePlainText" class="attio-summary-text">Настройте условия...</div>
+              <div class="guided-rule-if-then"><div><span>ЕСЛИ</span><p id="createRuleIfText">Настройте условия</p></div><div><span>ТО</span><p id="createRuleThenText">Выберите действие</p></div></div>
+              <div id="createRulePlainText" class="attio-summary-text sr-only">Настройте условия...</div>
               <div id="createRuleValidationErrors" class="attio-validation-box"></div>
             </div>
+
+            <div id="createRulePreflight" class="guided-rule-preflight" aria-live="polite"></div>
 
           </div>
         </div>
@@ -2353,10 +2369,11 @@
             <span>Отмена</span>
             <kbd>Esc</kbd>
           </button>
-          <button type="button" id="btnSubmitCreateRule" class="btn btn-primary" onclick="window.submitCreateRule()">
-            <span>Создать правило</span>
-            <kbd>Ctrl ↵</kbd>
-          </button>
+          <div class="guided-rule-footer-actions">
+            <button type="button" id="btnCreateRulePrevious" class="btn btn-secondary hidden" onclick="window.changeRuleBuilderStep('create', -1)">Назад</button>
+            <button type="button" id="btnCreateRuleNext" class="btn btn-primary" onclick="window.changeRuleBuilderStep('create', 1)">Продолжить</button>
+            <button type="button" id="btnSubmitCreateRule" class="btn btn-primary hidden" onclick="window.submitCreateRule()"><span>Создать шаблон</span><kbd>Ctrl ↵</kbd></button>
+          </div>
         </div>
 
       </div>
@@ -2364,18 +2381,24 @@
 
     <!-- Modal: Attio Edit Rule Modal / Popup ("Photo 2") -->
     <div id="modalEditRule" class="modal-overlay hidden" onclick="window.onEditRuleOverlayClick(event)">
-      <div class="modal-card create-rule-card ui-dialog" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+      <div class="modal-card create-rule-card ui-dialog guided-rule-dialog" role="dialog" aria-modal="true" aria-labelledby="editRuleDialogTitle" onclick="event.stopPropagation()">
         
         <!-- Header -->
         <div class="create-rule-header">
           <div class="create-rule-breadcrumb-wrap">
             <div class="edit-rule-header-title-block">
-              <span class="edit-rule-modal-title">Редактирование правила</span>
+              <span id="editRuleDialogTitle" class="edit-rule-modal-title">Редактирование правила</span>
               <span id="editRuleSubtitle" class="edit-rule-modal-sub">Настройка параметров и условий</span>
             </div>
           </div>
           <button class="btn-close" type="button" onclick="window.closeModal('modalEditRule')" title="Закрыть (ESC)">&times;</button>
         </div>
+
+        <nav class="guided-rule-steps" aria-label="Шаги редактирования правила">
+          <button type="button" id="editRuleStepButton1" class="guided-rule-step is-current" data-rule-step-button="1" aria-current="step" onclick="window.goToRuleBuilderStep('edit', 1)"><span class="guided-rule-step-index" aria-hidden="true">1</span><span><strong>Условия</strong><small>Когда сработать</small></span></button>
+          <button type="button" id="editRuleStepButton2" class="guided-rule-step" data-rule-step-button="2" onclick="window.goToRuleBuilderStep('edit', 2)"><span class="guided-rule-step-index" aria-hidden="true">2</span><span><strong>Действие</strong><small>Что разрешено</small></span></button>
+          <button type="button" id="editRuleStepButton3" class="guided-rule-step" data-rule-step-button="3" onclick="window.goToRuleBuilderStep('edit', 3)"><span class="guided-rule-step-index" aria-hidden="true">3</span><span><strong>Проверка</strong><small>Охват и лимиты</small></span></button>
+        </nav>
 
         <!-- Body with Form Fields -->
         <div class="create-rule-body">
@@ -2458,10 +2481,10 @@
 
             <!-- 5. Additional Settings -->
             <div class="attio-more-settings">
-              <div class="attio-more-toggle" onclick="window.toggleEditRuleMoreSettings()">
+              <button type="button" class="attio-more-toggle" aria-expanded="false" aria-controls="editRuleMoreBody" onclick="window.toggleEditRuleMoreSettings()">
                 <span id="editRuleMoreArrow" class="attio-more-arrow">▸</span>
                 <span>Дополнительные параметры (Уведомления, Пауза)</span>
-              </div>
+              </button>
               <div id="editRuleMoreBody" class="attio-more-body hidden">
                 <div class="attio-field-row">
                   <div class="attio-field-label">
@@ -2504,9 +2527,12 @@
                 <span class="attio-summary-label">Предпросмотр правила:</span>
                 <button type="button" class="btn-link-action" onclick="window.useEditRulePlainName()">Вставить в название</button>
               </div>
-              <div id="editRulePlainText" class="attio-summary-text">Настройте условия...</div>
+              <div class="guided-rule-if-then"><div><span>ЕСЛИ</span><p id="editRuleIfText">Настройте условия</p></div><div><span>ТО</span><p id="editRuleThenText">Выберите действие</p></div></div>
+              <div id="editRulePlainText" class="attio-summary-text sr-only">Настройте условия...</div>
               <div id="editRuleValidationErrors" class="attio-validation-box"></div>
             </div>
+
+            <div id="editRulePreflight" class="guided-rule-preflight" aria-live="polite"></div>
 
           </div>
         </div>
@@ -2517,10 +2543,11 @@
             <span>Отмена</span>
             <kbd>Esc</kbd>
           </button>
-          <button type="button" id="btnSubmitEditRule" class="btn btn-primary" onclick="window.submitEditRule()">
-            <span>Завершить редактирование</span>
-            <kbd>Ctrl ↵</kbd>
-          </button>
+          <div class="guided-rule-footer-actions">
+            <button type="button" id="btnEditRulePrevious" class="btn btn-secondary hidden" onclick="window.changeRuleBuilderStep('edit', -1)">Назад</button>
+            <button type="button" id="btnEditRuleNext" class="btn btn-primary" onclick="window.changeRuleBuilderStep('edit', 1)">Продолжить</button>
+            <button type="button" id="btnSubmitEditRule" class="btn btn-primary hidden" onclick="window.submitEditRule()"><span>Сохранить изменения</span><kbd>Ctrl ↵</kbd></button>
+          </div>
         </div>
 
       </div>
@@ -3244,10 +3271,10 @@
 
   <!-- App Script -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="/static/js/browser-preferences.js?v=10.3.0"></script>
-  <script src="/static/js/workspace-slugs.js?v=10.3.0"></script>
-  <script src="/static/js/security.js?v=10.3.0"></script>
-  <script src="/static/js/i18n.js?v=10.3.0"></script>
-  <script src="/static/js/app.js?v=10.3.0"></script>
+  <script src="/static/js/browser-preferences.js?v=10.4.0"></script>
+  <script src="/static/js/workspace-slugs.js?v=10.4.0"></script>
+  <script src="/static/js/security.js?v=10.4.0"></script>
+  <script src="/static/js/i18n.js?v=10.4.0"></script>
+  <script src="/static/js/app.js?v=10.4.0"></script>
 </body>
 </html>

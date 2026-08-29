@@ -94,6 +94,18 @@ ClickUp: BL-101 `86eyr6073`
 - lane headers используют компактные semantic bands, а rule cards получают left rail по фактическому типу действия: stop, start/increase, decrease или notify;
 - существующие rule groups, detail, modal и API contracts сохранены.
 
+#### Guided Rule Builder
+
+- create и edit используют одну трёхшаговую модель `Условия → Действие → Проверка`, сохраняя существующие DOM ids, handlers и payload;
+- шаг отображает только реальное состояние навигации и валидации: никаких процентов, таймеров или fake progress;
+- новый шаблон не получает action и threshold автоматически; опасное действие требует явного выбора;
+- дополнительные ограничения и уведомления раскрываются по запросу, но обязательные guardrails остаются в основном потоке;
+- review всегда содержит human-readable `ЕСЛИ / ТО` и preflight: workspace, объекты, текущий охват кабинетов, частоту проверки, cooldown, логику и action-specific limits;
+- создание шаблона не означает назначение кабинета: это явно написано в preflight, а новое назначение остаётся отдельным существующим действием;
+- безопасный create draft хранит только non-secret form values, версионируется, валидируется и изолируется ключом workspace; edit draft не восстанавливается из-за риска stale overwrite;
+- состояние шага, готовность, warning и восстановленный draft обозначаются текстом/символом вместе с цветом;
+- на `390px` condition row складывается в одну колонку, footer actions переносятся, dialog не создаёт horizontal overflow.
+
 ### Efficiency
 
 - selector: `[data-ui-pilot="efficiency"]`;

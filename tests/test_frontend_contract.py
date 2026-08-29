@@ -800,6 +800,45 @@ class TestFrontendRuleContract(unittest.TestCase):
         ):
             self.assertIn(style_contract, self.styles)
 
+    def test_guided_rule_builder_is_safe_scoped_and_responsive(self):
+        for contract in (
+            'id="createRuleStepButton1"',
+            'id="createRuleStepButton2"',
+            'id="createRuleStepButton3"',
+            'id="editRuleStepButton1"',
+            'id="editRuleStepButton2"',
+            'id="editRuleStepButton3"',
+            'id="createRuleIfText"',
+            'id="createRuleThenText"',
+            'id="createRulePreflight"',
+            'id="editRulePreflight"',
+            'Выберите действие — ничего не изменится',
+            "if (actionSelect) actionSelect.value = '';",
+            "window.addCreateRuleConditionRow('spend', 'gte', '', 'today')",
+            'buyerly_guided_rule_draft_v1_',
+            'state.activeWorkspace?.id || state.activeWorkspace?.slug',
+            'isValidCreateRuleDraft',
+            'resetBrowserPreference(getCreateRuleDraftKey())',
+            'account.active_rules || []',
+            'Каждые 5 минут',
+            'Группы объявлений (ad sets)',
+            'шаблон ещё никуда не назначен',
+        ):
+            self.assertIn(contract, self.index + self.script)
+
+        for style_contract in (
+            '.guided-rule-steps',
+            '.guided-rule-if-then',
+            '.guided-rule-preflight-status',
+            '.guided-rule-facts',
+            '.guided-rule-dialog .attio-cond-row',
+            '@media (max-width: 480px)',
+        ):
+            self.assertIn(style_contract, self.ui_system)
+
+        self.assertNotIn('/api/rule-drafts', self.script)
+        self.assertNotIn('/api/drafts', self.script)
+
     def test_account_cards_separate_meta_automation_and_rule_state(self):
         for contract in (
             'id="modalAccountDetails"',
