@@ -89,9 +89,13 @@ ClickUp: BL-101 `86eyr6073`
 ### Automations
 
 - selector: `[data-ui-pilot="automations"]`;
-- shared page header, primary Button и EmptyState;
+- shared page header, primary Button, search/action filters и result count;
+- загрузка, ошибка с повтором, отсутствие правил и отсутствие результатов фильтра — четыре отдельные, текстово различимые состояния;
 - Kanban wrapper и lanes прозрачные: единственная самостоятельная surface в рабочей области — rule card;
 - lane headers используют компактные semantic bands, а rule cards получают left rail по фактическому типу действия: stop, start/increase, decrease или notify;
+- card open target, выбор карточки, настройки группы и chooser rows доступны с клавиатуры и имеют accessible name;
+- длинные названия переносятся внутри card/record geometry, не вытесняя action badge и controls;
+- до `768px` kanban становится вертикальным списком групп без горизонтальной прокрутки страницы; detail screen также складывает sidebar и content в одну колонку;
 - существующие rule groups, detail, modal и API contracts сохранены.
 
 #### Guided Rule Builder
@@ -99,12 +103,15 @@ ClickUp: BL-101 `86eyr6073`
 - create и edit используют одну трёхшаговую модель `Условия → Действие → Проверка`, сохраняя существующие DOM ids, handlers и payload;
 - шаг отображает только реальное состояние навигации и валидации: никаких процентов, таймеров или fake progress;
 - новый шаблон не получает action и threshold автоматически; опасное действие требует явного выбора;
+- STOP, START и изменение бюджета требуют отдельного контекстного подтверждения перед create/edit mutation;
+- submit показывает busy-state, блокирует повторную отправку и сохраняет доступную validation/error обратную связь;
 - дополнительные ограничения и уведомления раскрываются по запросу, но обязательные guardrails остаются в основном потоке;
 - review всегда содержит human-readable `ЕСЛИ / ТО` и preflight: workspace, объекты, текущий охват кабинетов, частоту проверки, cooldown, логику и action-specific limits;
 - создание шаблона не означает назначение кабинета: это явно написано в preflight, а новое назначение остаётся отдельным существующим действием;
 - безопасный create draft хранит только non-secret form values, версионируется, валидируется и изолируется ключом workspace; edit draft не восстанавливается из-за риска stale overwrite;
 - состояние шага, готовность, warning и восстановленный draft обозначаются текстом/символом вместе с цветом;
 - на `390px` condition row складывается в одну колонку, footer actions переносятся, dialog не создаёт horizontal overflow.
+- modal focus остаётся внутри открытого dialog и возвращается к вызвавшему control после закрытия.
 
 ### Efficiency
 
@@ -140,6 +147,7 @@ ClickUp: BL-101 `86eyr6073`
 ## Responsive contract
 
 - `390px`: шесть mobile destinations помещаются без горизонтального scroll; длинные desktop-названия сокращены до `Сводка`, `Правила` и `Связи`;
+- `390–768px`: Automations summary остаётся компактным, группы правил выстраиваются вертикально, а record view не сохраняет desktop two-column width;
 - `390px`: Today сохраняет live status, складывает operations surface и context links в одну колонку, а primary next action занимает полную ширину;
 - `390–480px`: KPI используют две колонки, а главный Spend занимает всю строку; при ширине до `360px` сетка безопасно складывается в одну колонку;
 - `768px`: sidebar уступает место mobile navigation, data surfaces не создают document-level horizontal overflow;

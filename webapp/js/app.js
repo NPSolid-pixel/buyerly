@@ -170,6 +170,13 @@
     summaryViewLoaded: false,
     presets: [],
     ruleGroups: [],
+    rulesViewStatus: 'idle',
+    rulesViewError: '',
+    rulesSearchQuery: '',
+    rulesActionFilter: 'all',
+    rulesBulkDeleting: false,
+    createRuleSubmitting: false,
+    editRuleSubmitting: false,
     collapsedRuleGroups: new Set(readBrowserPreference('buyerly_collapsed_rule_groups', [], {
       json: true,
       validate: isIdArray
@@ -801,6 +808,11 @@
     state.fbConnections = [];
     state.presets = [];
     state.ruleGroups = [];
+    state.rulesViewStatus = 'idle';
+    state.rulesViewError = '';
+    state.rulesSearchQuery = '';
+    state.rulesActionFilter = 'all';
+    state.selectedRuleIds.clear();
     state.auditEvents = [];
     state.todayAuditEvents = [];
     state.todayLoadVersion = (state.todayLoadVersion || 0) + 1;
@@ -2017,6 +2029,7 @@
         if (listEl && state.activeTab === 'accounts') {
           listEl.innerHTML = `<div class="empty-state"><p class="text-danger">${escapeHtml(err.message)}</p></div>`;
         }
+        return false;
       } finally {
         if (state.workspaceEpoch === epoch) {
           loadAccountsInFlightPromise = null;
@@ -5320,16 +5333,59 @@
   let draggedRuleInfo = null;
 
   async function loadRulesTab() {
-    await Promise.all([loadPresets(), loadRuleGroups(), loadAccounts()]);
+    const epoch = state.workspaceEpoch || 0;
+    state.rulesViewStatus = 'loading';
+    state.rulesViewError = '';
+    renderRulesTab();
+
+    const [presetsResult, groupsResult, accountsResult] = await Promise.all([
+      loadPresets(),
+      loadRuleGroups(),
+      loadAccounts()
+    ]);
+    if (state.workspaceEpoch !== epoch) return;
+
+    const failed = [presetsResult, groupsResult, accountsResult].some(result => result === false);
+    state.rulesViewStatus = failed ? 'error' : 'ready';
+    state.rulesViewError = failed
+      ? 'Не удалось получить часть данных. Ничего не изменено — повторите загрузку.'
+      : '';
     renderRulesTab();
   }
+
+  window.retryRulesTab = function () {
+    if (state.rulesViewStatus === 'loading') return;
+    loadRulesTab();
+  };
 
   window.onRulesFilterChange = function () {
     const searchInput = document.getElementById('rulesSearchInput');
     const actionFilter = document.getElementById('rulesActionFilter');
     state.rulesSearchQuery = (searchInput?.value || '').toLowerCase().trim();
     state.rulesActionFilter = actionFilter?.value || 'all';
+    document.getElementById('rulesSearchClear')?.classList.toggle('hidden', !state.rulesSearchQuery);
     renderRulesTab();
+  };
+
+  window.clearRulesSearch = function () {
+    const input = document.getElementById('rulesSearchInput');
+    if (input) input.value = '';
+    state.rulesSearchQuery = '';
+    document.getElementById('rulesSearchClear')?.classList.add('hidden');
+    renderRulesTab();
+    input?.focus();
+  };
+
+  window.resetRulesFilters = function () {
+    const input = document.getElementById('rulesSearchInput');
+    const actionFilter = document.getElementById('rulesActionFilter');
+    if (input) input.value = '';
+    if (actionFilter) actionFilter.value = 'all';
+    state.rulesSearchQuery = '';
+    state.rulesActionFilter = 'all';
+    document.getElementById('rulesSearchClear')?.classList.add('hidden');
+    renderRulesTab();
+    input?.focus();
   };
 
   function isPresetMatchingFilter(preset) {
@@ -5384,24 +5440,25 @@
       : '';
 
     const isSelected = state.selectedRuleIds && state.selectedRuleIds.has(p.id);
+    const accessibleName = `Открыть правило «${p.name}». Действие: ${act.label}. ${condList.length} условий.`;
 
     return `
-      <div class="rules-kanban-card rule-card ${isSelected ? 'selected' : ''}"
+      <article class="rules-kanban-card rule-card ${isSelected ? 'selected' : ''}"
            draggable="true"
            data-preset-id="${p.id}"
            data-group-id="${groupId !== null ? groupId : ''}"
            ondragstart="window.onRuleDragStart(event, ${p.id}, ${groupId !== null ? groupId : 'null'})"
-           ondragend="window.onRuleDragEnd(event)"
-           onclick="window.openRuleRecordPage(${p.id})">
+           ondragend="window.onRuleDragEnd(event)">
+        <button type="button" class="rule-card-open-target" aria-label="${escapeHtml(accessibleName)}" onclick="window.openRuleRecordPage(${p.id})"></button>
         <div class="rule-card-top">
           <div class="rule-card-top-left">
-            <span class="rule-card-checkbox ${isSelected ? 'selected' : ''}" onclick="event.stopPropagation(); window.toggleSelectRule(${p.id})" title="Выбрать правило">
+            <button type="button" class="rule-card-checkbox ${isSelected ? 'selected' : ''}" aria-pressed="${isSelected}" aria-label="${isSelected ? 'Снять выбор' : 'Выбрать'}: ${escapeHtml(p.name)}" onclick="event.stopPropagation(); window.toggleSelectRule(${p.id})" title="${isSelected ? 'Снять выбор' : 'Выбрать правило'}">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </span>
+            </button>
             <span class="rule-card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
           </div>
           <div class="rule-card-top-right">
-            <span class="rule-action-badge ${act.class}">${act.label}${stepInfo}</span>
+            <span class="rule-action-badge ${act.class}" aria-label="Действие: ${escapeHtml(act.label + stepInfo)}">${act.label}${stepInfo}</span>
           </div>
         </div>
         
@@ -5418,7 +5475,7 @@
             </span>
           </div>
         </div>
-      </div>
+      </article>
     `;
   }
 
@@ -5444,6 +5501,15 @@
     const countEl = document.getElementById('rulesBulkCount');
     const count = state.selectedRuleIds ? state.selectedRuleIds.size : 0;
     if (!bar) return;
+    const moveButton = document.getElementById('btnBulkMoveRules');
+    const deleteButton = document.getElementById('btnBulkDeleteRules');
+    if (moveButton) moveButton.disabled = state.rulesBulkDeleting;
+    if (deleteButton) {
+      deleteButton.disabled = state.rulesBulkDeleting;
+      deleteButton.setAttribute('aria-busy', String(state.rulesBulkDeleting));
+      const label = deleteButton.querySelector('span');
+      if (label) label.textContent = state.rulesBulkDeleting ? 'Удаляем…' : 'Удалить';
+    }
     if (count > 0) {
       if (countEl) countEl.textContent = count;
       bar.classList.remove('hidden');
@@ -5453,11 +5519,14 @@
   }
 
   window.bulkDeleteSelectedRules = async function() {
+    if (state.rulesBulkDeleting) return;
     const count = state.selectedRuleIds ? state.selectedRuleIds.size : 0;
     if (count === 0) return;
     if (!confirm(`Удалить выбранные правила (${count} шт.)?`)) return;
 
     const idsToDelete = [...state.selectedRuleIds];
+    state.rulesBulkDeleting = true;
+    updateRulesBulkActionsBar();
     showGlobalLoading(`Удаление правил (${count})...`);
     try {
       const results = await Promise.allSettled(
@@ -5483,6 +5552,8 @@
     } catch (err) {
       showToast(`Ошибка удаления: ${err.message}`, 'error');
     } finally {
+      state.rulesBulkDeleting = false;
+      updateRulesBulkActionsBar();
       hideGlobalLoading();
     }
   };
@@ -5814,7 +5885,17 @@
 
   function renderRulesTab() {
     const boardContainer = document.getElementById('ruleGroupsContainer');
+    const boardWrapper = boardContainer?.closest('.rules-board-wrapper');
     const emptyEl = document.getElementById('rulesEmptyState');
+    const filteredEmptyEl = document.getElementById('rulesFilteredEmptyState');
+    const loadingEl = document.getElementById('rulesLoadingState');
+    const errorEl = document.getElementById('rulesErrorState');
+    const errorMessageEl = document.getElementById('rulesErrorMessage');
+    const resultCountEl = document.getElementById('rulesResultCount');
+    const retryButton = document.getElementById('btnRetryRules');
+    const addRuleButton = document.getElementById('btnAddRuleMain');
+    const searchInput = document.getElementById('rulesSearchInput');
+    const actionFilter = document.getElementById('rulesActionFilter');
     const activeCountEl = document.getElementById('rulesActiveCount');
     const groupsCountEl = document.getElementById('rulesGroupsCount');
     const linkedCountEl = document.getElementById('rulesLinkedAccsCount');
@@ -5822,7 +5903,34 @@
 
     updateRulesBulkActionsBar();
 
+    const status = state.rulesViewStatus || 'idle';
+    const isLoading = status === 'loading' || status === 'idle';
+    const hasError = status === 'error';
+    loadingEl?.classList.toggle('hidden', !isLoading);
+    errorEl?.classList.toggle('hidden', !hasError);
+    if (errorMessageEl && hasError) errorMessageEl.textContent = state.rulesViewError || 'Проверьте соединение и попробуйте ещё раз.';
+    if (retryButton) retryButton.disabled = isLoading;
+    if (addRuleButton) addRuleButton.disabled = isLoading || hasError;
+    if (searchInput) searchInput.disabled = isLoading || hasError;
+    if (actionFilter) actionFilter.disabled = isLoading || hasError;
+    if (boardWrapper) {
+      boardWrapper.classList.toggle('hidden', isLoading || hasError);
+      boardWrapper.setAttribute('aria-busy', String(isLoading));
+    }
+    emptyEl.classList.add('hidden');
+    filteredEmptyEl?.classList.add('hidden');
+
+    if (isLoading || hasError) {
+      boardContainer.innerHTML = '';
+      if (activeCountEl) activeCountEl.textContent = '—';
+      if (groupsCountEl) groupsCountEl.textContent = '—';
+      if (linkedCountEl) linkedCountEl.textContent = '—';
+      if (resultCountEl) resultCountEl.textContent = isLoading ? 'Загрузка…' : 'Данные недоступны';
+      return;
+    }
+
     const totalPresets = state.presets.length;
+    const matchingPresets = state.presets.filter(isPresetMatchingFilter);
     let linkedAccountsCount = 0;
     state.accounts.forEach(a => {
       if (a.rules_enabled && a.active_rules && a.active_rules.length > 0) {
@@ -5833,14 +5941,30 @@
     if (activeCountEl) activeCountEl.textContent = totalPresets;
     if (groupsCountEl) groupsCountEl.textContent = state.ruleGroups.length;
     if (linkedCountEl) linkedCountEl.textContent = linkedAccountsCount;
+    if (resultCountEl) {
+      const countMod100 = matchingPresets.length % 100;
+      const countMod10 = matchingPresets.length % 10;
+      const noun = countMod100 >= 11 && countMod100 <= 14
+        ? 'правил'
+        : countMod10 === 1 ? 'правило' : countMod10 >= 2 && countMod10 <= 4 ? 'правила' : 'правил';
+      resultCountEl.textContent = `${matchingPresets.length} ${noun}`;
+    }
 
     if (totalPresets === 0 && state.ruleGroups.length === 0) {
       boardContainer.innerHTML = '';
+      boardWrapper?.classList.add('hidden');
       emptyEl.classList.remove('hidden');
       return;
     }
 
-    emptyEl.classList.add('hidden');
+    if (totalPresets > 0 && matchingPresets.length === 0) {
+      boardContainer.innerHTML = '';
+      boardWrapper?.classList.add('hidden');
+      filteredEmptyEl?.classList.remove('hidden');
+      return;
+    }
+
+    boardWrapper?.classList.remove('hidden');
 
     const defaultDotColors = ['dot-purple', 'dot-blue', 'dot-emerald', 'dot-amber', 'dot-orange', 'dot-cyan', 'dot-magenta', 'dot-rose', 'dot-lime', 'dot-yellow', 'dot-red', 'dot-gray'];
     const allGroupedPresetIds = new Set();
@@ -5865,7 +5989,7 @@
               <span class="rules-column-count">${ungroupedPresets.length}</span>
             </div>
             <div class="rules-column-actions">
-              <button class="rules-column-btn" title="Добавить правило" onclick="window.openChooseRuleModal(null)">
+              <button class="rules-column-btn" type="button" aria-label="Добавить правило без группы" title="Добавить правило" onclick="window.openChooseRuleModal(null)">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
             </div>
@@ -5896,10 +6020,15 @@
         return `
           <div class="rules-column collapsed"
                data-group-id="${group.id}"
+               role="button"
+               tabindex="0"
+               aria-expanded="false"
+               aria-label="Развернуть группу «${escapeHtml(group.name)}», правил: ${presetsInGroup.length}"
                ondragover="window.onRuleGroupColumnDragOver(event, ${group.id})"
                ondragenter="window.onRuleGroupColumnDragEnter(event, ${group.id})"
                ondragleave="window.onRuleGroupColumnDragLeave(event, ${group.id})"
                ondrop="window.onRuleGroupColumnDrop(event, ${group.id})"
+               onkeydown="window.onCollapsedRuleGroupKeydown(event, ${group.id})"
                onclick="window.toggleGroupCollapse(${group.id})"
                title="Нажмите, чтобы развернуть колонку">
             <div class="rules-column-collapsed-strip"
@@ -5927,17 +6056,18 @@
                draggable="true"
                ondragstart="window.onRuleGroupColumnDragStart(event, ${group.id})"
                ondragend="window.onRuleGroupColumnDragEnd(event)">
-            <div class="rules-column-title-wrap" onclick="window.openGroupMenuPopover(event, ${group.id})" title="Настройки группы" draggable="false">
+            <button type="button" class="rules-column-title-wrap" aria-label="Настройки группы «${escapeHtml(group.name)}»" onclick="window.openGroupMenuPopover(event, ${group.id})" title="Настройки группы" draggable="false">
               <span class="rules-column-dot ${dotColor}"></span>
               <span class="rules-column-title" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
               <span class="rules-column-count">${presetsInGroup.length}</span>
-            </div>
+            </button>
             <div class="rules-column-actions" draggable="false">
-              <button class="rules-column-btn" title="Добавить правило в группу" onclick="window.openChooseRuleModal(${group.id})">
+              <button class="rules-column-btn" type="button" aria-label="Добавить правило в группу «${escapeHtml(group.name)}»" title="Добавить правило в группу" onclick="window.openChooseRuleModal(${group.id})">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
               <button class="rules-column-drag-handle"
                       type="button"
+                      aria-label="Переместить группу «${escapeHtml(group.name)}»"
                       title="Переместить группу"
                       draggable="true"
                       ondragstart="window.onRuleGroupColumnDragStart(event, ${group.id})"
@@ -5982,6 +6112,12 @@
     }
     writeBrowserPreference('buyerly_collapsed_rule_groups', [...state.collapsedRuleGroups], { json: true });
     renderRulesTab();
+  };
+
+  window.onCollapsedRuleGroupKeydown = function (event, groupId) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    window.toggleGroupCollapse(groupId);
   };
 
   // Group Menu Popover Logic
@@ -6185,11 +6321,18 @@
 
   window.submitNewColumnFromPopover = async function () {
     const input = document.getElementById('newColumnPopoverNameInput');
+    const button = document.getElementById('btnSubmitNewRuleGroup');
+    if (button?.disabled) return;
     const name = input?.value.trim();
     if (!name) {
       showToast('Введите название группы', 'error');
       input?.focus();
       return;
+    }
+    if (button) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      button.textContent = 'Создаём…';
     }
     try {
       const created = await apiRequest('/api/rule-groups', {
@@ -6206,6 +6349,12 @@
       renderRulesTab();
     } catch (e) {
       showToast(`Ошибка создания группы: ${e.message}`, 'error');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.setAttribute('aria-busy', 'false');
+        button.textContent = 'Создать группу ↵';
+      }
     }
   };
 
@@ -6240,6 +6389,7 @@
 
   window.renderChooseRuleList = function (query = '') {
     const container = document.getElementById('chooseRuleList');
+    const confirmButton = document.getElementById('btnConfirmChooseRule');
     if (!container) return;
 
     const q = (query || '').toLowerCase().trim();
@@ -6263,6 +6413,7 @@
     };
 
     if (state.chooseRuleFilteredList.length === 0) {
+      if (confirmButton) confirmButton.disabled = true;
       container.innerHTML = `
         <div class="modal-list-empty">
           Правил не найдено. Нажмите «Создать новое правило» ниже.
@@ -6270,6 +6421,8 @@
       `;
       return;
     }
+
+    if (confirmButton) confirmButton.disabled = false;
 
     container.innerHTML = state.chooseRuleFilteredList.map((preset, idx) => {
       const act = actionBadgeMap[preset.action] || { label: preset.action, class: '' };
@@ -6280,7 +6433,7 @@
       const subInfo = groupNames ? `Группа: ${escapeHtml(groupNames)}` : 'Без группы';
 
       return `
-        <div class="choose-rule-item ${isSelected ? 'selected' : ''}" data-index="${idx}" onclick="window.selectAndConfirmRule(${preset.id})">
+        <button type="button" class="choose-rule-item ${isSelected ? 'selected' : ''}" role="listitem" data-index="${idx}" aria-label="Выбрать правило «${escapeHtml(preset.name)}»" onclick="window.selectAndConfirmRule(${preset.id})">
           <div class="choose-rule-item-left">
             <div class="choose-rule-item-icon">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
@@ -6293,7 +6446,7 @@
           <div class="choose-rule-item-right">
             <span class="rule-action-badge ${act.class}">${act.label}</span>
           </div>
-        </div>
+        </button>
       `;
     }).join('');
   };
@@ -6357,7 +6510,34 @@
   const GUIDED_RULE_OPERATORS = new Set(['gt', 'gte', 'lt', 'lte', 'eq']);
   const GUIDED_RULE_WINDOWS = new Set(['today', 'yesterday', 'last_3d', 'last_7d']);
   const GUIDED_RULE_ACTION_KEYS = new Set(Object.keys(GUIDED_RULE_ACTIONS));
+  const CONFIRMED_RULE_ACTIONS = new Set(['turn_off', 'turn_on', 'increase_budget', 'decrease_budget']);
   let createRuleDraftSaveTimer = null;
+
+  function setRuleSubmitState(mode, submitting) {
+    const isEdit = mode === 'edit';
+    const stateKey = isEdit ? 'editRuleSubmitting' : 'createRuleSubmitting';
+    const button = document.getElementById(isEdit ? 'btnSubmitEditRule' : 'btnSubmitCreateRule');
+    state[stateKey] = submitting;
+    if (!button) return;
+    button.disabled = submitting;
+    button.setAttribute('aria-busy', String(submitting));
+    const label = button.querySelector('span');
+    if (label) label.textContent = submitting ? (isEdit ? 'Сохраняем…' : 'Создаём…') : (isEdit ? 'Сохранить изменения' : 'Создать шаблон');
+  }
+
+  function confirmRuleMutation(mode, action, ruleName, presetId = null) {
+    if (!CONFIRMED_RULE_ACTIONS.has(action)) return true;
+    const actionLabel = GUIDED_RULE_ACTIONS[action] || action;
+    if (mode === 'create') {
+      return window.confirm(`Создать правило «${ruleName}» с действием «${actionLabel}»? Шаблон не запустится, пока вы отдельно не назначите его кабинету.`);
+    }
+    const linkedCount = (state.accounts || []).filter(account => (account.active_rules || [])
+      .some(rule => Number(rule.preset_id) === Number(presetId))).length;
+    const reach = linkedCount > 0
+      ? `Изменение затронет конфигурацию правила. Назначено кабинетам: ${linkedCount}.`
+      : 'Сейчас правило не назначено кабинетам.';
+    return window.confirm(`Сохранить действие «${actionLabel}» для правила «${ruleName}»? ${reach}`);
+  }
 
   function guidedRulePrefix(mode) {
     return mode === 'edit' ? 'editRule' : 'createRule';
@@ -6585,10 +6765,15 @@
     }
     const preflight = document.getElementById(`${prefix}Preflight`);
     if (!preflight) return;
+    const needsConfirmation = CONFIRMED_RULE_ACTIONS.has(validation.action);
+    const hasWarning = validation.all.length > 0 || needsConfirmation;
+    const statusTitle = validation.all.length
+      ? 'Нужна проверка'
+      : needsConfirmation ? 'Потребуется подтверждение' : 'Конфигурация готова';
     preflight.innerHTML = `
-      <div class="guided-rule-preflight-status ${validation.all.length ? 'has-warning' : 'is-ready'}">
-        <span class="guided-rule-state-icon" aria-hidden="true">${validation.all.length ? '!' : '✓'}</span>
-        <div><strong>${validation.all.length ? 'Нужна проверка' : 'Конфигурация готова'}</strong><span>${escapeHtml(scopeText)}</span></div>
+      <div class="guided-rule-preflight-status ${hasWarning ? 'has-warning' : 'is-ready'}">
+        <span class="guided-rule-state-icon" aria-hidden="true">${hasWarning ? '!' : '✓'}</span>
+        <div><strong>${statusTitle}</strong><span>${escapeHtml(scopeText)}${needsConfirmation ? ' Опасное действие нужно подтвердить перед сохранением.' : ''}</span></div>
       </div>
       <dl class="guided-rule-facts">
         <div><dt>Контекст</dt><dd>${escapeHtml(workspaceName)}</dd></div>
@@ -6624,7 +6809,7 @@
     previous?.classList.toggle('hidden', step === 1);
     next?.classList.toggle('hidden', step === 3);
     submit?.classList.toggle('hidden', step !== 3);
-    if (submit) submit.disabled = validation.all.length > 0;
+    if (submit) submit.disabled = validation.all.length > 0 || state[`${mode}RuleSubmitting`] === true;
   }
 
   window.goToRuleBuilderStep = function (mode, nextStep, options = {}) {
@@ -6674,6 +6859,7 @@
   window.openCreateRuleModal = function (targetGroupId = null, options = {}) {
     haptic('selection');
     state.createRuleModalOpen = true;
+    setRuleSubmitState('create', false);
     state.createRuleDraftHydrating = true;
     state.createRuleBuilderStep = 1;
     state.createRuleTargetGroupId = targetGroupId !== null && targetGroupId !== undefined ? Number(targetGroupId) : null;
@@ -6783,7 +6969,9 @@
 
   window.setCreateRuleLogic = function (logic = 'and') {
     document.querySelectorAll('#createRuleLogicGroup .attio-logic-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.logic === (logic || 'and'));
+      const isActive = btn.dataset.logic === (logic || 'and');
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
     });
     window.renderCreateRuleDraftSummary();
   };
@@ -6858,7 +7046,7 @@
         <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
         <option value="last_7d" ${timeWindow === 'last_7d' ? 'selected' : ''}>7 дней</option>
       </select>
-      <button type="button" class="attio-cond-del-btn" onclick="window.removeCreateRuleConditionRow(this)" title="Удалить условие">
+      <button type="button" class="attio-cond-del-btn" aria-label="Удалить условие" onclick="window.removeCreateRuleConditionRow(this)" title="Удалить условие">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     `;
@@ -6922,7 +7110,7 @@
     renderGuidedRulePreflight('create', validation);
     updateGuidedRuleStepState('create', validation);
     queueCreateRuleDraftSave();
-    if (saveButton) saveButton.disabled = errors.length > 0;
+    if (saveButton) saveButton.disabled = errors.length > 0 || state.createRuleSubmitting;
     return errors;
   };
 
@@ -6938,10 +7126,10 @@
   };
 
   window.submitCreateRule = async function () {
+    if (state.createRuleSubmitting) return;
     const nameInput = document.getElementById('createRuleNameInput');
     const actionSelect = document.getElementById('createRuleActionSelect');
     const groupSelect = document.getElementById('createRuleGroupSelect');
-    const saveButton = document.getElementById('btnSubmitCreateRule');
 
     const name = nameInput?.value.trim() || document.getElementById('createRulePlainText')?.dataset.plainName || 'Новое правило';
     const action = actionSelect?.value || '';
@@ -6958,6 +7146,7 @@
       showToast(errors[0], 'error');
       return;
     }
+    if (!confirmRuleMutation('create', action, name)) return;
 
     const payload = {
       name,
@@ -6971,7 +7160,7 @@
       budget_max_daily: action === 'increase_budget' ? budgetCeiling : 0.0
     };
 
-    if (saveButton) saveButton.disabled = true;
+    setRuleSubmitState('create', true);
     try {
       const newPreset = await apiRequest('/api/presets', {
         method: 'POST',
@@ -7006,7 +7195,8 @@
     } catch (err) {
       showToast(`Ошибка создания правила: ${err.message}`, 'error');
     } finally {
-      if (saveButton) saveButton.disabled = false;
+      setRuleSubmitState('create', false);
+      window.renderCreateRuleDraftSummary();
     }
   };
 
@@ -7827,6 +8017,12 @@
     input.select();
   };
 
+  window.onRecordTitleDisplayKeydown = function (event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    window.enableInlineTitleEdit();
+  };
+
   window.saveInlineTitleEdit = async function () {
     const display = document.getElementById('recordTitleDisplay');
     const input = document.getElementById('recordTitleInput');
@@ -7912,6 +8108,7 @@
   window.openEditRuleModal = function (presetId) {
     haptic('selection');
     state.ruleBuilderMode = 'edit';
+    setRuleSubmitState('edit', false);
     state.editRuleBuilderStep = 1;
     const preset = state.presets.find(p => p.id === Number(presetId));
     if (!preset) {
@@ -8020,7 +8217,9 @@
 
   window.setEditRuleLogic = function (logic = 'and') {
     document.querySelectorAll('#editRuleLogicGroup .attio-logic-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.logic === (logic || 'and'));
+      const isActive = btn.dataset.logic === (logic || 'and');
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
     });
     window.renderEditRuleDraftSummary();
   };
@@ -8095,7 +8294,7 @@
         <option value="last_3d" ${timeWindow === 'last_3d' ? 'selected' : ''}>3 дня</option>
         <option value="last_7d" ${timeWindow === 'last_7d' ? 'selected' : ''}>7 дней</option>
       </select>
-      <button type="button" class="attio-cond-del-btn" onclick="window.removeEditRuleConditionRow(this)" title="Удалить условие">
+      <button type="button" class="attio-cond-del-btn" aria-label="Удалить условие" onclick="window.removeEditRuleConditionRow(this)" title="Удалить условие">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     `;
@@ -8158,7 +8357,7 @@
 
     renderGuidedRulePreflight('edit', validation);
     updateGuidedRuleStepState('edit', validation);
-    if (saveButton) saveButton.disabled = errors.length > 0;
+    if (saveButton) saveButton.disabled = errors.length > 0 || state.editRuleSubmitting;
     return errors;
   };
 
@@ -8174,6 +8373,7 @@
   };
 
   window.submitEditRule = async function () {
+    if (state.editRuleSubmitting) return;
     const presetIdStr = document.getElementById('editRulePresetId')?.value;
     const presetId = presetIdStr ? Number(presetIdStr) : null;
     if (!presetId) return;
@@ -8181,7 +8381,6 @@
     const nameInput = document.getElementById('editRuleNameInput');
     const actionSelect = document.getElementById('editRuleActionSelect');
     const groupSelect = document.getElementById('editRuleGroupSelect');
-    const saveButton = document.getElementById('btnSubmitEditRule');
 
     const name = nameInput?.value.trim() || document.getElementById('editRulePlainText')?.dataset.plainName || 'Правило';
     const action = actionSelect?.value || '';
@@ -8198,6 +8397,7 @@
       showToast(errors[0], 'error');
       return;
     }
+    if (!confirmRuleMutation('edit', action, name, presetId)) return;
 
     const payload = {
       name,
@@ -8211,7 +8411,7 @@
       budget_max_daily: action === 'increase_budget' ? budgetCeiling : 0.0
     };
 
-    if (saveButton) saveButton.disabled = true;
+    setRuleSubmitState('edit', true);
     try {
       const updatedPreset = await apiRequest(`/api/presets/${presetId}`, {
         method: 'PUT',
@@ -8271,7 +8471,8 @@
     } catch (err) {
       showToast(`Ошибка сохранения: ${err.message}`, 'error');
     } finally {
-      if (saveButton) saveButton.disabled = false;
+      setRuleSubmitState('edit', false);
+      window.renderEditRuleDraftSummary();
     }
   };
 
@@ -8293,10 +8494,12 @@
       const groups = await apiRequest('/api/rule-groups') || [];
       if (state.workspaceEpoch !== epoch) return;
       state.ruleGroups = groups;
+      return true;
     } catch (error) {
       if (state.workspaceEpoch !== epoch) return;
       state.ruleGroups = [];
       console.error('Failed to load rule groups:', error);
+      return false;
     }
   }
 
@@ -8533,9 +8736,11 @@
       if (state.workspaceEpoch !== epoch) return;
       state.presets = data || [];
       renderPresetsList(state.activePresetId || state.templatePresetId);
+      return true;
     } catch (e) {
       if (state.workspaceEpoch !== epoch) return;
       console.error('Failed to load presets:', e);
+      return false;
     }
   }
 
@@ -11559,15 +11764,32 @@
   // GLOBAL MODALS & UTILS
   // ==========================================================
   const activeModalStack = [];
+  const modalReturnFocus = new Map();
+  const modalFocusableSelector = [
+    'button:not([disabled])',
+    '[href]',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])'
+  ].join(',');
 
   window.openModal = function (modalId) {
     const el = document.getElementById(modalId);
     if (!el) return;
+    if (document.activeElement instanceof HTMLElement && !el.contains(document.activeElement)) {
+      modalReturnFocus.set(modalId, document.activeElement);
+    }
     el.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     if (!activeModalStack.includes(modalId)) {
       activeModalStack.push(modalId);
     }
+    setTimeout(() => {
+      if (!el.classList.contains('hidden') && !el.contains(document.activeElement)) {
+        el.querySelector(modalFocusableSelector)?.focus();
+      }
+    }, 30);
   };
 
   window.closeModal = function (modalId) {
@@ -11581,6 +11803,16 @@
     if (activeModalStack.length === 0) {
       document.body.style.overflow = '';
     }
+    const returnTarget = modalReturnFocus.get(modalId);
+    modalReturnFocus.delete(modalId);
+    setTimeout(() => {
+      if (returnTarget instanceof HTMLElement && returnTarget.isConnected && returnTarget.getClientRects().length > 0) {
+        returnTarget.focus();
+        return;
+      }
+      const topModalId = activeModalStack[activeModalStack.length - 1];
+      document.getElementById(topModalId)?.querySelector(modalFocusableSelector)?.focus();
+    }, 0);
   };
 
   document.getElementById('btnOpenTokenGuide')?.addEventListener('click', () => {
@@ -12927,6 +13159,23 @@
 
     // Close modals on Escape key or return from Rule Record page
     document.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab' && activeModalStack.length > 0) {
+        const topModal = document.getElementById(activeModalStack[activeModalStack.length - 1]);
+        const focusable = topModal
+          ? [...topModal.querySelectorAll(modalFocusableSelector)].filter(element => element.getClientRects().length > 0)
+          : [];
+        if (focusable.length > 0) {
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
       if (e.key === 'Escape') {
         if (activeModalStack.length > 0) {
           const topModal = activeModalStack[activeModalStack.length - 1];

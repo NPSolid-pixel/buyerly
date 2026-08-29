@@ -887,6 +887,51 @@ class TestFrontendRuleContract(unittest.TestCase):
         self.assertNotIn('/api/rule-drafts', self.script)
         self.assertNotIn('/api/drafts', self.script)
 
+    def test_automations_workspace_has_complete_resilient_ui_contract(self):
+        for markup_contract in (
+            'id="rulesSearchInput"',
+            'id="rulesActionFilter"',
+            'id="rulesResultCount"',
+            'id="rulesLoadingState"',
+            'id="rulesErrorState"',
+            'id="btnRetryRules"',
+            'id="rulesFilteredEmptyState"',
+            'aria-label="Доска правил"',
+            'role="alert" aria-live="polite"',
+            'aria-labelledby="chooseRuleDialogTitle"',
+        ):
+            self.assertIn(markup_contract, self.index)
+
+        for script_contract in (
+            "rulesViewStatus: 'idle'",
+            'window.retryRulesTab',
+            'window.clearRulesSearch',
+            'window.resetRulesFilters',
+            'state.rulesBulkDeleting',
+            'CONFIRMED_RULE_ACTIONS',
+            'confirmRuleMutation',
+            'setRuleSubmitState',
+            'modalReturnFocus',
+            'modalFocusableSelector',
+            "e.key === 'Tab' && activeModalStack.length > 0",
+            'aria-pressed="${isSelected}"',
+            'class="rule-card-open-target"',
+        ):
+            self.assertIn(script_contract, self.script)
+
+        for style_contract in (
+            '.rules-toolbar',
+            '.rules-view-state',
+            '.rules-view-state-error',
+            '.rule-card-open-target:focus-visible',
+            '[data-ui-pilot="automations"] .rules-kanban-board',
+            'flex-direction: column',
+            '.record-page-main-layout',
+            'overflow-x: hidden',
+            '.rules-state-spinner',
+        ):
+            self.assertIn(style_contract, self.ui_system)
+
     def test_account_cards_separate_meta_automation_and_rule_state(self):
         for contract in (
             'id="modalAccountDetails"',
