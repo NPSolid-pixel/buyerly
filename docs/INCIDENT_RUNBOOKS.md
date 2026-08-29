@@ -81,3 +81,25 @@ After rollback, verify the previous SHA through `/health/live` and
 `/health/ready`, confirm worker heartbeat, and keep the failed smoke JSON for the
 incident timeline. Do not mark the release successful until a new SHA produces
 a fully successful result.
+
+## Disaster Recovery from off-site backup
+
+**Signal:** Complete loss of VPS, fatal disk corruption, or unrecoverable database state.
+
+1. Provision a clean VPS with Docker and clone the canonical repository `hiurano/buyerly` to `/opt/buyerly`.
+2. Configure `/opt/buyerly/.env` with the production secrets (`POSTGRES_PASSWORD`, `BACKUP_ENCRYPTION_KEY`, `S3_*` credentials).
+3. Start the database service:
+   ```bash
+   docker compose up -d db
+   ```
+4. Download and restore the latest encrypted backup from Cloudflare R2 / S3:
+   ```bash
+   bash scripts/restore_db.sh --download-latest-offsite --yes
+   ```
+5. Run migrations and start all production services:
+   ```bash
+   docker compose run --rm migrate
+   docker compose up -d
+   ```
+6. Verify `/health/ready` returns 200 and all worker heartbeats are active.
+

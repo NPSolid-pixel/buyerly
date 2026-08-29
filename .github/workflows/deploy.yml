@@ -102,7 +102,7 @@ jobs:
               echo "📥 Pulling latest git changes..."
               git fetch origin main
               git reset --hard origin/main
-              chmod +x scripts/deploy.sh scripts/backup_db.sh || true
+              chmod +x scripts/*.sh scripts/*.py || true
               deploy_log="/tmp/buyerly-deploy-${{ github.sha }}.log"
               umask 077
               : >"${deploy_log}"
