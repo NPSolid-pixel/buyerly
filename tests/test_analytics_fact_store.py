@@ -455,7 +455,7 @@ class TestAnalyticsFactStore(unittest.IsolatedAsyncioTestCase):
 
     async def test_analytics_hierarchy_api_endpoint(self):
         async with self.test_session_maker() as session:
-            today_str = datetime.now(timezone.utc).date().isoformat()
+            today_str = resolve_account_period_dates(self.acc1.timezone_name, "today")[0]
             await AnalyticsFactService.upsert_entity_facts(
                 session,
                 workspace_id=self.ws1.id,

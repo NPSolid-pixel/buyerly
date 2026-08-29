@@ -260,6 +260,14 @@
     }
   }
 
+  function hideInitialLoading() {
+    const loader = document.getElementById('appInitialLoading');
+    if (loader) {
+      loader.classList.add('hidden');
+      loader.style.display = 'none';
+    }
+  }
+
   function showLoading() {
     // Optional global spinner / loading indicator
   }
@@ -268,6 +276,7 @@
     // Optional global spinner / loading indicator
   }
 
+  window.hideInitialLoading = hideInitialLoading;
   window.showLoading = showLoading;
   window.hideLoading = hideLoading;
 
@@ -300,6 +309,7 @@
 
       if (!response.ok) {
         if (response.status === 401 && endpoint !== '/api/auth/login') {
+          hideInitialLoading();
           setWebAuthToken('');
           const loginScreen = document.getElementById('loginScreen');
           const appEl = document.getElementById('app');
@@ -1396,6 +1406,7 @@
   state.currentInviteToken = '';
 
   window.handleInviteRoute = async function (token) {
+    hideInitialLoading();
     state.currentInviteToken = token;
     const acceptScreen = document.getElementById('inviteAcceptScreen');
     const loginScreen = document.getElementById('loginScreen');
@@ -11439,6 +11450,7 @@
     // Check for invite landing route
     const parsedLocation = parsePathLocation();
     if (parsedLocation.inviteToken) {
+      hideInitialLoading();
       window.handleInviteRoute(parsedLocation.inviteToken);
       return;
     }
@@ -11453,6 +11465,7 @@
       const userWorkspaces = user && user.workspaces ? user.workspaces : [];
       const hasWorkspaces = userWorkspaces.length > 0 || !!user.active_workspace;
       if (user && user.onboarding_completed === false && !hasWorkspaces) {
+        hideInitialLoading();
         const appEl = document.getElementById('app');
         if (appEl) {
           appEl.style.display = 'none';
@@ -11478,6 +11491,7 @@
         }
       }
 
+      hideInitialLoading();
       // Hide login and workspace creation screens & reveal main app UI
       const loginScreen = document.getElementById('loginScreen');
       const createWorkspaceScreen = document.getElementById('createWorkspaceScreen');
@@ -11571,6 +11585,7 @@
         }
       }
     } catch (e) {
+      hideInitialLoading();
       console.warn("Unauthorized / access locked:", e);
       rememberReturnRoute();
       setWebAuthToken('');
